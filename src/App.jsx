@@ -10,6 +10,11 @@ import {
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
+/* ── Analytics helper ── */
+function track(event, params) {
+  if (typeof window.gtag === 'function') window.gtag('event', event, params);
+}
+
 /* ── Constants ── */
 const CATEGORIES = {
   bbq: [
@@ -422,6 +427,7 @@ function exportCSV(reviews) {
     ].map(esc).join(',');
   });
   const csv = [headers.map(esc).join(','), ...rows].join('\n');
+  track('csv_exported', { review_count: reviews.length });
   const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -613,6 +619,8 @@ export default function App() {
       .catch(() => {});
     // Handle Firebase redirect result (mobile sign-in flow)
     handleRedirectResult().catch(() => {});
+    // Track PWA install
+    window.addEventListener('appinstalled', () => track('app_installed'));
   }, []);
 
   // Online/offline detection
@@ -639,8 +647,10 @@ export default function App() {
   // Firebase auth listener
   useEffect(() => {
     const unsub = onAuthChange(async (user) => {
+      const wasSignedOut = !fbUser;
       setFbUser(user);
       if (user) {
+        if (wasSignedOut) track('sign_in', { method: 'google' });
         try {
           const profile = await getOrCreateProfile(user);
           setUserProfile(profile);
@@ -793,6 +803,7 @@ export default function App() {
       pulling = false;
       if (diff > 100) {
         setPullRefreshing(true);
+        track('pull_refresh_sync');
         try {
           const cloud = await loadMyCloudReviews(fbUser.uid);
           const merged = mergeReviews(reviews, cloud);
@@ -817,6 +828,8 @@ export default function App() {
     window.history.pushState(null, '', '');
     setView(v);
     setDraftText('');
+    const viewEvents = { stats: 'view_stats', map: 'view_map', leaderboard: 'view_leaderboard', mvp: 'view_mvp', compare: 'comparison_viewed', home: 'scorecard_launched' };
+    if (viewEvents[v]) track(viewEvents[v]);
   }
 
   const save = useCallback((updated) => {
@@ -913,6 +926,12 @@ export default function App() {
       ? reviews.map(r => r.id === currentReview.id ? reviewToSave : r)
       : [reviewToSave, ...reviews];
     save(updated);
+    const sc = calcScores(reviewToSave.scores);
+    if (exists) {
+      track('review_edited', { restaurant: reviewToSave.restaurant, location: reviewToSave.location || '', stars: sc.stars, composite: sc.composite.toFixed(2) });
+    } else {
+      track('review_created', { restaurant: reviewToSave.restaurant, location: reviewToSave.location || '', stars: sc.stars, composite: sc.composite.toFixed(2), review_count: updated.length });
+    }
     setDirty(false);
     setView('home');
     setCurrentReview(null);
@@ -996,6 +1015,7 @@ export default function App() {
   };
 
   const exportBackup = () => {
+    track('backup_exported', { review_count: reviews.length });
     const json = JSON.stringify(reviews, null, 2);
     const blob = new Blob([json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -1021,6 +1041,7 @@ export default function App() {
         for (const r of data) merged.set(r.id, r);
         const latest = Array.from(merged.values()).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
         save(latest);
+        track('backup_imported', { review_count: latest.length });
         alert(`Imported! ${latest.length} total reviews.`);
       } catch {
         alert('Import failed — invalid file.');
@@ -1133,6 +1154,7 @@ export default function App() {
       else navigator.clipboard?.writeText(text);
     }
     setShareGenerating(false);
+    track('share_card_generated', { restaurant: r.restaurant });
   };
 
   const exportText = (r) => {
@@ -1309,7 +1331,7 @@ export default function App() {
               const sc = r._sc;
               const isExpanded = expandedPublic === r.id;
               return (
-                <div key={r.id} onClick={() => setExpandedPublic(isExpanded ? null : r.id)}
+                <div key={r.id} onClick={() => { setExpandedPublic(isExpanded ? null : r.id); if (!isExpanded) track('public_review_expanded', { restaurant: r.restaurant }); }}
                   style={{ background: S.card, borderRadius: '10px', padding: '16px', marginBottom: '10px',
                     border: `1px solid ${S.border}`, cursor: 'pointer', transition: 'all 0.15s' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -1398,7 +1420,7 @@ export default function App() {
         {/* Scorecard CTA — only for signed-out users who skipped sign-in */}
         {!fbUser && (
           <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-            <button onClick={() => navigateTo('home')} style={{
+            <button onClick={() => { track('skip_sign_in'); navigateTo('home'); }} style={{
               padding: '10px 24px', background: 'none', color: S.accent, border: `1px solid ${S.accent}`,
               borderRadius: '8px', fontFamily: "'Oswald', sans-serif", fontSize: '14px',
               fontWeight: '700', letterSpacing: '1px', cursor: 'pointer',
@@ -1726,6 +1748,7 @@ export default function App() {
                           const result = await addFriendByCode(fbUser.uid, friendCodeInput);
                           setFriendMsg(result.ok ? `Added ${result.friend.displayName}!` : result.error);
                           if (result.ok) {
+                            track('friend_added');
                             setFriendCodeInput('BBQ-');
                             const friends = await getFriendsList(fbUser.uid);
                             setFbFriends(friends);
@@ -1739,6 +1762,7 @@ export default function App() {
                       const result = await addFriendByCode(fbUser.uid, friendCodeInput);
                       setFriendMsg(result.ok ? `Added ${result.friend.displayName}!` : result.error);
                       if (result.ok) {
+                        track('friend_added');
                         setFriendCodeInput('BBQ-');
                         const friends = await getFriendsList(fbUser.uid);
                         setFbFriends(friends);
@@ -2333,6 +2357,7 @@ export default function App() {
             const draft = generateGoogleDraft(r);
             setDraftText(draft);
             navigator.clipboard?.writeText(draft);
+            track('google_draft_generated', { restaurant: r.restaurant });
           }} style={sBtn(false, false)}>Google Draft</button>
           <button onClick={() => deleteReview(r.id)} style={{ ...sBtn(false, false), color: '#f87171', borderColor: '#f87171' }}>Delete</button>
         </div>
@@ -2740,6 +2765,7 @@ export default function App() {
                       const result = await addFriendByCode(fbUser.uid, friendCodeInput);
                       setFriendMsg(result.ok ? `Added ${result.friend.displayName}!` : result.error);
                       if (result.ok) {
+                        track('friend_added');
                         setFriendCodeInput('BBQ-');
                         const friends = await getFriendsList(fbUser.uid);
                         setFbFriends(friends);
