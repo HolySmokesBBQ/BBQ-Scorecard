@@ -38,25 +38,54 @@ export async function signInGoogle() {
   const loaded = await loadGsi();
   if (!loaded) return false;
   accessToken = null;
+
+  // Detect standalone PWA mode (installed to homescreen)
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches
+    || window.navigator.standalone === true;
+
   return new Promise((resolve) => {
+    let resolved = false;
+    const done = (ok) => { if (!resolved) { resolved = true; resolve(ok); } };
+
     tokenClient = window.google.accounts.oauth2.initTokenClient({
       client_id: CLIENT_ID,
       scope: SCOPES,
       callback: (resp) => {
         if (resp.access_token) {
           accessToken = resp.access_token;
-          resolve(true);
+          done(true);
         } else {
-          resolve(false);
+          done(false);
         }
       },
+      error_callback: () => done(false),
     });
-    tokenClient.requestAccessToken({ prompt: '' });
-    setTimeout(() => {
-      if (!accessToken) {
+
+    try {
+      tokenClient.requestAccessToken({ prompt: '' });
+    } catch {
+      // Popup blocked — try with consent prompt (opens in new tab on standalone)
+      try {
         tokenClient.requestAccessToken({ prompt: 'consent' });
+      } catch {
+        done(false);
+        return;
+      }
+    }
+
+    // Fallback: if first attempt silently fails, retry with consent
+    setTimeout(() => {
+      if (!accessToken && !resolved) {
+        try {
+          tokenClient.requestAccessToken({ prompt: 'consent' });
+        } catch {
+          done(false);
+        }
       }
     }, 2000);
+
+    // Safety timeout — don't hang forever
+    setTimeout(() => done(false), 30000);
   });
 }
 
@@ -104,4 +133,13 @@ export async function saveToDrive(data) {
   } catch {
     return false;
   }
+}
+
+export function isAuthenticated() {
+  return !!accessToken;
+}
+
+export async function autoSync(data) {
+  if (!accessToken) return false;
+  return saveToDrive(data);
 }

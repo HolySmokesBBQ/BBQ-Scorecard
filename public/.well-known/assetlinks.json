@@ -1,0 +1,13 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.holysmokesbbq.scorecard",
+      "sha256_cert_fingerprints": [
+        "65:97:DB:C4:84:6E:F9:48:53:08:C6:DB:95:1D:47:C6:0A:E9:23:4E:33:1A:FB:76:5E:DE:53:97:10:8E:B4:97",
+        "EC:00:AA:BA:DC:B1:04:F6:41:8D:7D:6D:43:88:88:C4:CB:22:87:D2:BE:63:F2:16:A9:31:65:96:9B:E2:39:5B"
+      ]
+    }
+  }
+]

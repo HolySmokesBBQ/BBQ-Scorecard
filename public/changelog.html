@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Changelog — BBQ Scorecard by Holy Smokes BBQ Co</title>
+  <link rel="icon" href="/favicon.ico" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #1a1a1a; color: #f5e6d3; font-family: 'Inter', sans-serif; line-height: 1.7; }
+    .container { max-width: 640px; margin: 0 auto; padding: 32px 20px 64px; }
+    h1 { font-family: 'Oswald', sans-serif; font-size: 24px; font-weight: 700; letter-spacing: 2px; color: #d4782f; margin-bottom: 4px; }
+    .subtitle { font-size: 13px; color: #888; margin-bottom: 32px; }
+    h2 { font-family: 'Oswald', sans-serif; font-size: 18px; font-weight: 600; letter-spacing: 1px; color: #d4782f; margin-top: 32px; margin-bottom: 4px; }
+    .date { font-size: 12px; color: #666; margin-bottom: 10px; }
+    .tag { display: inline-block; font-size: 10px; font-weight: 600; letter-spacing: 1px; padding: 2px 8px; border-radius: 4px; margin-right: 4px; margin-bottom: 4px; }
+    .tag-feature { background: #2d4a1e; color: #86efac; }
+    .tag-fix { background: #4a1e1e; color: #fca5a5; }
+    .tag-infra { background: #1e3a4a; color: #93c5fd; }
+    .tag-design { background: #4a3a1e; color: #fcd34d; }
+    ul { padding-left: 20px; margin-bottom: 8px; }
+    li { font-size: 14px; color: #ccc; margin-bottom: 6px; }
+    a { color: #d4782f; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .back { display: inline-block; margin-bottom: 24px; font-size: 14px; color: #d4782f; }
+    .current { background: #2a2015; border: 1px solid #d4782f; border-radius: 8px; padding: 16px; margin-top: 8px; }
+    .separator { border: none; border-top: 1px solid #333; margin: 32px 0; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a class="back" href="/">&larr; Back to app</a>
+    <h1>CHANGELOG</h1>
+    <p class="subtitle">BBQ Scorecard by Holy Smokes BBQ Co &middot; Version History</p>
+
+    <!-- v2.2.3 -->
+    <div class="current">
+      <h2>v2.2.3 &mdash; REBRAND + PLAY STORE</h2>
+      <p class="date">May 24, 2026</p>
+      <span class="tag tag-design">DESIGN</span>
+      <span class="tag tag-feature">FEATURE</span>
+      <span class="tag tag-infra">INFRA</span>
+      <ul>
+        <li>Rebranded from &ldquo;Muiller &amp; Friends BBQ Scorecard&rdquo; to &ldquo;BBQ Scorecard by Holy Smokes BBQ Co&rdquo;</li>
+        <li>Updated app header &mdash; &ldquo;BBQ SCORECARD&rdquo; with &ldquo;BY HOLY SMOKES BBQ CO&rdquo; subtitle</li>
+        <li>Share card updated with new branding</li>
+        <li>Page titles, privacy policy, and changelog updated with new name</li>
+        <li>PWA manifest name updated for install prompts and app info</li>
+        <li>Account deletion page &mdash; dedicated page at /delete-account.html with step-by-step instructions for deleting reviews or requesting full account removal</li>
+        <li>Google Play Store listing preparation &mdash; Android TWA package, store metadata, and data safety disclosures</li>
+      </ul>
+    </div>
+
+    <hr class="separator" />
+
+    <!-- v2.2.2 -->
+    <h2>v2.2.2 &mdash; DESKTOP + PRIVACY</h2>
+      <p class="date">May 24, 2026</p>
+      <span class="tag tag-design">DESIGN</span>
+      <span class="tag tag-feature">FEATURE</span>
+      <span class="tag tag-fix">FIX</span>
+      <ul>
+        <li>Responsive desktop layout &mdash; app scales from phone to full-width desktop</li>
+        <li>Review list switches to 2-column grid at 768px, 3-column at 1200px</li>
+        <li>Detail view &mdash; photo and score info side-by-side on desktop with sticky left column</li>
+        <li>Scoring form &mdash; BBQ and Family tracks displayed side-by-side on wide screens</li>
+        <li>Form fields (restaurant, date, location, trip) arranged in 2-column grid on desktop</li>
+        <li>Landing page story text flows into two columns; published reviews in responsive grid</li>
+        <li>Profile cards (profile, add friend, friends list) in 2-column grid on desktop</li>
+        <li>Leaderboard head-to-head section in 2-column grid on desktop</li>
+        <li>All containers widen progressively: 480px &rarr; 900px &rarr; 1100px</li>
+        <li>Friend code and &ldquo;Add a Friend&rdquo; moved to the home page &mdash; no longer hidden behind the Profile screen</li>
+        <li>&ldquo;Connect with Friends&rdquo; sign-in prompt on home page for signed-out users</li>
+        <li>Connected friends count shown on home page</li>
+        <li>Privacy policy rewritten for accuracy &mdash; explicitly documents Cloud Firestore database, what data is collected, security rules, and data deletion behavior</li>
+        <li>Added &ldquo;Security&rdquo; section to privacy policy covering Firestore rules and HTTPS encryption</li>
+        <li>Third-party services section expanded &mdash; Firebase Auth and Cloud Firestore listed separately</li>
+        <li>Landing page &mdash; &ldquo;Join the Crew&rdquo; sign-in section added so users can connect before entering the scorecard</li>
+        <li>Landing page &mdash; signed-in users see their friend code, share button, and quick links on the homepage</li>
+        <li>Landing page &mdash; &ldquo;The Journey&rdquo; story fixed: centered heading, single-column paragraphs at comfortable reading width</li>
+        <li>Removed redundant &ldquo;Rate Your Own&rdquo; card; replaced with contextual sign-in flow and skip option</li>
+      </ul>
+
+    <hr class="separator" />
+
+    <!-- v2.2.1 -->
+    <h2>v2.2.1 &mdash; MULTIPLAYER UPDATE</h2>
+    <p class="date">May 23, 2026</p>
+    <span class="tag tag-feature">FEATURE</span>
+    <span class="tag tag-infra">INFRA</span>
+    <ul>
+      <li>Friend profiles &mdash; sign in with Google, get a unique friend code (e.g. BBQ-7K3M), share it with friends</li>
+      <li>Leaderboard &mdash; overall rankings across your friend group plus head-to-head comparisons on shared restaurants</li>
+      <li>Firebase backend &mdash; Firestore database for real-time review syncing across devices and users</li>
+      <li>Firebase Auth replaces Google Identity Services for sign-in</li>
+      <li>Friend scorecards in restaurant detail view &mdash; see how friends scored the same spot</li>
+      <li>Migrated hosting from GitHub Pages to Netlify with direct CLI deploys</li>
+      <li>One-command deploy workflow: <code>npm run deploy</code></li>
+      <li>Updated landing page story text</li>
+    </ul>
+
+    <hr class="separator" />
+
+    <!-- v2.1.4 -->
+    <h2>v2.1.4</h2>
+    <p class="date">May 23, 2026</p>
+    <span class="tag tag-feature">FEATURE</span>
+    <ul>
+      <li>Photo gallery &mdash; up to 6 photos per review with carousel viewer</li>
+      <li>Friends at the meal &mdash; add friends, enter their scores, compare side-by-side</li>
+      <li>Group average &mdash; composite score across all scorers at the table</li>
+      <li>Share card &mdash; generates a 1080&times;1350 PNG image card via Canvas API for sharing to social media</li>
+      <li>Offline indicator &mdash; sticky banner when connection drops, auto-sync on reconnect</li>
+      <li>Edit tracking &mdash; "last edited" timestamp on updated reviews</li>
+      <li>Enhanced detail view with photo gallery navigation and friend score breakdown</li>
+    </ul>
+
+    <hr class="separator" />
+
+    <!-- v2.1.3 -->
+    <h2>v2.1.3</h2>
+    <p class="date">May 2026</p>
+    <span class="tag tag-feature">FEATURE</span>
+    <span class="tag tag-fix">FIX</span>
+    <ul>
+      <li>Meat MVP tracker &mdash; best restaurant per meat type ranked by BBQ average</li>
+      <li>Google Review draft generator &mdash; auto-converts scores to a Google-style 1&ndash;5 review with TL;DR format</li>
+      <li>Auto-backup to Google Drive on every save (when signed in)</li>
+      <li>Dark/light theme toggle with persistence</li>
+      <li>CSV export &mdash; Excel-compatible with BOM, all categories included</li>
+      <li>Map view &mdash; Leaflet + OpenStreetMap with color-coded markers by star rating</li>
+      <li>Landing page with "The Journey" story and published reviews grid</li>
+      <li>Manual JSON backup/import as mobile OAuth workaround</li>
+      <li>Force-update button &mdash; unregisters service worker and clears caches</li>
+      <li>Fixed mobile split stepper &mdash; replaced broken number input with custom +/&minus;/number buttons</li>
+      <li>Privacy policy page</li>
+      <li>Google Search Console verification</li>
+    </ul>
+
+    <hr class="separator" />
+
+    <!-- v2.1.2 -->
+    <h2>v2.1.2</h2>
+    <p class="date">May 2026</p>
+    <span class="tag tag-feature">FEATURE</span>
+    <span class="tag tag-infra">INFRA</span>
+    <ul>
+      <li>Custom domain setup &mdash; holysmokesbbqco.com</li>
+      <li>HTTPS via Let's Encrypt on GitHub Pages</li>
+      <li>PWA icons generated from logo (192&times;192 and 512&times;512)</li>
+      <li>Fixed CNAME file encoding issue</li>
+      <li>Base path changed from /BBQ-Scorecard/ to /</li>
+    </ul>
+
+    <hr class="separator" />
+
+    <!-- v2.0.0 -->
+    <h2>v2.0.0</h2>
+    <p class="date">2026</p>
+    <span class="tag tag-feature">FEATURE</span>
+    <span class="tag tag-design">DESIGN</span>
+    <ul>
+      <li>Complete rewrite as React + Vite PWA</li>
+      <li>KCBS-inspired scoring system &mdash; 7 BBQ categories + 3 family categories on a 1&ndash;9 scale</li>
+      <li>Composite score with family bonus tiers and 5-star rating</li>
+      <li>Score descriptors for every category at every level</li>
+      <li>Google Drive sync via OAuth (drive.file scope)</li>
+      <li>Photo capture with compression</li>
+      <li>Side-by-side restaurant comparison</li>
+      <li>Stats dashboard with star distribution and category averages</li>
+      <li>Search, filter by trip/city, sort by date or score</li>
+      <li>Timestamped notes log</li>
+      <li>Review duplication and text export</li>
+      <li>Installable PWA with service worker caching</li>
+      <li>Oswald + Inter typography, dark theme</li>
+    </ul>
+
+    <hr class="separator" />
+
+    <!-- v1.0.0 -->
+    <h2>v1.0.0 &mdash; THE ORIGINAL</h2>
+    <p class="date">2025</p>
+    <span class="tag tag-feature">FEATURE</span>
+    <ul>
+      <li>Initial release</li>
+      <li>Basic BBQ restaurant scoring</li>
+      <li>localStorage persistence</li>
+      <li>Single-page app deployed to GitHub Pages</li>
+    </ul>
+
+    <div style="text-align: center; padding: 32px 0; margin-top: 16px; border-top: 1px solid #333;">
+      <a href="/" style="font-size: 11px; color: #888;">Back to app</a>
+      <div style="font-size: 10px; color: #333; margin-top: 6px;">&copy; 2026 Holy Smokes BBQ Co</div>
+    </div>
+  </div>
+</body>
+</html>
