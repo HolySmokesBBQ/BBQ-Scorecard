@@ -1,0 +1,276 @@
+rules_version = '2';
+
+// ─────────────────────────────────────────────────────────────
+// Holy Smokes BBQ — Firestore Security Rules
+// ─────────────────────────────────────────────────────────────
+// Data model:
+//   users/{userId}                            — profile
+//   users/{userId}/friends/{friendId}         — accepted friendship (mutual)
+//   users/{userId}/friendRequests/{fromUid}   — incoming friend request inbox
+//   friendCodes/{code}                        — code → userId lookup
+//   reviews/{userId}_{reviewId}               — restaurant reviews
+//   cooks/{userId}_{cookId}                   — cook log entries
+//   recipes/{userId}_{recipeId}               — recipes
+//
+// Doc ID convention: per-user record collections use `{userId}_{recordId}`
+// so the owner is derivable from the path.
+//
+// Friendship model (mutual consent):
+//   1. Requester writes one doc to users/{target}/friendRequests/{requester}.
+//   2. Target sees the request in their inbox and accepts.
+//   3. On accept, the target writes both friend docs in a single batch:
+//        users/{target}/friends/{requester}   (owner write, request exists)
+//        users/{requester}/friends/{target}   (cross-user write, allowed
+//          because the requester's friendship doc can only be created by
+//          someone with a matching incoming request — verified by exists()).
+//      Then deletes the request.
+//   This blocks the forced-friendship IDOR previously possible when any
+//   signed-in user who knew a target's UID could write directly into the
+//   target's friends list. (Security Audit Finding #1.)
+// ─────────────────────────────────────────────────────────────
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helpers ──────────────────────────────────────────────
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isFriendOf(ownerUid) {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(ownerUid)/friends/$(request.auth.uid));
+    }
+
+    function docIdBelongsTo(docId, ownerUid) {
+      return docId.matches('^' + ownerUid + '_.+');
+    }
+
+    // Field whitelists — block injection of unexpected keys (audit #6).
+    function reviewFields() {
+      return [
+        'id', 'userId', 'restaurant', 'location', 'date', 'trip',
+        'meats', 'meatOther', 'sides', 'sideOther', 'dessert',
+        'scores', 'sauceDep', 'wouldReturn', 'notes', 'notesLog',
+        'price', 'priceSplit', 'googleReviewUrl', 'photo', 'photos',
+        'friends', 'lastEdited', 'restaurantKey', 'syncedAt'
+      ];
+    }
+
+    function cookFields() {
+      return [
+        'id', 'userId', 'name', 'date', 'meatType', 'cut', 'weight',
+        'rub', 'rubRecipeId', 'sauce', 'sauceRecipeId', 'woodType',
+        'smokerType', 'fuelSource', 'cookTemp', 'wrapMethod', 'wrapTemp',
+        'targetInternalTemp', 'cookTimeHours', 'cookTimeMinutes', 'restTime',
+        'weatherTemp', 'weatherWind', 'weatherHumidity', 'photos',
+        'notes', 'notesLog', 'rating', 'tags', 'shared', 'whatIdChange',
+        'createdAt', 'lastEdited', 'restaurantKey', 'syncedAt'
+      ];
+    }
+
+    function recipeFields() {
+      return [
+        'id', 'userId', 'type', 'name', 'ingredients', 'cookMethod',
+        'meatType', 'instructions', 'rubRecipeId', 'sauceRecipeId',
+        'woodRecommendation', 'tempGuidelines', 'timeGuidelines',
+        'notes', 'rating', 'shared',
+        'createdAt', 'lastEdited', 'syncedAt'
+      ];
+    }
+
+    // ── USERS ────────────────────────────────────────────────
+    // Profile fields readable by any signed-in user — required for friend
+    // lookups (friendCodes → users → display name/photo). Email exposure
+    // is a documented tradeoff (audit Finding #9). Future hardening:
+    // split into public/private subcollections.
+    match /users/{userId} {
+      allow read: if isSignedIn();
+
+      allow create: if isOwner(userId)
+                    && request.resource.data.email == request.auth.token.email
+                    && request.resource.data.keys().hasOnly([
+                      'displayName', 'email', 'photoURL', 'friendCode', 'createdAt'
+                    ]);
+
+      allow update: if isOwner(userId)
+                    && request.resource.data.friendCode == resource.data.friendCode
+                    && request.resource.data.createdAt == resource.data.createdAt
+                    && request.resource.data.email == resource.data.email
+                    && request.resource.data.keys().hasOnly([
+                      'displayName', 'email', 'photoURL', 'friendCode', 'createdAt'
+                    ]);
+
+      allow delete: if false;
+
+      // ── FRIENDS SUBCOLLECTION ─────────────────────────────
+      // Created ONLY as part of an accept-request flow. See header comment.
+      match /friends/{friendId} {
+        allow read: if isOwner(userId);
+
+        allow create: if isSignedIn()
+                      && (
+                        // Owner accepting a request in their own inbox
+                        (request.auth.uid == userId
+                         && exists(/databases/$(database)/documents/users/$(userId)/friendRequests/$(friendId)))
+                        ||
+                        // Counterpart write into requester's friends list.
+                        // The accepter (auth.uid) IS `friendId`, and their
+                        // own inbox contains the request from `userId`.
+                        (request.auth.uid == friendId
+                         && exists(/databases/$(database)/documents/users/$(friendId)/friendRequests/$(userId)))
+                      )
+                      && request.resource.data.keys().hasOnly([
+                        'displayName', 'photoURL', 'friendCode', 'addedAt'
+                      ]);
+
+        // Either side can unfriend at any time.
+        allow delete: if isSignedIn()
+                      && (request.auth.uid == userId || request.auth.uid == friendId);
+
+        allow update: if false;
+      }
+
+      // ── FRIEND REQUESTS (incoming inbox) ─────────────────
+      // Path: users/{userId}/friendRequests/{requesterUid}
+      // userId = target of the request, requesterUid = who's asking.
+      match /friendRequests/{requesterUid} {
+        // Only the inbox owner can list/read.
+        allow read: if isOwner(userId);
+
+        // Anyone can drop a request — but only with their own uid as
+        // the doc id, can't self-request, and only with the allowed fields.
+        allow create: if isSignedIn()
+                      && request.auth.uid == requesterUid
+                      && request.auth.uid != userId
+                      && request.resource.data.keys().hasOnly([
+                        'displayName', 'photoURL', 'friendCode', 'requestedAt'
+                      ]);
+
+        // Target deletes on accept/reject; requester deletes to cancel.
+        allow delete: if isSignedIn()
+                      && (request.auth.uid == userId || request.auth.uid == requesterUid);
+
+        allow update: if false;
+      }
+    }
+
+    // ── FRIEND CODES ─────────────────────────────────────────
+    match /friendCodes/{code} {
+      allow read: if isSignedIn();
+
+      allow create: if isSignedIn()
+                    && request.resource.data.userId == request.auth.uid
+                    && code.matches('^BBQ-[A-Z0-9]{4,6}$')
+                    && request.resource.data.keys().hasOnly(['userId']);
+
+      allow update, delete: if false;
+    }
+
+    // ── REVIEWS ──────────────────────────────────────────────
+    match /reviews/{docId} {
+      allow read: if isSignedIn() && (
+        resource.data.userId == request.auth.uid
+        || isFriendOf(resource.data.userId)
+      );
+
+      allow create: if isSignedIn()
+                    && request.resource.data.userId == request.auth.uid
+                    && docIdBelongsTo(docId, request.auth.uid)
+                    && request.resource.data.keys().hasOnly(reviewFields());
+
+      allow update: if isSignedIn()
+                    && resource.data.userId == request.auth.uid
+                    && request.resource.data.userId == request.auth.uid
+                    && request.resource.data.keys().hasOnly(reviewFields());
+
+      allow delete: if isSignedIn()
+                    && resource.data.userId == request.auth.uid;
+    }
+
+    // ── COOKS (Notebook) ─────────────────────────────────────
+    match /cooks/{docId} {
+      allow read: if isSignedIn() && (
+        resource.data.userId == request.auth.uid
+        || (resource.data.shared == true && isFriendOf(resource.data.userId))
+      );
+
+      allow create: if isSignedIn()
+                    && request.resource.data.userId == request.auth.uid
+                    && docIdBelongsTo(docId, request.auth.uid)
+                    && request.resource.data.keys().hasOnly(cookFields());
+
+      allow update: if isSignedIn()
+                    && resource.data.userId == request.auth.uid
+                    && request.resource.data.userId == request.auth.uid
+                    && request.resource.data.keys().hasOnly(cookFields());
+
+      allow delete: if isSignedIn()
+                    && resource.data.userId == request.auth.uid;
+    }
+
+    // ── RECIPES (Notebook) ───────────────────────────────────
+    match /recipes/{docId} {
+      allow read: if isSignedIn() && (
+        resource.data.userId == request.auth.uid
+        || (resource.data.shared == true && isFriendOf(resource.data.userId))
+      );
+
+      allow create: if isSignedIn()
+                    && request.resource.data.userId == request.auth.uid
+                    && docIdBelongsTo(docId, request.auth.uid)
+                    && request.resource.data.keys().hasOnly(recipeFields());
+
+      allow update: if isSignedIn()
+                    && resource.data.userId == request.auth.uid
+                    && request.resource.data.userId == request.auth.uid
+                    && request.resource.data.keys().hasOnly(recipeFields());
+
+      allow delete: if isSignedIn()
+                    && resource.data.userId == request.auth.uid;
+    }
+
+    // ── BOARD PRICES (BBQ Board) ─────────────────────────────
+    // Public price directory for meat cuts. Read-open (anyone, even
+    // signed-out, can browse). Write-auth: signed-in users can submit
+    // one document per submission, must be their own userId, and the
+    // field whitelist blocks injection.
+    //
+    // Anti-spam: enforced at the app layer + rate limits from Firebase
+    // itself. If abuse becomes a problem, tighten to require App Check
+    // and add a per-user submission counter subcollection.
+    match /board_prices/{docId} {
+      allow read: if true;
+
+      allow create: if isSignedIn()
+                    && request.resource.data.userId == request.auth.uid
+                    && request.resource.data.keys().hasOnly([
+                      'userId', 'shopId', 'store', 'storeType', 'region', 'location',
+                      'cut', 'pricePerLb', 'notes', 'source', 'reportedAt'
+                    ])
+                    && request.resource.data.store is string
+                    && request.resource.data.store.size() > 0
+                    && request.resource.data.store.size() <= 80
+                    && request.resource.data.pricePerLb is number
+                    && request.resource.data.pricePerLb > 0
+                    && request.resource.data.pricePerLb <= 100
+                    && request.resource.data.cut is string
+                    && request.resource.data.region is string
+                    && request.resource.data.storeType is string
+                    && request.resource.data.source == 'community';
+
+      // Owner can delete their own submission (e.g. correcting a typo).
+      // Update not allowed — resubmit instead, so timestamps stay honest.
+      allow delete: if isSignedIn()
+                    && resource.data.userId == request.auth.uid;
+
+      allow update: if false;
+    }
+
+    // ── DEFAULT DENY ─────────────────────────────────────────
+  }
+}
