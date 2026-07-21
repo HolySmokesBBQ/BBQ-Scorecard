@@ -1,29 +1,29 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <!-- Google Tag Manager -->
-  <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
-  new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
-  j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
-  'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
-  })(window,document,'script','dataLayer','GTM-T5VZ3G4R');</script>
-  <!-- End Google Tag Manager -->
-  <!-- Google tag (gtag.js) -->
-  <script async src="https://www.googletagmanager.com/gtag/js?id=G-7X235L8GQS"></script>
-  <script>
-    window.dataLayer = window.dataLayer || [];
-    function gtag(){dataLayer.push(arguments);}
-    gtag('js', new Date());
-    gtag('config', 'G-7X235L8GQS');
-  </script>
+  <!-- GTM + GA4 init — external file so CSP can drop 'unsafe-inline' -->
+  <script src="/gtm-init.js?v=6"></script>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Privacy Policy — BBQ Scorecard by Holy Smokes BBQ Co</title>
   <link rel="icon" href="/favicon.ico" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
   <style>
+    @font-face {
+      font-family: 'Inter';
+      font-style: normal;
+      font-weight: 400 700;
+      font-display: swap;
+      src: url(/fonts/inter-latin.woff2) format('woff2');
+      unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+    }
+    @font-face {
+      font-family: 'Oswald';
+      font-style: normal;
+      font-weight: 400 700;
+      font-display: swap;
+      src: url(/fonts/oswald-latin.woff2) format('woff2');
+      unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+    }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { background: #1a1a1a; color: #f5e6d3; font-family: 'Inter', sans-serif; line-height: 1.7; }
     .container { max-width: 640px; margin: 0 auto; padding: 32px 20px 64px; }
@@ -37,14 +37,10 @@
   </style>
 </head>
 <body>
-<!-- Google Tag Manager (noscript) -->
-<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-T5VZ3G4R"
-height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
-<!-- End Google Tag Manager (noscript) -->
   <div class="container">
     <a class="back" href="/">&larr; Back to app</a>
     <h1>PRIVACY POLICY</h1>
-    <p class="subtitle">BBQ Scorecard by Holy Smokes BBQ Co &middot; Last updated May 24, 2026</p>
+    <p class="subtitle">BBQ Scorecard by Holy Smokes BBQ Co &middot; Last updated July 20, 2026</p>
 
     <h2>WHAT THIS APP DOES</h2>
     <p>BBQ Scorecard by Holy Smokes BBQ Co is a restaurant review tool. It lets you score BBQ restaurants, track visits, keep notes, and compare scores with friends.</p>
@@ -67,20 +63,25 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     <h2>HOW YOUR DATA IS SHARED</h2>
     <p>When you add a friend by exchanging friend codes, they can see your restaurant reviews (scores, restaurant names, locations, dates, and notes). You can see theirs. This is the entire point of the friends feature.</p>
     <p>No data is shared with anyone you have not added as a friend. Your reviews are only visible to you and your confirmed friends.</p>
-    <p>We do not sell, rent, or share your data with any third parties. There are no ads, no analytics services, and no tracking scripts.</p>
+    <p>We do not sell or rent your data, and we do not share it with advertisers or data brokers. There are no ads. There is no public feed. The third-party services listed in the next section process data on our behalf so the app can function.</p>
 
     <h2>THIRD-PARTY SERVICES</h2>
     <p>The app uses the following third-party services:</p>
-    <p><strong>Firebase Authentication (Google):</strong> handles sign-in. Subject to <a href="https://firebase.google.com/support/privacy" target="_blank">Google's privacy policy</a>.</p>
-    <p><strong>Cloud Firestore (Google Firebase):</strong> the database where user profiles, reviews, and friend connections are stored when signed in. Data is hosted on Google Cloud infrastructure. Subject to <a href="https://firebase.google.com/support/privacy" target="_blank">Google's privacy policy</a>.</p>
-    <p><strong>OpenStreetMap via Leaflet:</strong> map tiles for the map view. No personal data is shared beyond standard HTTP requests for map tile images.</p>
-    <p><strong>Netlify:</strong> website hosting and CDN. Netlify serves the app files but does not have access to Firestore data. Subject to <a href="https://www.netlify.com/privacy/" target="_blank">Netlify's privacy policy</a>.</p>
+    <p><strong>Firebase Authentication (Google):</strong> handles sign-in. Subject to <a href="https://firebase.google.com/support/privacy" target="_blank" rel="noopener noreferrer">Google's privacy policy</a>.</p>
+    <p><strong>Cloud Firestore (Google Firebase):</strong> the database where user profiles, reviews, and friend connections are stored when signed in. Data is hosted on Google Cloud infrastructure. Subject to <a href="https://firebase.google.com/support/privacy" target="_blank" rel="noopener noreferrer">Google's privacy policy</a>.</p>
+    <p><strong>OpenStreetMap via Leaflet:</strong> map tiles for the map and nearby views. No personal data is shared beyond standard HTTP requests for map tile images.</p>
+    <p><strong>Overpass API (OpenStreetMap):</strong> used by the BBQ Near Me feature to search for nearby restaurants. Your coordinates are sent as part of the search query. No account or personal data is shared. Subject to <a href="https://wiki.openstreetmap.org/wiki/Overpass_API" target="_blank" rel="noopener noreferrer">OpenStreetMap's usage policies</a>.</p>
+    <p><strong>Google Analytics / Google Tag Manager:</strong> anonymous usage analytics. Subject to <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">Google's privacy policy</a>.</p>
+    <p><strong>Netlify:</strong> website hosting and CDN. Netlify serves the app files but does not have access to Firestore data. Subject to <a href="https://www.netlify.com/privacy/" target="_blank" rel="noopener noreferrer">Netlify's privacy policy</a>.</p>
+
+    <h2>LOCATION DATA</h2>
+    <p>The &ldquo;BBQ Near Me&rdquo; feature uses your device&rsquo;s location (GPS or network-based) to find BBQ restaurants nearby. Location data is sent to the Overpass API (OpenStreetMap) as coordinates in the search query. Your location is not stored, logged, or sent to any other service. The app only accesses your location when you tap the Nearby button and you have granted permission. You can revoke location access at any time in your device settings.</p>
 
     <h2>LOCAL STORAGE</h2>
     <p>The app stores review data, photos, theme preferences, and geocoding cache in your browser's localStorage. This data never leaves your device unless you sign in, at which point review data (excluding photos) is synced to Cloud Firestore.</p>
 
     <h2>COOKIES AND TRACKING</h2>
-    <p>The app does not use cookies, analytics, or any form of user tracking. Firebase Authentication uses browser storage (localStorage/IndexedDB) for session management, not cookies.</p>
+    <p>The app uses Google Analytics and Google Tag Manager to track anonymous feature usage (which screens are viewed, which actions are taken). No personal information is included in analytics events. Firebase Authentication uses browser storage (localStorage/IndexedDB) for session management, not cookies.</p>
 
     <h2>SECURITY</h2>
     <p>Cloud Firestore is protected by security rules that restrict access. Users can only read and write their own data. Friend review data is accessible only to confirmed friends. All data in transit is encrypted via HTTPS.</p>
@@ -97,7 +98,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     <p>If this policy changes, the updated version will be posted at this URL with a new date.</p>
 
     <h2>CONTACT</h2>
-    <p>For questions about this policy, account deletion, or anything else, email <a href="mailto:support@holysmokesbbqco.com">support@holysmokesbbqco.com</a> or visit our GitHub: <a href="https://github.com/HolySmokesBBQ/BBQ-Scorecard" target="_blank">github.com/HolySmokesBBQ/BBQ-Scorecard</a></p>
+    <p>For questions about this policy, account deletion, or anything else, email <a href="mailto:support@holysmokesbbqco.com">support@holysmokesbbqco.com</a>.</p>
   </div>
 </body>
 </html>
