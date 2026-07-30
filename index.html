@@ -1,42 +1,184 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <!-- Google Tag Manager -->
-  <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
-  new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
-  j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
-  'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
-  })(window,document,'script','dataLayer','GTM-T5VZ3G4R');</script>
-  <!-- End Google Tag Manager -->
-  <!-- Google tag (gtag.js) -->
-  <script async src="https://www.googletagmanager.com/gtag/js?id=G-7X235L8GQS"></script>
-  <script>
-    window.dataLayer = window.dataLayer || [];
-    function gtag(){dataLayer.push(arguments);}
-    gtag('js', new Date());
-    gtag('config', 'G-7X235L8GQS');
-  </script>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <!-- Allow users to pinch-zoom — disabling it is an accessibility failure
+       per WCAG. iOS auto-zoom-on-focus is handled by ensuring inputs use
+       font-size >= 16px (already true throughout the app). -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#1a1a1a" />
   <title>BBQ Scorecard by Holy Smokes BBQ Co</title>
+
+  <!-- LCP optimization: preload the landing-page hero logo via AVIF for
+       max compression. Falls back gracefully — the <picture> element in
+       Site.jsx provides WebP and PNG sources for browsers without AVIF
+       support, and the preload is just a hint (browser uses whatever
+       matches the actual element it ends up rendering). -->
+  <link rel="preload" as="image" href="/holy-smokes-logo@2x.avif" type="image/avif" fetchpriority="high" />
+  <!-- Self-hosted variable fonts. Single woff2 per family covers the full
+       400-700 weight range. Preloaded as `font` so the browser fetches
+       them in parallel with the entry JS — no Google Fonts round trip,
+       no render-blocking CSS request, no font-loader.js shim. The
+       @font-face declarations live in the inline <style> block below
+       so they apply with the first paint. -->
+  <link rel="preload" as="font" type="font/woff2" href="/fonts/inter-latin.woff2" crossorigin />
+  <link rel="preload" as="font" type="font/woff2" href="/fonts/oswald-latin.woff2" crossorigin />
   <link rel="icon" href="/favicon.ico" />
   <link rel="apple-touch-icon" href="/icon-192.png" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="canonical" href="https://holysmokesbbqco.com/scorecard/" />
+
+  <!-- Open Graph / Twitter card metadata — helps social shares render
+       a nice preview when the link is posted in iMessage, Slack, etc. -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="BBQ Scorecard" />
+  <meta property="og:title" content="BBQ Scorecard by Holy Smokes BBQ Co" />
+  <meta property="og:description" content="Competition-style BBQ restaurant scoring + a cook notebook for tracking your own smokes. Built by a BBQ family from Kansas City." />
+  <meta property="og:image" content="https://holysmokesbbqco.com/holy-smokes-logo.png" />
+  <meta property="og:url" content="https://holysmokesbbqco.com/scorecard/" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="BBQ Scorecard by Holy Smokes BBQ Co" />
+  <meta name="twitter:description" content="Score BBQ joints. Log your cooks. Track what works." />
+  <meta name="twitter:image" content="https://holysmokesbbqco.com/holy-smokes-logo.png" />
+  <meta name="description" content="Score BBQ restaurants on 10 competition-style categories. Log every cook with rubs, woods, temps, and weather. Compare with friends." />
+
+  <!-- Schema.org JSON-LD — structured data for Google rich results.
+       Uses a single @graph with cross-referenced @id values so the
+       Organization, WebSite, WebApplication, and Person schemas form
+       a connected knowledge graph rather than four isolated blobs.
+
+       Why this matters:
+       - Google recognizes the brand (Organization, Person) and may
+         render an entity card for "Holy Smokes BBQ" / "Joel Muiller"
+         in search results.
+       - WebSite with potentialAction enables the sitelinks search box
+         in Google search results once the site has enough authority.
+       - WebApplication with offers/price=0 tells Google this is a free
+         app and may surface app-style result cards.
+
+       This script is static (no dependencies, no JS execution). The
+       crawler reads it during initial HTML parse — no SPA hydration
+       wait, no JS rendering required. -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebSite",
+        "@id": "https://holysmokesbbqco.com/scorecard/#website",
+        "url": "https://holysmokesbbqco.com/scorecard/",
+        "name": "BBQ Scorecard by Holy Smokes BBQ Co",
+        "description": "Score BBQ restaurants on 10 competition-style categories. Log every cook with rubs, woods, temps, and weather. Compare with friends.",
+        "publisher": { "@id": "https://holysmokesbbqco.com/#organization" },
+        "inLanguage": "en-US"
+      },
+      {
+        "@type": "WebApplication",
+        "@id": "https://holysmokesbbqco.com/scorecard/#webapp",
+        "name": "BBQ Scorecard",
+        "alternateName": "Holy Smokes BBQ Scorecard",
+        "url": "https://holysmokesbbqco.com/scorecard/",
+        "description": "Competition-style BBQ restaurant scoring. Rate restaurants across 10 categories (appearance, taste, tenderness, smoke, sides, sauce, portions, family-friendliness, value, return-likelihood). Add friends, compare scores, and find the best BBQ on the leaderboard.",
+        "applicationCategory": "LifestyleApplication",
+        "applicationSubCategory": "Food & Drink",
+        "operatingSystem": "Web, Android",
+        "browserRequirements": "Requires JavaScript. Requires HTML5.",
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD"
+        },
+        "publisher": { "@id": "https://holysmokesbbqco.com/#organization" },
+        "author": { "@id": "https://holysmokesbbqco.com/#joel" },
+        "featureList": [
+          "10-category competition-style BBQ restaurant scoring",
+          "Friend system with shared friend codes",
+          "Leaderboard and comparison views",
+          "Map view of all scored restaurants",
+          "Cloud sync via Firebase",
+          "Offline-first with local storage",
+          "Installable as a Progressive Web App"
+        ]
+      }
+    ]
+  }
+  </script>
+
+  <!-- GTM + GA4 init — moved below LCP-critical resources so they don't
+       compete for early bandwidth. `defer` makes them run after the
+       document is parsed but before DOMContentLoaded. -->
+  <script>window.GA_MEASUREMENT_ID = 'G-J8VT8DT328'; window.GA_PAGE_TITLE = 'BBQ Scorecard by Holy Smokes BBQ Co'; window.GA_CONTENT_GROUP = 'scorecard';</script>
+  <script src="/gtm-init.js?v=7" defer></script>
   <style>
+    /* Self-hosted variable fonts. Both files cover the full 400-700
+       weight range in a single woff2; `font-display: swap` ensures
+       text paints with the system fallback if the woff2 hasn't
+       loaded yet, then swaps when ready. unicode-range is latin only
+       so the browser skips loading these for non-latin glyphs. */
+    @font-face {
+      font-family: 'Inter';
+      font-style: normal;
+      font-weight: 400 700;
+      font-display: swap;
+      src: url(/fonts/inter-latin.woff2) format('woff2');
+      unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+    }
+    @font-face {
+      font-family: 'Oswald';
+      font-style: normal;
+      font-weight: 400 700;
+      font-display: swap;
+      src: url(/fonts/oswald-latin.woff2) format('woff2');
+      unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+    }
     * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-    body { background: #1a1a1a; color: #f5e6d3; font-family: 'Inter', sans-serif; }
+    html { background: #1a1a1a; min-height: 100%; overscroll-behavior-y: contain; }
+    body { background: #1a1a1a; color: #f5e6d3; font-family: 'Inter', sans-serif; min-height: 100vh; overscroll-behavior-y: contain; }
+    #root { min-height: 100vh; }
     input, textarea, select, button { font-family: 'Inter', sans-serif; }
   </style>
 </head>
 <body>
   <!-- Google Tag Manager (noscript) -->
-  <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-T5VZ3G4R"
-  height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
-  <!-- End Google Tag Manager (noscript) -->
-  <div id="root"></div>
+  <!-- `main` landmark for assistive tech. React mounts inside `#root`,
+       and that lives inside `<main>` so screen readers can jump to the
+       main content area with the standard landmark shortcut.
+
+       The placeholder below paints immediately when the WebView first
+       renders the document — long before the JS bundle parses and React
+       mounts. Without it, users (especially on Android Capacitor)
+       briefly see a black screen during the gap between the native
+       splash dismissing and React's first paint. The placeholder gets
+       wiped the moment ReactDOM.createRoot().render() runs in main.jsx.
+
+       Kept intentionally tiny — no fonts, no external assets except
+       the logo PNG which is already cached by the service worker on
+       second+ launches. Inline styles so it works before any CSS
+       module has even been requested. -->
+  <main id="root" aria-busy="true">
+    <div style="
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      padding: 24px;
+      background: #1a1a1a;
+      color: #f5e6d3;">
+      <img src="/bbq-scorecard-logo.png" alt="BBQ Scorecard"
+        style="width: 120px; height: 120px; border-radius: 50%; opacity: 0.92;" />
+      <div style="
+        font-family: 'Oswald', sans-serif;
+        font-size: 16px;
+        letter-spacing: 3px;
+        color: #d4782f;
+        font-weight: 700;">BBQ SCORECARD</div>
+      <div style="
+        font-size: 11px;
+        letter-spacing: 2px;
+        color: #888;">by Holy Smokes BBQ Co</div>
+    </div>
+  </main>
   <script type="module" src="/src/main.jsx"></script>
 </body>
 </html>

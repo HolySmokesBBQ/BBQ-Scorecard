@@ -1,2 +1,82 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+
 # Local Netlify folder
 .netlify
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Android signing — NEVER commit these
+*.keystore
+*.jks
+*.aab
+*.apk
+signing-key-info.txt
+# Internal briefing doc — embeds plaintext keystore/key passwords (security audit I-1)
+docs/briefings/PROJECT-BRIEFING.md
+BBQ-Scorecard-Android/
+BBQ-Notebook-Android/
+BBQ-Board-Android/
+android/app/release/
+android/app/debug/
+android/.gradle/
+android/build/
+android/app/build/
+# Notebook standalone Android project — same exclusions as android/
+android-notebook/app/release/
+android-notebook/app/debug/
+android-notebook/.gradle/
+android-notebook/build/
+android-notebook/app/build/
+# Board standalone Android project — same exclusions as android/
+android-board/app/release/
+android-board/app/debug/
+android-board/.gradle/
+android-board/build/
+android-board/app/build/
+# Holds the release keystore password + key password used by Gradle
+# signingConfigs. The .template files (without real values) ARE committed
+# so a fresh clone knows the schema.
+android/keystore.properties
+!android/keystore.properties.template
+android-notebook/keystore.properties
+!android-notebook/keystore.properties.template
+android-board/keystore.properties
+!android-board/keystore.properties.template
+
+# Firebase config with embedded OAuth client IDs
+google-services.json
+android/app/google-services.json
+android-notebook/app/google-services.json
+android-board/app/google-services.json
+GoogleService-Info.plist
+
+# Service account keys
+*-firebase-adminsdk-*.json
+service-account*.json
+
+# IDE / OS
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Misc
+releases/
+
+# App Store Connect API private keys — never commit
+*.p8

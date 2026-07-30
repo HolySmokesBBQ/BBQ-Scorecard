@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <!-- GTM + GA4 init — external file so CSP can drop 'unsafe-inline' -->
+  <script src="/gtm-init.js?v=7"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Privacy Policy — BBQ Notebook by Holy Smokes BBQ Co</title>
+  <link rel="icon" href="/favicon.ico" />
+  <style>
+    @font-face {
+      font-family: 'Inter';
+      font-style: normal;
+      font-weight: 400 700;
+      font-display: swap;
+      src: url(/fonts/inter-latin.woff2) format('woff2');
+      unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+    }
+    @font-face {
+      font-family: 'Oswald';
+      font-style: normal;
+      font-weight: 400 700;
+      font-display: swap;
+      src: url(/fonts/oswald-latin.woff2) format('woff2');
+      unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #1a1a1a; color: #f5e6d3; font-family: 'Inter', sans-serif; line-height: 1.7; }
+    .app-header { background: #121a14; border-bottom: 1px solid #2a2a2a; padding: 14px 16px; }
+    .app-header-inner { max-width: 640px; margin: 0 auto; display: flex; align-items: center; gap: 12px; }
+    .header-back { background: none; border: none; color: #888; font-size: 14px; cursor: pointer; text-decoration: none; padding: 0; }
+    .header-back:hover { text-decoration: underline; }
+    .header-divider { height: 20px; width: 1px; background: #2a2a2a; }
+    .header-title { font-family: 'Oswald', sans-serif; font-size: 20px; font-weight: 700; letter-spacing: 1px; color: #4A6741; line-height: 1; }
+    .header-subtitle { font-size: 11px; color: #888; margin-top: 2px; }
+    .container { max-width: 640px; margin: 0 auto; padding: 24px 20px 64px; }
+    h1 { font-family: 'Oswald', sans-serif; font-size: 24px; font-weight: 700; letter-spacing: 2px; color: #4A6741; margin-bottom: 4px; }
+    .subtitle { font-size: 13px; color: #888; margin-bottom: 32px; }
+    h2 { font-family: 'Oswald', sans-serif; font-size: 16px; font-weight: 600; letter-spacing: 1px; color: #4A6741; margin-top: 28px; margin-bottom: 8px; }
+    p { font-size: 14px; color: #ccc; margin-bottom: 12px; }
+    a { color: #4A6741; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <header class="app-header">
+    <div class="app-header-inner">
+      <a class="header-back" href="/notebook/" data-back>&larr; Back to Notebook</a>
+      <div class="header-divider"></div>
+      <div>
+        <div class="header-title">BBQ NOTEBOOK</div>
+        <div class="header-subtitle">Track your cooks and save your rubs</div>
+      </div>
+    </div>
+  </header>
+  <div class="container">
+    <h1>PRIVACY POLICY</h1>
+    <p class="subtitle">BBQ Notebook by Holy Smokes BBQ Co &middot; Last updated July 20, 2026</p>
+
+    <h2>WHAT THIS APP DOES</h2>
+    <p>BBQ Notebook by Holy Smokes BBQ Co is a cook log. It lets you record each smoke or grill session, save rub and sauce recipes, attach photos, and share cooks with friends you choose.</p>
+
+    <h2>HOW DATA IS STORED</h2>
+    <p>This app stores data in two places depending on whether you sign in:</p>
+    <p><strong>Without signing in:</strong> Your cooks and recipes stay on your device in your browser's localStorage and are never uploaded to our servers. Anonymous usage analytics still run &mdash; see "Cookies and Tracking" below.</p>
+    <p><strong>With signing in:</strong> Your data is stored in a <strong>Google Cloud Firestore database</strong> hosted on Firebase. This is a real cloud database managed by Google. Data stored in Firestore includes everything listed in the "What Data We Collect" section below. Your local device also keeps a copy in localStorage so the app works offline.</p>
+
+    <h2>ACCOUNTS AND AUTHENTICATION</h2>
+    <p>The app uses Firebase Authentication with Google sign-in. When you sign in, we receive your name, email address, and profile photo URL from your Google account. This information is used to identify you within the app and to your friends. We do not access any other Google account data.</p>
+
+    <h2>WHAT DATA WE COLLECT</h2>
+    <p>If you sign in, the following data is collected and stored in Cloud Firestore:</p>
+    <p><strong>Your profile:</strong> display name, email address, profile photo URL, and a unique friend code (e.g. BBQ-7K3M).</p>
+    <p><strong>Your cooks:</strong> meat type and cut, weight, rub used, sauce used, wood blend, smoker type, fuel source, cook temp, wrap method, finish temp, rest time, weather observations, outcome notes, and any other cook details you enter.</p>
+    <p><strong>Your recipes:</strong> rub and sauce recipes you save, including ingredient lists and notes.</p>
+    <p><strong>Your friends list:</strong> the user IDs, display names, and friend codes of users you connect with. Friend connections are bidirectional &mdash; when you add someone, they also see you.</p>
+    <p><strong>Photos:</strong> photos you attach to cooks are stored in Firebase Cloud Storage when you are signed in, so they sync across your devices. Photos remain associated only with your account and are visible only to you and confirmed friends.</p>
+
+    <h2>HOW YOUR DATA IS SHARED</h2>
+    <p>When you add a friend by exchanging friend codes, they can see the cooks you've logged (meat, rub, wood, temps, weather, notes, and photos). You can see theirs. This is the entire point of the friends feature.</p>
+    <p>No data is shared with anyone you have not added as a friend. Your cooks are only visible to you and your confirmed friends.</p>
+    <p>We do not sell or rent your data, and we do not share it with advertisers or data brokers. There are no sponsored recipes. There is no public feed. The third-party services listed in the next section process data on our behalf so the app can function.</p>
+
+    <h2>THIRD-PARTY SERVICES</h2>
+    <p>The app uses the following third-party services:</p>
+    <p><strong>Firebase Authentication (Google):</strong> handles sign-in. Subject to <a href="https://firebase.google.com/support/privacy" target="_blank" rel="noopener noreferrer">Google's privacy policy</a>.</p>
+    <p><strong>Cloud Firestore (Google Firebase):</strong> the database where user profiles, cooks, recipes, and friend connections are stored when signed in. Data is hosted on Google Cloud infrastructure. Subject to <a href="https://firebase.google.com/support/privacy" target="_blank" rel="noopener noreferrer">Google's privacy policy</a>.</p>
+    <p><strong>Firebase Cloud Storage (Google Firebase):</strong> stores photos you attach to cooks when signed in. Subject to <a href="https://firebase.google.com/support/privacy" target="_blank" rel="noopener noreferrer">Google's privacy policy</a>.</p>
+    <p><strong>National Weather Service (NWS) API:</strong> when you log a cook, the app can optionally fetch nearby weather observations from the U.S. National Weather Service using your device's coordinates. No account or personal data is shared. The NWS API is a free public U.S. government service.</p>
+    <p><strong>Google Analytics / Google Tag Manager:</strong> usage analytics. When you are signed in, your account ID is included so usage can be understood per account. Subject to <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">Google's privacy policy</a>.</p>
+    <p><strong>Netlify:</strong> website hosting and CDN for the web version. Netlify serves the app files but does not have access to Firestore data. Subject to <a href="https://www.netlify.com/privacy/" target="_blank" rel="noopener noreferrer">Netlify's privacy policy</a>.</p>
+
+    <h2>LOCATION DATA</h2>
+    <p>Weather lookups for cooks use your device's location (GPS or network-based) to find the nearest NWS observation station. Coordinates are sent only to the NWS API as part of the query. Your location is not stored, logged, or sent to any other service. The app only accesses your location when you log a cook and you have granted permission. You can revoke location access at any time in your device settings.</p>
+
+    <h2>LOCAL STORAGE</h2>
+    <p>The app stores cook data, recipes, theme preferences, and weather cache in your browser's localStorage. When you sign in, cook data and recipes are also synced to Cloud Firestore, and photos to Cloud Storage, so your data is available across devices.</p>
+
+    <h2>COOKIES AND TRACKING</h2>
+    <p>The app uses Google Analytics and Google Tag Manager to track feature usage (which screens are viewed, which actions are taken). Analytics events do not include your name, email address, or the content of your cooks and recipes. When you are signed in, your account ID is attached to your events. Firebase Authentication uses browser storage (localStorage/IndexedDB) for session management, not cookies.</p>
+
+    <h2>SECURITY</h2>
+    <p>Cloud Firestore and Cloud Storage are protected by security rules that restrict access. Users can only read and write their own data. Friend cook data is accessible only to confirmed friends. All data in transit is encrypted via HTTPS.</p>
+
+    <h2>DATA DELETION</h2>
+    <p>You can delete individual cooks and recipes from within the app. Deleted entries are removed from both your device and Cloud Firestore (if signed in).</p>
+    <p>To request full account deletion, visit our <a href="/notebook/delete-account-notebook.html">account deletion page</a> or email <a href="mailto:datadelete@holysmokesbbqco.com">datadelete@holysmokesbbqco.com</a>. We will remove your Firestore profile, all cooks, all recipes, all photos in Cloud Storage, and all friend connections within 7 days.</p>
+    <p>To clear local data, clear your browser's site data for this domain.</p>
+
+    <h2>CHILDREN'S PRIVACY</h2>
+    <p>This app is not directed at children under 13 and does not knowingly collect any information from children.</p>
+
+    <h2>CHANGES TO THIS POLICY</h2>
+    <p>If this policy changes, the updated version will be posted at this URL with a new date.</p>
+
+    <h2>CONTACT</h2>
+    <p>For questions about this policy, account deletion, or anything else, email <a href="mailto:support@holysmokesbbqco.com">support@holysmokesbbqco.com</a>.</p>
+  </div>
+  <script>
+    document.querySelectorAll('[data-back]').forEach(el => {
+      el.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (history.length > 1) history.back();
+        else location.href = '/notebook/';
+      });
+    });
+  </script>
+</body>
+</html>

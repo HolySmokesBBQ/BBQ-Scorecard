@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <!-- GTM + GA4 init — external file so CSP can drop 'unsafe-inline' -->
+  <script src="/gtm-init.js?v=7"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Privacy Policy — BBQ Board by Holy Smokes BBQ Co</title>
+  <link rel="icon" href="/favicon.ico" />
+  <style>
+    @font-face {
+      font-family: 'Inter';
+      font-style: normal;
+      font-weight: 400 700;
+      font-display: swap;
+      src: url(/fonts/inter-latin.woff2) format('woff2');
+      unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+    }
+    @font-face {
+      font-family: 'Oswald';
+      font-style: normal;
+      font-weight: 400 700;
+      font-display: swap;
+      src: url(/fonts/oswald-latin.woff2) format('woff2');
+      unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #1a1a1a; color: #f5e6d3; font-family: 'Inter', sans-serif; line-height: 1.7; }
+    .app-header { background: #121a14; border-bottom: 1px solid #2a2a2a; padding: 14px 16px; }
+    .app-header-inner { max-width: 640px; margin: 0 auto; display: flex; align-items: center; gap: 12px; }
+    .header-back { background: none; border: none; color: #888; font-size: 14px; cursor: pointer; text-decoration: none; padding: 0; }
+    .header-back:hover { text-decoration: underline; }
+    .header-divider { height: 20px; width: 1px; background: #2a2a2a; }
+    .header-title { font-family: 'Oswald', sans-serif; font-size: 20px; font-weight: 700; letter-spacing: 1px; color: #d4a64a; line-height: 1; }
+    .header-subtitle { font-size: 11px; color: #888; margin-top: 2px; }
+    .container { max-width: 640px; margin: 0 auto; padding: 24px 20px 64px; }
+    h1 { font-family: 'Oswald', sans-serif; font-size: 24px; font-weight: 700; letter-spacing: 2px; color: #d4a64a; margin-bottom: 4px; }
+    .subtitle { font-size: 13px; color: #888; margin-bottom: 32px; }
+    h2 { font-family: 'Oswald', sans-serif; font-size: 16px; font-weight: 600; letter-spacing: 1px; color: #d4a64a; margin-top: 28px; margin-bottom: 8px; }
+    p { font-size: 14px; color: #ccc; margin-bottom: 12px; }
+    a { color: #d4a64a; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <header class="app-header">
+    <div class="app-header-inner">
+      <a class="header-back" href="/board/" data-back>&larr; Back to Board</a>
+      <div class="header-divider"></div>
+      <div>
+        <div class="header-title">BBQ BOARD</div>
+        <div class="header-subtitle">Find the cheapest meat near you</div>
+      </div>
+    </div>
+  </header>
+  <div class="container">
+    <h1>PRIVACY POLICY</h1>
+    <p class="subtitle">BBQ Board by Holy Smokes BBQ Co &middot; Last updated July 20, 2026</p>
+
+    <h2>WHAT THIS APP DOES</h2>
+    <p>BBQ Board by Holy Smokes BBQ Co is a crowdsourced meat price directory. Users submit prices they see at local butchers, grocers, and warehouse clubs; other users see those submissions ranked by cheapest, freshest, or nearest. The whole point of the app is that submissions are public to all other users.</p>
+
+    <h2>HOW DATA IS STORED</h2>
+    <p>Prices submitted through the app, and the shops those prices are tagged to, are stored in a <strong>Google Cloud Firestore database</strong> hosted on Firebase. This is a real cloud database managed by Google. Data stored in Firestore includes everything listed in the "What Data We Collect" section below. Your device also keeps a local cache in localStorage so the app works offline.</p>
+
+    <h2>ACCOUNTS AND AUTHENTICATION</h2>
+    <p>The app uses Firebase Authentication with Google sign-in. Signing in is required to submit a price, so that submissions can be attributed. When you sign in, we receive your name, email address, and profile photo URL from your Google account. Your display name is shown next to prices you submit. We do not access any other Google account data.</p>
+
+    <h2>WHAT DATA WE COLLECT</h2>
+    <p>The following data is collected and stored in Cloud Firestore:</p>
+    <p><strong>Your profile:</strong> display name, email address, profile photo URL, and your user ID.</p>
+    <p><strong>Your submissions:</strong> the meat cut, the shop, the price per pound, the submission timestamp, an optional note, an optional photo of the price tag, and your user ID as the submitter.</p>
+    <p><strong>Shop data:</strong> shop name, address, approximate location (latitude/longitude), store type (butcher, grocer, warehouse), and city/region. Most shops are pre-seeded by us from public listings; when you submit a price for a shop not on Board yet, the shop record itself is added and is visible to all users.</p>
+    <p><strong>Verified badges:</strong> if other users confirm a price you submitted, that verification is recorded and displayed next to the submission.</p>
+
+    <h2>HOW YOUR DATA IS SHARED</h2>
+    <p>Board is a crowdsourced directory. Submitted prices, shop names, shop locations, submission timestamps, and the display name of the submitter are visible to all other users of the app. This is what the app is for &mdash; a price only helps other cooks if they can see it.</p>
+    <p>Your email address and profile photo URL are not shown to other users. Only your display name is public.</p>
+    <p>We do not sell or rent your data, and we do not share it with advertisers or data brokers. The third-party services listed in the next section process data on our behalf so the app can function.</p>
+
+    <h2>THIRD-PARTY SERVICES</h2>
+    <p>The app uses the following third-party services:</p>
+    <p><strong>Firebase Authentication (Google):</strong> handles Google sign-in. Subject to <a href="https://firebase.google.com/support/privacy" target="_blank" rel="noopener noreferrer">Google's privacy policy</a>.</p>
+    <p><strong>Cloud Firestore (Google Firebase):</strong> the database where user profiles, submitted prices, shop records, and verification counts are stored. Data is hosted on Google Cloud infrastructure in the <code>holy-smokes-bbq-board</code> Firebase project. Subject to <a href="https://firebase.google.com/support/privacy" target="_blank" rel="noopener noreferrer">Google's privacy policy</a>.</p>
+    <p><strong>Firebase Cloud Storage (Google Firebase):</strong> stores optional price-tag photos attached to submissions. Photos are visible to all users along with the submission itself. Subject to <a href="https://firebase.google.com/support/privacy" target="_blank" rel="noopener noreferrer">Google's privacy policy</a>.</p>
+    <p><strong>OpenStreetMap / Leaflet:</strong> map tiles for the shop map view are served from OpenStreetMap. Your device requests tiles based on the visible map area. Subject to the <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap Foundation's privacy notice</a>.</p>
+    <p><strong>Google Analytics / Google Tag Manager:</strong> usage analytics (which screens are viewed, which submissions are opened, which cities are searched). Event parameters can include your resolved city, filter and radius choices, and submission activity, but not your Google account name, email, or user ID. Google Analytics also derives approximate location from your IP address. Subject to <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">Google's privacy policy</a>.</p>
+    <p><strong>Netlify:</strong> website hosting and CDN for the web version. Netlify serves the app files but does not have access to Firestore data. Subject to <a href="https://www.netlify.com/privacy/" target="_blank" rel="noopener noreferrer">Netlify's privacy policy</a>.</p>
+
+    <h2>LOCATION DATA</h2>
+    <p>Board uses two forms of location data. <strong>Your device's location</strong> (GPS or network-based) is used, only if you grant permission, to sort shops by nearest and to filter to nearby cities. Your precise coordinates are not stored or transmitted; the distance sort happens on your device. The resolved city and approximate distance are included in usage analytics events, and Google Analytics also derives approximate location from your IP address. <strong>Shop locations</strong> (latitude/longitude of each butcher, grocer, or warehouse on Board) are stored in Firestore and are publicly visible to all users on the shop map. You can revoke your device's location access at any time in your device settings; the app will still work, but you'll need to pick your city manually.</p>
+
+    <h2>LOCAL STORAGE</h2>
+    <p>The app stores your selected region, city, theme preferences, and a cache of recent shops and prices in your browser's localStorage. Submitted prices and shop records also live in Cloud Firestore.</p>
+
+    <h2>COOKIES AND TRACKING</h2>
+    <p>The app uses Google Analytics and Google Tag Manager to track feature usage (which screens are viewed, which actions are taken). Event parameters can include your resolved city and filter choices; they do not include your Google account name, email, or user ID. Firebase Authentication uses browser storage (localStorage/IndexedDB) for session management, not cookies.</p>
+
+    <h2>SECURITY</h2>
+    <p>Cloud Firestore is protected by security rules that restrict who can write what. Users can only submit prices while signed in, and each submission is bound to their user ID. All data in transit is encrypted via HTTPS.</p>
+
+    <h2>DATA DELETION</h2>
+    <p>You can delete individual price submissions you've made from within the app. Deleted submissions are removed from Cloud Firestore, but the shop record itself is preserved so other users' submissions on that shop remain visible.</p>
+    <p>To request full account deletion, visit our <a href="/delete-account-board.html">account deletion page</a> or email <a href="mailto:datadelete@holysmokesbbqco.com">datadelete@holysmokesbbqco.com</a>. We will remove your Firestore profile, all price submissions you made, and any attached photos in Cloud Storage within 7 days. Shop records you were the first to add are retained; other users' submissions against those shops remain valid data for the community.</p>
+    <p>To clear local data, clear your browser's site data for this domain.</p>
+
+    <h2>CHILDREN'S PRIVACY</h2>
+    <p>This app is not directed at children under 13 and does not knowingly collect any information from children.</p>
+
+    <h2>CHANGES TO THIS POLICY</h2>
+    <p>If this policy changes, the updated version will be posted at this URL with a new date.</p>
+
+    <h2>CONTACT</h2>
+    <p>For questions about this policy, account deletion, or anything else, email <a href="mailto:support@holysmokesbbqco.com">support@holysmokesbbqco.com</a>.</p>
+  </div>
+  <script>
+    document.querySelectorAll('[data-back]').forEach(el => {
+      el.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (history.length > 1) history.back();
+        else location.href = '/board/';
+      });
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <!-- GTM + GA4 init — external file so CSP can drop 'unsafe-inline' -->
+  <script src="/gtm-init.js?v=7"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Delete Account — BBQ Notebook by Holy Smokes BBQ Co</title>
+  <link rel="icon" href="/favicon.ico" />
+  <style>
+    @font-face {
+      font-family: 'Inter';
+      font-style: normal;
+      font-weight: 400 700;
+      font-display: swap;
+      src: url(/fonts/inter-latin.woff2) format('woff2');
+      unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+    }
+    @font-face {
+      font-family: 'Oswald';
+      font-style: normal;
+      font-weight: 400 700;
+      font-display: swap;
+      src: url(/fonts/oswald-latin.woff2) format('woff2');
+      unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #1a1a1a; color: #f5e6d3; font-family: 'Inter', sans-serif; line-height: 1.7; }
+    .app-header { background: #121a14; border-bottom: 1px solid #2a2a2a; padding: 14px 16px; }
+    .app-header-inner { max-width: 640px; margin: 0 auto; display: flex; align-items: center; gap: 12px; }
+    .header-back { background: none; border: none; color: #888; font-size: 14px; cursor: pointer; text-decoration: none; padding: 0; }
+    .header-back:hover { text-decoration: underline; }
+    .header-divider { height: 20px; width: 1px; background: #2a2a2a; }
+    .header-title { font-family: 'Oswald', sans-serif; font-size: 20px; font-weight: 700; letter-spacing: 1px; color: #4A6741; line-height: 1; }
+    .header-subtitle { font-size: 11px; color: #888; margin-top: 2px; }
+    .container { max-width: 640px; margin: 0 auto; padding: 24px 20px 64px; }
+    h1 { font-family: 'Oswald', sans-serif; font-size: 24px; font-weight: 700; letter-spacing: 2px; color: #4A6741; margin-bottom: 4px; }
+    .subtitle { font-size: 13px; color: #888; margin-bottom: 32px; }
+    h2 { font-family: 'Oswald', sans-serif; font-size: 16px; font-weight: 600; letter-spacing: 1px; color: #4A6741; margin-top: 28px; margin-bottom: 8px; }
+    p { font-size: 14px; color: #ccc; margin-bottom: 12px; }
+    ol { padding-left: 20px; margin-bottom: 16px; }
+    li { font-size: 14px; color: #ccc; margin-bottom: 8px; }
+    a { color: #4A6741; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .highlight { background: #1f2a1a; border: 1px solid #4A6741; border-radius: 8px; padding: 16px; margin: 16px 0; }
+    .email-link { font-weight: 600; color: #4A6741; }
+    .warning { background: #4a1e1e; border: 1px solid #fca5a5; border-radius: 8px; padding: 16px; margin: 16px 0; }
+    .warning p { color: #fca5a5; margin-bottom: 0; }
+  </style>
+</head>
+<body>
+  <header class="app-header">
+    <div class="app-header-inner">
+      <a class="header-back" href="/notebook/" data-back>&larr; Back to Notebook</a>
+      <div class="header-divider"></div>
+      <div>
+        <div class="header-title">BBQ NOTEBOOK</div>
+        <div class="header-subtitle">Track your cooks and save your rubs</div>
+      </div>
+    </div>
+  </header>
+  <div class="container">
+    <h1>DELETE YOUR ACCOUNT</h1>
+    <p class="subtitle">BBQ Notebook by Holy Smokes BBQ Co</p>
+
+    <p>You can delete your data from BBQ Notebook at any time. There are two options depending on what you want to remove.</p>
+
+    <h2>OPTION 1: DELETE INDIVIDUAL COOKS OR RECIPES</h2>
+    <p>You can delete any cook or recipe directly from within the app:</p>
+    <ol>
+      <li>Open the app and find the cook or recipe you want to delete</li>
+      <li>Tap to open it</li>
+      <li>Scroll to the bottom and tap <strong>Delete</strong></li>
+      <li>Confirm the deletion</li>
+    </ol>
+    <p>Deleted entries are removed from your device and from Cloud Firestore immediately. Photos attached to deleted cooks are removed from Cloud Storage at the same time. This cannot be undone.</p>
+
+    <h2>OPTION 2: DELETE YOUR ENTIRE ACCOUNT</h2>
+    <p>To delete your account and all associated data from our servers, send an email to:</p>
+    <div class="highlight">
+      <p><a class="email-link" href="mailto:datadelete@holysmokesbbqco.com?subject=Account%20Deletion%20Request%20-%20BBQ%20Notebook">datadelete@holysmokesbbqco.com</a></p>
+      <p style="font-size: 12px; color: #888; margin-bottom: 0;">Subject: Account Deletion Request &mdash; BBQ Notebook</p>
+    </div>
+    <p>Include the email address you used to sign in with Google. We will delete the following data within 7 days:</p>
+    <ol>
+      <li><strong>Your profile</strong> &mdash; display name, email, photo URL, and friend code</li>
+      <li><strong>All of your cooks</strong> &mdash; meat, rub, wood, temps, weather, outcome notes, and any other cook data stored in Cloud Firestore</li>
+      <li><strong>All of your recipes</strong> &mdash; saved rubs and sauces</li>
+      <li><strong>All of your photos</strong> &mdash; removed from Firebase Cloud Storage</li>
+      <li><strong>Your friend connections</strong> &mdash; removed from both your account and your friends' accounts</li>
+    </ol>
+
+    <div class="warning">
+      <p><strong>This is permanent.</strong> Once your account is deleted, your cooks, recipes, photos, and friend connections cannot be recovered.</p>
+    </div>
+
+    <h2>LOCAL DATA</h2>
+    <p>Data stored on your device (localStorage) is not affected by an account deletion request. To clear local data, go to your browser settings and clear site data for holysmokesbbqco.com, or uninstall the app.</p>
+
+    <h2>WHAT WE KEEP</h2>
+    <p>Nothing tied to your account. When your account is deleted, all data associated with it is permanently removed from Cloud Firestore and Cloud Storage. We do not retain backups of deleted user data. Anonymised usage analytics already collected by Google Analytics are held on Google's own retention schedule and are not linked back to a deleted account.</p>
+
+    <h2>QUESTIONS</h2>
+    <p>If you have questions about data deletion, contact us at <a href="mailto:datadelete@holysmokesbbqco.com">datadelete@holysmokesbbqco.com</a> or visit our <a href="/notebook/privacy-notebook.html">privacy policy</a>.</p>
+
+    <div style="text-align: center; padding: 32px 0; margin-top: 16px; border-top: 1px solid #333;">
+      <div style="font-size: 10px; color: #666;">&copy; 2026 Holy Smokes BBQ Co</div>
+    </div>
+  </div>
+  <script>
+    document.querySelectorAll('[data-back]').forEach(el => {
+      el.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (history.length > 1) history.back();
+        else location.href = '/notebook/';
+      });
+    });
+  </script>
+</body>
+</html>

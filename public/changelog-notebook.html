@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="/gtm-init.js?v=7"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Changelog — BBQ Notebook by Holy Smokes BBQ Co</title>
+  <link rel="icon" href="/favicon.ico" />
+  <style>
+    @font-face {
+      font-family: 'Inter';
+      font-style: normal;
+      font-weight: 400 700;
+      font-display: swap;
+      src: url(/fonts/inter-latin.woff2) format('woff2');
+      unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+    }
+    @font-face {
+      font-family: 'Oswald';
+      font-style: normal;
+      font-weight: 400 700;
+      font-display: swap;
+      src: url(/fonts/oswald-latin.woff2) format('woff2');
+      unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #1a1a1a; color: #f5e6d3; font-family: 'Inter', sans-serif; line-height: 1.7; }
+    .app-header { background: #121a14; border-bottom: 1px solid #2a2a2a; padding: 14px 16px; }
+    .app-header-inner { max-width: 640px; margin: 0 auto; display: flex; align-items: center; gap: 12px; }
+    .header-back { background: none; border: none; color: #888; font-size: 14px; cursor: pointer; text-decoration: none; padding: 0; }
+    .header-back:hover { text-decoration: underline; }
+    .header-divider { height: 20px; width: 1px; background: #2a2a2a; }
+    .header-title { font-family: 'Oswald', sans-serif; font-size: 20px; font-weight: 700; letter-spacing: 1px; color: #4A6741; line-height: 1; }
+    .header-subtitle { font-size: 11px; color: #888; margin-top: 2px; }
+    .container { max-width: 640px; margin: 0 auto; padding: 24px 20px 64px; }
+    h1 { font-family: 'Oswald', sans-serif; font-size: 24px; font-weight: 700; letter-spacing: 2px; color: #4A6741; margin-bottom: 4px; }
+    .subtitle { font-size: 13px; color: #888; margin-bottom: 32px; }
+    h2 { font-family: 'Oswald', sans-serif; font-size: 18px; font-weight: 600; letter-spacing: 1px; color: #4A6741; margin-top: 32px; margin-bottom: 4px; }
+    .date { font-size: 12px; color: #666; margin-bottom: 10px; }
+    .tag { display: inline-block; font-size: 10px; font-weight: 600; letter-spacing: 1px; padding: 2px 8px; border-radius: 4px; margin-right: 4px; margin-bottom: 4px; }
+    .tag-feature { background: #2d4a1e; color: #86efac; }
+    .tag-fix { background: #4a1e1e; color: #fca5a5; }
+    .tag-infra { background: #1e3a4a; color: #93c5fd; }
+    .tag-design { background: #4a3a1e; color: #fcd34d; }
+    ul { padding-left: 20px; margin-bottom: 8px; }
+    li { font-size: 14px; color: #ccc; margin-bottom: 6px; }
+    a { color: #4A6741; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .current { background: #1f2a1a; border: 1px solid #4A6741; border-radius: 8px; padding: 16px; margin-top: 8px; }
+    .separator { border: none; border-top: 1px solid #333; margin: 32px 0; }
+  </style>
+</head>
+<body>
+  <header class="app-header">
+    <div class="app-header-inner">
+      <a class="header-back" href="/notebook/" data-back>&larr; Back to Notebook</a>
+      <div class="header-divider"></div>
+      <div>
+        <div class="header-title">BBQ NOTEBOOK</div>
+        <div class="header-subtitle">Track your cooks and save your rubs</div>
+      </div>
+    </div>
+  </header>
+  <div class="container">
+    <h1>CHANGELOG</h1>
+    <p class="subtitle">BBQ Notebook by Holy Smokes BBQ Co &middot; Version History</p>
+
+    <div class="current">
+      <h2>v2.1.7</h2>
+      <p class="date">July 11, 2026</p>
+      <span class="tag tag-feature">FEATURE</span>
+      <ul>
+        <li><strong>Radial rating dial</strong> &mdash; the cook rating is now a press-and-hold wheel you rotate around like a temperature knob. Continuous 0.0 to 9.0 instead of picking a single number, with a haptic tick at each integer. Now you can rate your cook as precisely as it deserves &mdash; the 8.5 that isn&rsquo;t quite a 9, the 3.2 that wasn&rsquo;t quite a fail</li>
+        <li>Full keyboard and stepper accessibility for the rating dial &mdash; arrow keys step 0.1, PageUp/PageDown step 1, Home/End jump to bounds</li>
+      </ul>
+    </div>
+
+    <hr class="separator" />
+
+    <div>
+      <h2>v2.1.6</h2>
+      <p class="date">June 22, 2026</p>
+      <span class="tag tag-feature">FEATURE</span>
+      <ul>
+        <li><strong>Rewards &amp; tiers</strong> &mdash; brand-new Rewards page with three ladders to climb. Overall pitmaster path (First Light at 1 cook all the way to Eternal Pitmaster at 2,500). Per-meat ladders (Brisket Boss, Pulled Pork Patriarch, Hall of the Yardbird, and dozens more &mdash; each meat has its own 9-tier ladder up to 1,000 cooks). Plus 8 behavioral achievements (Note Taker, Recipe Author, Lesson Learner, Thermometer Whisperer, etc.)</li>
+        <li><strong>Unlock celebrations</strong> &mdash; the save banner turns gold and names your new tier the moment you cross a threshold. No streaks, no points, no leaderboards beyond Cook Compare &mdash; just earned titles that stick with you</li>
+        <li>Reach Rewards from the home screen quick actions</li>
+      </ul>
+    </div>
+
+    <hr class="separator" />
+
+    <div>
+      <h2>v2.1.5</h2>
+      <p class="date">June 22, 2026</p>
+      <span class="tag tag-feature">FEATURE</span>
+      <ul>
+        <li><strong>Bulk CSV export</strong> &mdash; the Stats page now has <em>Export cooks CSV</em> and <em>Export recipes CSV</em> buttons. One click and your whole cook log (or recipe library) lands on your device as a spreadsheet-ready file for backup or analysis</li>
+        <li><strong>Tips from your past cooks</strong> &mdash; when you start a new cook of a meat you&rsquo;ve cooked before, the form surfaces the &ldquo;What I&rsquo;d change next time&rdquo; notes from your last few cooks of that meat. Tap to expand. Closes the loop on your own feedback so you don&rsquo;t repeat the same mistake</li>
+        <li><strong>Filters stick between sessions</strong> &mdash; if you filter the cook log to one meat type or tag, the filter survives an app restart instead of resetting to All</li>
+        <li><strong>Recipe search</strong> &mdash; new search box on the Recipes page matches recipe name, ingredient name, and prep notes</li>
+        <li><strong>Tag autocomplete</strong> &mdash; the cook tag input now suggests tags you&rsquo;ve already used as you type</li>
+      </ul>
+    </div>
+
+    <hr class="separator" />
+
+    <div>
+      <h2>v2.1.4</h2>
+      <p class="date">June 22, 2026</p>
+      <span class="tag tag-feature">FEATURE</span>
+      <span class="tag tag-fix">FIX</span>
+      <ul>
+        <li><strong>Export any cook to PDF</strong> &mdash; new <em>Export PDF</em> button on every cook&rsquo;s detail page renders the full cook log (meat, rub, wood, smoker, temps, timestamped notes, photos) into a Letter-size PDF you can save, print, or share</li>
+        <li><strong>Multi-photo import</strong> &mdash; the Import page now accepts up to 5 photos at once for OCR brands. The first one drives OCR; the rest attach to the cook as bonus shots</li>
+        <li><strong>&ldquo;Cook this again&rdquo;</strong> &mdash; the cook detail page action button formerly named <em>Duplicate</em> is now <em>Cook this again</em>, with the same one-tap duplicate behavior</li>
+        <li><strong>MEATER parser tweak</strong> &mdash; OCR-truncated custom meat names like &ldquo;Flat (Bottom Rack&rdquo; are auto-closed to &ldquo;Flat (Bottom Rack)&rdquo; on import</li>
+      </ul>
+    </div>
+
+    <hr class="separator" />
+
+    <div>
+      <h2>v2.1.3</h2>
+      <p class="date">June 20, 2026</p>
+      <span class="tag tag-feature">FEATURE</span>
+      <ul>
+        <li><strong>More thermometer brands</strong> &mdash; Combustion, ChefsTemp, ThermoPro, Govee, and Maverick now show up in the Import brand picker alongside MEATER, FireBoard, ThermoWorks, Weber Connect, and Inkbird</li>
+        <li><strong>Remembers your brand</strong> &mdash; the Import page now starts on the brand you last used so you don&rsquo;t have to scroll the picker every time. Tap <em>← Back</em> from the file picker if you want to switch brands</li>
+      </ul>
+    </div>
+
+    <hr class="separator" />
+
+    <div>
+      <h2>v2.1.2</h2>
+      <p class="date">June 11, 2026</p>
+      <span class="tag tag-feature">FEATURE</span>
+      <ul>
+        <li><strong>Universal Thermometer Import</strong> &mdash; the MEATER Import page is now a full multi-brand Import page. Pick your thermometer brand and we walk you through the right export step for that device</li>
+        <li><strong>CSV import</strong> for FireBoard, ThermoWorks, and Weber Connect &mdash; cleaner than OCR since those apps already give you structured CSV exports. We pull cook duration, peak food temp, average pit temp, and the cook date automatically</li>
+        <li><strong>Screenshot OCR</strong> for MEATER (already there) and Inkbird &mdash; same flow as before, brand-specific guide</li>
+        <li><strong>Generic CSV fallback</strong> &mdash; pick &ldquo;Other / generic CSV&rdquo; and any thermometer with a CSV export that has a timestamp column + at least one temperature column will work</li>
+      </ul>
+    </div>
+
+    <hr class="separator" />
+
+    <div>
+      <h2>v2.1.1</h2>
+      <p class="date">June 11, 2026</p>
+      <span class="tag tag-feature">FEATURE</span>
+      <span class="tag tag-fix">FIX</span>
+      <ul>
+        <li><strong>Sign in with email</strong> &mdash; Google Sign-In is still here, but now there&rsquo;s an email + password option for anyone who doesn&rsquo;t want to tie their cook log to a Google account. Forgot-password reset link works too</li>
+        <li><strong>Cook Share Card</strong> &mdash; new <em>Share</em> button on every cook&rsquo;s detail page generates a 1080&times;1920 image card with the cook name, meat, weight, cook temp, finish temp, cook time, rub, wood, smoker, wrap, and rest time on a charcoal Holy Smokes background. Share to messages, Instagram Stories, BBQ group chats, or save to your camera roll</li>
+        <li><strong>Draft cook persistence</strong> &mdash; in-progress cooks now auto-save as drafts. If the app gets backgrounded or interrupted mid-form, you get a restore prompt when you start a new cook</li>
+        <li><strong>Logout confirmation</strong> &mdash; a stray tap on the Sign Out button no longer drops your session. Confirms first</li>
+        <li><strong>Replay the walkthrough</strong> &mdash; new <em>Show app walkthrough again</em> button on your Profile if you skipped the first-launch tour and want to revisit it</li>
+        <li>Internal: expanded GA4 instrumentation so we can finally measure whether MEATER Import actually works in the wild (parse-success rate, drop-off points, abandoned imports)</li>
+      </ul>
+    </div>
+
+    <hr class="separator" />
+
+    <div>
+      <h2>v2.1.0</h2>
+      <p class="date">June 10, 2026</p>
+      <span class="tag tag-feature">FEATURE</span>
+      <span class="tag tag-fix">FIX</span>
+      <ul>
+        <li><strong>Import from MEATER</strong> &mdash; new home-screen button reads a screenshot of your MEATER Cook Summary screen and pre-fills a cook for you. We pull the meat type, finish temp, cook date, and total duration automatically, then show you what we read so you can review and edit anything before tapping save</li>
+        <li>The screenshot itself attaches as the cook&rsquo;s first photo so MEATER&rsquo;s temperature graph stays right there in your cook log forever</li>
+        <li>Fields the OCR isn&rsquo;t sure about get a gold <em>DOUBLE CHECK</em> chip so you know exactly where to look twice</li>
+        <li>Step-by-step in-app guide walks you through screenshotting the right MEATER screen the first time</li>
+        <li><strong>Floating add-cook button</strong> &mdash; new <em>+</em> button stays pinned to the bottom-right of the home screen so you can start a new cook from anywhere in the cook log, not just the empty state</li>
+      </ul>
+    </div>
+
+    <hr class="separator" />
+
+    <div>
+      <h2>v2.0.7</h2>
+      <p class="date">June 10, 2026</p>
+      <span class="tag tag-feature">FEATURE</span>
+      <ul>
+        <li><strong>Sides and Desserts</strong> are first-class recipe types now &mdash; smoke a mac &amp; cheese, save your banana pudding, log a peach cobbler. Same ingredient list + preparation field as sauces, just with their own filter pill and a smarter form label per type (a no-cook dessert doesn&rsquo;t ask for &ldquo;Cook Method&rdquo;)</li>
+        <li><strong>New ingredient units</strong> &mdash; <code>box</code>, <code>can</code>, <code>jar</code>, and <code>pkg</code> joined the unit dropdown so &ldquo;1 box instant vanilla pudding&rdquo; works as written without a hack</li>
+        <li>Recipe filter pills on the Recipes screen now include Sides and Desserts alongside Rubs, Sauces, and Full Cooks</li>
+      </ul>
+    </div>
+
+    <hr class="separator" />
+
+    <div>
+      <h2>v2.0.6</h2>
+      <p class="date">June 10, 2026</p>
+      <span class="tag tag-feature">FEATURE</span>
+      <ul>
+        <li><strong>Friend cooks go real</strong> &mdash; the Cook Compare bracket layout now pulls actual friend cooks from Firestore (any cook a friend marked <em>Share with friends</em>) and shows them side-by-side with your own. The example friend cooks step aside the moment a real shared cook lands</li>
+        <li>Friend cook fetch runs on sign-in, on every Sync, and whenever a friend connects or disconnects &mdash; no manual refresh needed</li>
+        <li>Friend recipes are pulled at the same time and surface in your Recipes list with attribution to the friend who shared</li>
+      </ul>
+    </div>
+
+    <hr class="separator" />
+
+    <div>
+      <h2>v2.0.5</h2>
+      <p class="date">June 10, 2026</p>
+      <span class="tag tag-fix">FIX</span>
+      <span class="tag tag-infra">SECURITY</span>
+      <ul>
+        <li><strong>Cook deletions now sync to the cloud</strong> &mdash; previously deleting a cook only removed it from your device, then the next cloud sync would resurrect it. Same fix for recipes</li>
+        <li><strong>Cook photos now back up to Cloud Storage</strong> &mdash; before, photos lived only on your device and would silently disappear if you switched devices or cleared app data. Now they upload on save and stay with your account</li>
+        <li>Photo cleanup &mdash; when you delete a cook, its photos are deleted from Cloud Storage too, not just from your device</li>
+        <li>Internal: registered <code>cooks/&#123;userId&#125;/&#123;cookId&#125;/&#123;photo&#125;</code> in the Firebase Storage rules with the same friend-read gating as review photos; tightened the Android-specific gitignore so Firebase credentials can never be committed by accident</li>
+      </ul>
+    </div>
+
+    <hr class="separator" />
+
+    <div>
+      <h2>v2.0.4</h2>
+      <p class="date">June 10, 2026</p>
+      <span class="tag tag-feature">FEATURE</span>
+      <span class="tag tag-fix">FIX</span>
+      <ul>
+        <li><strong>Stats page</strong> &mdash; new screen rounding up your cook log by the numbers. Total smoking time counter, cook + recipe + friend counts, best-rated cook, longest smoke, average cook temp / finish temp / rest, most-used rub, most-used wood, and full meat breakdown</li>
+        <li>Reach it from the home screen account block &mdash; new <em>Stats</em> button alongside Cook Compare and Recipes</li>
+        <li><strong>Profile fix</strong> &mdash; removed the leftover restaurant scorecard stat block from your Profile page that was showing review counts instead of cook stats. Profile is now focused on account + friends, and Stats handles the numbers</li>
+        <li>Wording fix: friend-request copy on Profile now says &ldquo;cooks&rdquo; instead of &ldquo;reviews&rdquo;</li>
+      </ul>
+    </div>
+
+    <hr class="separator" />
+
+    <div>
+      <h2>v2.0.3</h2>
+      <p class="date">June 10, 2026</p>
+      <span class="tag tag-feature">FEATURE</span>
+      <span class="tag tag-fix">FIX</span>
+      <span class="tag tag-design">DESIGN</span>
+      <ul>
+        <li><strong>Cloud sync</strong> &mdash; new <em>Sync to cloud</em> button on the home screen and Recipes page backs your cooks and recipes up to your account. Two-way: pulls anything cloud-only down, merges with local, pushes the combined set back up &mdash; nothing gets lost across phone wipes, reinstalls, or switching devices</li>
+        <li><strong>Cook Compare populated</strong> &mdash; example friend cooks (Brother Brian and Dad) appear alongside your own so the head-to-head bracket view is visible from day one. They&rsquo;ll step aside automatically once real friend cook sharing ships</li>
+        <li><strong>Save confirmation banners</strong> &mdash; saving a cook or a recipe now shows a clear green confirmation banner with the name of what you just saved, so you know the write actually went through</li>
+        <li><strong>Launcher icon text fix</strong> &mdash; the BBQ Notebook logo is now sized comfortably inside Android&rsquo;s adaptive-icon safe zone, so &ldquo;BBQ&rdquo; and &ldquo;NOTEBOOK&rdquo; no longer get clipped on circular-mask launchers (Pixel, OnePlus, stock Android)</li>
+        <li><strong>Changelog page</strong> &mdash; you&rsquo;re reading it. Reachable from About &rarr; Changelog</li>
+        <li>Defensive: recipes saved before the createdAt field existed now get one auto-assigned, so newest-first sort works on every recipe</li>
+      </ul>
+    </div>
+
+    <hr class="separator" />
+
+    <div>
+      <h2>v2.0.0</h2>
+      <p class="date">June 10, 2026</p>
+      <span class="tag tag-feature">FEATURE</span>
+      <span class="tag tag-design">DESIGN</span>
+      <span class="tag tag-infra">INFRA</span>
+      <ul>
+        <li>Standalone Notebook &mdash; every trace of the restaurant scorecard side has been pulled from the app. No mode toggle, no restaurant search, no cross-app branding anywhere in the UI</li>
+        <li>Introducing <strong>Cook Compare</strong> &mdash; the leaderboard rebuilt around your cooks. Default view is a recency feed of your latest smokes. Tap a meat type to flip into a side-by-side bracket showing your last 5 cooks of that meat with rub, wood, smoker, cook temp, wrap, finish temp, rest, weather, and rating per card</li>
+        <li>Launcher icon &mdash; new charcoal background sampled from the logo&rsquo;s outer ring so the icon reads as one continuous mark on your home screen instead of a logo floating on a white tile</li>
+        <li>Internal: shared components forked into NotebookHome and NotebookLeaderboard so the bundle is leaner and cleaner</li>
+      </ul>
+    </div>
+
+    <hr class="separator" />
+
+    <div>
+      <h2>v1.0.3</h2>
+      <p class="date">June 10, 2026</p>
+      <span class="tag tag-fix">FIX</span>
+      <ul>
+        <li>Google Sign-In fix &mdash; v1.0.0 through v1.0.2 shipped with the Notebook&rsquo;s Android OAuth client missing from the Firebase config, so tapping &ldquo;Sign in with Google&rdquo; bounced immediately. Now resolved end-to-end with the Play App Signing fingerprint registered properly</li>
+      </ul>
+    </div>
+
+    <hr class="separator" />
+
+    <div>
+      <h2>v1.0.2</h2>
+      <p class="date">June 10, 2026</p>
+      <span class="tag tag-design">DESIGN</span>
+      <ul>
+        <li>Notebook stands on its own &mdash; new About story drawn from Joel&rsquo;s roots (Kansas City BBQ family, United Methodist pastor in seminary), Notebook-specific privacy and account deletion pages, no more cross-link to the restaurant scorecard side</li>
+      </ul>
+    </div>
+
+    <hr class="separator" />
+
+    <div>
+      <h2>v1.0.1</h2>
+      <p class="date">June 9, 2026</p>
+      <span class="tag tag-fix">FIX</span>
+      <ul>
+        <li>Launcher icon &mdash; v1.0.0 shipped with the framework&rsquo;s placeholder icon instead of the BBQ Notebook logo. Real Holy Smokes / BBQ Notebook badge now shows on the home screen and app drawer</li>
+      </ul>
+    </div>
+
+    <hr class="separator" />
+
+    <div>
+      <h2>v1.0.0</h2>
+      <p class="date">June 9, 2026</p>
+      <span class="tag tag-feature">FEATURE</span>
+      <ul>
+        <li>First release &mdash; a focused cook log for people who actually care about BBQ. Log every smoke with rubs, woods, smoker temps, weather, wrap method, finish temps, rest times, and outcome notes</li>
+        <li>Save rubs and sauces as reusable recipes &mdash; apply them to any cook with one tap, never re-type eight ingredients again</li>
+        <li>Photos sync to Firebase Cloud Storage so your BBQ archive stays with you across devices</li>
+        <li>Private friend codes (6 characters, mutual acceptance required) &mdash; no public feed, no random users, just the people you actually cook with</li>
+        <li>Built by a BBQ family from Kansas City. Faith, family, and fire</li>
+      </ul>
+    </div>
+  </div>
+  <script>
+    document.querySelectorAll('[data-back]').forEach(el => {
+      el.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (history.length > 1) history.back();
+        else location.href = '/notebook/';
+      });
+    });
+  </script>
+</body>
+</html>

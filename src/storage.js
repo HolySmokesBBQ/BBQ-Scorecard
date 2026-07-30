@@ -1,10 +1,13 @@
-const STORAGE_KEY = 'muiller-bbq-reviews';
-const DRIVE_FILE_NAME = 'muiller-bbq-scorecard-data.json';
-const CLIENT_ID = '109928096278-4v26g0ku6ij989laqnt0bcnalm8iojgd.apps.googleusercontent.com';
-const SCOPES = 'https://www.googleapis.com/auth/drive.file';
+// localStorage adapters for offline-first reviews, cooks, and recipes.
+//
+// NOTE: The legacy Google Drive sync code that previously lived here was
+// removed June 5, 2026 per Security Audit Finding #4. It was dead code
+// (exported but never imported) and added attack surface: a hardcoded
+// OAuth client ID, dynamic script injection from accounts.google.com, a
+// module-scoped access token with no rotation, and an unescaped Drive API
+// query construction. Firebase sync (firebaseSync.js) supersedes it.
 
-let accessToken = null;
-let tokenClient = null;
+const STORAGE_KEY = 'muiller-bbq-reviews';
 
 export function loadLocal() {
   try {
@@ -23,123 +26,53 @@ export function saveLocal(reviews) {
   }
 }
 
-function loadGsi() {
-  return new Promise((resolve) => {
-    if (window.google?.accounts?.oauth2) return resolve(true);
-    const s = document.createElement('script');
-    s.src = 'https://accounts.google.com/gsi/client';
-    s.onload = () => resolve(true);
-    s.onerror = () => resolve(false);
-    document.head.appendChild(s);
-  });
+/* ── Cook Notebook Storage ── */
+const COOKS_KEY = 'muiller-bbq-cooks';
+const RECIPES_KEY = 'muiller-bbq-recipes';
+
+export function loadCooks() {
+  try { return JSON.parse(localStorage.getItem(COOKS_KEY) || '[]'); } catch { return []; }
+}
+export function saveCooksLocal(cooks) {
+  try { localStorage.setItem(COOKS_KEY, JSON.stringify(cooks)); } catch (e) { console.error('Cook save failed:', e); }
+}
+export function loadRecipes() {
+  try { return JSON.parse(localStorage.getItem(RECIPES_KEY) || '[]'); } catch { return []; }
+}
+export function saveRecipesLocal(recipes) {
+  try { localStorage.setItem(RECIPES_KEY, JSON.stringify(recipes)); } catch (e) { console.error('Recipe save failed:', e); }
 }
 
-export async function signInGoogle() {
-  const loaded = await loadGsi();
-  if (!loaded) return false;
-  accessToken = null;
+/* ── Tombstones ──
+   Local-only record of IDs the user deleted. On cloud merge, anything
+   in here is excluded from the merged set so an offline delete still
+   wins against a later cloud sync that re-fetches the deleted doc.
+   Closes the edge case from security audit finding N-2. */
+const COOK_TOMBSTONES_KEY = 'muiller-bbq-cook-tombstones';
+const RECIPE_TOMBSTONES_KEY = 'muiller-bbq-recipe-tombstones';
 
-  // Detect standalone PWA mode (installed to homescreen)
-  const isStandalone = window.matchMedia('(display-mode: standalone)').matches
-    || window.navigator.standalone === true;
+export function loadCookTombstones()    { try { return new Set(JSON.parse(localStorage.getItem(COOK_TOMBSTONES_KEY) || '[]')); } catch { return new Set(); } }
+export function loadRecipeTombstones()  { try { return new Set(JSON.parse(localStorage.getItem(RECIPE_TOMBSTONES_KEY) || '[]')); } catch { return new Set(); } }
+export function saveCookTombstones(s)   { try { localStorage.setItem(COOK_TOMBSTONES_KEY, JSON.stringify(Array.from(s))); } catch (e) { console.error(e); } }
+export function saveRecipeTombstones(s) { try { localStorage.setItem(RECIPE_TOMBSTONES_KEY, JSON.stringify(Array.from(s))); } catch (e) { console.error(e); } }
 
-  return new Promise((resolve) => {
-    let resolved = false;
-    const done = (ok) => { if (!resolved) { resolved = true; resolve(ok); } };
+/* ── Cook form draft ──
+   Saved on every dirty edit so an interrupted cook (phone call, app
+   backgrounded by Android) restores the in-progress form on next
+   launch. Cleared on successful save or explicit discard. */
+const COOK_DRAFT_KEY = 'muiller-bbq-cook-draft';
 
-    tokenClient = window.google.accounts.oauth2.initTokenClient({
-      client_id: CLIENT_ID,
-      scope: SCOPES,
-      callback: (resp) => {
-        if (resp.access_token) {
-          accessToken = resp.access_token;
-          done(true);
-        } else {
-          done(false);
-        }
-      },
-      error_callback: () => done(false),
-    });
-
-    try {
-      tokenClient.requestAccessToken({ prompt: '' });
-    } catch {
-      // Popup blocked — try with consent prompt (opens in new tab on standalone)
-      try {
-        tokenClient.requestAccessToken({ prompt: 'consent' });
-      } catch {
-        done(false);
-        return;
-      }
-    }
-
-    // Fallback: if first attempt silently fails, retry with consent
-    setTimeout(() => {
-      if (!accessToken && !resolved) {
-        try {
-          tokenClient.requestAccessToken({ prompt: 'consent' });
-        } catch {
-          done(false);
-        }
-      }
-    }, 2000);
-
-    // Safety timeout — don't hang forever
-    setTimeout(() => done(false), 30000);
-  });
+export function loadCookDraft() {
+  try { const v = localStorage.getItem(COOK_DRAFT_KEY); return v ? JSON.parse(v) : null; } catch { return null; }
+}
+export function saveCookDraft(cook) {
+  try { localStorage.setItem(COOK_DRAFT_KEY, JSON.stringify(cook)); } catch (e) { console.error('Draft save failed:', e); }
+}
+export function clearCookDraft() {
+  try { localStorage.removeItem(COOK_DRAFT_KEY); } catch {}
 }
 
-async function findDriveFile() {
-  try {
-    const r = await fetch(
-      `https://www.googleapis.com/drive/v3/files?q=name='${DRIVE_FILE_NAME}'+and+trashed=false&spaces=drive&fields=files(id)`,
-      { headers: { Authorization: `Bearer ${accessToken}` } }
-    );
-    const d = await r.json();
-    return d.files?.[0]?.id || null;
-  } catch {
-    return null;
-  }
-}
-
-export async function loadFromDrive() {
-  try {
-    const fileId = await findDriveFile();
-    if (!fileId) return null;
-    const r = await fetch(
-      `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
-      { headers: { Authorization: `Bearer ${accessToken}` } }
-    );
-    return await r.json();
-  } catch {
-    return null;
-  }
-}
-
-export async function saveToDrive(data) {
-  try {
-    const fileId = await findDriveFile();
-    const body = JSON.stringify(data);
-    const metadata = { name: DRIVE_FILE_NAME, mimeType: 'application/json' };
-    const form = new FormData();
-    form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-    form.append('file', new Blob([body], { type: 'application/json' }));
-    const url = fileId
-      ? `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart`
-      : 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
-    const method = fileId ? 'PATCH' : 'POST';
-    const r = await fetch(url, { method, headers: { Authorization: `Bearer ${accessToken}` }, body: form });
-    return r.ok;
-  } catch {
-    return false;
-  }
-}
-
-export function isAuthenticated() {
-  return !!accessToken;
-}
-
-export async function autoSync(data) {
-  if (!accessToken) return false;
-  return saveToDrive(data);
-}
+/* ── Onboarding flag ── */
+const ONBOARDED_KEY = 'muiller-bbq-notebook-onboarded';
+export function hasOnboarded()   { return !!localStorage.getItem(ONBOARDED_KEY); }
+export function markOnboarded()  { try { localStorage.setItem(ONBOARDED_KEY, '1'); } catch {} }

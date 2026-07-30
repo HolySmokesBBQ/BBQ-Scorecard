@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <!-- GTM + GA4 init — external file so CSP can drop 'unsafe-inline' -->
-  <script src="/gtm-init.js?v=6"></script>
+  <script src="/gtm-init.js?v=7"></script>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Privacy Policy — BBQ Scorecard by Holy Smokes BBQ Co</title>
@@ -47,7 +47,7 @@
 
     <h2>HOW DATA IS STORED</h2>
     <p>This app stores data in two places depending on whether you sign in:</p>
-    <p><strong>Without signing in:</strong> All data stays on your device in your browser's localStorage. Nothing is sent to any server.</p>
+    <p><strong>Without signing in:</strong> Your reviews and ratings stay on your device in your browser's localStorage and are never uploaded to our servers. Anonymous usage analytics still run &mdash; see "Cookies and Tracking" below.</p>
     <p><strong>With signing in:</strong> Your data is stored in a <strong>Google Cloud Firestore database</strong> hosted under the Firebase project "holy-smokes-bbq-scorecard." This is a real cloud database managed by Google. Data stored in Firestore includes everything listed in the "What Data We Collect" section below. Your local device also keeps a copy in localStorage so the app works offline.</p>
 
     <h2>ACCOUNTS AND AUTHENTICATION</h2>
@@ -63,7 +63,7 @@
     <h2>HOW YOUR DATA IS SHARED</h2>
     <p>When you add a friend by exchanging friend codes, they can see your restaurant reviews (scores, restaurant names, locations, dates, and notes). You can see theirs. This is the entire point of the friends feature.</p>
     <p>No data is shared with anyone you have not added as a friend. Your reviews are only visible to you and your confirmed friends.</p>
-    <p>We do not sell or rent your data, and we do not share it with advertisers or data brokers. There are no ads. There is no public feed. The third-party services listed in the next section process data on our behalf so the app can function.</p>
+    <p>We do not sell or rent your data, and we do not share it with advertisers or data brokers. There is no public feed. The third-party services listed in the next section process data on our behalf so the app can function.</p>
 
     <h2>THIRD-PARTY SERVICES</h2>
     <p>The app uses the following third-party services:</p>
@@ -71,7 +71,7 @@
     <p><strong>Cloud Firestore (Google Firebase):</strong> the database where user profiles, reviews, and friend connections are stored when signed in. Data is hosted on Google Cloud infrastructure. Subject to <a href="https://firebase.google.com/support/privacy" target="_blank" rel="noopener noreferrer">Google's privacy policy</a>.</p>
     <p><strong>OpenStreetMap via Leaflet:</strong> map tiles for the map and nearby views. No personal data is shared beyond standard HTTP requests for map tile images.</p>
     <p><strong>Overpass API (OpenStreetMap):</strong> used by the BBQ Near Me feature to search for nearby restaurants. Your coordinates are sent as part of the search query. No account or personal data is shared. Subject to <a href="https://wiki.openstreetmap.org/wiki/Overpass_API" target="_blank" rel="noopener noreferrer">OpenStreetMap's usage policies</a>.</p>
-    <p><strong>Google Analytics / Google Tag Manager:</strong> anonymous usage analytics. Subject to <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">Google's privacy policy</a>.</p>
+    <p><strong>Google Analytics / Google Tag Manager:</strong> usage analytics. When you are signed in, your account ID is included so usage can be understood per account. Subject to <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">Google's privacy policy</a>.</p>
     <p><strong>Netlify:</strong> website hosting and CDN. Netlify serves the app files but does not have access to Firestore data. Subject to <a href="https://www.netlify.com/privacy/" target="_blank" rel="noopener noreferrer">Netlify's privacy policy</a>.</p>
 
     <h2>LOCATION DATA</h2>
@@ -81,7 +81,7 @@
     <p>The app stores review data, photos, theme preferences, and geocoding cache in your browser's localStorage. This data never leaves your device unless you sign in, at which point review data (excluding photos) is synced to Cloud Firestore.</p>
 
     <h2>COOKIES AND TRACKING</h2>
-    <p>The app uses Google Analytics and Google Tag Manager to track anonymous feature usage (which screens are viewed, which actions are taken). No personal information is included in analytics events. Firebase Authentication uses browser storage (localStorage/IndexedDB) for session management, not cookies.</p>
+    <p>The app uses Google Analytics and Google Tag Manager to track feature usage (which screens are viewed, which actions are taken). Analytics events do not include your name, email address, or the text of your reviews. When you are signed in, your account ID is attached to your events. Firebase Authentication uses browser storage (localStorage/IndexedDB) for session management, not cookies.</p>
 
     <h2>SECURITY</h2>
     <p>Cloud Firestore is protected by security rules that restrict access. Users can only read and write their own data. Friend review data is accessible only to confirmed friends. All data in transit is encrypted via HTTPS.</p>

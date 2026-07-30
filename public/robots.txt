@@ -1,0 +1,15 @@
+# https://holysmokesbbqco.com/robots.txt
+# BBQ Scorecard by Holy Smokes BBQ Co
+
+User-agent: *
+Allow: /
+
+# Don't waste crawl budget on these — they're either user data or app shell
+Disallow: /sw.js
+Disallow: /workbox-*.js
+Disallow: /assets/
+
+# Private internal tool — should never be indexed
+Disallow: /catering/
+
+Sitemap: https://holysmokesbbqco.com/sitemap.xml
