@@ -45,7 +45,8 @@ workflows:
         XCODE_PROJECT: "ios/App/App.xcodeproj"
         XCODE_SCHEME: "App"
         BUNDLE_ID: "com.holysmokesbbq.scorecard"
-      node: 20
+      # Capacitor 8 CLI requires Node >= 22.
+      node: 22
       xcode: latest
     scripts:
       - name: Install JS dependencies
