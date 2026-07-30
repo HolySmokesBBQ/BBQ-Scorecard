@@ -84,6 +84,16 @@ workflows:
           keychain add-certificates
       - name: Apply provisioning profiles to the project
         script: xcode-project use-profiles
+      - name: Resolve Swift Package dependencies
+        # Capacitor 8 uses SPM; a fresh CI checkout has no resolved packages,
+        # which makes the build-ipa preflight `xcodebuild -showBuildSettings`
+        # fail ("Failed to show build settings"). Resolve first. If this step
+        # errors, its output shows xcodebuild's real error (the wrapper hides
+        # it).
+        script: |
+          xcodebuild -resolvePackageDependencies \
+            -project "$XCODE_PROJECT" \
+            -scheme "$XCODE_SCHEME"
       - name: Build IPA
         script: |
           xcode-project build-ipa \
