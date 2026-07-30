@@ -49,7 +49,12 @@ workflows:
       xcode: latest
     scripts:
       - name: Install JS dependencies
-        script: npm ci
+        # `npm install`, not `npm ci`: the committed lock and the CI runner's
+        # npm resolve some transitive deps (e.g. picomatch) to different
+        # versions, and npm ci hard-fails on any mismatch. npm install
+        # reconciles them on the runner. Tighten back to npm ci once the lock
+        # is regenerated with the same npm major as the Codemagic image.
+        script: npm install --no-audit --no-fund
       - name: Build web assets (native target)
         script: npm run build:native
       - name: Capacitor sync iOS
