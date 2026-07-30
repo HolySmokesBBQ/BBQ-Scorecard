@@ -1,0 +1,88 @@
+# Codemagic CI — BBQ Scorecard iOS build (Path B: cloud Mac, no Apple hardware).
+#
+# This pipeline is written and structurally complete, but it is NOT yet
+# runnable — it needs the Apple-account values that only exist once the
+# Apple Developer Program membership is active. Every one of those is an
+# environment variable in the `appstore_credentials` group, NOT hardcoded
+# here. Nothing in this file has been run; the first real execution is on
+# Codemagic's Mac.
+#
+# ── To activate (the "greenlight" step) ─────────────────────────────
+# 1. Sign up at codemagic.io, connect the GitHub repo
+#    HolySmokesBBQ/BBQ-Scorecard.
+# 2. Apple Developer Program must be active ($99/yr membership — a
+#    subscription, not hardware).
+# 3. In App Store Connect: Users and Access → Integrations → App Store
+#    Connect API → create a key. Note the Key ID, Issuer ID, and the
+#    downloaded .p8 private key.
+# 4. In Codemagic: add an "appstore_credentials" environment group with:
+#      APP_STORE_CONNECT_ISSUER_ID
+#      APP_STORE_CONNECT_KEY_IDENTIFIER
+#      APP_STORE_CONNECT_PRIVATE_KEY   (contents of the .p8)
+#      CERTIFICATE_PRIVATE_KEY         (a signing cert private key, or let
+#                                       Codemagic generate one)
+# 5. Register the bundle id com.holysmokesbbq.scorecard in App Store
+#    Connect, create the app record.
+# 6. Flip `submit_to_testflight` to true when ready for the first tester
+#    build.
+#
+# ── The one thing CI cannot do ──────────────────────────────────────
+# Sign in with Apple must be CODED before the App Store accepts this app
+# (it is Google-sign-in-only today — automatic rejection under Guideline
+# 4.8), and it can only be verified on a real iPhone. That is a tester's
+# device, not yours and not the cloud Mac. See ios/SETUP.md step 3.
+
+workflows:
+  ios-release:
+    name: BBQ Scorecard iOS
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    integrations:
+      # Fill in the App Store Connect API key name once created (step 3).
+      app_store_connect: BBQ_Scorecard_ASC_KEY
+    environment:
+      groups:
+        - appstore_credentials
+      vars:
+        XCODE_PROJECT: "ios/App/App.xcodeproj"
+        XCODE_SCHEME: "App"
+        BUNDLE_ID: "com.holysmokesbbq.scorecard"
+      node: 20
+      xcode: latest
+    scripts:
+      - name: Install JS dependencies
+        script: npm ci
+      - name: Build web assets (native target)
+        script: npm run build:native
+      - name: Capacitor sync iOS
+        # Copies dist-native/ into the iOS project and refreshes native
+        # deps. Capacitor 8 uses Swift Package Manager, so there is no
+        # `pod install` step.
+        script: npx cap sync ios
+      - name: Fetch signing files (App Store Connect API key)
+        # Auto-manages certificate + provisioning profile via the API key.
+        # No manual certificate handling, no Mac keychain wrangling.
+        script: |
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --type IOS_APP_STORE \
+            --create
+      - name: Add certs to keychain
+        script: |
+          keychain initialize
+          keychain add-certificates
+      - name: Apply provisioning profiles to the project
+        script: xcode-project use-profiles
+      - name: Build IPA
+        script: |
+          xcode-project build-ipa \
+            --project "$XCODE_PROJECT" \
+            --scheme "$XCODE_SCHEME"
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        auth: integration
+        # Flip to true at greenlight to push the build to TestFlight for
+        # iPhone-owning testers. Leave false while wiring things up.
+        submit_to_testflight: false
