@@ -81,6 +81,6 @@ workflows:
     publishing:
       app_store_connect:
         auth: integration
-        # Flip to true at greenlight to push the build to TestFlight for
-        # iPhone-owning testers. Leave false while wiring things up.
-        submit_to_testflight: false
+        # Pushes a successful build straight to TestFlight so iPhone-owning
+        # testers can install it. Add them under the app's TestFlight tab.
+        submit_to_testflight: true
