@@ -52,16 +52,14 @@ const app = initializeApp(firebaseConfig);
 const isCapacitorNative = typeof window !== 'undefined' && !!window.Capacitor?.isNativePlatform?.();
 const appCheckSiteKey = import.meta.env.VITE_FIREBASE_APPCHECK_SITE_KEY;
 
-if (isCapacitorNative) {
-  // Native (Android via Capacitor): use the Capacitor Firebase App Check
-  // plugin, which talks to the Play Integrity API. Configuration of the
-  // attestation provider lives in Firebase Console; the plugin attaches
-  // tokens to subsequent Firebase calls automatically.
-  // Import dynamically so this code path is tree-shaken from the web bundle.
-  import('@capacitor-firebase/app-check')
-    .then(({ FirebaseAppCheck }) => FirebaseAppCheck.initialize({ isTokenAutoRefreshEnabled: true }))
-    .catch((e) => { if (import.meta.env.DEV) console.warn('App Check (native) init failed:', e); });
-} else if (appCheckSiteKey && typeof window !== 'undefined') {
+// Native App Check (the @capacitor-firebase/app-check plugin) was removed:
+// its Swift Package claims the same 'app-check' identity as firebase-ios-sdk's
+// own dependency, so the FirebaseAppCheck/AppCheckCore product couldn't
+// resolve and the iOS SPM build failed. The web reCAPTCHA path below is
+// unaffected. Re-add the native plugin once the upstream SPM identity
+// conflict is fixed. (`isCapacitorNative` retained for future use.)
+void isCapacitorNative;
+if (appCheckSiteKey && typeof window !== 'undefined') {
   // Web: use reCAPTCHA v3 provider with the site key from build-time env.
   // Dev debug-token support — set VITE_APPCHECK_DEBUG=1 in .env.local
   // to bypass App Check during local dev. Pair with a debug token
