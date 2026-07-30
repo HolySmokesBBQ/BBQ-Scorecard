@@ -15,12 +15,12 @@
 # 3. In App Store Connect: Users and Access → Integrations → App Store
 #    Connect API → create a key. Note the Key ID, Issuer ID, and the
 #    downloaded .p8 private key.
-# 4. In Codemagic: add an "appstore_credentials" environment group with:
-#      APP_STORE_CONNECT_ISSUER_ID
-#      APP_STORE_CONNECT_KEY_IDENTIFIER
-#      APP_STORE_CONNECT_PRIVATE_KEY   (contents of the .p8)
-#      CERTIFICATE_PRIVATE_KEY         (a signing cert private key, or let
-#                                       Codemagic generate one)
+# 4. In Codemagic: Team settings -> Integrations -> App Store Connect ->
+#    add the key (Issuer ID, Key ID, upload the .p8) and name the
+#    integration EXACTLY "BBQ_Scorecard_ASC_KEY". The workflow references
+#    it via integrations.app_store_connect + publishing auth: integration,
+#    so no environment group is needed. Codemagic auto-creates the signing
+#    certificate through fetch-signing-files --create.
 # 5. Register the bundle id com.holysmokesbbq.scorecard in App Store
 #    Connect, create the app record.
 # 6. Flip `submit_to_testflight` to true when ready for the first tester
@@ -41,8 +41,6 @@ workflows:
       # Fill in the App Store Connect API key name once created (step 3).
       app_store_connect: BBQ_Scorecard_ASC_KEY
     environment:
-      groups:
-        - appstore_credentials
       vars:
         XCODE_PROJECT: "ios/App/App.xcodeproj"
         XCODE_SCHEME: "App"
