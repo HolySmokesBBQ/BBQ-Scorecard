@@ -41,6 +41,10 @@ workflows:
       # Fill in the App Store Connect API key name once created (step 3).
       app_store_connect: BBQ_Scorecard_ASC_KEY
     environment:
+      # Group holding CERTIFICATE_PRIVATE_KEY (secure) — the persistent iOS
+      # signing key. Create it in Codemagic → app → Environment variables.
+      groups:
+        - appstore_credentials
       vars:
         XCODE_PROJECT: "ios/App/App.xcodeproj"
         XCODE_SCHEME: "App"
