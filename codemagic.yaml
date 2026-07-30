@@ -64,11 +64,19 @@ workflows:
         # `pod install` step.
         script: npx cap sync ios
       - name: Fetch signing files (App Store Connect API key)
-        # Auto-manages certificate + provisioning profile via the API key.
-        # No manual certificate handling, no Mac keychain wrangling.
+        # The API key creates the distribution certificate, but the CLI needs
+        # a certificate private key to store it ("Cannot save Signing
+        # Certificates without certificate private key"). Generate a PEM RSA
+        # key and pass it.
+        # NOTE: this generates a NEW certificate each build. To reuse one cert
+        # and avoid Apple's certificate limit, persist this key as a
+        # CERTIFICATE_PRIVATE_KEY environment variable in Codemagic and switch
+        # --certificate-key to @env:CERTIFICATE_PRIVATE_KEY.
         script: |
+          ssh-keygen -t rsa -b 2048 -m PEM -f /tmp/cert_key -q -N ""
           app-store-connect fetch-signing-files "$BUNDLE_ID" \
             --type IOS_APP_STORE \
+            --certificate-key=@file:/tmp/cert_key \
             --create
       - name: Add certs to keychain
         script: |
