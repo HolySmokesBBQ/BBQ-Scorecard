@@ -107,5 +107,10 @@ workflows:
       app_store_connect:
         auth: integration
         # Pushes a successful build straight to TestFlight so iPhone-owning
-        # testers can install it. Add them under the app's TestFlight tab.
+        # testers can install it.
         submit_to_testflight: true
+        # Auto-attach the external tester group so an approved build
+        # distributes to the public-link testers with no manual "add group"
+        # step in App Store Connect. Must match the group name exactly.
+        beta_groups:
+          - External Testing
