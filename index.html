@@ -5,7 +5,10 @@
   <!-- Allow users to pinch-zoom — disabling it is an accessibility failure
        per WCAG. iOS auto-zoom-on-focus is handled by ensuring inputs use
        font-size >= 16px (already true throughout the app). -->
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- viewport-fit=cover lets the WebView go edge-to-edge on notched
+       iPhones AND makes env(safe-area-inset-*) return real values so the
+       app can pad content out from under the status bar / home indicator. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#1a1a1a" />
   <title>BBQ Scorecard by Holy Smokes BBQ Co</title>
 
@@ -133,7 +136,12 @@
     * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
     html { background: #1a1a1a; min-height: 100%; overscroll-behavior-y: contain; }
     body { background: #1a1a1a; color: #f5e6d3; font-family: 'Inter', sans-serif; min-height: 100vh; overscroll-behavior-y: contain; }
-    #root { min-height: 100vh; }
+    /* Keep app content below the iOS status bar / notch. The theme layer
+       sets #root's background to the current theme, so this padded strip
+       matches the screen — no off-color band. --safe-area-top is a dev
+       override hook (set it in the browser preview to simulate a notch);
+       on device it's unset and falls back to the real inset. */
+    #root { min-height: 100vh; padding-top: var(--safe-area-top, env(safe-area-inset-top, 0px)); }
     input, textarea, select, button { font-family: 'Inter', sans-serif; }
   </style>
 </head>

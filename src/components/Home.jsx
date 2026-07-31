@@ -49,6 +49,7 @@ export default function Home() {
   const [showMenu, setShowMenu] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
   const menuGroups = [
+    { title: 'BBQ SCORECARD', items: [{ label: 'Home', key: 'home' }] },
     { title: 'REVIEWS & MAP', items: [{ label: 'Map', key: 'map' }, { label: 'BBQ Near Me', key: 'nearby' }] },
     { title: 'COMPARE & PROGRESS', items: [{ label: 'Compare', key: 'compare' }, { label: 'Stats', key: 'stats' }, { label: 'MVP', key: 'mvp' }, { label: 'Rewards', key: 'achievements' }, { label: 'Leaderboard', key: 'leaderboard' }] },
     { title: 'ACCOUNT', items: [{ label: 'Settings', key: 'settings' }] },
@@ -79,17 +80,10 @@ export default function Home() {
     <>
       <header style={{ background: theme === 'dark' ? '#1a1510' : '#ede5dc', borderBottom: `1px solid ${S.border}`, padding: '14px 16px' }}>
         <div className="bbq-container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 0 }}>
+          {/* No "Back" on Home — the home screen is the app's root; iOS
+              users navigate via the hamburger menu, not a web-style back
+              button. (Sub-screens keep their own Back-to-home link.) */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            {window.Capacitor?.isNativePlatform?.() ? (
-              <button onClick={() => { track('cross_app_nav', { from: 'scorecard', to: 'site' }); setView('site'); }}
-                style={{ background: 'none', border: 'none', color: S.muted, fontSize: 14, cursor: 'pointer', padding: 0 }}>
-                ← Back
-              </button>
-            ) : (
-              <a href="/" onClick={() => track('cross_app_nav', { from: 'scorecard', to: 'site' })}
-                style={{ color: S.muted, textDecoration: 'none', fontSize: 14 }}>← Back</a>
-            )}
-            <div style={{ height: 20, width: 1, background: S.border }} />
             <div>
               <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 20, fontWeight: 700, letterSpacing: 1, color: S.accent }}>
                 BBQ SCORECARD
