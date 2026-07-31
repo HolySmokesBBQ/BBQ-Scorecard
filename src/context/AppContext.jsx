@@ -186,6 +186,12 @@ export default function AppProvider({ children }) {
   const [dirty, setDirty] = useState(false);
   const [compareIds, setCompareIds] = useState([]);
   const [compareMode, setCompareMode] = useState(false);
+  // Review pending an in-app delete confirmation (null = none). See
+  // deleteReview / DeleteConfirmModal.
+  const [pendingDeleteId, setPendingDeleteId] = useState(null);
+  // localStorage flag set when the user ticks "never ask again" in the
+  // delete confirmation — lets a mass-delete run skip the prompt.
+  const DELETE_CONFIRM_SKIP_KEY = 'bbq-scorecard-skip-delete-confirm';
   const [themePref, setThemePref] = useState(() => localStorage.getItem('muiller-bbq-theme') || 'system');
   const [systemTheme, setSystemTheme] = useState(() =>
     window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
@@ -887,8 +893,9 @@ export default function AppProvider({ children }) {
     }
   };
 
-  const deleteReview = (id) => {
-    if (!window.confirm('Delete this review?')) return;
+  // The actual removal, with no confirmation. Both the confirm modal and
+  // the "never ask again" fast-path call this.
+  const performDelete = (id) => {
     const removed = reviews.find(r => r.id === id);
     save(reviews.filter(r => r.id !== id));
     setView('home');
@@ -905,6 +912,25 @@ export default function AppProvider({ children }) {
       deleteCloudReview(fbUser.uid, id).catch(() => {});
     }
   };
+
+  // Deleting a review opens an in-app "are you sure?" (DeleteConfirmModal),
+  // NOT a native confirm — unless the user has ticked "never ask again",
+  // which stores DELETE_CONFIRM_SKIP_KEY so a mass-delete run isn't
+  // interrupted on every review.
+  const deleteReview = (id) => {
+    let skip = false;
+    try { skip = localStorage.getItem(DELETE_CONFIRM_SKIP_KEY) === '1'; } catch {}
+    if (skip) { performDelete(id); return; }
+    setPendingDeleteId(id);
+  };
+
+  const confirmPendingDelete = (neverAskAgain) => {
+    if (neverAskAgain) { try { localStorage.setItem(DELETE_CONFIRM_SKIP_KEY, '1'); } catch {} }
+    if (pendingDeleteId != null) performDelete(pendingDeleteId);
+    setPendingDeleteId(null);
+  };
+
+  const cancelPendingDelete = () => setPendingDeleteId(null);
 
   const handlePhoto = async (e) => {
     const file = e.target.files?.[0];
@@ -1333,6 +1359,7 @@ export default function AppProvider({ children }) {
     // Functions
     navigateTo, save, startNew, editReview, viewDetail, duplicateReview,
     update, updateScore, toggleChip, saveCurrentReview, deleteReview,
+    pendingDeleteId, confirmPendingDelete, cancelPendingDelete,
     handlePhoto, removePhoto, addFriend, removeFriend, updateFriendScore,
     exportBackup, handleImport, publishReviews, addTimestampedNote,
     shareReview, shareReviewStory, exportText, attemptSignIn, attemptAppleSignIn,

@@ -1,4 +1,4 @@
-import { useRef, useCallback, useState } from 'react';
+import { useRef, useCallback } from 'react';
 import { useAppContext } from '../context/AppContext.jsx';
 import { calcScores, exportCSV, track } from '../scoring.js';
 import { SAMPLE_REVIEW } from '../sampleData.js';
@@ -6,8 +6,6 @@ import { NAV_V2 } from '../featureFlags.js';
 import Avatar from './Avatar.jsx';
 import NotebookAdCard from './NotebookAdCard.jsx';
 import ScorecardOnboarding from './ScorecardOnboarding.jsx';
-import NavDrawer from './NavDrawer.jsx';
-import AboutScreen from './AboutScreen.jsx';
 import {
   sendFriendRequest, getFriendsList,
   loadMyCloudReviews, mergeReviews, syncReviewsUp,
@@ -45,19 +43,8 @@ export default function Home() {
     view,
   } = useAppContext();
 
-  // NAV_V2: hamburger drawer + About modal state.
-  const [showMenu, setShowMenu] = useState(false);
-  const [showAbout, setShowAbout] = useState(false);
-  const menuGroups = [
-    { title: 'BBQ SCORECARD', items: [{ label: 'Home', key: 'home' }] },
-    { title: 'REVIEWS & MAP', items: [{ label: 'Map', key: 'map' }, { label: 'BBQ Near Me', key: 'nearby' }] },
-    { title: 'COMPARE & PROGRESS', items: [{ label: 'Compare', key: 'compare' }, { label: 'Stats', key: 'stats' }, { label: 'MVP', key: 'mvp' }, { label: 'Rewards', key: 'achievements' }, { label: 'Leaderboard', key: 'leaderboard' }] },
-    { title: 'ACCOUNT', items: [{ label: 'Settings', key: 'settings' }] },
-  ];
-  const onMenuSelect = (key) => {
-    if (key === 'compare') { setCompareMode(true); setCompareIds([]); setView('home'); return; }
-    navigateTo(key);
-  };
+  // The ☰ menu + drawer + About modal moved to AppNav.jsx (global), so
+  // Home no longer owns that state or markup.
 
   // Notebook removed in v3.1.12 — useCookContext / startNewCook /
   // deleteCook no longer needed on the Scorecard side.
@@ -93,21 +80,10 @@ export default function Home() {
               </div>
             </div>
           </div>
-          {NAV_V2 ? (
-            <button onClick={() => { setShowMenu(true); track('hamburger_opened'); }} aria-label="Open menu"
-              style={{ background: 'none', border: `1px solid ${S.border}`,
-                borderRadius: '8px', width: '40px', height: '40px', fontSize: '18px', cursor: 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', color: S.text }}>
-              ☰
-            </button>
-          ) : (
-            <button onClick={() => setThemePref(t => t === 'dark' ? 'light' : t === 'light' ? 'system' : 'dark')}
-              style={{ background: 'none', border: `1px solid ${S.border}`,
-                borderRadius: '50%', width: '32px', height: '32px', fontSize: '16px', cursor: 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', color: S.text }}>
-              {themePref === 'dark' ? '☀' : themePref === 'light' ? '☽' : '◐'}
-            </button>
-          )}
+          {/* The ☰ menu is now global (AppNav, mounted in App.jsx) so it
+              appears on every screen. Nothing needed here — the floating
+              button sits over this header's right side. Legacy pre-NAV_V2
+              builds showed a theme toggle here; theme lives in Settings now. */}
         </div>
       </header>
     <div className="bbq-container" style={{ paddingBottom: '80px' }}>
@@ -242,12 +218,17 @@ export default function Home() {
       </div>
 
       {compareMode && (
-        <div style={{ padding: '8px', background: S.dark, borderRadius: '6px', marginBottom: '12px', fontSize: '12px', color: S.muted }}>
-          Tap 2 restaurants to compare. Selected: {compareIds.length}/2
-          {compareIds.length === 2 && (
-            <button onClick={() => { navigateTo('compare'); }}
-              style={{ ...sBtn(true, true), marginLeft: '8px' }}>Go</button>
-          )}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', padding: '8px 12px', background: S.dark, borderRadius: '6px', marginBottom: '12px' }}>
+          <span style={{ fontSize: '12px', color: S.muted }}>
+            Tap 2 restaurants to compare. Selected: {compareIds.length}/2
+          </span>
+          <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
+            {compareIds.length === 2 && (
+              <button onClick={() => { navigateTo('compare'); }} style={sBtn(true, true)}>Go</button>
+            )}
+            {/* Escape hatch — an accidental long-press is one tap to undo. */}
+            <button onClick={() => { setCompareMode(false); setCompareIds([]); }} style={sBtn(false, true)}>Cancel</button>
+          </div>
         </div>
       )}
 
@@ -340,23 +321,46 @@ export default function Home() {
             <div key={r.id}
               onClick={() => {
                 if (longPressTriggered.current) return;
-                if (compareMode) {
-                  if (isSelected) setCompareIds(compareIds.filter(id => id !== r.id));
-                  else if (compareIds.length < 2) setCompareIds([...compareIds, r.id]);
-                  return;
-                }
+                // Tapping a review ALWAYS opens its detail — even in compare
+                // mode. Selecting two to compare is a deliberate checkbox tap
+                // (rendered below when compareMode is on), never a hijack of
+                // the row tap.
                 viewDetail(r);
               }}
-              onTouchStart={() => startLongPress(() => deleteReview(r.id))}
+              onTouchStart={() => startLongPress(() => { setCompareMode(true); setCompareIds([r.id]); })}
               onTouchEnd={cancelLongPress}
               onTouchMove={cancelLongPress}
-              onContextMenu={(e) => { e.preventDefault(); deleteReview(r.id); }}
+              onMouseDown={() => startLongPress(() => { setCompareMode(true); setCompareIds([r.id]); })}
+              onMouseUp={cancelLongPress}
+              onMouseLeave={cancelLongPress}
               style={{
                 padding: '14px', background: isSelected ? (theme === 'dark' ? '#2a2015' : '#fff3e0') : S.card, borderRadius: '8px',
                 marginBottom: '8px', cursor: 'pointer', border: `1px solid ${isSelected ? S.accent : S.border}`,
                 transition: 'all 0.15s', WebkitTouchCallout: 'none', userSelect: 'none',
               }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: compareMode ? '10px' : '0px' }}>
+                {compareMode && (
+                  <div
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onTouchStart={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (isSelected) setCompareIds(compareIds.filter(id => id !== r.id));
+                      else if (compareIds.length < 2) setCompareIds([...compareIds, r.id]);
+                    }}
+                    role="checkbox"
+                    aria-checked={isSelected}
+                    aria-label={`Select ${r.restaurant} to compare`}
+                    style={{
+                      flexShrink: 0, width: '24px', height: '24px', borderRadius: '6px',
+                      border: `2px solid ${isSelected ? S.accent : S.border}`,
+                      background: isSelected ? S.accent : 'transparent',
+                      color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: '15px', lineHeight: 1, cursor: 'pointer',
+                    }}
+                  >{isSelected ? '✓' : ''}</div>
+                )}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flex: 1, minWidth: 0 }}>
                 <div style={{ flex: 1 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                     <span style={{ fontSize: '11px', color: S.accent, fontWeight: '700', fontFamily: "'Oswald', sans-serif" }}>
@@ -379,6 +383,7 @@ export default function Home() {
                       ${r.price}{r.priceSplit > 1 ? ` · $${(r.price / r.priceSplit).toFixed(0)}/ea` : ''}
                     </div>
                   )}
+                </div>
                 </div>
               </div>
             </div>
@@ -554,18 +559,6 @@ export default function Home() {
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>+</button>
     </div>
-    {NAV_V2 && (
-      <NavDrawer
-        open={showMenu}
-        onClose={() => setShowMenu(false)}
-        groups={menuGroups}
-        onSelect={onMenuSelect}
-        onAbout={() => setShowAbout(true)}
-        S={S}
-        theme={theme}
-      />
-    )}
-    {showAbout && <AboutScreen onClose={() => setShowAbout(false)} />}
     </>
   );
 }

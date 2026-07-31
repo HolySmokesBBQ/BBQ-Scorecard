@@ -63,7 +63,6 @@ export default function Settings() {
 
   return (
     <div className="bbq-container" style={{ padding: 16 }}>
-      <button onClick={() => setView('home')} style={{ background: 'none', border: 'none', color: S.accent, fontSize: 14, cursor: 'pointer', marginBottom: 16 }}>← Back</button>
       <h2 style={{ fontFamily: "'Oswald', sans-serif", fontSize: 20, letterSpacing: 2, marginBottom: 20 }}>Settings</h2>
 
       {/* APPEARANCE — always available, signed in or not */}

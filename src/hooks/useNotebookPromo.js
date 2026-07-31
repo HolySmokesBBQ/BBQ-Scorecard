@@ -12,6 +12,15 @@ export default function useNotebookPromo(storageKey) {
   const [show, setShow] = useState(false);
 
   useEffect(() => {
+    // BBQ Notebook is not on the App Store, so its cross-promo must never
+    // surface on iOS — the NOTEBOOK_PLAY_URL below points at Google Play,
+    // and both an unavailable-app reference and a competing-store link are
+    // App Store review rejections (Guideline 2.3.10). The promo still runs
+    // on Android/web, where Notebook is a real, installable app.
+    if (typeof window !== 'undefined' && window.Capacitor?.getPlatform?.() === 'ios') {
+      setShow(false);
+      return;
+    }
     try {
       const dismissedAt = Number(localStorage.getItem(storageKey) || 0);
       const elapsed = Date.now() - dismissedAt;

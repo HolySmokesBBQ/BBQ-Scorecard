@@ -38,7 +38,6 @@ export default function Stats() {
 
   return (
     <div className="bbq-container" style={{ padding: '16px' }}>
-      <button onClick={() => setView('home')} style={{ background: 'none', border: 'none', color: S.accent, fontSize: '14px', cursor: 'pointer', marginBottom: '16px' }}>Back</button>
       <h2 style={{ fontFamily: "'Oswald', sans-serif", fontSize: '20px', letterSpacing: '2px', marginBottom: '16px' }}>Stats Dashboard</h2>
 
       <div style={{ background: S.card, borderRadius: '8px', padding: '16px', marginBottom: '12px', border: `1px solid ${S.border}` }}>

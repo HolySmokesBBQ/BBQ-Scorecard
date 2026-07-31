@@ -183,7 +183,6 @@ export default function Nearby() {
 
   return (
     <div className="bbq-container" style={{ padding: '16px' }}>
-      <button onClick={() => setView('home')} style={{ background: 'none', border: 'none', color: S.accent, fontSize: '14px', cursor: 'pointer', marginBottom: '16px' }}>Back</button>
       <h2 style={{ fontFamily: "'Oswald', sans-serif", fontSize: '20px', letterSpacing: '2px', marginBottom: '4px' }}>BBQ Near Me</h2>
       <div style={{ fontSize: '12px', color: S.muted, marginBottom: '12px' }}>
         {nearbyStatus === 'locating' ? 'Finding your location...' :

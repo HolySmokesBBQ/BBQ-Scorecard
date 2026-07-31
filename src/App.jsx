@@ -6,6 +6,8 @@ import { NAV_V2 } from './featureFlags.js';
 // and we want LCP to be as fast as possible.
 import Site from './components/Site.jsx';
 import NotebookLaunchModal from './components/NotebookLaunchModal.jsx';
+import AppNav from './components/AppNav.jsx';
+import DeleteConfirmModal from './components/DeleteConfirmModal.jsx';
 
 // Everything else loads on demand. Each lazy import becomes its own JS chunk
 // that the browser fetches the first time the route is needed.
@@ -69,6 +71,10 @@ function AppRouter() {
   return (
     <>
       <Suspense fallback={<LoadingFallback />}>{node}</Suspense>
+      {/* Persistent ☰ menu on every in-app screen (NAV_V2). Sub-screens
+          rely on this instead of their own Back buttons. */}
+      {NAV_V2 && <AppNav />}
+      <DeleteConfirmModal />
       <NotebookLaunchModal />
     </>
   );

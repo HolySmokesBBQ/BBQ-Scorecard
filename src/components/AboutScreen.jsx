@@ -19,17 +19,33 @@ const OTHER_APPS = [
     label: 'notebook',
     name: 'BBQ Notebook',
     tagline: 'Cook log with rubs, sauces, weather, and what to change next time.',
+    // Notebook has a live web version. On iOS we point users there (an
+    // own-website link is App Store-safe) instead of at Google Play.
+    webUrl: 'https://holysmokesbbqco.com/notebook/',
+    iosNote: 'Live now on the web at holysmokesbbqco.com/notebook.',
   },
   {
     packageId: 'com.holysmokesbbq.board',
     label: 'board',
     name: 'BBQ Board',
     tagline: "Local butcher price directory. See who's cheapest on brisket this week.",
+    // No web build to link to yet; on iOS it's a non-linking status card.
+    iosNote: 'In beta testing for its App Store release.',
   },
 ];
 
 export default function AboutScreen({ onClose }) {
   const { S, fbUser, reviews } = useAppContext();
+
+  // iOS cross-promo rules (App Store Guideline 2.3.10 — no competing-store
+  // links, no references to apps unavailable on iOS):
+  //   • BBQ Notebook → not on the App Store, but its web version is live,
+  //     so the card links to holysmokesbbqco.com/notebook (own-site links
+  //     are fine) instead of Google Play.
+  //   • BBQ Board    → no web build yet, so a non-linking status card that
+  //     says it's in beta for its App Store release.
+  // Android/web keep the full, tappable Google Play lineup unchanged.
+  const isIOS = typeof window !== 'undefined' && window.Capacitor?.getPlatform?.() === 'ios';
 
   const reportProblem = async () => {
     track('report_problem_opened', {});
@@ -44,9 +60,14 @@ export default function AboutScreen({ onClose }) {
     });
   };
 
-  const openApp = (packageId, appLabel) => {
-    track('scorecard_crosspromo_click', { target: appLabel });
-    const url = `https://play.google.com/store/apps/details?id=${packageId}`;
+  // Where a card sends the user: on iOS, Notebook's web version (and
+  // nothing for Board); everywhere else, Google Play.
+  const linkFor = (app) => isIOS ? app.webUrl : `https://play.google.com/store/apps/details?id=${app.packageId}`;
+
+  const openApp = (app) => {
+    const url = linkFor(app);
+    if (!url) return;
+    track('scorecard_crosspromo_click', { target: app.label });
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 
@@ -75,7 +96,7 @@ export default function AboutScreen({ onClose }) {
             fontSize: '22px', fontWeight: 700, letterSpacing: '2px',
             color: S.accent, margin: 0,
           }}>
-            HOLY SMOKES BBQ
+            HOLY SMOKES BBQ CO
           </h2>
           <button onClick={onClose} aria-label="Close" style={{
             background: 'none', border: `1px solid ${S.border}`,
@@ -101,22 +122,34 @@ export default function AboutScreen({ onClose }) {
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px' }}>
-          {OTHER_APPS.map(app => (
-            <button
-              key={app.packageId}
-              onClick={() => openApp(app.packageId, app.label)}
-              style={{
-                background: S.dark, border: `1px solid ${S.border}`, borderRadius: '8px',
-                padding: '12px 14px', cursor: 'pointer', textAlign: 'left',
-                color: S.text, fontFamily: 'inherit',
-              }}
-            >
-              <div style={{ fontWeight: 700, color: S.accent, fontSize: '15px' }}>{app.name}</div>
-              <div style={{ fontSize: '12px', color: S.muted, marginTop: '2px', lineHeight: 1.4 }}>
-                {app.tagline}
-              </div>
-            </button>
-          ))}
+          {OTHER_APPS.map(app => {
+            const clickable = !!linkFor(app);
+            // On iOS, append the platform-specific status (web-live / in-beta).
+            const note = isIOS ? app.iosNote : null;
+            const inner = (
+              <>
+                <div style={{ fontWeight: 700, color: S.accent, fontSize: '15px' }}>{app.name}</div>
+                <div style={{ fontSize: '12px', color: S.muted, marginTop: '2px', lineHeight: 1.4 }}>
+                  {app.tagline}{note ? ` ${note}` : ''}
+                </div>
+              </>
+            );
+            const cardStyle = {
+              background: S.dark, border: `1px solid ${S.border}`, borderRadius: '8px',
+              padding: '12px 14px', textAlign: 'left', color: S.text,
+            };
+            return clickable ? (
+              <button
+                key={app.packageId}
+                onClick={() => openApp(app)}
+                style={{ ...cardStyle, cursor: 'pointer', fontFamily: 'inherit' }}
+              >
+                {inner}
+              </button>
+            ) : (
+              <div key={app.packageId} style={cardStyle}>{inner}</div>
+            );
+          })}
         </div>
 
         <div style={{
