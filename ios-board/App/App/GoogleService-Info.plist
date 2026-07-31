@@ -1,24 +1,36 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<!--
-  PLACEHOLDER — replace before first Codemagic build.
-
-  Download the real GoogleService-Info.plist from the Firebase project
-  holy-smokes-bbq-board (Project settings → Your apps → iOS →
-  GoogleService-Info.plist). Overwrite this file, then force-add:
-    git add -f ios-board/App/App/GoogleService-Info.plist
-
-  Values below are deliberately invalid — building against them will
-  fail loud during Firebase init, not silently connect to the wrong
-  project. See [[ios-codemagic-build]] gotcha #8.
--->
 <plist version="1.0">
 <dict>
-  <key>PLACEHOLDER</key>
-  <string>Replace this file with the real one from Firebase console.</string>
-  <key>BUNDLE_ID</key>
-  <string>com.holysmokesbbq.board</string>
-  <key>PROJECT_ID</key>
-  <string>holy-smokes-bbq-board</string>
+	<key>CLIENT_ID</key>
+	<string>641836204823-6s0sak603jv42q42d7adtige0u35i3lc.apps.googleusercontent.com</string>
+	<key>REVERSED_CLIENT_ID</key>
+	<string>com.googleusercontent.apps.641836204823-6s0sak603jv42q42d7adtige0u35i3lc</string>
+	<key>ANDROID_CLIENT_ID</key>
+	<string>641836204823-btoe8v8dbf5g0tnf3ve6fu51i8apqupu.apps.googleusercontent.com</string>
+	<key>API_KEY</key>
+	<string>AIzaSyDaq5IxIb2UwTibJPw0S8ay1CgXrtpkZQM</string>
+	<key>GCM_SENDER_ID</key>
+	<string>641836204823</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>com.holysmokesbbq.board</string>
+	<key>PROJECT_ID</key>
+	<string>holy-smokes-bbq-board</string>
+	<key>STORAGE_BUCKET</key>
+	<string>holy-smokes-bbq-board.firebasestorage.app</string>
+	<key>IS_ADS_ENABLED</key>
+	<false></false>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false></false>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true></true>
+	<key>IS_GCM_ENABLED</key>
+	<true></true>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true></true>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:641836204823:ios:6f0c54fa5c015d1bfb6d52</string>
 </dict>
 </plist>
