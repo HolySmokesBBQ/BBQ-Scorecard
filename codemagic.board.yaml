@@ -1,0 +1,116 @@
+# Codemagic CI — BBQ Board iOS build (cloud Mac, no Apple hardware needed).
+#
+# This is a peer of the Scorecard-side codemagic.yaml — kept in a separate
+# file so a Codemagic app can be pointed specifically at Board without touching
+# Scorecard's pipeline. When registering the app in Codemagic, set the yaml
+# path to `codemagic.board.yaml` instead of the default.
+#
+# ── To activate ─────────────────────────────────────────────────────
+# 1. Register the bundle id `com.holysmokesbbq.board` in developer.apple.com →
+#    Certificates, Identifiers & Profiles → Identifiers → +.
+# 2. Create the App Store Connect app record: My Apps → + → New App with
+#    that bundle id. Name "BBQ Board — Meat Prices".
+# 3. Create (or reuse) an App Store Connect API key (Admin). If reusing
+#    Scorecard's, it works — Team-level keys grant access to every app under
+#    the team. To keep concerns separate, register a new key and name its
+#    Codemagic integration `BBQ_Board_ASC_KEY`, then swap the name below.
+# 4. In Codemagic → Team settings → Integrations → App Store Connect, add
+#    the key (Issuer ID, Key ID, upload .p8) under the name referenced below.
+# 5. Create Codemagic env group `appstore_credentials_board` (or reuse the
+#    Scorecard one if you want a shared cert key across apps — Apple lets
+#    ONE Distribution certificate cover multiple app IDs on the same team).
+#    Store CERTIFICATE_PRIVATE_KEY (secure) — generate with
+#    `ssh-keygen -t rsa -b 2048 -m PEM`, persist the PEM contents.
+# 6. Set `submit_to_testflight` to true when ready for the first tester build.
+#    Until then, artifact-only builds are safe to run.
+#
+# ── The one thing CI cannot do ──────────────────────────────────────
+# Board is Google-sign-in-only today. Apple guideline 4.8 requires Sign in
+# with Apple when third-party sign-in is offered. If Board goes to the App
+# Store as a login-required app, Sign in with Apple must be CODED first, and
+# it can only be verified on a real iPhone. See ios-board/SETUP.md if that
+# file is expanded (currently a placeholder).
+
+workflows:
+  ios-release:
+    name: BBQ Board iOS
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    integrations:
+      # Rename if a Board-specific ASC key is registered separately.
+      app_store_connect: BBQ_Scorecard_ASC_KEY
+    environment:
+      # Holds CERTIFICATE_PRIVATE_KEY (secure) — the persistent iOS signing
+      # key. If you share Scorecard's key, use the same group.
+      groups:
+        - appstore_credentials
+      vars:
+        XCODE_PROJECT: "ios-board/App/App.xcodeproj"
+        XCODE_SCHEME: "App"
+        BUNDLE_ID: "com.holysmokesbbq.board"
+      # Capacitor 8 CLI requires Node >= 22.
+      node: 22
+      xcode: latest
+    scripts:
+      - name: Install JS dependencies
+        # `npm install`, not `npm ci`: the committed lock and the CI runner's
+        # npm resolve some transitive deps (e.g. picomatch) to different
+        # versions, and npm ci hard-fails on any mismatch. Consistent with
+        # Scorecard's pipeline.
+        script: npm install --no-audit --no-fund
+      - name: Build web assets (Board native target)
+        # Produces dist-board-native/. Distinct from Scorecard's
+        # dist-native/ so both apps can coexist in the same repo.
+        script: npm run build:board-native
+      - name: Capacitor sync iOS (Board config)
+        # Uses capacitor.board.config.ts so `webDir: dist-board-native` and
+        # `ios.path: ios-board` are picked up. Copies the Board web bundle
+        # into ios-board/App/App/public/ and refreshes native deps.
+        # Capacitor 8 uses Swift Package Manager, so no `pod install` step.
+        script: npx cap sync ios --config capacitor.board.config.ts
+      - name: Fetch signing files (App Store Connect API key)
+        # PERSISTENT signing certificate reused across every build (Apple's
+        # Distribution certificate limit is small). One team-wide certificate
+        # can sign multiple bundle IDs, so Scorecard's cert also works for
+        # Board — but the profile still has to be created per bundle ID.
+        script: |
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --type IOS_APP_STORE \
+            --certificate-key=@env:CERTIFICATE_PRIVATE_KEY \
+            --create
+      - name: Add certs to keychain
+        script: |
+          keychain initialize
+          keychain add-certificates
+      - name: Apply provisioning profiles to the project
+        script: xcode-project use-profiles
+      - name: Resolve Swift Package dependencies
+        # Fresh CI checkout has no resolved SPM packages. Without this,
+        # build-ipa's preflight `xcodebuild -showBuildSettings` fails with
+        # "Failed to show build settings" — a misleading error that hides
+        # the real SPM problem.
+        script: |
+          xcodebuild -resolvePackageDependencies \
+            -project "$XCODE_PROJECT" \
+            -scheme "$XCODE_SCHEME"
+      - name: Build IPA
+        script: |
+          xcode-project build-ipa \
+            --project "$XCODE_PROJECT" \
+            --scheme "$XCODE_SCHEME"
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        auth: integration
+        # Flip to true when ready for the first tester build. Kept false so
+        # the initial scaffolded runs are artifact-only — no accidental
+        # TestFlight submission of an incomplete Board.
+        submit_to_testflight: false
+        # When submit_to_testflight flips true, auto-attach the external
+        # tester group so approved builds distribute to the public-link
+        # testers with no manual "add group" step. Group must exist first
+        # (create in App Store Connect → TestFlight → External Testing).
+        beta_groups:
+          - External Testing

@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#1a1a1a" />
+  <title>BBQ Board — Local Butcher & Meat Prices | Holy Smokes BBQ</title>
+
+  <link rel="preload" as="image" href="/board/bbq-board-logo.png" type="image/png" fetchpriority="high" />
+  <link rel="preload" as="font" type="font/woff2" href="/board/fonts/inter-latin.woff2" crossorigin />
+  <link rel="preload" as="font" type="font/woff2" href="/board/fonts/oswald-latin.woff2" crossorigin />
+  <link rel="icon" type="image/png" href="/board/board-icon-192.png" />
+  <link rel="apple-touch-icon" href="/board/board-icon-192.png" />
+  <link rel="canonical" href="https://holysmokesbbqco.com/board/" />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="BBQ Board" />
+  <meta property="og:title" content="BBQ Board — Local Butcher & Meat Prices" />
+  <meta property="og:description" content="Crowdsourced meat prices from local butchers, grocery meat counters, and warehouse clubs. Find the cheapest brisket, pork shoulder, ribs, and chicken near you. Submit a price to keep the community honest." />
+  <meta property="og:image" content="https://holysmokesbbqco.com/bbq-board-logo.png" />
+  <meta property="og:url" content="https://holysmokesbbqco.com/board/" />
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="BBQ Board — Holy Smokes BBQ" />
+  <meta name="twitter:description" content="Crowdsourced meat prices from local butchers, grocery meat counters, and warehouse clubs. Find the cheapest brisket, pork shoulder, ribs, and chicken near you." />
+  <meta name="description" content="BBQ Board is a crowdsourced meat price directory. Find the cheapest brisket, pork shoulder, ribs, and chicken from local butchers and grocery stores in your area. Submit prices to help the community." />
+  <meta name="keywords" content="butcher prices, brisket price per pound, cheapest brisket, meat prices near me, BBQ meat prices, pork shoulder price, ribs price, Costco brisket price, Walmart brisket price, Wisconsin butcher" />
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebApplication",
+        "@id": "https://holysmokesbbqco.com/board/#webapp",
+        "name": "BBQ Board",
+        "alternateName": ["Holy Smokes BBQ Board", "BBQ Meat Price Board", "BBQ Butcher Price Tracker"],
+        "url": "https://holysmokesbbqco.com/board/",
+        "description": "Crowdsourced butcher and meat counter price directory. Find the cheapest BBQ cuts near you and submit prices to keep the community informed. Milwaukee, Madison, Chicago, Kansas City, and more.",
+        "applicationCategory": "LifestyleApplication",
+        "applicationSubCategory": "Food & Drink",
+        "operatingSystem": "Web",
+        "browserRequirements": "Requires JavaScript. Requires HTML5.",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "publisher": { "@id": "https://holysmokesbbqco.com/#organization" },
+        "inLanguage": "en-US",
+        "keywords": "butcher prices, brisket price per pound, meat prices near me, BBQ meat prices, Milwaukee butcher, Wisconsin brats, Kansas City meat",
+        "featureList": [
+          "Local butcher and grocery meat prices",
+          "Filter by meat: brisket, pork shoulder, ribs, chicken, brats, ground beef",
+          "Filter by store type: butcher shops, warehouse clubs, grocery stores",
+          "City picker with radius (5, 10, 25, 50, 100 miles)",
+          "Automatic location detection",
+          "Community-submitted prices with freshness timestamps",
+          "Weekly ad OCR — upload a photo, extract prices",
+          "Wisconsin brats coverage — Milwaukee's cultural staple"
+        ]
+      },
+      {
+        "@type": "FAQPage",
+        "@id": "https://holysmokesbbqco.com/board/#faq",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "Where can I find the cheapest brisket near me?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "BBQ Board tracks brisket prices at butcher shops, warehouse clubs (Costco, Sam's Club), and grocery meat counters within your city. Pick your city and radius, filter by 'Brisket,' and the cheapest priced shop appears first. Costco national baseline is around $5.89/lb for whole packer brisket (Prime or Choice). Local butchers price higher because the meat is grass-fed or heritage-raised."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "How much do brats cost in Wisconsin?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Wisconsin butchers stake their reputation on their brat recipes. Kettle Range Milwaukee's Milwaukee Bratwurst runs about $9.95/lb. Bavaria Sausage Kitchen (Madison) sells Kaiser Bratwurst at about $6/lb in the 10 lb box. Costco's Kirkland Bratwurst (made by Johnsonville in Sheboygan Falls) works out to about $3.51/lb. Submit your local butcher's price to help the community."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Which butcher shops are in Milwaukee?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Milwaukee-metro butchers on BBQ Board include Bunzel's Meat Market, Kettle Range Meat Co. (Milwaukee and Elm Grove), Ray's Butcher Shoppe (Greenfield), Buddy's Meat Market, C & R Market, Usinger's, Rupena's Fine Foods (West Allis), Becher Meats (West Allis), Roberts' Specialty Meats (Waukesha), Sausage Haus Meat & Deli (Oconomowoc), and Daybreak Prime Meats (Delafield)."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "How does BBQ Board get its prices?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Three sources. First, chain-catalog baselines from Costco (via Warehouse Runner, a crowdsourced price tracker), Sam's Club product pages, and Hy-Vee's online store — these give a reasonable national or regional price. Second, weekly ad OCR — you drop a photo of a printed or PDF weekly ad and the app extracts per-pound prices. Third, community submissions — anyone with a Google account can post the price they saw on the shelf. Prices older than 30 days are flagged stale."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Which cities does BBQ Board cover?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Launch coverage: Milwaukee, Waukesha, Madison, Middleton, Appleton, Green Bay, Chicago, and Kansas City. Pick any city plus a radius (5 to 100 miles) and see every butcher, warehouse club, and grocery meat counter in range. Coverage grows as users submit prices in their own cities."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "How do I submit a price?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Every unpriced shop has a Submit button. Sign in with Google (one tap), pick the meat cut, enter the price per pound you saw, and it posts. You can also upload a photo of a weekly ad and let the app OCR the prices for you to confirm and submit."
+            }
+          }
+        ]
+      }
+    ]
+  }
+  </script>
+
+  <script>window.GA_MEASUREMENT_ID = 'G-WYSD9Q7CGL'; window.GA_PAGE_TITLE = 'BBQ Board — Holy Smokes BBQ Co'; window.GA_CONTENT_GROUP = 'board';</script>
+  <script src="/gtm-init.js?v=7" defer></script>
+
+  <style>
+    @font-face {
+      font-family: 'Inter';
+      font-style: normal;
+      font-weight: 400 700;
+      font-display: swap;
+      src: url(/board/fonts/inter-latin.woff2) format('woff2');
+      unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+    }
+    @font-face {
+      font-family: 'Oswald';
+      font-style: normal;
+      font-weight: 400 700;
+      font-display: swap;
+      src: url(/board/fonts/oswald-latin.woff2) format('woff2');
+      unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html { background: #1a1a1a; min-height: 100%; }
+    body { background: #1a1a1a; color: #f5e6d3; font-family: 'Inter', sans-serif; min-height: 100vh; }
+    /* iOS safe area: viewport-fit=cover above lets the app draw edge-to-edge,
+       and this padding keeps the header out from under the iPhone notch and
+       the bottom UI out from under the home indicator. Both env() values are
+       0 on browsers/devices that don't expose insets, so this is safe on web
+       and Android too. */
+    #root { min-height: 100vh; padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
+    input, textarea, select, button { font-family: 'Inter', sans-serif; }
+
+    .bbq-container-wide { max-width: 720px; margin: 0 auto; padding: 0; }
+    @media (min-width: 768px) {
+      .bbq-container-wide { max-width: 1100px; }
+    }
+    @media (min-width: 1200px) {
+      .bbq-container-wide { max-width: 1300px; }
+    }
+  </style>
+</head>
+<body>
+  <main id="root">
+    <div style="max-width:720px;margin:0 auto;padding:24px 16px;color:#f5e6d3;line-height:1.6;">
+      <div style="text-align:center;padding:48px 0 32px;">
+        <img src="/board/bbq-board-logo.png" alt="BBQ Board"
+          style="width:120px;height:120px;border-radius:50%;opacity:0.92;" />
+        <div style="font-family:'Oswald',sans-serif;font-size:16px;letter-spacing:3px;color:#A85F52;font-weight:700;margin-top:16px;">BBQ BOARD</div>
+        <div style="font-size:11px;letter-spacing:2px;color:#888;margin-top:4px;">by Holy Smokes BBQ Co</div>
+      </div>
+      <h1 style="font-size:28px;margin-bottom:12px;color:#d4a64a;">BBQ Board — Local Meat Prices</h1>
+      <p style="margin-bottom:12px;">Crowdsourced meat prices from local butchers, grocery meat counters, and warehouse clubs. <strong>Find the cheapest brisket, pork shoulder, ribs, chicken, and Wisconsin brats near you</strong> — and submit prices to keep everyone honest.</p>
+
+      <p style="margin-bottom:16px;">Launched with coverage in Milwaukee, Madison, Chicago, Kansas City, and the greater Wisconsin corridor. Prices come from real receipts, real store visits, chain-catalog baselines, and the BBQ community. See a better price? Submit it in 20 seconds and help the next pitmaster save a few bucks per pound.</p>
+
+      <h2 style="font-size:20px;margin:20px 0 10px;color:#A85F52;">Tracked cuts</h2>
+      <ul style="margin-bottom:20px;padding-left:20px;">
+        <li>Brisket packer (USDA Prime, Choice, Select)</li>
+        <li>Pork shoulder / Boston butt</li>
+        <li>Spare ribs and baby back ribs</li>
+        <li>Bratwurst — fresh and smoked</li>
+        <li>Whole chicken</li>
+        <li>Whole turkey</li>
+        <li>Tri-tip</li>
+        <li>Ground beef (80/20)</li>
+      </ul>
+
+      <h2 style="font-size:20px;margin:20px 0 10px;color:#A85F52;">Cities covered</h2>
+      <p style="margin-bottom:12px;">Milwaukee, WI · Waukesha, WI · Madison, WI · Middleton, WI · Appleton, WI · Green Bay, WI · Chicago, IL · Kansas City, MO. Each city pairs with a radius selector (5, 10, 25, 50, 100 miles) so you can widen or tighten the search. Coverage grows as users submit prices in their own cities.</p>
+
+      <h2 style="font-size:20px;margin:20px 0 10px;color:#A85F52;">How BBQ Board works</h2>
+      <p style="margin-bottom:12px;">Every price on BBQ Board has a store, a cut, a price per pound, and a timestamp. Sort by distance and price. Filter to just butcher shops if you want to support local — every Costco, Walmart, and Meijer drops out. Prices older than 30 days get flagged as stale; older than 90 hidden entirely. Anyone can submit a new price by signing in with Google, or by uploading a photo of a weekly ad for the app to OCR.</p>
+
+      <h2 style="font-size:20px;margin:20px 0 10px;color:#A85F52;">Common questions</h2>
+
+      <h3 style="font-size:16px;margin:12px 0 4px;">Where can I find the cheapest brisket near me?</h3>
+      <p style="margin-bottom:12px;">Pick your city, filter by Brisket, and the cheapest priced shop appears first. Costco's national baseline is around $5.89/lb for whole packer (Prime or Choice). Local butchers price higher because the meat is grass-fed or heritage-raised.</p>
+
+      <h3 style="font-size:16px;margin:12px 0 4px;">How much do brats cost in Wisconsin?</h3>
+      <p style="margin-bottom:12px;">Kettle Range Milwaukee: about $9.95/lb for Milwaukee Bratwurst. Bavaria Sausage Kitchen (Madison): about $6/lb for Kaiser Bratwurst in a bulk box. Costco Kirkland (made by Johnsonville in Sheboygan Falls, WI): about $3.51/lb. Submit your local butcher's price to help the community.</p>
+
+      <h3 style="font-size:16px;margin:12px 0 4px;">Which butcher shops are in Milwaukee?</h3>
+      <p style="margin-bottom:12px;">Bunzel's Meat Market, Kettle Range Meat Co. (Milwaukee and Elm Grove), Ray's Butcher Shoppe (Greenfield), Buddy's Meat Market, C & R Market, Usinger's, Rupena's Fine Foods (West Allis), Becher Meats (West Allis), Roberts' Specialty Meats (Waukesha), Sausage Haus Meat & Deli (Oconomowoc), Daybreak Prime Meats (Delafield).</p>
+
+      <h3 style="font-size:16px;margin:12px 0 4px;">How do I submit a price?</h3>
+      <p style="margin-bottom:20px;">Every unpriced shop has a Submit button. Sign in with Google, pick the meat cut, enter the price per pound. Or upload a photo of a weekly ad and let the app OCR the prices for you to confirm.</p>
+
+      <p style="font-size:13px;color:#999;font-style:italic;">Loading the price board&hellip;</p>
+    </div>
+  </main>
+  <script type="module" src="/src/main.board.jsx"></script>
+</body>
+</html>

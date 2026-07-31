@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  PLACEHOLDER — replace before first Codemagic build.
+
+  Download the real GoogleService-Info.plist from the Firebase project
+  holy-smokes-bbq-board (Project settings → Your apps → iOS →
+  GoogleService-Info.plist). Overwrite this file, then force-add:
+    git add -f ios-board/App/App/GoogleService-Info.plist
+
+  Values below are deliberately invalid — building against them will
+  fail loud during Firebase init, not silently connect to the wrong
+  project. See [[ios-codemagic-build]] gotcha #8.
+-->
+<plist version="1.0">
+<dict>
+  <key>PLACEHOLDER</key>
+  <string>Replace this file with the real one from Firebase console.</string>
+  <key>BUNDLE_ID</key>
+  <string>com.holysmokesbbq.board</string>
+  <key>PROJECT_ID</key>
+  <string>holy-smokes-bbq-board</string>
+</dict>
+</plist>
