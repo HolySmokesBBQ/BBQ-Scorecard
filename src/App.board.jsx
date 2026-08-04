@@ -16,6 +16,9 @@ import { SEED_PRICES } from './board/seed.js';
 import { SHOPS, shopsForRegion, shopsNear, getShop, shopLatLng } from './board/shops.js';
 import { extractPricedPhrases } from './board/circular.js';
 import Onboarding, { hasOnboarded } from './board/Onboarding.jsx';
+import BoardHamburger from './components/BoardHamburger.jsx';
+import Calculator from './board/Calculator.jsx';
+import Settings from './board/Settings.jsx';
 import { sendProblemReport } from './diagnostics.js';
 import 'leaflet/dist/leaflet.css';
 
@@ -204,6 +207,7 @@ export default function BoardApp() {
   const [viewMode, setViewMode] = useState('list'); // 'list' | 'map'
   const [showAbout, setShowAbout] = useState(false);
   const [detailShopId, setDetailShopId] = useState(null);
+  const [view, setView] = useState('home'); // 'home' | 'calculator' | 'settings'
 
   const pricedCount = shopRows.filter(r => r.price).length;
   const unpricedCount = shopRows.length - pricedCount;
@@ -246,12 +250,47 @@ export default function BoardApp() {
     });
   };
 
+  // ── Sub-screens accessed via the hamburger menu ────────────────
+  // Rendered as full-screen replacements (not modals) with the same
+  // hamburger + AboutScreen mounted so navigation stays reachable.
+  if (view === 'calculator') {
+    return (
+      <>
+        <Calculator onClose={() => setView('home')} />
+        <BoardHamburger
+          currentView={view}
+          onNavigate={setView}
+          onAbout={() => { setShowAbout(true); track('board_about_opened'); }}
+        />
+        {showAbout && <AboutScreen onClose={() => setShowAbout(false)} user={user} />}
+      </>
+    );
+  }
+
+  if (view === 'settings') {
+    return (
+      <>
+        <Settings user={user} onSignIn={handleSignIn} onClose={() => setView('home')} />
+        <BoardHamburger
+          currentView={view}
+          onNavigate={setView}
+          onAbout={() => { setShowAbout(true); track('board_about_opened'); }}
+        />
+        {showAbout && <AboutScreen onClose={() => setShowAbout(false)} user={user} />}
+      </>
+    );
+  }
+
   return (
     <div style={{ minHeight: '100vh', background: PAL.bg, color: PAL.text }}>
       <Header
         user={user}
         onSignIn={handleSignIn}
         onSignOut={() => signOut(auth)}
+      />
+      <BoardHamburger
+        currentView={view}
+        onNavigate={setView}
         onAbout={() => { setShowAbout(true); track('board_about_opened'); }}
       />
       {showAbout && <AboutScreen onClose={() => setShowAbout(false)} user={user} />}
@@ -549,10 +588,11 @@ function BoardMap({ shopRows, city, radius, onSubmit, onShopTap }) {
 }
 
 // ─── Header ────────────────────────────────────────────────────
-function Header({ user, onSignIn, onSignOut, onAbout }) {
+function Header({ user, onSignIn, onSignOut }) {
   // Slim action-bar-only header — no title text (the big brand block below
-  // handles branding). Prevents the "double header" issue where the top strip
-  // and the centered brand block both showed BBQ BOARD titles.
+  // handles branding). About + Settings live in the hamburger menu now
+  // (BoardHamburger.jsx), so this header carries only the web-only Back
+  // link and the sign-in/out toggle.
   return (
     <header style={{
       background: PAL.panelDeep,
@@ -569,7 +609,6 @@ function Header({ user, onSignIn, onSignOut, onAbout }) {
             <a href="/" onClick={() => track('cross_app_nav', { from: 'board', to: 'site' })}
               style={{ color: PAL.textDim, textDecoration: 'none', fontSize: 14, padding: '6px 4px' }}>← Back</a>
           )}
-          <button onClick={onAbout} style={secondaryBtn} aria-label="About">About</button>
         </div>
         {user ? (
           <button onClick={onSignOut} style={secondaryBtn}>Sign out</button>
