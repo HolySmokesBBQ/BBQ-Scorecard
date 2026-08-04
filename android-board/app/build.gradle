@@ -1,0 +1,109 @@
+apply plugin: 'com.android.application'
+
+// ─────────────────────────────────────────────────────────────
+// Release signing config. Reads credentials from
+// `android-board/keystore.properties` (gitignored). When the
+// file is missing — e.g. a fresh clone before the developer has
+// set up signing — release builds fall through to a debug-signed
+// AAB, which is dev-only and must never be shipped.
+//
+// Schema of keystore.properties (see ../keystore.properties.template):
+//   storeFile=<path relative to android-board/>
+//   storePassword=<keystore password>
+//   keyAlias=<key alias>
+//   keyPassword=<key password>
+// ─────────────────────────────────────────────────────────────
+def keystorePropsFile = rootProject.file("keystore.properties")
+def keystoreProps = new Properties()
+if (keystorePropsFile.exists()) {
+    keystorePropsFile.withReader('UTF-8') { keystoreProps.load(it) }
+}
+
+android {
+    namespace = "com.holysmokesbbq.board"
+    compileSdk = rootProject.ext.compileSdkVersion
+    defaultConfig {
+        applicationId "com.holysmokesbbq.board"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode 23700
+        versionName "2.3.7"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        aaptOptions {
+            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    signingConfigs {
+        if (keystorePropsFile.exists()) {
+            release {
+                storeFile rootProject.file(keystoreProps['storeFile'])
+                storePassword keystoreProps['storePassword']
+                keyAlias keystoreProps['keyAlias']
+                keyPassword keystoreProps['keyPassword']
+            }
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            if (keystorePropsFile.exists()) {
+                signingConfig signingConfigs.release
+            }
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+// After bundleRelease finishes, archive the signed AAB to
+// BBQ-Board-Android/ with a version-stamped filename like
+// "BBQ Board-signed-v1.0.0.aab". Same archive-every-build
+// pattern as the Scorecard and Notebook sides, so rollback is
+// always trivial.
+// ─────────────────────────────────────────────────────────────
+tasks.register('copyReleaseBundle', Copy) {
+    dependsOn 'bundleRelease'
+    from layout.buildDirectory.file('outputs/bundle/release/app-release.aab')
+    into rootProject.file('../BBQ-Board-Android')
+    def versionName = android.defaultConfig.versionName
+    rename { "BBQ Board-signed-v${versionName}.aab" }
+    onlyIf { keystorePropsFile.exists() }
+    doLast {
+        logger.lifecycle("Signed AAB archived to: ../BBQ-Board-Android/BBQ Board-signed-v${versionName}.aab")
+    }
+}
+
+tasks.matching { it.name == 'bundleRelease' }.configureEach {
+    finalizedBy 'copyReleaseBundle'
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+}
+
+apply from: 'capacitor.build.gradle'
+
+try {
+    def servicesJSON = file('google-services.json')
+    if (servicesJSON.text) {
+        apply plugin: 'com.google.gms.google-services'
+        apply plugin: 'com.google.firebase.crashlytics'
+    }
+} catch(Exception e) {
+    logger.info("google-services.json not found, google-services + crashlytics plugins not applied. Push Notifications and crash reporting won't work")
+}
