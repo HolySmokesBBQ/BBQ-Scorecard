@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useAppContext } from '../context/AppContext.jsx';
 import { CATEGORIES, DESCRIPTORS, MEATS, SIDES_LIST, SAUCE_DEP_OPTIONS, RETURN_OPTIONS } from '../constants.js';
 import { calcScores, track } from '../scoring.js';
@@ -63,6 +64,27 @@ export default function ReviewForm() {
     return [...seen.values()].sort((a, b) => a.localeCompare(b));
   })();
 
+  // Custom restaurant autocomplete. Replaces the native <datalist>, which
+  // rendered as a half-transparent, sticky overlay in the Android WebView
+  // and always offered the entire list. We only surface suggestions once
+  // what's typed actually resembles an existing name, and the dropdown is
+  // a plain positioned element we fully control and can hide cleanly.
+  const [showRestaurantList, setShowRestaurantList] = useState(false);
+  const restaurantMatches = (() => {
+    const q = (currentReview.restaurant || '').trim().toLowerCase();
+    if (!q) return [];
+    const hits = restaurantSuggestions.filter(n => n.toLowerCase().includes(q));
+    // Nothing to offer if the only hit is the exact name already typed.
+    if (hits.length === 1 && hits[0].toLowerCase() === q) return [];
+    // Prefix matches first (the closest "similar name"), then the rest.
+    hits.sort((a, b) => {
+      const ap = a.toLowerCase().startsWith(q) ? 0 : 1;
+      const bp = b.toLowerCase().startsWith(q) ? 0 : 1;
+      return ap - bp || a.localeCompare(b);
+    });
+    return hits.slice(0, 6);
+  })();
+
   const sc = calcScores(currentReview.scores);
 
   return (
@@ -81,18 +103,36 @@ export default function ReviewForm() {
       {/* Info Fields */}
       <div style={{ marginBottom: '20px' }}>
         <div className="bbq-form-fields">
-        <div style={{ marginBottom: '10px' }}>
+        <div style={{ marginBottom: '10px', position: 'relative' }}>
           <label style={sLabel()}>RESTAURANT</label>
-          <input type="text" list="bbq-restaurant-suggestions"
+          <input type="text"
             value={currentReview.restaurant}
-            onChange={e => update('restaurant', e.target.value)}
+            onChange={e => { update('restaurant', e.target.value); setShowRestaurantList(true); }}
+            onFocus={() => setShowRestaurantList(true)}
+            // Delay the hide so a tap on a suggestion (which fires onMouseDown
+            // first) still registers before the list closes.
+            onBlur={() => setTimeout(() => setShowRestaurantList(false), 150)}
+            autoComplete="off"
             placeholder="Name" style={sInput()} />
-          {restaurantSuggestions.length > 0 && (
-            <datalist id="bbq-restaurant-suggestions">
-              {restaurantSuggestions.map(name => (
-                <option key={name} value={name} />
+          {showRestaurantList && restaurantMatches.length > 0 && (
+            <div style={{
+              position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 30,
+              marginTop: '2px', background: S.card, border: `1px solid ${S.border}`,
+              borderRadius: '6px', overflow: 'hidden', boxShadow: '0 6px 16px rgba(0,0,0,0.35)',
+            }}>
+              {restaurantMatches.map((name, i) => (
+                <div key={name}
+                  // onMouseDown (not onClick) so it fires before the input's
+                  // blur; preventDefault keeps focus from bouncing.
+                  onMouseDown={(e) => { e.preventDefault(); update('restaurant', name); setShowRestaurantList(false); }}
+                  style={{
+                    padding: '10px 12px', fontSize: '14px', color: S.text, cursor: 'pointer',
+                    borderTop: i === 0 ? 'none' : `1px solid ${S.border}`,
+                  }}>
+                  {name}
+                </div>
               ))}
-            </datalist>
+            </div>
           )}
         </div>
 

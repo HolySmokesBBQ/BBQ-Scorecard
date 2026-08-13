@@ -12,7 +12,7 @@ export default function Detail() {
     galleryIndex, setGalleryIndex,
     draftText, setDraftText,
     editReview, duplicateReview, shareReview, shareReviewStory, exportText, deleteReview,
-    shareGenerating,
+    shareGenerating, storyGenerating,
     reviews, rankMap,
     friendReviewsMap,
     OfflineBanner,
@@ -316,9 +316,9 @@ export default function Detail() {
             style={{ ...sBtn(false, false), opacity: shareGenerating ? 0.5 : 1 }}>
             {shareGenerating ? 'Generating...' : 'Share Card'}
           </button>
-          <button onClick={() => shareReviewStory(r)} disabled={shareGenerating}
-            style={{ ...sBtn(false, false), opacity: shareGenerating ? 0.5 : 1 }}>
-            {shareGenerating ? 'Generating...' : 'Story Card'}
+          <button onClick={() => shareReviewStory(r)} disabled={storyGenerating}
+            style={{ ...sBtn(false, false), opacity: storyGenerating ? 0.5 : 1 }}>
+            {storyGenerating ? 'Generating...' : 'Story Card'}
           </button>
           <button onClick={exportPdf} disabled={pdfGenerating}
             style={{ ...sBtn(false, false), opacity: pdfGenerating ? 0.5 : 1 }}>

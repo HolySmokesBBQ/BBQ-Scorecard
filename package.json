@@ -1,6 +1,6 @@
 {
   "name": "bbq-scorecard",
-  "version": "3.6.0",
+  "version": "3.6.2",
   "private": true,
   "type": "module",
   "scripts": {
@@ -12,7 +12,8 @@
     "build:native": "vite build --config vite.config.native.js",
     "build:notebook": "vite build --config vite.config.notebook.js",
     "build:notebook-native": "vite build --config vite.config.native.notebook.js",
-    "build:calculator": "vite build --config vite.config.calculator.js",
+    "build:calculator-prices": "node scripts/generate-calculator-prices.mjs",
+    "build:calculator": "npm run build:calculator-prices && vite build --config vite.config.calculator.js",
     "build:catering": "vite build --config vite.config.catering.js",
     "build:board": "vite build --config vite.config.board.js",
     "build:board-native": "vite build --config vite.config.native.board.js",

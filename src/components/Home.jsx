@@ -65,29 +65,22 @@ export default function Home() {
 
   return (
     <>
-      <header style={{ background: theme === 'dark' ? '#1a1510' : '#ede5dc', borderBottom: `1px solid ${S.border}`, padding: '14px 16px' }}>
-        <div className="bbq-container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 0 }}>
-          {/* No "Back" on Home — the home screen is the app's root; iOS
-              users navigate via the hamburger menu, not a web-style back
-              button. (Sub-screens keep their own Back-to-home link.) */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div>
-              <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 20, fontWeight: 700, letterSpacing: 1, color: S.accent }}>
-                BBQ SCORECARD
-              </div>
-              <div style={{ fontSize: 11, color: S.muted, marginTop: -2 }}>
-                Rate and rank BBQ restaurants
-              </div>
-            </div>
-          </div>
-          {/* The ☰ menu is now global (AppNav, mounted in App.jsx) so it
-              appears on every screen. Nothing needed here — the floating
-              button sits over this header's right side. Legacy pre-NAV_V2
-              builds showed a theme toggle here; theme lives in Settings now. */}
-        </div>
-      </header>
     <div className="bbq-container" style={{ paddingBottom: '80px' }}>
       <OfflineBanner />
+      {/* No header bar — Board-style headerless layout. The ☰ (AppNav,
+          mounted globally in App.jsx) floats over the top-right corner;
+          the brand block below just scrolls with the content. The old
+          fixed <header> was what made the ☰ read as "stuck in a header."
+          Right-padding leaves room for the floating ☰ so the brand text
+          never sits under it. */}
+      <div style={{ textAlign: 'center', padding: '16px 52px 12px' }}>
+        <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 22, fontWeight: 700, letterSpacing: 1, color: S.accent }}>
+          BBQ SCORECARD
+        </div>
+        <div style={{ fontSize: 12, color: S.muted, marginTop: 2 }}>
+          Rate and rank BBQ restaurants
+        </div>
+      </div>
 
       {/* Pull-to-refresh indicator */}
       {pullRefreshing && (

@@ -21,22 +21,26 @@ const DARK = [26, 26, 26];        // #1a1a1a
 const TEXT = [60, 60, 60];
 const MUTED = [136, 136, 136];
 
-// Hand-written category list to avoid importing constants.js (which
-// pulls in the smoker catalog and other unrelated code). Keep in sync
-// with src/constants.js CATEGORIES.
+// Category list mirrored from src/constants.js CATEGORIES. Kept as a
+// local literal (rather than importing constants.js, which pulls in the
+// smoker catalog and other unrelated code) — but the KEYS must match the
+// review data exactly, or scores[c.key] is undefined and every mismatched
+// row prints "—". Previously these had drifted (meat/bark/smokeRing/flavor
+// /value) and left half the grid blank. If constants.js CATEGORIES change,
+// update these too.
 const BBQ_CATS = [
-  { key: 'meat',        label: 'Meat' },
-  { key: 'bark',        label: 'Bark' },
-  { key: 'smokeRing',   label: 'Smoke Ring' },
-  { key: 'tenderness',  label: 'Tenderness' },
-  { key: 'flavor',      label: 'Flavor' },
+  { key: 'appearance',  label: 'Appearance' },
+  { key: 'taste',       label: 'Taste / Flavor' },
+  { key: 'tenderness',  label: 'Tenderness / Texture' },
+  { key: 'smoke',       label: 'Smoke' },
   { key: 'sides',       label: 'Sides' },
   { key: 'sauce',       label: 'Sauce' },
+  { key: 'portions',    label: 'Portions / Value' },
 ];
 const FAM_CATS = [
   { key: 'service',     label: 'Service' },
   { key: 'cleanliness', label: 'Cleanliness' },
-  { key: 'value',       label: 'Value' },
+  { key: 'amenities',   label: 'Family Amenities' },
 ];
 
 function setColor(doc, fn, rgb) {

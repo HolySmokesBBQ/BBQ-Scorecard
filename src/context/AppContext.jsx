@@ -208,6 +208,9 @@ export default function AppProvider({ children }) {
     try { return JSON.parse(localStorage.getItem('muiller-bbq-friends') || '[]'); } catch { return []; }
   });
   const [shareGenerating, setShareGenerating] = useState(false);
+  // Separate flag for the Story Card so generating one card doesn't flip
+  // the other button's label/disabled state (they are distinct exports).
+  const [storyGenerating, setStoryGenerating] = useState(false);
   const [fbUser, setFbUser] = useState(null);
   const [userProfile, setUserProfile] = useState(null);
   const [fbFriends, setFbFriends] = useState([]);
@@ -1207,7 +1210,7 @@ export default function AppProvider({ children }) {
 
     const filename = `${r.restaurant.replace(/[^a-zA-Z0-9]/g, '-')}-story.png`;
 
-    setShareGenerating(true);
+    setStoryGenerating(true);
     try {
       const byScore = [...reviews].sort((a, b) =>
         calcScores(b.scores).composite - calcScores(a.scores).composite);
@@ -1261,16 +1264,22 @@ export default function AppProvider({ children }) {
         track('story_card_failed', { reason: (e?.message || 'unknown').toString().slice(0, 80) });
       }
     } finally {
-      setShareGenerating(false);
+      setStoryGenerating(false);
     }
   };
 
   const exportText = (r) => {
     const sc = calcScores(r.scores);
+    const friendNames = (r.friends || []).map(f => f?.name).filter(Boolean);
     const lines = [
       `═══ ${r.restaurant} ═══`,
       `Date: ${r.date}  |  Location: ${r.location || 'N/A'}`,
       r.trip ? `Trip: ${r.trip}` : '',
+      // "What was ordered" and "who was there" — these were captured on the
+      // review but omitted from the export, so anyone (or an AI) reading the
+      // paste had to ask for them.
+      r.meats?.length ? `Ordered: ${r.meats.join(', ')}` : '',
+      friendNames.length ? `With: ${friendNames.join(', ')}` : '',
       `Price: $${r.price || '?'}${r.priceSplit > 1 ? ` ($${(r.price / r.priceSplit).toFixed(2)}/person × ${r.priceSplit})` : ''}`,
       '',
       '— BBQ Track —',
@@ -1286,6 +1295,7 @@ export default function AppProvider({ children }) {
       r.sauceDep ? `Sauce: ${r.sauceDep}` : '',
       r.wouldReturn ? `Return: ${r.wouldReturn}` : '',
       ...(r.notesLog?.length ? ['', '— Notes —', ...r.notesLog] : []),
+      ...(r.notes ? ['', '— Additional Notes —', r.notes] : []),
     ].filter(Boolean).join('\n');
     navigator.clipboard?.writeText(lines);
   };
@@ -1334,7 +1344,7 @@ export default function AppProvider({ children }) {
     galleryIndex, setGalleryIndex,
     friendName, setFriendName,
     friendsList,
-    shareGenerating,
+    shareGenerating, storyGenerating,
     fbUser, setFbUser,
     userProfile,
     fbFriends, setFbFriends,
