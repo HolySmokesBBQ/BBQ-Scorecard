@@ -49,6 +49,12 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<!-- Google Sign-In. Both values MUST match ios-board/App/App/GoogleService-Info.plist
+	     (project holy-smokes-bbq-board, sender 641836204823). Without GIDClientID the
+	     SDK raises at GIDSignIn.m:739 and the app aborts the moment a sign-in starts;
+	     a URL scheme from a different project silently breaks the OAuth callback. -->
+	<key>GIDClientID</key>
+	<string>641836204823-6s0sak603jv42q42d7adtige0u35i3lc.apps.googleusercontent.com</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -56,17 +62,18 @@
 			<string>GoogleSignIn</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>com.googleusercontent.apps.582963363646-9kvclho7jo0447lf1qn57uctvbaolj8h</string>
+				<string>com.googleusercontent.apps.641836204823-6s0sak603jv42q42d7adtige0u35i3lc</string>
 			</array>
 		</dict>
 	</array>
+	<!-- These strings are shown verbatim in the iOS permission prompt and are read by
+	     App Review. They must describe features BBQ Board actually has: shop search by
+	     distance, and scanning a weekly ad to pull prices out of it. -->
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>BBQ Board uses your location only when you tap "BBQ Near Me" to find barbecue restaurants close to you. Your location is never stored or shared.</string>
+	<string>BBQ Board uses your location to sort butcher shops and meat counters by how far they are from you. Your location is never stored or shared.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>BBQ Board uses the camera so you can take photos of your plate to attach to a review.</string>
+	<string>BBQ Board uses the camera so you can photograph a store's weekly ad and have the per-pound prices read off it for you.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>BBQ Board accesses your photo library so you can attach existing photos to a review.</string>
-	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>BBQ Board saves the share cards it generates to your photo library.</string>
+	<string>BBQ Board accesses your photo library so you can pick an existing photo of a weekly ad to scan for prices.</string>
 </dict>
 </plist>
