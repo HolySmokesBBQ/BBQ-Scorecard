@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { onAuthStateChanged, signInWithPopup, signInWithCredential, GoogleAuthProvider, signOut } from 'firebase/auth';
+import { signInAnonymously } from './firebase.board.js';
 import {
   collection, query, where, getDocs, addDoc, serverTimestamp,
   orderBy, limit,
@@ -238,15 +239,27 @@ export default function BoardApp() {
     }
   };
 
-  const openSubmit = (prefill = {}) => {
-    if (!user) {
-      handleSignIn();
-      return;
+  // Anonymous fallback — signed-in-required at the Firestore rules layer
+  // but users don't want to hand over a Google account just to add a price.
+  // Anonymous auth still gives us a real uid so shopId construction and
+  // duplicate detection keep working.
+  const handleSignInAnon = async () => {
+    try {
+      await signInAnonymously();
+      track('board_signin_anon');
+    } catch (err) {
+      console.error('anon signin failed', err);
+      track('board_signin_anon_failed', { error: err?.code || 'unknown' });
+      throw err;
     }
+  };
+
+  const openSubmit = (prefill = {}) => {
     setSubmitState(prefill);
     track('board_submit_opened', {
       prefill_shop: prefill.shopId || 'none',
       prefill_cut: prefill.cut || 'none',
+      signed_in: !!user,
     });
   };
 
@@ -283,11 +296,7 @@ export default function BoardApp() {
 
   return (
     <div style={{ minHeight: '100vh', background: PAL.bg, color: PAL.text }}>
-      <Header
-        user={user}
-        onSignIn={handleSignIn}
-        onSignOut={() => signOut(auth)}
-      />
+      <Header />
       <BoardHamburger
         currentView={view}
         onNavigate={setView}
@@ -381,6 +390,7 @@ export default function BoardApp() {
           region={region}
           user={user}
           onSignIn={handleSignIn}
+          onSignInAnon={handleSignInAnon}
         />
 
         <Footer />
@@ -393,6 +403,8 @@ export default function BoardApp() {
           prefillShopId={submitState.shopId}
           prefillCut={submitState.cut}
           onClose={() => setSubmitState(null)}
+          onSignIn={handleSignIn}
+          onSignInAnon={handleSignInAnon}
         />
       )}
 
@@ -588,11 +600,12 @@ function BoardMap({ shopRows, city, radius, onSubmit, onShopTap }) {
 }
 
 // ─── Header ────────────────────────────────────────────────────
-function Header({ user, onSignIn, onSignOut }) {
-  // Slim action-bar-only header — no title text (the big brand block below
-  // handles branding). About + Settings live in the hamburger menu now
-  // (BoardHamburger.jsx), so this header carries only the web-only Back
-  // link and the sign-in/out toggle.
+function Header() {
+  // Web-only Back link. Sign-in/out lives in the hamburger (Settings →
+  // ACCOUNT); keeping a duplicate button up here just overlaps with the
+  // floating hamburger and asks users the same question twice.
+  const isNative = typeof window !== 'undefined' && !!window.Capacitor?.isNativePlatform?.();
+  if (isNative) return null;
   return (
     <header style={{
       background: PAL.panelDeep,
@@ -600,21 +613,10 @@ function Header({ user, onSignIn, onSignOut }) {
       padding: '8px 16px',
     }}>
       <div className="bbq-container-wide" style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+        display: 'flex', alignItems: 'center', gap: 8,
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {/* Web-only: the website navigates back to holysmokesbbqco.com;
-              the installed app IS the home screen, so no Back there. */}
-          {!window.Capacitor?.isNativePlatform?.() && (
-            <a href="/" onClick={() => track('cross_app_nav', { from: 'board', to: 'site' })}
-              style={{ color: PAL.textDim, textDecoration: 'none', fontSize: 14, padding: '6px 4px' }}>← Back</a>
-          )}
-        </div>
-        {user ? (
-          <button onClick={onSignOut} style={secondaryBtn}>Sign out</button>
-        ) : (
-          <button onClick={onSignIn} style={secondaryBtn}>Sign in</button>
-        )}
+        <a href="/" onClick={() => track('cross_app_nav', { from: 'board', to: 'site' })}
+          style={{ color: PAL.textDim, textDecoration: 'none', fontSize: 14, padding: '6px 4px' }}>← Back</a>
       </div>
     </header>
   );
@@ -1352,13 +1354,26 @@ function VerifiedBadge() {
 // ─── Circular OCR panel ───────────────────────────────────────
 // Snap or drop a photo of a weekly ad. tesseract.js is lazy-loaded on
 // first use so the initial Board bundle stays lean.
-function CircularScrubPanel({ region, user, onSignIn }) {
+function CircularScrubPanel({ region, user, onSignIn, onSignInAnon }) {
   const [status, setStatus] = useState('idle'); // idle | loading-ocr | ocr-running | reviewing | submitting
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState('');
   const [proposals, setProposals] = useState([]);
   const [imageUrl, setImageUrl] = useState(null);
   const [selectedShopId, setSelectedShopId] = useState('');
+  const [showAuthGate, setShowAuthGate] = useState(false);
+  const [authBusy, setAuthBusy] = useState(false);
+  const [pendingSubmit, setPendingSubmit] = useState(false);
+
+  // If the user pressed submit while signed out, fire the write as soon
+  // as auth resolves.
+  useEffect(() => {
+    if (pendingSubmit && user) {
+      setPendingSubmit(false);
+      submitProposals(user);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingSubmit, user]);
 
   const regionShops = useMemo(() => shopsForRegion(region), [region]);
 
@@ -1412,8 +1427,11 @@ function CircularScrubPanel({ region, user, onSignIn }) {
     setProposals(prev => prev.map((p, i) => i === idx ? { ...p, keep: !p.keep } : p));
   };
 
-  const submitProposals = async () => {
-    if (!user) return onSignIn();
+  const submitProposals = async (submittingUser = user) => {
+    if (!submittingUser) {
+      setShowAuthGate(true);
+      return;
+    }
     const shop = getShop(selectedShopId);
     if (!shop) {
       setError('Pick which shop the ad is from before submitting.');
@@ -1431,7 +1449,7 @@ function CircularScrubPanel({ region, user, onSignIn }) {
       const p = kept[i];
       try {
         await addDoc(collection(db, 'board_prices'), {
-          userId: user.uid,
+          userId: submittingUser.uid,
           shopId: shop.id,
           store: shop.name,
           storeType: shop.storeType,
@@ -1609,7 +1627,7 @@ function CircularScrubPanel({ region, user, onSignIn }) {
             </button>
             <button
               type="button"
-              onClick={submitProposals}
+              onClick={() => submitProposals()}
               disabled={proposals.filter(p => p.keep).length === 0 || !selectedShopId}
               style={{
                 flex: 2, background: PAL.brass, color: '#111', border: 'none',
@@ -1629,6 +1647,25 @@ function CircularScrubPanel({ region, user, onSignIn }) {
 
       {error && (
         <div style={{ color: PAL.red, fontSize: 12, marginTop: 10 }}>{error}</div>
+      )}
+
+      {showAuthGate && (
+        <AuthGate
+          busy={authBusy}
+          onSignIn={async () => {
+            setAuthBusy(true);
+            try { await onSignIn(); setPendingSubmit(true); setShowAuthGate(false); }
+            catch { setError('Sign in failed. Try again.'); }
+            finally { setAuthBusy(false); }
+          }}
+          onSignInAnon={async () => {
+            setAuthBusy(true);
+            try { await onSignInAnon(); setPendingSubmit(true); setShowAuthGate(false); }
+            catch { setError('Anonymous sign-in failed. Try again.'); }
+            finally { setAuthBusy(false); }
+          }}
+          onCancel={() => setShowAuthGate(false)}
+        />
       )}
     </div>
   );
@@ -1677,8 +1714,77 @@ function Footer() {
   );
 }
 
+// ─── Auth gate — shown when a signed-out user tries to submit ─────
+// Gives users two paths: sign in with Google (recommended — lets us
+// attribute + let them delete their own submissions later), or continue
+// anonymously (Firebase anon auth, no Google account needed). Either
+// path satisfies the isSignedIn() Firestore rules check.
+function AuthGate({ onSignIn, onSignInAnon, onCancel, busy }) {
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: 16, zIndex: 200,
+    }}>
+      <div style={{
+        background: PAL.panel, border: `1px solid ${PAL.border}`,
+        borderRadius: 10, padding: 22, width: '100%', maxWidth: 400,
+      }}>
+        <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: 20, fontWeight: 700, color: PAL.brass, marginBottom: 10 }}>
+          One quick thing
+        </div>
+        <div style={{ fontSize: 14, color: PAL.text, marginBottom: 18, lineHeight: 1.5 }}>
+          BBQ Board attaches every price to an account so real submissions
+          stand out from noise. Pick how you'd like to submit:
+        </div>
+        <button
+          type="button"
+          onClick={onSignIn}
+          disabled={busy}
+          style={{
+            width: '100%', background: PAL.brass, color: '#111', border: 'none',
+            padding: '12px', borderRadius: 6, fontWeight: 700, cursor: busy ? 'default' : 'pointer',
+            fontSize: 15, marginBottom: 10, opacity: busy ? 0.6 : 1,
+          }}
+        >
+          Sign in with Google
+        </button>
+        <button
+          type="button"
+          onClick={onSignInAnon}
+          disabled={busy}
+          style={{
+            width: '100%', background: 'transparent', color: PAL.text,
+            border: `1px solid ${PAL.border}`,
+            padding: '12px', borderRadius: 6, cursor: busy ? 'default' : 'pointer',
+            fontSize: 14, marginBottom: 10, opacity: busy ? 0.6 : 1,
+          }}
+        >
+          Continue without an account
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={busy}
+          style={{
+            width: '100%', background: 'transparent', color: PAL.textDim,
+            border: 'none', padding: '8px', cursor: busy ? 'default' : 'pointer',
+            fontSize: 13,
+          }}
+        >
+          Cancel
+        </button>
+        <div style={{ fontSize: 11, color: PAL.textDim, lineHeight: 1.5, marginTop: 10 }}>
+          Anonymous submissions can't be edited or deleted later. Signing
+          in with Google lets you manage yours.
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Submit modal ──────────────────────────────────────────────
-function SubmitModal({ region, user, prefillShopId, prefillCut, onClose }) {
+function SubmitModal({ region, user, prefillShopId, prefillCut, onClose, onSignIn, onSignInAnon }) {
   const knownShop = prefillShopId ? getShop(prefillShopId) : null;
   const [shopMode, setShopMode] = useState(knownShop ? 'existing' : 'new');
   const [existingShopId, setExistingShopId] = useState(prefillShopId || '');
@@ -1690,11 +1796,22 @@ function SubmitModal({ region, user, prefillShopId, prefillCut, onClose }) {
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [showAuthGate, setShowAuthGate] = useState(false);
+  const [authBusy, setAuthBusy] = useState(false);
+  const [pendingSubmit, setPendingSubmit] = useState(false);
 
   const regionShops = useMemo(() => shopsForRegion(region), [region]);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  // If the user pressed submit while signed out, fire the write as soon
+  // as the parent's onAuthStateChanged flips `user` from null to real.
+  useEffect(() => {
+    if (pendingSubmit && user) {
+      setPendingSubmit(false);
+      doSubmit(user);
+    }
+  }, [pendingSubmit, user]);
+
+  const doSubmit = async (submittingUser) => {
     setError('');
     const priceNum = parseFloat(price);
     if (!(priceNum > 0) || priceNum > 100) return setError('Price must be between $0.01 and $100.00 per pound.');
@@ -1716,13 +1833,13 @@ function SubmitModal({ region, user, prefillShopId, prefillCut, onClose }) {
       // name get distinct shopIds. Prevents deliberate collision + false
       // attribution attacks (SECURITY-AUDIT-BOARD.md Finding B-7).
       const storeSlug = store.toLowerCase().replace(/[^a-z0-9]+/g, '_').slice(0, 40);
-      shopId = `user_${storeSlug}_${user.uid.slice(0, 8)}`;
+      shopId = `user_${storeSlug}_${submittingUser.uid.slice(0, 8)}`;
     }
 
     setSaving(true);
     try {
       await addDoc(collection(db, 'board_prices'), {
-        userId: user.uid,
+        userId: submittingUser.uid,
         shopId,
         store,
         storeType,
@@ -1730,20 +1847,60 @@ function SubmitModal({ region, user, prefillShopId, prefillCut, onClose }) {
         location,
         cut,
         pricePerLb: priceNum,
-        // Sanitize: strip HTML tags and control chars before write.
-        // Defense-in-depth for Finding B-8 — the rules cap length but
-        // the stored value can still be XSS-shaped without this.
         notes: sanitizeNote(notes),
         source: 'community',
         reportedAt: serverTimestamp(),
       });
-      track('board_price_submitted', { cut, storeType, region, shopMode });
+      track('board_price_submitted', { cut, storeType, region, shopMode, anon: submittingUser.isAnonymous === true });
       onClose();
     } catch (err) {
       console.error('submit failed', err);
       setError('Something went wrong. Try again in a moment.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    // Cheap up-front validation so the auth-gate doesn't pop for
+    // invalid forms.
+    const priceNum = parseFloat(price);
+    if (!(priceNum > 0) || priceNum > 100) return setError('Price must be between $0.01 and $100.00 per pound.');
+    if (shopMode === 'existing' && !getShop(existingShopId)) return setError('Pick a shop from the list, or add a new one.');
+    if (shopMode === 'new' && !newStore.trim()) return setError('Store name is required.');
+
+    if (!user) {
+      setShowAuthGate(true);
+      return;
+    }
+    doSubmit(user);
+  };
+
+  const gateSignIn = async () => {
+    setAuthBusy(true);
+    try {
+      await onSignIn();
+      setPendingSubmit(true);
+      setShowAuthGate(false);
+    } catch {
+      setError('Sign in failed. Try again.');
+    } finally {
+      setAuthBusy(false);
+    }
+  };
+
+  const gateSignInAnon = async () => {
+    setAuthBusy(true);
+    try {
+      await onSignInAnon();
+      setPendingSubmit(true);
+      setShowAuthGate(false);
+    } catch {
+      setError('Anonymous sign-in failed. Try again.');
+    } finally {
+      setAuthBusy(false);
     }
   };
 
@@ -1855,10 +2012,21 @@ function SubmitModal({ region, user, prefillShopId, prefillCut, onClose }) {
         </div>
 
         <div style={{ marginTop: 12, fontSize: 11, color: PAL.textDim, lineHeight: 1.5 }}>
-          Submitting as <strong style={{ color: PAL.text }}>{user?.displayName || user?.email}</strong>.
-          Prices are public and community-visible.
+          {user?.isAnonymous
+            ? 'Submitting anonymously. Prices are public and community-visible.'
+            : user
+              ? <>Submitting as <strong style={{ color: PAL.text }}>{user.displayName || user.email}</strong>. Prices are public and community-visible.</>
+              : 'You\'ll be asked how to submit before the price posts. Prices are public and community-visible.'}
         </div>
       </form>
+      {showAuthGate && (
+        <AuthGate
+          busy={authBusy}
+          onSignIn={gateSignIn}
+          onSignInAnon={gateSignInAnon}
+          onCancel={() => setShowAuthGate(false)}
+        />
+      )}
     </div>
   );
 }
