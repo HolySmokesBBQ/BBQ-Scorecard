@@ -1271,14 +1271,20 @@ export default function AppProvider({ children }) {
   const exportText = (r) => {
     const sc = calcScores(r.scores);
     const friendNames = (r.friends || []).map(f => f?.name).filter(Boolean);
+    const meatsAll = [...(r.meats || []), r.meatOther].filter(Boolean);
+    const sidesAll = [...(r.sides || []), r.sideOther].filter(Boolean);
     const lines = [
       `═══ ${r.restaurant} ═══`,
       `Date: ${r.date}  |  Location: ${r.location || 'N/A'}`,
       r.trip ? `Trip: ${r.trip}` : '',
-      // "What was ordered" and "who was there" — these were captured on the
-      // review but omitted from the export, so anyone (or an AI) reading the
-      // paste had to ask for them.
-      r.meats?.length ? `Ordered: ${r.meats.join(', ')}` : '',
+      // What was ordered and who was there — captured on the review but
+      // previously omitted from the export, so anyone (or an AI) reading the
+      // paste had to ask. Now every ordered detail rides along.
+      r.orderStyle ? `Order style: ${r.orderStyle}` : '',
+      meatsAll.length ? `Meats: ${meatsAll.join(', ')}` : '',
+      sidesAll.length ? `Sides: ${sidesAll.join(', ')}` : '',
+      r.dessert ? `Dessert: ${r.dessert}` : '',
+      r.drinks ? `Drinks: ${r.drinks}` : '',
       friendNames.length ? `With: ${friendNames.join(', ')}` : '',
       `Price: $${r.price || '?'}${r.priceSplit > 1 ? ` ($${(r.price / r.priceSplit).toFixed(2)}/person × ${r.priceSplit})` : ''}`,
       '',

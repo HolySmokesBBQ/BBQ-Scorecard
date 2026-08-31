@@ -55,7 +55,9 @@ export default function Detail() {
     return reviews.filter(x => (x.restaurant || '').trim().toLowerCase() === target).length;
   })();
   const orderParts = [
-    ...(r.meats || []), r.meatOther, ...(r.sides || []), r.sideOther, r.dessert ? `Dessert: ${r.dessert}` : '',
+    r.orderStyle ? `(${r.orderStyle})` : '',
+    ...(r.meats || []), r.meatOther, ...(r.sides || []), r.sideOther,
+    r.dessert ? `Dessert: ${r.dessert}` : '', r.drinks ? `Drinks: ${r.drinks}` : '',
   ].filter(Boolean);
   const photos = r.photos?.length ? r.photos : (r.photo ? [r.photo] : []);
   const hasFriends = (r.friends || []).length > 0;

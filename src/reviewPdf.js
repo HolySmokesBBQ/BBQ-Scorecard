@@ -175,6 +175,23 @@ export async function exportReviewPdf(review, calcScores) {
     y += 24;
   }
 
+  // What was ordered — meats, sides, dessert, drinks, order style, and who
+  // was there. Mirrors the clipboard export so the PDF is a complete record.
+  const meatsAll = [...(review.meats || []), review.meatOther].filter(Boolean);
+  const sidesAll = [...(review.sides || []), review.sideOther].filter(Boolean);
+  const friendNames = (review.friends || []).map(f => f?.name).filter(Boolean);
+  const orderBody = [
+    review.orderStyle ? `Order style: ${review.orderStyle}` : '',
+    meatsAll.length ? `Meats: ${meatsAll.join(', ')}` : '',
+    sidesAll.length ? `Sides: ${sidesAll.join(', ')}` : '',
+    review.dessert ? `Dessert: ${review.dessert}` : '',
+    review.drinks ? `Drinks: ${review.drinks}` : '',
+    friendNames.length ? `With: ${friendNames.join(', ')}` : '',
+  ].filter(Boolean).join('\n');
+  if (orderBody) {
+    y = drawSection(doc, 'Ordered', orderBody, y);
+  }
+
   // Notes log + free-form notes
   if (review.notesLog && review.notesLog.length) {
     y = drawSection(doc, 'Notes', review.notesLog.join('\n'), y);

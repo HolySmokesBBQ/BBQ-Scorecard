@@ -220,6 +220,12 @@ export default function ReviewForm() {
         </div>
       </div>
 
+      {/* Order style — how the meal was ordered (plate, by the pound, sandwich…) */}
+      <div style={{ marginBottom: '16px' }}>
+        <label style={sLabel()}>ORDER STYLE</label>
+        <input type="text" value={currentReview.orderStyle || ''} onChange={e => update('orderStyle', e.target.value)} placeholder="Plate, by the pound, sandwich, combo…" style={sInput()} />
+      </div>
+
       {/* Meats */}
       <div style={{ marginBottom: '16px' }}>
         <label style={sLabel()}>MEATS ORDERED</label>
@@ -244,10 +250,16 @@ export default function ReviewForm() {
         <input type="text" value={currentReview.sideOther || ''} onChange={e => update('sideOther', e.target.value)} placeholder="Other side..." style={{ ...sInput(), fontSize: '12px' }} />
       </div>
 
-      {/* Dessert */}
-      <div style={{ marginBottom: '20px' }}>
-        <label style={sLabel()}>DESSERT</label>
-        <input type="text" value={currentReview.dessert || ''} onChange={e => update('dessert', e.target.value)} placeholder="What'd you have?" style={sInput()} />
+      {/* Dessert + Drinks — side by side */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
+        <div style={{ flex: 1 }}>
+          <label style={sLabel()}>DESSERT</label>
+          <input type="text" value={currentReview.dessert || ''} onChange={e => update('dessert', e.target.value)} placeholder="What'd you have?" style={sInput()} />
+        </div>
+        <div style={{ flex: 1 }}>
+          <label style={sLabel()}>DRINKS</label>
+          <input type="text" value={currentReview.drinks || ''} onChange={e => update('drinks', e.target.value)} placeholder="Sweet tea, beer…" style={sInput()} />
+        </div>
       </div>
 
       {/* Friends */}

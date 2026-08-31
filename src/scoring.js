@@ -45,6 +45,7 @@ export function emptyReview() {
   return {
     id: genId(), restaurant: '', date: new Date().toISOString().split('T')[0],
     location: '', meats: [], meatOther: '', sides: [], sideOther: '', dessert: '',
+    drinks: '', orderStyle: '',
     scores: {}, sauceDep: '', wouldReturn: '', notes: '', notesLog: [],
     price: '', priceSplit: '1', trip: '', googleReviewUrl: '', photo: null,
     photos: [], friends: [], lastEdited: null,
@@ -397,6 +398,7 @@ export function generateGoogleDraft(r) {
   if (ordered.length) orderBits.push(`We ordered the ${joinAnd(ordered.map(x => x.toLowerCase()))}`);
   if (sidesList.length) orderBits.push(`${orderBits.length ? 'with ' : 'Sides were '}${joinAnd(sidesList.map(x => x.toLowerCase()))}`);
   if (r.dessert) orderBits.push(`and ${r.dessert.toLowerCase()} for dessert`);
+  if (r.drinks) orderBits.push(`${orderBits.length ? 'and ' : 'We had '}${r.drinks.toLowerCase()} to drink`);
   if (orderBits.length) paragraphs.push(orderBits.join(' ') + '.');
 
   // The reviewer's own notes ARE the body of the draft. Strip the date
