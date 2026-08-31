@@ -1,6 +1,6 @@
 {
   "name": "bbq-scorecard",
-  "version": "3.6.4",
+  "version": "4.0.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -38,6 +38,7 @@
     "@capacitor/filesystem": "^8.1.2",
     "@capacitor/ios": "^8.4.2",
     "@capacitor/share": "^8.0.1",
+    "@capgo/native-purchases": "^8.7.0",
     "firebase": "^12.14.0",
     "jspdf": "^4.2.1",
     "leaflet": "^1.9.4",

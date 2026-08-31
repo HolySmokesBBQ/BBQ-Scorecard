@@ -152,6 +152,10 @@ import {
   generateShareCard, generateGoogleDraft, exportCSV,
 } from '../scoring.js';
 import { generateReviewStoryCard } from '../reviewShareCard.js';
+import {
+  initEntitlements, isUnlocked, canCreateReview, isGateEnabled,
+} from '../entitlements.js';
+import { reconcileEntitlementOnLaunch } from '../purchases.js';
 
 const AppContext = createContext(null);
 
@@ -189,6 +193,9 @@ export default function AppProvider({ children }) {
   // Review pending an in-app delete confirmation (null = none). See
   // deleteReview / DeleteConfirmModal.
   const [pendingDeleteId, setPendingDeleteId] = useState(null);
+  // 4.0 free-tier gate (iOS only; see entitlements.js).
+  const [paywallOpen, setPaywallOpen] = useState(false);
+  const [unlocked, setUnlocked] = useState(() => isUnlocked());
   // localStorage flag set when the user ticks "never ask again" in the
   // delete confirmation — lets a mass-delete run skip the prompt.
   const DELETE_CONFIRM_SKIP_KEY = 'bbq-scorecard-skip-delete-confirm';
@@ -409,6 +416,17 @@ export default function AppProvider({ children }) {
     const raw = loadLocal();
     const migrated = raw.map(migrateReview);
     setReviews(migrated);
+    // Runs once ever. A device that already holds reviews but has never
+    // seen 4.0 belonged to a paid-era customer, so it gets unlocked
+    // permanently rather than being handed a paywall.
+    initEntitlements(migrated.length);
+    setUnlocked(isUnlocked());
+    // A paid-era customer who deleted and reinstalled has no local data for
+    // the migration above to spot, so ask StoreKit which build they first
+    // downloaded. Silent, best-effort, never blocks load.
+    reconcileEntitlementOnLaunch()
+      .then(granted => { if (granted) setUnlocked(true); })
+      .catch(() => {});
     setLoaded(true);
     fetch(`${import.meta.env.BASE_URL}published-reviews.json`)
       .then(r => r.ok ? r.json() : [])
@@ -828,6 +846,14 @@ export default function AppProvider({ children }) {
   const saveCurrentReview = async () => {
     if (!currentReview.restaurant.trim()) return;
     const exists = reviews.find(r => r.id === currentReview.id);
+
+    // Free-tier gate. Only ever blocks CREATING a new review — editing
+    // anything already saved stays open forever, no matter the count.
+    if (!exists && !canCreateReview(reviews.length)) {
+      track('paywall_shown', { reviews: reviews.length });
+      setPaywallOpen(true);
+      return;
+    }
     let reviewToSave = exists
       ? { ...currentReview, lastEdited: new Date().toISOString().split('T')[0] }
       : currentReview;
@@ -1376,6 +1402,13 @@ export default function AppProvider({ children }) {
     navigateTo, save, startNew, editReview, viewDetail, duplicateReview,
     update, updateScore, toggleChip, saveCurrentReview, deleteReview,
     pendingDeleteId, confirmPendingDelete, cancelPendingDelete,
+    // 4.0 entitlements
+    paywallOpen,
+    openPaywall: () => setPaywallOpen(true),
+    closePaywall: () => setPaywallOpen(false),
+    refreshEntitlements: () => setUnlocked(isUnlocked()),
+    unlocked,
+    gateEnabled: isGateEnabled(),
     handlePhoto, removePhoto, addFriend, removeFriend, updateFriendScore,
     exportBackup, handleImport, publishReviews, addTimestampedNote,
     shareReview, shareReviewStory, exportText, attemptSignIn, attemptAppleSignIn,

@@ -8,6 +8,7 @@ import Site from './components/Site.jsx';
 import NotebookLaunchModal from './components/NotebookLaunchModal.jsx';
 import AppNav from './components/AppNav.jsx';
 import DeleteConfirmModal from './components/DeleteConfirmModal.jsx';
+import Paywall from './components/Paywall.jsx';
 
 // Everything else loads on demand. Each lazy import becomes its own JS chunk
 // that the browser fetches the first time the route is needed.
@@ -75,6 +76,7 @@ function AppRouter() {
           rely on this instead of their own Back buttons. */}
       {NAV_V2 && <AppNav />}
       <DeleteConfirmModal />
+      <Paywall />
       <NotebookLaunchModal />
     </>
   );
