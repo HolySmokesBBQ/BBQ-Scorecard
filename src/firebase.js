@@ -53,6 +53,7 @@ const app = initializeApp(firebaseConfig);
 // not initialized and the app behaves exactly as before.
 // ─────────────────────────────────────────────────────────────
 const isCapacitorNative = typeof window !== 'undefined' && !!window.Capacitor?.isNativePlatform?.();
+const isCapacitorIOS = typeof window !== 'undefined' && window.Capacitor?.getPlatform?.() === 'ios';
 const appCheckSiteKey = import.meta.env.VITE_FIREBASE_APPCHECK_SITE_KEY;
 
 // Native App Check (the @capacitor-firebase/app-check plugin) was removed:
@@ -60,8 +61,7 @@ const appCheckSiteKey = import.meta.env.VITE_FIREBASE_APPCHECK_SITE_KEY;
 // own dependency, so the FirebaseAppCheck/AppCheckCore product couldn't
 // resolve and the iOS SPM build failed. The web reCAPTCHA path below is
 // unaffected. Re-add the native plugin once the upstream SPM identity
-// conflict is fixed. (`isCapacitorNative` is also what selects the auth
-// persistence chain further down.)
+// conflict is fixed.
 if (appCheckSiteKey && typeof window !== 'undefined') {
   // Web: use reCAPTCHA v3 provider with the site key from build-time env.
   // Dev debug-token support — set VITE_APPCHECK_DEBUG=1 in .env.local
@@ -98,16 +98,24 @@ if (appCheckSiteKey && typeof window !== 'undefined') {
 // and email sign-in "loading indefinitely". Android is unaffected
 // because Capacitor serves it from https://localhost, a normal origin.
 //
-// So on native we never touch IndexedDB: localStorage only, falling back
-// to in-memory if even that is unavailable. localStorage is already
-// proven in this WebView — every saved review lives there (storage.js).
-// The web build keeps getAuth()'s default behaviour unchanged.
+// So on iOS we never touch IndexedDB: localStorage only, falling back to
+// in-memory if even that is unavailable. localStorage is already proven
+// in this WebView — every saved review lives there (storage.js).
+//
+// Scoped to iOS on purpose, NOT to native generally. Changing where the
+// auth token is stored signs out everyone who is currently signed in,
+// once, on the first launch after the update (saved reviews are
+// untouched — it is only the token). iOS has no working signed-in users
+// to lose because this bug means auth has never completed there. Android
+// does, is served from https://localhost, and has no bug, so it keeps
+// getAuth()'s default and nobody gets logged out for nothing. Web is
+// likewise unchanged.
 //
 // popupRedirectResolver is passed through so the redirect-result path in
 // firebaseSync.handleRedirectResult() keeps working; initializeAuth()
 // does not install one by default the way getAuth() does.
 // ─────────────────────────────────────────────────────────────
-export const auth = isCapacitorNative
+export const auth = isCapacitorIOS
   ? initializeAuth(app, {
       persistence: [browserLocalPersistence, inMemoryPersistence],
       popupRedirectResolver: browserPopupRedirectResolver,
