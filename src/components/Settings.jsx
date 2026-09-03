@@ -24,7 +24,7 @@ export default function Settings() {
     incomingRequests, setIncomingRequests,
     friendCodeInput, setFriendCodeInput,
     friendMsg, setFriendMsg,
-    attemptSignIn, attemptAppleSignIn,
+    attemptSignIn, attemptAppleSignIn, authBusy, authError,
     themePref, setThemePref,
     syncStatus,
     exportBackup, handleImport,
@@ -182,9 +182,20 @@ export default function Settings() {
         <Section label="ACCOUNT">
           <div style={{ fontSize: 14, color: S.muted, marginBottom: 16, textAlign: 'center' }}>Sign in to sync across devices and add friends.</div>
           <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center' }}>
-            <button onClick={async () => { await attemptSignIn(); }} style={{ ...sBtn(true, false), padding: '14px 32px' }}>Sign In with Google</button>
-            <button onClick={async () => { await attemptAppleSignIn(); }} style={{ ...sBtn(false, false), padding: '14px 32px' }}>Sign In with Apple</button>
+            <button onClick={attemptSignIn} disabled={!!authBusy} style={{ ...sBtn(true, false), padding: '14px 32px' }}>
+              {authBusy === 'google' ? 'Signing in…' : 'Sign In with Google'}
+            </button>
+            <button onClick={attemptAppleSignIn} disabled={!!authBusy} style={{ ...sBtn(false, false), padding: '14px 32px' }}>
+              {authBusy === 'apple' ? 'Signing in…' : 'Sign In with Apple'}
+            </button>
           </div>
+          {authError && (
+            <div style={{
+              fontSize: '12px', color: '#fca5a5', background: '#3a1717',
+              border: '1px solid #f87171', borderRadius: '6px',
+              padding: '8px 10px', marginTop: '10px', textAlign: 'center',
+            }}>{authError}</div>
+          )}
           <div style={{ textAlign: 'center', fontSize: 11, color: S.muted, letterSpacing: 2, margin: '14px 0 4px' }}>OR</div>
           <EmailSignInBox S={S} sBtn={sBtn} sInput={sInput} />
         </Section>

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Sign in with Apple.
+
+	     Without this entitlement ASAuthorizationAppleIDProvider fails
+	     immediately, @capacitor-firebase/authentication rejects, and the
+	     "Sign In with Apple" button does nothing at all. That is the
+	     rejection App Review filed against 4.0.0 build 8 under Guideline
+	     2.1(a): "unable to Sign in with Apple as the button was
+	     unresponsive."
+
+	     This must stay in sync with the Sign In with Apple capability on
+	     the com.holysmokesbbq.scorecard App ID in the Apple Developer
+	     portal. If the App ID does not have it, signing fails at build
+	     time with "provisioning profile does not include the
+	     com.apple.developer.applesignin entitlement". -->
+	<key>com.apple.developer.applesignin</key>
+	<array>
+		<string>Default</string>
+	</array>
+</dict>
+</plist>

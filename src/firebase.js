@@ -1,5 +1,8 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, OAuthProvider } from 'firebase/auth';
+import {
+  getAuth, initializeAuth, browserLocalPersistence, inMemoryPersistence,
+  browserPopupRedirectResolver, GoogleAuthProvider, OAuthProvider,
+} from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check';
@@ -57,8 +60,8 @@ const appCheckSiteKey = import.meta.env.VITE_FIREBASE_APPCHECK_SITE_KEY;
 // own dependency, so the FirebaseAppCheck/AppCheckCore product couldn't
 // resolve and the iOS SPM build failed. The web reCAPTCHA path below is
 // unaffected. Re-add the native plugin once the upstream SPM identity
-// conflict is fixed. (`isCapacitorNative` retained for future use.)
-void isCapacitorNative;
+// conflict is fixed. (`isCapacitorNative` is also what selects the auth
+// persistence chain further down.)
 if (appCheckSiteKey && typeof window !== 'undefined') {
   // Web: use reCAPTCHA v3 provider with the site key from build-time env.
   // Dev debug-token support — set VITE_APPCHECK_DEBUG=1 in .env.local
@@ -79,7 +82,37 @@ if (appCheckSiteKey && typeof window !== 'undefined') {
   }
 }
 
-export const auth = getAuth(app);
+// ─────────────────────────────────────────────────────────────
+// Auth — persistence is chosen explicitly on native.
+//
+// getAuth() defaults to trying indexedDBLocalPersistence FIRST. In the
+// iOS WKWebView the app is served from the custom scheme
+// `capacitor://localhost`, and IndexedDB on a custom-scheme origin can
+// hang: indexedDB.open() fires neither success nor error. Firebase Auth
+// awaits that probe before it will send ANY request, so every auth call
+// (email/password, and the signInWithCredential that the native Google
+// and Apple plugins hand off to) returns a promise that never settles.
+//
+// That is precisely what App Review saw on 4.0.0 build 8 (submission
+// 78b470e2, Guideline 2.1(a)): "Sign in with Apple ... unresponsive"
+// and email sign-in "loading indefinitely". Android is unaffected
+// because Capacitor serves it from https://localhost, a normal origin.
+//
+// So on native we never touch IndexedDB: localStorage only, falling back
+// to in-memory if even that is unavailable. localStorage is already
+// proven in this WebView — every saved review lives there (storage.js).
+// The web build keeps getAuth()'s default behaviour unchanged.
+//
+// popupRedirectResolver is passed through so the redirect-result path in
+// firebaseSync.handleRedirectResult() keeps working; initializeAuth()
+// does not install one by default the way getAuth() does.
+// ─────────────────────────────────────────────────────────────
+export const auth = isCapacitorNative
+  ? initializeAuth(app, {
+      persistence: [browserLocalPersistence, inMemoryPersistence],
+      popupRedirectResolver: browserPopupRedirectResolver,
+    })
+  : getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
 export const googleProvider = new GoogleAuthProvider();

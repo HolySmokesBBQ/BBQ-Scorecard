@@ -273,33 +273,56 @@ export default function AppProvider({ children }) {
     display: 'block', fontSize: '11px', color: S.muted, marginBottom: '4px', letterSpacing: '1px',
   });
 
-  const attemptSignIn = async () => {
+  // Sign-in status, shared by every provider button.
+  //   authBusy  — 'google' | 'apple' | null, so the pressed button can say
+  //               so instead of looking inert while the sheet loads.
+  //   authError — plain-English failure text rendered next to the buttons.
+  // Before this, the buttons were `onClick={async () => { await attempt() }}`
+  // with the result discarded: a failed sign-in produced no spinner, no
+  // message, nothing. App Review read that as "the button was
+  // unresponsive" (Guideline 2.1(a), 4.0.0 build 8).
+  const [authBusy, setAuthBusy] = useState(null);
+  const [authError, setAuthError] = useState(null);
+
+  // Backing out of the Apple/Google sheet is a normal thing to do, not an
+  // error worth shouting about.
+  const isUserCancel = (e) => {
+    const code = String(e?.code || '');
+    const msg = String(e?.message || '');
+    return /cancel/i.test(code) || /cancel/i.test(msg)
+      || code === 'auth/popup-closed-by-user'
+      || code === '1001';   // ASAuthorizationError.canceled
+  };
+
+  const runSignIn = async (method, fn) => {
     if (isInAppBrowser()) {
       setShowInAppWarning(true);
-      track('signin_failed', { method: 'google', reason: 'in_app_browser' });
+      track('signin_failed', { method, reason: 'in_app_browser' });
       return null;
     }
+    setAuthBusy(method);
+    setAuthError(null);
     try {
-      return await firebaseSignIn();
+      const user = await fn();
+      return user;
     } catch (e) {
-      track('signin_failed', { method: 'google', reason: (e?.code || e?.message || 'unknown').toString().slice(0, 80) });
-      throw e;
+      const reason = (e?.code || e?.message || 'unknown').toString().slice(0, 80);
+      track('signin_failed', { method, reason });
+      if (!isUserCancel(e)) {
+        setAuthError(
+          e?.code === 'auth/timeout'
+            ? 'That took too long. Check your connection and try again.'
+            : `Sign-in failed. ${String(e?.message || '').replace(/^Firebase: /, '')}`.trim()
+        );
+      }
+      return null;
+    } finally {
+      setAuthBusy(null);
     }
   };
 
-  const attemptAppleSignIn = async () => {
-    if (isInAppBrowser()) {
-      setShowInAppWarning(true);
-      track('signin_failed', { method: 'apple', reason: 'in_app_browser' });
-      return null;
-    }
-    try {
-      return await firebaseSignInWithApple();
-    } catch (e) {
-      track('signin_failed', { method: 'apple', reason: (e?.code || e?.message || 'unknown').toString().slice(0, 80) });
-      throw e;
-    }
-  };
+  const attemptSignIn = () => runSignIn('google', firebaseSignIn);
+  const attemptAppleSignIn = () => runSignIn('apple', firebaseSignInWithApple);
 
   // Inject responsive CSS (once)
   useEffect(() => {
@@ -1412,6 +1435,7 @@ export default function AppProvider({ children }) {
     handlePhoto, removePhoto, addFriend, removeFriend, updateFriendScore,
     exportBackup, handleImport, publishReviews, addTimestampedNote,
     shareReview, shareReviewStory, exportText, attemptSignIn, attemptAppleSignIn,
+    authBusy, authError, clearAuthError: () => setAuthError(null),
     attemptEmailSignIn: firebaseEmailSignIn,
     attemptEmailSignUp: firebaseEmailSignUp,
     sendPasswordReset: firebaseSendPasswordReset,

@@ -204,6 +204,29 @@ export async function deleteCookPhotos(userId, cookId) {
    AUTH
    ══════════════════════════════════════════ */
 
+/* Never let an auth call hang forever.
+
+   App Review rejected 4.0.0 build 8 partly because email sign-in sat
+   "loading indefinitely" (Guideline 2.1(a)). The underlying cause is
+   fixed in firebase.js (IndexedDB persistence hanging in the iOS
+   WKWebView), but a spinner that can never stop is a bad failure mode
+   whatever the cause — offline, a wedged plugin, a stalled network. So
+   every auth entry point below races a timeout and surfaces an error the
+   user can act on instead of spinning. */
+const AUTH_TIMEOUT_MS = 30000;
+
+function withTimeout(promise, label) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      const e = new Error(`${label} timed out. Check your connection and try again.`);
+      e.code = 'auth/timeout';
+      reject(e);
+    }, AUTH_TIMEOUT_MS);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 /* Detect Capacitor native shell */
 function isCapacitor() {
   return window.Capacitor?.isNativePlatform?.() || window.Capacitor?.getPlatform?.() === 'android';
@@ -240,14 +263,17 @@ export async function firebaseSignIn() {
     if (isCapacitor()) {
       try {
         const { FirebaseAuthentication } = await import('@capacitor-firebase/authentication');
-        const result = await FirebaseAuthentication.signInWithGoogle();
+        const result = await withTimeout(FirebaseAuthentication.signInWithGoogle(), 'Google sign-in');
         // Use the credential to sign in with Firebase Auth web SDK
         const credential = GoogleAuthProvider.credential(result.credential?.idToken);
-        const userCredential = await signInWithCredential(auth, credential);
+        const userCredential = await withTimeout(signInWithCredential(auth, credential), 'Sign-in');
         return userCredential.user;
       } catch (nativeError) {
+        // Do NOT swallow this. Returning null here made the button look
+        // dead to the user (and to App Review) — the caller cannot tell
+        // "cancelled" from "broken". Let it propagate so the UI shows it.
         console.error('Native Google Sign-In failed:', nativeError);
-        return null;
+        throw nativeError;
       }
     }
     if (shouldUseRedirect()) {
@@ -270,8 +296,11 @@ export async function firebaseSignIn() {
         return null;
       }
     }
+    // Anything else is a genuine failure the user needs to see. Returning
+    // null here would leave the caller with no way to tell success from
+    // failure, which is how a broken sign-in reads as a dead button.
     console.error('Firebase sign-in failed:', error);
-    return null;
+    throw error;
   }
 }
 
@@ -285,7 +314,7 @@ export async function firebaseSignInWithApple() {
     if (isCapacitor()) {
       try {
         const { FirebaseAuthentication } = await import('@capacitor-firebase/authentication');
-        const result = await FirebaseAuthentication.signInWithApple();
+        const result = await withTimeout(FirebaseAuthentication.signInWithApple(), 'Apple sign-in');
         // Apple returns an idToken and a rawNonce; build the Firebase
         // credential from them via the apple.com OAuth provider.
         const provider = new OAuthProvider('apple.com');
@@ -293,11 +322,15 @@ export async function firebaseSignInWithApple() {
           idToken: result.credential?.idToken,
           rawNonce: result.credential?.nonce,
         });
-        const userCredential = await signInWithCredential(auth, credential);
+        const userCredential = await withTimeout(signInWithCredential(auth, credential), 'Sign-in');
         return userCredential.user;
       } catch (nativeError) {
+        // Same as the Google path: surface it. A missing Sign in with
+        // Apple entitlement (which is what shipped in build 8) rejects
+        // here, and swallowing it is exactly why the button appeared
+        // unresponsive during review.
         console.error('Native Apple Sign-In failed:', nativeError);
-        return null;
+        throw nativeError;
       }
     }
     if (shouldUseRedirect()) {
@@ -317,7 +350,7 @@ export async function firebaseSignInWithApple() {
       }
     }
     console.error('Firebase Apple sign-in failed:', error);
-    return null;
+    throw error;
   }
 }
 
@@ -348,7 +381,7 @@ export async function firebaseSignOut() {
    Errors normalize Firebase's auth/* codes into plain English. */
 export async function firebaseEmailSignIn(email, password) {
   try {
-    const result = await signInWithEmailAndPassword(auth, email.trim(), password);
+    const result = await withTimeout(signInWithEmailAndPassword(auth, email.trim(), password), 'Sign-in');
     return { user: result.user };
   } catch (error) {
     return { error: humanizeAuthError(error) };
@@ -357,7 +390,7 @@ export async function firebaseEmailSignIn(email, password) {
 
 export async function firebaseEmailSignUp(email, password) {
   try {
-    const result = await createUserWithEmailAndPassword(auth, email.trim(), password);
+    const result = await withTimeout(createUserWithEmailAndPassword(auth, email.trim(), password), 'Sign-up');
     // Fire a verification email so the user can confirm ownership. Non-blocking —
     // if it fails (rate limit, network) the account still works.
     try { await sendEmailVerification(result.user); } catch {}
@@ -369,7 +402,7 @@ export async function firebaseEmailSignUp(email, password) {
 
 export async function firebaseSendPasswordReset(email) {
   try {
-    await sendPasswordResetEmail(auth, email.trim());
+    await withTimeout(sendPasswordResetEmail(auth, email.trim()), 'Password reset');
     return { ok: true };
   } catch (error) {
     return { error: humanizeAuthError(error) };
@@ -388,6 +421,7 @@ function humanizeAuthError(error) {
     case 'auth/weak-password':         return 'Password is too weak — use at least 6 characters.';
     case 'auth/too-many-requests':     return 'Too many attempts. Wait a few minutes and try again.';
     case 'auth/network-request-failed':return 'Network error. Check your connection and try again.';
+    case 'auth/timeout':               return 'That took too long. Check your connection and try again.';
     default:                            return error?.message?.replace(/^Firebase: /, '') || 'Sign-in failed. Try again.';
   }
 }
