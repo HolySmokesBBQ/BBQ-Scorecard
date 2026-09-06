@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { signOut } from 'firebase/auth';
 import { auth } from '../firebase.board.js';
-import { STATES, STATE_LABELS } from './schema.js';
+import { STATES } from './schema.js';
 
 // Board Settings — minimal by design. Board has less user-owned state
 // than Scorecard/Notebook (no cooks, no reviews to export). This
@@ -48,6 +48,10 @@ const S = {
 };
 
 const LS_REGION = 'board-default-region';
+// STATES is keyed by state code, not an array — iterate its values and
+// sort by label so the picker reads alphabetically by state name rather
+// than by code (which put Arkansas ahead of Arizona).
+const STATE_OPTIONS = Object.values(STATES).sort((a, b) => a.label.localeCompare(b.label));
 const LS_RADIUS = 'board-default-radius';
 const LS_UNITS = 'board-distance-units';
 const RADIUS_OPTIONS = [10, 25, 50, 100];
@@ -63,7 +67,7 @@ function writeLS(key, value) {
 }
 
 export default function Settings({ user, onSignIn, onClose }) {
-  const [region, setRegion] = useState(() => readLS(LS_REGION, 'milwaukee_metro'));
+  const [region, setRegion] = useState(() => readLS(LS_REGION, 'WI'));
   const [radius, setRadius] = useState(() => parseInt(readLS(LS_RADIUS, '25'), 10));
   const [units, setUnits] = useState(() => readLS(LS_UNITS, 'mi'));
 
@@ -92,8 +96,8 @@ export default function Settings({ user, onSignIn, onClose }) {
 
           <label style={S.label}>Default region</label>
           <select value={region} onChange={(e) => handleRegion(e.target.value)} style={S.input}>
-            {STATES.map(s => (
-              <option key={s} value={s}>{STATE_LABELS[s] || s}</option>
+            {STATE_OPTIONS.map(s => (
+              <option key={s.code} value={s.code}>{s.label}</option>
             ))}
           </select>
 

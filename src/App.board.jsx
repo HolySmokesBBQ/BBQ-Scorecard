@@ -9,7 +9,7 @@ import { auth, googleProvider, db } from './firebase.board.js';
 import {
   CUTS, CUT_ORDER, MEATS, TOP_MEATS, CUT_TO_MEAT,
   REGIONS, CITIES, CITY_ORDER, RADIUS_OPTIONS, DEFAULT_RADIUS,
-  STATES, STATE_LABELS,
+  STATES, STATE_LABELS, normalizeLocationState,
   STORE_TYPES,
   ageInDays, isFresh, isStale, nearestCity,
 } from './board/schema.js';
@@ -1828,7 +1828,9 @@ function SubmitModal({ region, user, prefillShopId, prefillCut, onClose, onSignI
       if (!newStore.trim()) return setError('Store name is required.');
       store = newStore.trim().slice(0, 80);
       storeType = newStoreType;
-      location = newLocation.trim().slice(0, 120);
+      // Normalize "Thorp, Wisconsin" -> "Thorp, WI" so both spellings
+      // don't land in Firestore for the same town.
+      location = normalizeLocationState(newLocation).slice(0, 120);
       // Append per-user suffix so two users submitting the same store
       // name get distinct shopIds. Prevents deliberate collision + false
       // attribution attacks (SECURITY-AUDIT-BOARD.md Finding B-7).

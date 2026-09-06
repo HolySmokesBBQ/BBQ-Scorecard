@@ -331,33 +331,117 @@ export const CITY_ORDER = [
   'pittsburgh_pa', 'monroeville_pa', 'bethel_park_pa',
 ];
 
-// Full names for the state codes that appear in CITIES. Hand-maintained
-// (there are only ~23 states in play today). Adding a new state to
-// CITIES = add its label here too, or the state selector shows the raw
-// code as a fallback.
+// Full names for every US state code, plus DC. This is deliberately the
+// complete set rather than only the states CITIES uses today: the state
+// selector falls back to the raw code when a label is missing, so a
+// partial map meant that adding a city in a new state silently rendered
+// "AZ" next to "Alabama" in the picker (found 2026-09-06 — AZ, FL and IA
+// had cities but no labels). Complete map, no maintenance step, no drift.
 export const STATE_LABELS = {
   AL: 'Alabama',
+  AK: 'Alaska',
+  AZ: 'Arizona',
   AR: 'Arkansas',
+  CA: 'California',
   CO: 'Colorado',
+  CT: 'Connecticut',
+  DE: 'Delaware',
+  DC: 'District of Columbia',
+  FL: 'Florida',
   GA: 'Georgia',
+  HI: 'Hawaii',
   ID: 'Idaho',
   IL: 'Illinois',
   IN: 'Indiana',
+  IA: 'Iowa',
   KS: 'Kansas',
   KY: 'Kentucky',
   LA: 'Louisiana',
+  ME: 'Maine',
+  MD: 'Maryland',
+  MA: 'Massachusetts',
+  MI: 'Michigan',
   MN: 'Minnesota',
+  MS: 'Mississippi',
   MO: 'Missouri',
-  NC: 'North Carolina',
+  MT: 'Montana',
   NE: 'Nebraska',
+  NV: 'Nevada',
+  NH: 'New Hampshire',
+  NJ: 'New Jersey',
+  NM: 'New Mexico',
+  NY: 'New York',
+  NC: 'North Carolina',
+  ND: 'North Dakota',
   OH: 'Ohio',
   OK: 'Oklahoma',
+  OR: 'Oregon',
   PA: 'Pennsylvania',
+  RI: 'Rhode Island',
   SC: 'South Carolina',
+  SD: 'South Dakota',
   TN: 'Tennessee',
   TX: 'Texas',
+  UT: 'Utah',
+  VT: 'Vermont',
+  VA: 'Virginia',
+  WA: 'Washington',
+  WV: 'West Virginia',
   WI: 'Wisconsin',
+  WY: 'Wyoming',
 };
+
+// Canonical form for the state in a free-text location: the two-letter
+// postal code, because that is how it reads on a storefront and in a
+// mailing address ("Thorp, WI") and because the shop rows are tight.
+// The state *picker* stays on full names — that is a browse control,
+// not an address. Submitters type whatever they like ("Thorp, WI",
+// "Thorp, Wisconsin", "thorp wisconsin"), so normalize on the way in
+// rather than letting both spellings land in Firestore.
+const STATE_LOOKUP = (() => {
+  const m = new Map();
+  for (const [code, label] of Object.entries(STATE_LABELS)) {
+    m.set(code.toLowerCase(), code);
+    m.set(label.toLowerCase(), code);
+  }
+  return m;
+})();
+
+// "Thorp, Wisconsin" -> "Thorp, WI". Returns the input unchanged (just
+// whitespace-collapsed) when no trailing state is recognized, so a
+// street address or a bare city is never mangled. Deliberately only
+// looks at the END of the string: "Kansas City" and "New York" are
+// cities, and treating a leading state name as the state would turn
+// them into "City, KS" and "York, NY".
+export function normalizeLocationState(raw) {
+  if (!raw) return '';
+  const s = String(raw).trim().replace(/\s+/g, ' ');
+  if (!s) return '';
+
+  // Hold a trailing ZIP aside so "Thorp, Wisconsin 54771" still matches.
+  const zipMatch = s.match(/\s(\d{5}(?:-\d{4})?)$/);
+  const zip = zipMatch ? zipMatch[1] : '';
+  const body = zipMatch ? s.slice(0, -zipMatch[0].length).trim() : s;
+
+  // Candidates, most specific first: the segment after the last comma,
+  // then the last two words (for "North Carolina"), then the last word.
+  const candidates = [];
+  const comma = body.lastIndexOf(',');
+  if (comma !== -1) candidates.push([body.slice(0, comma), body.slice(comma + 1)]);
+  const words = body.split(' ');
+  for (const n of [2, 1]) {
+    if (words.length > n) candidates.push([words.slice(0, -n).join(' '), words.slice(-n).join(' ')]);
+  }
+
+  for (const [head, tail] of candidates) {
+    const code = STATE_LOOKUP.get(tail.trim().replace(/\.$/, '').toLowerCase());
+    if (!code) continue;
+    const left = head.trim().replace(/[,\s]+$/, '');
+    const out = left ? `${left}, ${code}` : code;
+    return zip ? `${out} ${zip}` : out;
+  }
+  return zip ? `${body} ${zip}` : body;
+}
 
 // STATES is derived once at module load from CITIES + CITY_ORDER.
 // Shape: { [code]: { code, label, cityIds: [id, ...] } }
