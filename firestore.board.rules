@@ -1,0 +1,104 @@
+rules_version = '2';
+
+// Firestore security rules for the BBQ Board project ONLY
+// (holy-smokes-bbq-board). Deploy with:
+//
+//   npm run deploy:rules:board
+//
+// Why this file exists separately from firestore.rules:
+//   firestore.rules is the SHARED file and .firebaserc's `default` project
+//   is Scorecard, so `firebase deploy --only firestore:rules` with no
+//   --project flag pushes it to Scorecard. Board's deployed ruleset was a
+//   hand-maintained subset with no counterpart in the repo, so nothing kept
+//   it in step with schema.js — by 2026-09-06 its region allowlist had
+//   drifted 13 regions behind (27 vs 40) and submissions from Denver,
+//   Phoenix, Minneapolis, Indianapolis, Pittsburgh and eight other metros
+//   were being denied silently. That is audit Finding B-5 recurring.
+//
+//   Board's client only ever touches board_prices. It has no users/{uid}
+//   write and no getOrCreateProfile, so none of the profile rules in the
+//   shared file belong here.
+//
+// The three enum blocks below are generated from src/board/schema.js by
+// scripts/sync-firestore-rules.mjs. NEVER edit them by hand.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    match /board_prices/{docId} {
+      allow read: if true;
+
+      allow create: if isSignedIn()
+                    && request.resource.data.userId == request.auth.uid
+                    // Block docId 'seed_' prefix forgery (Finding B-2)
+                    && !docId.matches('^seed_.*')
+                    && request.resource.data.keys().hasOnly([
+                      'userId', 'shopId', 'store', 'storeType', 'region', 'location',
+                      'cut', 'pricePerLb', 'notes', 'source', 'reportedAt'
+                    ])
+                    // Server-side timestamp only — client cannot fake past/future (B-1)
+                    && request.resource.data.reportedAt == request.time
+                    && request.resource.data.store is string
+                    && request.resource.data.store.size() > 0
+                    && request.resource.data.store.size() <= 80
+                    && request.resource.data.pricePerLb is number
+                    && request.resource.data.pricePerLb > 0
+                    && request.resource.data.pricePerLb <= 100
+                    // shopId shape: bounded string, cannot start with 'seed_'
+                    // (Finding B-1: attribution forgery)
+                    && request.resource.data.shopId is string
+                    && request.resource.data.shopId.size() > 0
+                    && request.resource.data.shopId.size() <= 120
+                    && !request.resource.data.shopId.matches('^seed_.*')
+                    // location: bounded (Finding B-3 partial)
+                    && request.resource.data.location is string
+                    && request.resource.data.location.size() <= 120
+                    // The three enum blocks below are generated from
+                    // src/board/schema.js by scripts/sync-firestore-rules.mjs.
+                    // NEVER edit them by hand — edit schema.js and run
+                    // `npm run deploy:rules` (which syncs + deploys).
+                    // /* @sync:cuts */
+                    && request.resource.data.cut in [
+                      'brisket_prime', 'brisket_choice', 'brisket_select', 'ribeye',
+                      'filet_mignon', 'tbone', 'porterhouse', 'sirloin', 'flank', 'chuck_roast',
+                      'tri_tip', 'ground_beef_80', 'pork_shoulder', 'spare_ribs', 'baby_back_ribs',
+                      'bratwurst_fresh', 'bratwurst_smoked', 'whole_chicken', 'chicken_breast',
+                      'whole_turkey'
+                    ]
+                    // /* @endsync */
+                    // /* @sync:regions */
+                    && request.resource.data.region in [
+                      'milwaukee_metro', 'madison_metro', 'fox_valley', 'green_bay',
+                      'chicago_metro', 'kansas_city_metro', 'austin_metro', 'memphis_metro',
+                      'nashville_metro', 'st_louis_metro', 'dallas_metro', 'houston_metro',
+                      'san_antonio_metro', 'birmingham_metro', 'boise_metro', 'lexington_metro',
+                      'greenville_metro', 'owensboro_metro', 'lockhart_metro', 'atlanta_metro',
+                      'louisville_metro', 'charlotte_metro', 'raleigh_metro', 'columbia_metro',
+                      'lexington_nc_metro', 'tuscaloosa_metro', 'oklahoma_city_metro',
+                      'tulsa_metro', 'little_rock_metro', 'new_orleans_metro', 'savannah_metro',
+                      'denver_metro', 'jacksonville_metro', 'phoenix_metro', 'wichita_metro',
+                      'twin_cities_metro', 'omaha_metro', 'cincinnati_metro', 'indianapolis_metro',
+                      'pittsburgh_metro'
+                    ]
+                    // /* @endsync */
+                    // /* @sync:storeTypes */
+                    && request.resource.data.storeType in ['butcher', 'warehouse', 'grocery', 'farm']
+                    // /* @endsync */
+                    && request.resource.data.source == 'community'
+                    && (!('notes' in request.resource.data.keys())
+                        || (request.resource.data.notes is string
+                            && request.resource.data.notes.size() <= 500));
+
+      // Owner can delete their own submission (e.g. correcting a typo).
+      // Update not allowed — resubmit instead, so timestamps stay honest.
+      allow delete: if isSignedIn()
+                    && resource.data.userId == request.auth.uid;
+
+      allow update: if false;
+    }
+  }
+}

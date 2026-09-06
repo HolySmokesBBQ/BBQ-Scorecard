@@ -1,0 +1,9 @@
+{
+  "firestore": {
+    "rules": "firestore.board.rules",
+    "indexes": "firestore.indexes.board.json",
+    "predeploy": [
+      "npm run sync:rules"
+    ]
+  }
+}
