@@ -86,8 +86,9 @@ export default function Settings() {
               <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>{fbUser.displayName}</div>
               <div style={{ fontSize: 12, color: S.muted, marginBottom: 12 }}>{fbUser.email}</div>
               <div style={{ fontSize: 12, color: S.muted, letterSpacing: 1, marginBottom: 4 }}>Your Friend Code</div>
-              <div style={{ fontSize: 28, fontWeight: 700, fontFamily: "'Oswald', sans-serif", color: S.accent, letterSpacing: 4, padding: '8px 0' }}>{userProfile.friendCode}</div>
+              <div style={{ fontSize: 28, fontWeight: 700, fontFamily: "'Oswald', sans-serif", color: S.accent, letterSpacing: 4, padding: '8px 0' }}>{userProfile.friendCode || '—'}</div>
               <button onClick={() => {
+                if (!userProfile.friendCode) { alert('Your friend code is still syncing. Try again in a moment.'); return; }
                 const url = `${window.location.origin}/#add-friend/${userProfile.friendCode}`;
                 if (navigator.share) navigator.share({ title: 'Join me on Holy Smokes BBQ', text: `Add me on BBQ Scorecard! My friend code is ${userProfile.friendCode}`, url });
                 else { navigator.clipboard?.writeText(userProfile.friendCode); alert('Friend code copied!'); }

@@ -43,8 +43,9 @@ export default function Profile() {
             <div style={{
               fontSize: '28px', fontWeight: '700', fontFamily: "'Oswald', sans-serif",
               color: S.accent, letterSpacing: '4px', padding: '8px 0',
-            }}>{userProfile.friendCode}</div>
+            }}>{userProfile.friendCode || '—'}</div>
             <button onClick={() => {
+              if (!userProfile.friendCode) { alert('Your friend code is still syncing. Try again in a moment.'); return; }
               const url = `${window.location.origin}/#add-friend/${userProfile.friendCode}`;
               if (navigator.share) navigator.share({ title: 'Join me on Holy Smokes BBQ', text: `Add me on BBQ Scorecard! My friend code is ${userProfile.friendCode}`, url });
               else { navigator.clipboard?.writeText(userProfile.friendCode); alert('Friend code copied!'); }

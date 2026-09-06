@@ -497,9 +497,40 @@ export default function AppProvider({ children }) {
       setFbUser(user);
       if (user) {
         if (wasSignedOut) track('sign_in', { method: 'google' });
+        // A profile failure must NEVER gate access to the app.
+        //
+        // Profile.jsx and Settings.jsx render on `fbUser && userProfile`,
+        // so a null profile makes a signed-in user look signed out — the
+        // sign-in buttons come back as if nothing happened. That is
+        // exactly how App Review experienced the denied profile write on
+        // 4.0.0 build 9 (Guideline 2.1(a), "unable to access the app when
+        // we logged in using Sign in with Apple"): Sign in with Apple
+        // creates a NEW user, the users/{uid} create was rejected by a
+        // stale Firestore rule, this whole block aborted, and the app
+        // looked like it had refused the login.
+        //
+        // The rule is fixed, but the app should not depend on that. Fall
+        // back to a local profile and keep going, so a backend problem
+        // degrades one screen instead of locking the user out entirely.
+        let profile = null;
         try {
-          const profile = await getOrCreateProfile(user);
-          setUserProfile(profile);
+          profile = await getOrCreateProfile(user);
+        } catch (e) {
+          console.error('Profile load failed; continuing without it:', e);
+          track('profile_load_failed', {
+            reason: (e?.code || e?.message || 'unknown').toString().slice(0, 80),
+          });
+          profile = {
+            displayName: user.displayName || 'BBQ Fan',
+            photoURL: user.photoURL || null,
+            friendCode: null,
+            createdAt: new Date().toISOString(),
+            degraded: true,
+          };
+        }
+        setUserProfile(profile);
+
+        try {
           const friends = await getFriendsList(user.uid);
           setFbFriends(friends);
 
