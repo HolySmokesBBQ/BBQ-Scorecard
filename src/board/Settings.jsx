@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { signOut } from 'firebase/auth';
 import { auth } from '../firebase.board.js';
 import { STATES } from './schema.js';
+import { nativeAppVersion } from '../diagnostics.js';
 
 // Board Settings — minimal by design. Board has less user-owned state
 // than Scorecard/Notebook (no cooks, no reviews to export). This
@@ -70,6 +71,21 @@ export default function Settings({ user, onSignIn, onClose }) {
   const [region, setRegion] = useState(() => readLS(LS_REGION, 'WI'));
   const [radius, setRadius] = useState(() => parseInt(readLS(LS_RADIUS, '25'), 10));
   const [units, setUnits] = useState(() => readLS(LS_UNITS, 'mi'));
+
+  // Ask the platform what is actually installed rather than printing a
+  // constant. On web there is no Capacitor App plugin, so it falls back to
+  // the build-time version.
+  // nativeAppVersion resolves to 'unknown' off-native (no Capacitor App
+  // plugin in a browser), and 'BBQ Board vunknown' is worse than no version
+  // at all — so treat it as absent.
+  const [appVersion, setAppVersion] = useState(import.meta.env?.VITE_BUILD_VERSION || '');
+  const showVersion = appVersion && appVersion !== 'unknown';
+  useEffect(() => {
+    let live = true;
+    nativeAppVersion(import.meta.env?.VITE_BUILD_VERSION || '')
+      .then(v => { if (live) setAppVersion(v); });
+    return () => { live = false; };
+  }, []);
 
   const handleRegion = (v) => { setRegion(v); writeLS(LS_REGION, v); };
   const handleRadius = (v) => { setRadius(v); writeLS(LS_RADIUS, String(v)); };
@@ -152,7 +168,7 @@ export default function Settings({ user, onSignIn, onClose }) {
         <div style={S.card}>
           <h2 style={S.h2}>ABOUT THIS APP</h2>
           <div style={{ fontSize: 14, marginBottom: 8 }}>
-            BBQ Board v{import.meta.env?.VITE_BUILD_VERSION || '2.3.6'}
+            BBQ Board{showVersion ? ` v${appVersion}` : ''}
           </div>
           <a href="https://holysmokesbbqco.com/board/changelog" target="_blank" rel="noopener noreferrer" style={{ color: PAL.brass, fontSize: 13 }}>
             Release notes →

@@ -51,7 +51,11 @@ export function getErrorLog() {
 
 // ── Report assembly ──────────────────────────────────────────────
 
-async function nativeAppVersion(fallback) {
+// Exported so the Settings screen can show the version Android/iOS actually
+// installed. It used to print a hardcoded '2.3.6' fallback, which meant the
+// About box read 2.3.6 on every build including 2.4.0 — actively misleading
+// when diagnosing whether an update had taken.
+export async function nativeAppVersion(fallback) {
   try {
     const { App } = await import('@capacitor/app');
     const info = await App.getInfo();

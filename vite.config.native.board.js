@@ -55,7 +55,22 @@ export default defineConfig(({ mode }) => ({
     preact(),
     fixupNativePaths(),
     renameBoardIndex(),
+    // selfDestroying ships a service worker whose only job is to unregister
+    // itself and delete every cache it owns.
+    //
+    // Board is a Capacitor app: the WebView already serves these assets from
+    // the APK on local disk, so a precaching SW buys nothing — there is no
+    // offline case to cover. What it did buy was a bug. Android keeps app
+    // data across an update, so the SW installed by 2.3.9 survived the
+    // upgrade to 2.4.0, kept control of the WebView, and served its own
+    // precached index.html — which points at the OLD bundle hash. Joel
+    // installed 2.4.0 and still saw 2.3.9's broken state picker a day later,
+    // because browsers only re-check sw.js once per 24h.
+    //
+    // Shipping this once cleans up every already-installed copy. The PWA
+    // block can be dropped entirely in a later release.
     VitePWA({
+      selfDestroying: true,
       registerType: 'autoUpdate',
       includeAssets: ['bbq-board-logo.png', 'favicon.ico', 'board-icon-192.png', 'board-icon-512.png'],
       manifest: {
