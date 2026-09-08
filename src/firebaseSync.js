@@ -356,6 +356,12 @@ export async function firebaseSignInWithApple() {
 
 /* Handle redirect result on page load */
 export async function handleRedirectResult() {
+  // Web only. On native there is no redirect flow to resolve — sign-in goes
+  // through @capacitor-firebase/authentication — and getRedirectResult()
+  // needs the popup/redirect resolver, which iOS deliberately no longer
+  // installs because its authDomain iframe never loads in the WebView and
+  // hangs every auth call. See the comment in firebase.js.
+  if (isCapacitor()) return null;
   try {
     const result = await getRedirectResult(auth);
     if (result?.user) {

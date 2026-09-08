@@ -25,8 +25,9 @@ const INAPP = 'inapp';
 //   build 8 = 4.0.0 (rejected in review, never public)
 //   build 9 = 4.0.0 (rejected in review, never public)
 //   build 10 = 4.0.0 (submitted, superseded before release)
-//   build 11 = 4.0.0 (first build actually available for free)
-const FIRST_FREE_BUILD = '11';
+//   build 11 = 4.0.0 (superseded before submission)
+//   build 12 = 4.0.0 (first build actually available for free)
+const FIRST_FREE_BUILD = '12';
 const FIRST_FREE_VERSION = '4.0.0';
 
 function available() {

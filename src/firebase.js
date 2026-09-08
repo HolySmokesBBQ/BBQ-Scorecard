@@ -1,7 +1,7 @@
 import { initializeApp } from 'firebase/app';
 import {
   getAuth, initializeAuth, browserLocalPersistence, inMemoryPersistence,
-  browserPopupRedirectResolver, GoogleAuthProvider, OAuthProvider,
+  GoogleAuthProvider, OAuthProvider,
 } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
@@ -111,14 +111,34 @@ if (appCheckSiteKey && typeof window !== 'undefined') {
 // getAuth()'s default and nobody gets logged out for nothing. Web is
 // likewise unchanged.
 //
-// popupRedirectResolver is passed through so the redirect-result path in
-// firebaseSync.handleRedirectResult() keeps working; initializeAuth()
-// does not install one by default the way getAuth() does.
+// NO popupRedirectResolver on iOS, and this is the important part.
+//
+// The resolver is the only step in auth initialization that waits on the
+// network: it loads a cross-origin iframe from the authDomain
+// (holy-smokes-bbq-scorecard.firebaseapp.com/__/auth/iframe). The iOS
+// WebView serves the app from the custom scheme capacitor://localhost,
+// where that iframe never finishes loading. Firebase Auth awaits it as
+// part of _initializationPromise, so when it hangs EVERY auth call hangs
+// with it, forever: email/password, and the signInWithCredential that the
+// native Google and Apple plugins hand off to.
+//
+// That is what App Review saw three times, most explicitly on 4.0.0
+// build 10 (Guideline 2.1(a), iPad Air 11-inch): "app loaded indefinitely
+// when attempting to sign in". getAuth() installs this resolver by
+// default, which is why builds 8, 9 and 10 all did it — the persistence
+// change in build 9 was real but was never the thing holding the promise.
+//
+// Native does not need it. Popup and redirect sign-in are web-only paths;
+// on device we use @capacitor-firebase/authentication and exchange the
+// credential directly. firebaseSync.handleRedirectResult() is skipped on
+// native for the same reason.
+//
+// Android keeps getAuth()'s default. It is served from https://localhost,
+// a normal origin where the iframe loads, and sign-in works there today.
 // ─────────────────────────────────────────────────────────────
 export const auth = isCapacitorIOS
   ? initializeAuth(app, {
       persistence: [browserLocalPersistence, inMemoryPersistence],
-      popupRedirectResolver: browserPopupRedirectResolver,
     })
   : getAuth(app);
 export const db = getFirestore(app);
