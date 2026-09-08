@@ -273,6 +273,40 @@ export default function AppProvider({ children }) {
     display: 'block', fontSize: '11px', color: S.muted, marginBottom: '4px', letterSpacing: '1px',
   });
 
+  // Guard the WHOLE auth path, not just the Firebase call.
+  //
+  // firebaseSync's withTimeout wraps signInWithEmailAndPassword and friends,
+  // but every one of those is reached through _fbProxy, which first awaits
+  // `import('../firebaseSync.js')`. If that dynamic import never settles the
+  // inner timeout is never even reached, and the button sits on "Working..."
+  // forever with nothing to stop it. That is the failure App Review described
+  // twice, and the one place the build-9 timeout did not cover.
+  const AUTH_PATH_TIMEOUT_MS = 35000;
+  const withAuthTimeout = (promise, label) => {
+    let timer;
+    const timeout = new Promise((_, reject) => {
+      timer = setTimeout(() => {
+        const e = new Error(`${label} timed out. Check your connection and try again.`);
+        e.code = 'auth/timeout';
+        reject(e);
+      }, AUTH_PATH_TIMEOUT_MS);
+    });
+    return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+  };
+
+  // Slightly longer than firebaseSync's own 30s so the inner guard wins when
+  // it can and reports the more specific error; this is the backstop for the
+  // import itself.
+  const emailSignIn = (email, password) =>
+    withAuthTimeout(firebaseEmailSignIn(email, password), 'Sign-in')
+      .catch(e => ({ error: e?.message || 'Sign-in failed. Try again.' }));
+  const emailSignUp = (email, password) =>
+    withAuthTimeout(firebaseEmailSignUp(email, password), 'Sign-up')
+      .catch(e => ({ error: e?.message || 'Sign-up failed. Try again.' }));
+  const passwordReset = (email) =>
+    withAuthTimeout(firebaseSendPasswordReset(email), 'Password reset')
+      .catch(e => ({ error: e?.message || 'Reset failed. Try again.' }));
+
   // Sign-in status, shared by every provider button.
   //   authBusy  — 'google' | 'apple' | null, so the pressed button can say
   //               so instead of looking inert while the sheet loads.
@@ -303,7 +337,7 @@ export default function AppProvider({ children }) {
     setAuthBusy(method);
     setAuthError(null);
     try {
-      const user = await fn();
+      const user = await withAuthTimeout(fn(), 'Sign-in');
       return user;
     } catch (e) {
       const reason = (e?.code || e?.message || 'unknown').toString().slice(0, 80);
@@ -1467,9 +1501,9 @@ export default function AppProvider({ children }) {
     exportBackup, handleImport, publishReviews, addTimestampedNote,
     shareReview, shareReviewStory, exportText, attemptSignIn, attemptAppleSignIn,
     authBusy, authError, clearAuthError: () => setAuthError(null),
-    attemptEmailSignIn: firebaseEmailSignIn,
-    attemptEmailSignUp: firebaseEmailSignUp,
-    sendPasswordReset: firebaseSendPasswordReset,
+    attemptEmailSignIn: emailSignIn,
+    attemptEmailSignUp: emailSignUp,
+    sendPasswordReset: passwordReset,
     // Derived
     ranked, rankMap, trips, cities, meatMvps,
     // Component
