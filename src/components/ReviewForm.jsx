@@ -3,6 +3,8 @@ import { useAppContext } from '../context/AppContext.jsx';
 import { CATEGORIES, DESCRIPTORS, MEATS, SIDES_LIST, SAUCE_DEP_OPTIONS, RETURN_OPTIONS } from '../constants.js';
 import { calcScores, track } from '../scoring.js';
 
+const ALL_CATEGORIES = [...CATEGORIES.bbq, ...CATEGORIES.family];
+
 // One row per BBQ / Family category. Nine tappable number buttons —
 // tap a number to set the score directly. The radial ScoreWheel that
 // briefly landed in v3.4.6 was removed in v3.4.7: Scorecard scores are
@@ -83,6 +85,42 @@ export default function ReviewForm() {
       return ap - bp || a.localeCompare(b);
     });
     return hits.slice(0, 6);
+  })();
+
+  // ── Blind Table ──────────────────────────────────────────────
+  // Scoring with friends on one phone has an anchoring problem: whoever
+  // goes first is visible to everyone after, and the table drifts toward
+  // that first number. Real blind judging exists to kill exactly that.
+  //
+  // Blind Table collapses every scorer's card so nobody sees anyone
+  // else's numbers while the phone goes round, then reveals the whole
+  // table at once. Session state only — nothing new is persisted, and the
+  // scores themselves are stored exactly as they always were.
+  const [blindTable, setBlindTable] = useState(false);
+  const [openScorer, setOpenScorer] = useState(null);
+  const [revealed, setRevealed] = useState(false);
+
+  const friends = currentReview.friends || [];
+  const allScorers = [
+    { name: 'You', scores: currentReview.scores },
+    ...friends,
+  ];
+  const scoredCount = (scores) =>
+    ALL_CATEGORIES.filter(c => scores[c.key] > 0).length;
+  const everyoneIn = allScorers.length > 1
+    && allScorers.every(s => scoredCount(s.scores) > 0);
+
+  // Where the table disagreed most. Only categories every scorer rated
+  // count, otherwise a single missing score reads as a huge split.
+  const splits = (() => {
+    if (allScorers.length < 2) return [];
+    return ALL_CATEGORIES.map(c => {
+      const vals = allScorers.map(s => ({ name: s.name, v: s.scores[c.key] }));
+      if (vals.some(x => !(x.v > 0))) return null;
+      const hi = vals.reduce((a, b) => (b.v > a.v ? b : a));
+      const lo = vals.reduce((a, b) => (b.v < a.v ? b : a));
+      return { label: c.label, spread: hi.v - lo.v, hi, lo };
+    }).filter(Boolean).sort((a, b) => b.spread - a.spread);
   })();
 
   const sc = calcScores(currentReview.scores);
@@ -327,10 +365,84 @@ export default function ReviewForm() {
           <div style={{ fontSize: '11px', color: S.muted, marginBottom: '10px' }}>
             Tap a category number to set each friend's score
           </div>
+
+          {/* Blind Table toggle */}
+          <label style={{
+            display: 'flex', alignItems: 'flex-start', gap: '8px', cursor: 'pointer',
+            background: S.dark, border: `1px solid ${blindTable ? S.accent : S.border}`,
+            borderRadius: '8px', padding: '10px 12px', marginBottom: '12px',
+          }}>
+            <input
+              type="checkbox"
+              checked={blindTable}
+              onChange={e => {
+                setBlindTable(e.target.checked);
+                setOpenScorer(null);
+                setRevealed(false);
+                if (e.target.checked) track('blind_table_started', { scorers: allScorers.length });
+              }}
+              style={{ marginTop: '2px' }}
+            />
+            <span>
+              <span style={{ fontSize: '13px', fontWeight: 600, color: blindTable ? S.accent : S.text }}>
+                Blind table
+              </span>
+              <span style={{ display: 'block', fontSize: '11px', color: S.muted, lineHeight: 1.45 }}>
+                Hide everyone's numbers while the phone goes round, then reveal
+                the table at once. Stops the first score anchoring the rest.
+              </span>
+            </span>
+          </label>
+
+          {blindTable && !revealed && (
+            <div style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              fontSize: '11px', color: S.muted, marginBottom: '10px',
+            }}>
+              <span>{allScorers.filter(x => scoredCount(x.scores) > 0).length} of {allScorers.length} scored</span>
+              <button
+                onClick={() => {
+                  setRevealed(true);
+                  setOpenScorer(null);
+                  track('blind_table_revealed', {
+                    scorers: allScorers.length,
+                    top_spread: splits[0]?.spread || 0,
+                  });
+                }}
+                disabled={!everyoneIn}
+                style={{
+                  padding: '6px 14px', borderRadius: '6px', border: 'none',
+                  background: everyoneIn ? S.accent : '#444',
+                  color: everyoneIn ? '#fff' : S.muted,
+                  fontFamily: "'Oswald', sans-serif", fontSize: '12px',
+                  letterSpacing: '1px', fontWeight: 700,
+                  cursor: everyoneIn ? 'pointer' : 'default',
+                }}
+              >
+                REVEAL THE TABLE
+              </button>
+            </div>
+          )}
+
           {(currentReview.friends || []).map(friend => (
             <div key={friend.name} style={{ background: S.dark, borderRadius: '8px', padding: '12px', marginBottom: '8px', border: `1px solid ${S.border}` }}>
-              <div style={{ fontWeight: '600', fontSize: '14px', marginBottom: '10px', color: S.accent }}>{friend.name}</div>
-              {[...CATEGORIES.bbq, ...CATEGORIES.family].map(c => (
+              <div
+                onClick={() => blindTable && !revealed && setOpenScorer(openScorer === friend.name ? null : friend.name)}
+                style={{
+                  fontWeight: '600', fontSize: '14px', marginBottom: '10px', color: S.accent,
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  cursor: blindTable && !revealed ? 'pointer' : 'default',
+                }}
+              >
+                <span>{friend.name}</span>
+                {blindTable && !revealed && (
+                  <span style={{ fontSize: '11px', color: S.muted, fontWeight: 400 }}>
+                    {scoredCount(friend.scores) > 0 ? 'Scored ✓' : 'Not scored'}
+                    {openScorer === friend.name ? ' ▾' : ' ▸'}
+                  </span>
+                )}
+              </div>
+              {(!blindTable || revealed || openScorer === friend.name) && ALL_CATEGORIES.map(c => (
                 <div key={c.key} style={{ marginBottom: '8px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
                     <span style={{ fontSize: '11px', color: S.muted }}>{c.label}</span>
@@ -349,6 +461,7 @@ export default function ReviewForm() {
                 </div>
               ))}
               {(() => {
+                if (blindTable && !revealed) return null;
                 const fsc = calcScores(friend.scores);
                 return fsc.bbqAvg > 0 ? (
                   <div style={{ textAlign: 'center', padding: '8px 0', borderTop: `1px solid ${S.border}`, marginTop: '4px' }}>
@@ -362,12 +475,89 @@ export default function ReviewForm() {
         </div>
       )}
 
-      {/* Live score */}
+      {/* Table Verdict — the payoff for a blind table */}
+      {blindTable && revealed && splits.length > 0 && (
+        <div style={{
+          background: S.dark, border: `1px solid ${S.accent}`, borderRadius: '10px',
+          padding: '14px', marginBottom: '16px',
+        }}>
+          <div style={{
+            fontFamily: "'Oswald', sans-serif", fontSize: '14px', letterSpacing: '2px',
+            color: S.accent, marginBottom: '10px',
+          }}>
+            TABLE VERDICT
+          </div>
+
+          {/* Where the table split hardest */}
+          {splits[0].spread > 0 ? (
+            <div style={{ fontSize: '13px', lineHeight: 1.5, marginBottom: '12px' }}>
+              Biggest split was <strong>{splits[0].label}</strong>:{' '}
+              {splits[0].hi.name} said {splits[0].hi.v}, {splits[0].lo.name} said {splits[0].lo.v}.
+            </div>
+          ) : (
+            <div style={{ fontSize: '13px', lineHeight: 1.5, marginBottom: '12px' }}>
+              Dead agreement. Every scorer put down the same number in every category.
+            </div>
+          )}
+
+          {/* Each scorer's composite, side by side */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
+            {allScorers.map(sr => {
+              const fsc = calcScores(sr.scores);
+              return (
+                <div key={sr.name} style={{
+                  flex: '1 1 90px', background: S.card, border: `1px solid ${S.border}`,
+                  borderRadius: '8px', padding: '8px', textAlign: 'center',
+                }}>
+                  <div style={{ fontSize: '11px', color: S.muted, marginBottom: '2px' }}>{sr.name}</div>
+                  <div style={{
+                    fontSize: '18px', fontWeight: 700, color: S.accent,
+                    fontFamily: "'Oswald', sans-serif",
+                  }}>{fsc.composite.toFixed(2)}</div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Next-widest splits, so the argument has somewhere to go */}
+          {splits.filter(x => x.spread > 0).slice(1, 4).length > 0 && (
+            <div>
+              <div style={{ fontSize: '11px', color: S.muted, marginBottom: '6px' }}>
+                Also split on
+              </div>
+              {splits.filter(x => x.spread > 0).slice(1, 4).map(x => (
+                <div key={x.label} style={{
+                  display: 'flex', justifyContent: 'space-between',
+                  fontSize: '12px', padding: '3px 0', color: S.text,
+                }}>
+                  <span>{x.label}</span>
+                  <span style={{ color: S.muted }}>
+                    {x.lo.v}–{x.hi.v} ({x.hi.name} high)
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Live score — hidden during a blind table, since the running
+          composite on screen would anchor whoever the phone goes to next.
+          You can still see your own per-category picks above while you
+          enter them; it is the headline number that gets peeked at. */}
+      {blindTable && !revealed ? (
+        <div style={{
+          background: S.dark, borderRadius: '8px', padding: '14px', marginBottom: '16px',
+          textAlign: 'center', border: `1px dashed ${S.border}`, color: S.muted, fontSize: '12px',
+        }}>
+          Score hidden until the table is revealed
+        </div>
+      ) : (
       <div style={{ background: S.dark, borderRadius: '8px', padding: '14px', marginBottom: '16px', textAlign: 'center', border: `1px solid ${S.border}` }}>
         <div style={{ color: '#fbbf24', fontSize: '18px' }}>{'★'.repeat(sc.stars)}{'☆'.repeat(5 - sc.stars)}</div>
         <div style={{ fontSize: '24px', fontWeight: '700', color: S.accent, fontFamily: "'Oswald', sans-serif" }}>{sc.composite.toFixed(2)}</div>
         <div style={{ fontSize: '11px', color: S.muted }}>BBQ {sc.bbqAvg.toFixed(2)} + Bonus {sc.bonus.toFixed(2)}</div>
-        {(currentReview.friends || []).length > 0 && (() => {
+        {(currentReview.friends || []).length > 0 && !(blindTable && !revealed) && (() => {
           const allScorers = [{ name: 'You', scores: currentReview.scores }, ...(currentReview.friends || [])];
           const avgScores = {};
           [...CATEGORIES.bbq, ...CATEGORIES.family].forEach(c => {
@@ -382,6 +572,7 @@ export default function ReviewForm() {
           );
         })()}
       </div>
+      )}
 
       {/* Sauce dependency + Would return — side by side on desktop */}
       <div className="bbq-form-selects">
