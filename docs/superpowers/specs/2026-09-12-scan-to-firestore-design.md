@@ -142,9 +142,11 @@ The badge is data-driven from the record itself, per the decision. No new state,
 new component — it extends the existing conditional. `sourceUrl`, when present, becomes
 the tap target for the badge so a user can see the listing the price came from.
 
-This is the only piece that ships in an AAB. It goes into the 2.4.1 queue; scan
-documents are readable by 2.4.0 today, they just render with the default badge until
-2.4.1 lands.
+This is the only piece that ships in an AAB. It was written against the 2.4.1 queue,
+but 2.4.1 and 2.4.2 shipped without it (2.4.1 was the service-worker fix, 2.4.2 the
+error boundary), so it now targets the next queue rebuild after implementation. Scan
+documents are readable by every shipped version today; they just render with the
+default badge until the badge lands.
 
 ## 6. Security
 
