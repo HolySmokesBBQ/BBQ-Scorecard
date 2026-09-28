@@ -3,6 +3,7 @@ import { useAppContext } from '../context/AppContext.jsx';
 import { CATEGORIES, DESCRIPTORS } from '../constants.js';
 import { calcScores, generateGoogleDraft, track } from '../scoring.js';
 import NotebookReviewBanner from './NotebookReviewBanner.jsx';
+import { findLastVisit, compareVisits, shortVisitDate } from '../rematch.js';
 
 export default function Detail() {
   const {
@@ -44,6 +45,16 @@ export default function Detail() {
     }
   };
   const sc = calcScores(r.scores);
+
+  // Rematch: how this visit compares with your previous one to the same joint.
+  const lastVisit = findLastVisit(reviews, r);
+  const rematch = lastVisit ? compareVisits(lastVisit.scores, r.scores) : null;
+  useEffect(() => {
+    if (lastVisit && rematch?.compositeDelta != null) {
+      track('rematch_viewed', { restaurant: r.restaurant || '', delta: Number(rematch.compositeDelta.toFixed(2)) });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [r?.id, lastVisit?.id]);
   const allCats = [...CATEGORIES.bbq, ...CATEGORIES.family];
 
   // Visit-count badge — how many times this restaurant appears in the
@@ -156,6 +167,35 @@ export default function Detail() {
           </div>
         )}
       </div>
+
+      {/* Rematch: this visit against the last one */}
+      {rematch?.compositeDelta != null && (() => {
+        const d = rematch.compositeDelta;
+        const flat = Math.abs(d) < 0.005;
+        const color = flat ? S.muted : d > 0 ? '#4ade80' : '#f87171';
+        const when = shortVisitDate(lastVisit.date);
+        return (
+          <div style={{ background: S.dark, borderRadius: '8px', padding: '12px 14px', marginBottom: '16px', border: `1px solid ${S.border}` }}>
+            <div style={{ ...sLabel(), marginBottom: '4px' }}>Rematch</div>
+            <div style={{ fontSize: '14px', fontWeight: 600, color }}>
+              {flat ? `Same score as ${when}` : `${d > 0 ? 'Up' : 'Down'} ${Math.abs(d).toFixed(2)} since ${when}`}
+              <span style={{ fontSize: '12px', fontWeight: 400, color: S.muted }}> ({calcScores(lastVisit.scores).composite.toFixed(2)} {'→'} {sc.composite.toFixed(2)})</span>
+            </div>
+            {rematch.moves.length > 0 ? (
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '8px' }}>
+                {rematch.moves.slice(0, 3).map(m => (
+                  <span key={m.key} style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '4px', background: S.card, border: `1px solid ${S.border}`, color: S.text }}>
+                    {m.label} {m.prev}{'→'}{m.cur}{' '}
+                    <span style={{ fontWeight: 700, color: m.delta > 0 ? '#4ade80' : '#f87171' }}>{m.delta > 0 ? `+${m.delta}` : m.delta}</span>
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <div style={{ fontSize: '12px', color: S.muted, marginTop: '4px' }}>Every category scored the same both times.</div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Friends who ate here */}
       {hasFriends && (

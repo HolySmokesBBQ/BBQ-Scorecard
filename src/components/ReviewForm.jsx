@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAppContext } from '../context/AppContext.jsx';
 import { CATEGORIES, DESCRIPTORS, MEATS, SIDES_LIST, SAUCE_DEP_OPTIONS, RETURN_OPTIONS } from '../constants.js';
 import { calcScores, track } from '../scoring.js';
+import { findLastVisit, compareVisits, shortVisitDate } from '../rematch.js';
 
 const ALL_CATEGORIES = [...CATEGORIES.bbq, ...CATEGORIES.family];
 
@@ -11,11 +12,18 @@ const ALL_CATEGORIES = [...CATEGORIES.bbq, ...CATEGORIES.family];
 // integer 1–9 (no fractional precision), so the wheel added ceremony
 // without benefit. The wheel still lives in the codebase for Notebook's
 // cook ratings, which DO want fractional values like 7.25.
-function CategoryScoreRow({ c, value, onPick, S }) {
+function CategoryScoreRow({ c, value, lastValue, onPick, S }) {
   return (
     <div style={{ marginBottom: '16px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-        <span style={{ fontSize: '13px', fontWeight: '500' }}>{c.label}</span>
+        <span style={{ fontSize: '13px', fontWeight: '500' }}>
+          {c.label}
+          {lastValue > 0 && (
+            <span style={{ marginLeft: '8px', fontSize: '11px', fontWeight: 400, color: S.muted }}>
+              last time {lastValue}
+            </span>
+          )}
+        </span>
         <span style={{ fontSize: '15px', fontWeight: '700', color: S.accent }}>{value || '—'}</span>
       </div>
       {value > 0 && DESCRIPTORS[c.key]?.[value] && (
@@ -124,6 +132,20 @@ export default function ReviewForm() {
   })();
 
   const sc = calcScores(currentReview.scores);
+
+  // Rematch: your last scored visit to this same joint, if any.
+  const lastVisit = findLastVisit(reviews, currentReview);
+  const lastSc = lastVisit ? calcScores(lastVisit.scores) : null;
+  const rematch = lastVisit ? compareVisits(lastVisit.scores, currentReview.scores) : null;
+  // Hold the running delta until the BBQ track is filled in at least as far
+  // as last visit's was; one tapped category against a full card reads as
+  // a swing that isn't there.
+  const bbqScoredCount = (scores) => CATEGORIES.bbq.filter(c => scores?.[c.key] > 0).length;
+  const rematchReady = !!lastVisit && bbqScoredCount(currentReview.scores) >= bbqScoredCount(lastVisit.scores);
+  useEffect(() => {
+    if (lastVisit) track('rematch_started', { restaurant: currentReview.restaurant || '', view });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastVisit?.id]);
 
   return (
     <div className="bbq-container-form">
@@ -331,6 +353,17 @@ export default function ReviewForm() {
         )}
       </div>
 
+      {/* Rematch banner: you've scored this joint before */}
+      {lastVisit && (
+        <div style={{
+          background: S.dark, border: `1px solid ${S.accent}`, borderRadius: '8px',
+          padding: '10px 12px', marginBottom: '16px', fontSize: '12px', color: S.text,
+        }}>
+          <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: '13px', letterSpacing: '2px', color: S.accent, marginBottom: '2px' }}>REMATCH</div>
+          You scored this place {lastSc.composite.toFixed(2)} on {shortVisitDate(lastVisit.date)}. Your old score shows next to each category.
+        </div>
+      )}
+
       {/* BBQ + Family Scoring — side by side on desktop */}
       <div className="bbq-form-tracks">
       <div style={{ marginBottom: '16px' }}>
@@ -339,6 +372,7 @@ export default function ReviewForm() {
           <CategoryScoreRow
             key={c.key} c={c} S={S}
             value={currentReview.scores[c.key]}
+            lastValue={lastVisit?.scores?.[c.key]}
             onPick={(n) => updateScore(c.key, n)}
           />
         ))}
@@ -350,6 +384,7 @@ export default function ReviewForm() {
           <CategoryScoreRow
             key={c.key} c={c} S={S}
             value={currentReview.scores[c.key]}
+            lastValue={lastVisit?.scores?.[c.key]}
             onPick={(n) => updateScore(c.key, n)}
           />
         ))}
@@ -557,6 +592,13 @@ export default function ReviewForm() {
         <div style={{ color: '#fbbf24', fontSize: '18px' }}>{'★'.repeat(sc.stars)}{'☆'.repeat(5 - sc.stars)}</div>
         <div style={{ fontSize: '24px', fontWeight: '700', color: S.accent, fontFamily: "'Oswald', sans-serif" }}>{sc.composite.toFixed(2)}</div>
         <div style={{ fontSize: '11px', color: S.muted }}>BBQ {sc.bbqAvg.toFixed(2)} + Bonus {sc.bonus.toFixed(2)}</div>
+        {rematchReady && rematch?.compositeDelta != null && (
+          <div style={{ fontSize: '12px', fontWeight: 600, marginTop: '4px', color: rematch.compositeDelta > 0.005 ? '#4ade80' : rematch.compositeDelta < -0.005 ? '#f87171' : S.muted }}>
+            {Math.abs(rematch.compositeDelta) < 0.005
+              ? `Same as ${shortVisitDate(lastVisit.date)}`
+              : `${rematch.compositeDelta > 0 ? '▲' : '▼'} ${Math.abs(rematch.compositeDelta).toFixed(2)} vs ${shortVisitDate(lastVisit.date)}`}
+          </div>
+        )}
         {(currentReview.friends || []).length > 0 && !(blindTable && !revealed) && (() => {
           const allScorers = [{ name: 'You', scores: currentReview.scores }, ...(currentReview.friends || [])];
           const avgScores = {};

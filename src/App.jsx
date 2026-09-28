@@ -5,7 +5,6 @@ import { NAV_V2 } from './featureFlags.js';
 // Site (landing page) is loaded eagerly — it's what new visitors see first
 // and we want LCP to be as fast as possible.
 import Site from './components/Site.jsx';
-import NotebookLaunchModal from './components/NotebookLaunchModal.jsx';
 import AppNav from './components/AppNav.jsx';
 import DeleteConfirmModal from './components/DeleteConfirmModal.jsx';
 import Paywall from './components/Paywall.jsx';
@@ -77,7 +76,9 @@ function AppRouter() {
       {NAV_V2 && <AppNav />}
       <DeleteConfirmModal />
       <Paywall />
-      <NotebookLaunchModal />
+      {/* The center-screen Notebook launch modal was retired in 4.2.0: half of
+          the users who saw it spent their first tap closing it. Notebook is
+          still promoted by the Home card and the review Detail banner. */}
     </>
   );
 }
