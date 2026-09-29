@@ -8,6 +8,8 @@
     "dev:notebook": "vite --config vite.config.notebook.js",
     "dev:board": "vite --config vite.config.native.board.js",
     "audit": "npm audit --omit=dev --audit-level=high",
+    "test": "vitest run",
+    "check:drift": "node scripts/check-fork-drift.mjs",
     "build": "vite build --config website/vite.config.js",
     "build:native": "vite build --config vite.config.native.js",
     "build:notebook": "vite build --config website/vite.config.notebook.js",
@@ -19,8 +21,6 @@
     "build:board-native": "vite build --config vite.config.native.board.js",
     "sync:notebook": "node scripts/sync-notebook.mjs",
     "sync:board": "node scripts/sync-board.mjs",
-    "sync:rules": "node scripts/sync-firestore-rules.mjs",
-    "check:rules": "node scripts/sync-firestore-rules.mjs --check",
     "sync:rules": "node scripts/sync-firestore-rules.mjs",
     "check:rules": "node scripts/sync-firestore-rules.mjs --check",
     "deploy:rules": "node scripts/sync-firestore-rules.mjs && firebase deploy --only firestore:rules --project default",
@@ -60,6 +60,7 @@
     "preact": "^10.29.2",
     "sharp": "^0.34.5",
     "vite": "^5.0.0",
-    "vite-plugin-pwa": "^0.17.0"
+    "vite-plugin-pwa": "^0.17.0",
+    "vitest": "^2.1.9"
   }
 }
