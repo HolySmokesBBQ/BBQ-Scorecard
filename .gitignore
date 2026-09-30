@@ -56,7 +56,13 @@ google-services.json
 android/app/google-services.json
 android-notebook/app/google-services.json
 android-board/app/google-services.json
-GoogleService-Info.plist
+# NOTE (audit F-10, 2026-09-29): ios/App/App/GoogleService-Info.plist and
+# ios-board/App/App/GoogleService-Info.plist are deliberately TRACKED, not
+# ignored — Codemagic builds iOS from the pushed repo and needs them, and
+# Firebase iOS config is public-by-design (it ships inside every IPA).
+# A GoogleService-Info.plist ignore line previously here was a lie: the
+# files were already tracked, so gitignore never applied. Real secrets
+# (keystores, .p8, signing passwords) stay ignored below.
 
 # Service account keys
 *-firebase-adminsdk-*.json
