@@ -20,6 +20,7 @@ import Onboarding, { hasOnboarded } from './board/Onboarding.jsx';
 import BoardHamburger from './components/BoardHamburger.jsx';
 import Calculator from './board/Calculator.jsx';
 import Settings from './board/Settings.jsx';
+import { priceTier, scanBadgeLabel } from './board/priceTier.js';
 import { sendProblemReport } from './diagnostics.js';
 import 'leaflet/dist/leaflet.css';
 
@@ -1265,12 +1266,10 @@ function ShopCard({ shop, price, distance, onSubmit, onOpen }) {
   const cut = price ? CUTS[price.cut] : null;
   const days = price ? ageInDays(price.reportedAt) : null;
   const fresh = price ? isFresh(price.reportedAt) : false;
-  // "Verified" trust badge derives ONLY from the server-validated
-  // `source` field. The docId-prefix fallback below used to also grant
-  // Verified when the id started with 'seed_' — but a user could mint
-  // that docId themselves and forge the badge on a $0.01 fake price
-  // (SECURITY-AUDIT-BOARD-DEEP.md Finding B-2). Removed the fallback.
-  const isSeed = price && price.source === 'operator_verified';
+  // Trust tier derives ONLY from the server-validated `source` field,
+  // never the docId, which a client can mint to forge a badge
+  // (SECURITY-AUDIT-BOARD-DEEP.md Finding B-2). See board/priceTier.js.
+  const tier = priceTier(price);
 
   return (
     <div
@@ -1294,7 +1293,8 @@ function ShopCard({ shop, price, distance, onSubmit, onOpen }) {
           <span style={{ fontSize: 16 }}>{storeType.icon}</span>
           <div style={{ fontWeight: 700, fontSize: 15 }}>{shop.name}</div>
           <TypeBadge type={shop.storeType} />
-          {isSeed && <VerifiedBadge />}
+          {tier === 'verified' && <VerifiedBadge />}
+          {tier === 'scan' && <ScanBadge price={price} />}
         </div>
         {price && (
           <div style={{ fontSize: 13, color: PAL.textDim, marginBottom: 2 }}>
@@ -1360,6 +1360,30 @@ function TypeBadge({ type }) {
       letterSpacing: 0.5, textTransform: 'uppercase', fontWeight: 700,
     }}>Butcher</span>
   );
+}
+
+// Scan prices come from a shop's own published listing. Amber rather than
+// green: attributable and dated, but nobody stood in the store. When the
+// scan recorded a sourceUrl the badge opens it, so a user can read the
+// listing the number came from. Stops the click bubbling to the card,
+// which would otherwise open the shop detail underneath.
+function ScanBadge({ price }) {
+  const label = scanBadgeLabel(price?.reportedAt);
+  const style = {
+    fontSize: 10, background: PAL.panelDeep, color: PAL.amber,
+    padding: '2px 6px', borderRadius: 4, border: `1px solid ${PAL.amber}33`,
+    letterSpacing: 0.5, fontWeight: 700, textDecoration: 'none',
+  };
+  if (price?.sourceUrl) {
+    return (
+      <a
+        href={price.sourceUrl} target="_blank" rel="noopener noreferrer"
+        onClick={(e) => e.stopPropagation()}
+        style={style}
+      >{label}</a>
+    );
+  }
+  return <span style={style}>{label}</span>;
 }
 
 function VerifiedBadge() {
