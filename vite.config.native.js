@@ -38,7 +38,15 @@ export default defineConfig(({ mode }) => ({
   plugins: [
     preact(),
     stripTesseract(),
+    // selfDestroying: the Capacitor WebView loads the bundle from the APK on
+    // local disk, so a precaching service worker has no offline case to
+    // cover. What it can do is survive an app update (Android keeps app
+    // data) and keep serving the previous version's precached index.html,
+    // which is how Board 2.4.0 showed 2.3.9's UI. This ships a sw.js that
+    // unregisters itself and clears its caches on every installed copy.
+    // The PWA block can be dropped entirely in a later release.
     VitePWA({
+      selfDestroying: true,
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'icon-192.png', 'icon-512.png', 'holy-smokes-logo.png'],
       manifest: {
