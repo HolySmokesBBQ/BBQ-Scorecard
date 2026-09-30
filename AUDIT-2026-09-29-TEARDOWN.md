@@ -256,7 +256,7 @@ Per session ownership — Overseer does not edit app code.
 | F-2, F-3, F-4 (Pit Humidity math + pressure + hardcoded call sites) | **Notebook** | 1 — fix F-4 with or before F-3 |
 | F-6 (`selfDestroying` missing) | **Scorecard** ✅ done `3a906fe`, AAB 4.2.1 built+verified · **Notebook** pending | 1 — one-line config change each |
 | F-5 (web fork auth swallowing) | **Website** ✅ ported + deployed + verified live (incl. caller hardening) | 1 — done |
-| F-5 residual (Board `handleSignIn` swallows, native + web) | **Board** | 2 |
+| F-5 residual (Board `handleSignIn` swallows, native + web) | **Board** — independently confirmed by Board session (second source); proposed as Board 2.4.4 (timeout race + visible error state + web mirror); **awaiting Joel's go** | 2 |
 | F-1 (wire vitest + `test` script + CI) | **Overseer → all** | 2 — nothing else holds without this |
 | F-7 (fork drift + CRLF/LF mismatch) | **Overseer** decides policy | 2 |
 | F-8 (`package.json`) | **Overseer** | 3 |
