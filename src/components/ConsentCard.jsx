@@ -12,7 +12,7 @@ const PRIVACY_URL = 'https://holysmokesbbqco.com/privacy.html';
 
 export const CONSENT_PURPOSE =
   'That covers which screens and features you use, plus the restaurant names on reviews you open, share, or compare. ' +
-  "If you're signed in it's tied to your account ID, not your name or email.";
+  "It isn't linked to your account, name, or email.";
 
 export function useConsent() {
   const [rec, setRec] = useState(() => getConsent());

@@ -94,11 +94,10 @@ export function compressPhoto(file) {
    Wraps gtag with:
    - Auto context enrichment (every event gets the current `view`)
    - User properties for segmentation (app_mode, signed_in, review_count, etc.)
-   - User ID for cross-device stitching when signed in
+   - (No GA4 User-ID: dropped 2026-09-29, see _flushUserProperties)
    - Page view firing for SPA navigations
 */
 
-const GA_MEASUREMENT_ID = window.GA_MEASUREMENT_ID || 'G-5JZJ75VWR3';
 const _gaContext = {
   // Auto-attached to every event:
   _view: 'site',
@@ -117,15 +116,13 @@ const _gaContext = {
 // tag is never loaded either, so these are no-ops twice over.
 function _flushUserProperties() {
   if (!analyticsAllowed() || typeof window.gtag !== 'function') return;
-  // user_id goes through config, not user_properties
+  // user_id is deliberately NOT sent. GA4 User-ID would link analytics to
+  // the Firebase uid; at this traffic nobody uses cross-device reports, so
+  // the identifier isn't worth collecting (audit 2026-09-29 minimisation).
+  // It stays in _gaContext only so callers don't need to change.
   const { user_id, _view, ...userProps } = _gaContext;
   try {
     window.gtag('set', 'user_properties', userProps);
-    // Re-config with user_id so it attaches to subsequent events
-    window.gtag('config', GA_MEASUREMENT_ID, {
-      user_id: user_id || undefined,
-      send_page_view: false,  // we fire page_view manually on SPA navigations
-    });
   } catch {}
 }
 
