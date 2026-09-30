@@ -132,6 +132,10 @@ native:    withTimeout → 8 call sites   | auth/timeout → present | throw nat
 
 `website/` owns all web builds from this forked source, so **holysmokesbbqco.com is serving the dead-button, infinite-spinner behavior that got the iOS build rejected.** Same root cause, fixed on native only.
 
+**Resolved 2026-09-29 (evening), verified live.** Website session ported `withTimeout`, throw-instead-of-swallow (cancel/redirect returns kept), and the `auth/timeout` message — plus caller hardening the change request missed: every web sign-in caller was `await attemptSignIn()` with no try/catch, so bare throws would have just moved the silence into unhandled rejections. They ported native's `runSignIn` state machine and the busy/error button UI along with it. Good catch. Independently verified on the live site: the scorecard auth chunk carries the timeout copy.
+
+**Residual, routed to Board:** Board's own `handleSignIn` in `App.board.jsx` (its separate auth instance) still swallows failures with `console.error` + analytics track — identically on native and web. Same class as this finding, Board's file.
+
 ---
 
 ### F-6 — HIGH: The stale-bundle fix shipped to Board and was never propagated to Scorecard or Notebook.
@@ -251,11 +255,12 @@ Per session ownership — Overseer does not edit app code.
 |---|---|---|
 | F-2, F-3, F-4 (Pit Humidity math + pressure + hardcoded call sites) | **Notebook** | 1 — fix F-4 with or before F-3 |
 | F-6 (`selfDestroying` missing) | **Scorecard** ✅ done `3a906fe`, AAB 4.2.1 built+verified · **Notebook** pending | 1 — one-line config change each |
-| F-5 (web fork auth swallowing) | **Website** | 1 — port the native auth block |
+| F-5 (web fork auth swallowing) | **Website** ✅ ported + deployed + verified live (incl. caller hardening) | 1 — done |
+| F-5 residual (Board `handleSignIn` swallows, native + web) | **Board** | 2 |
 | F-1 (wire vitest + `test` script + CI) | **Overseer → all** | 2 — nothing else holds without this |
 | F-7 (fork drift + CRLF/LF mismatch) | **Overseer** decides policy | 2 |
 | F-8 (`package.json`) | **Overseer** | 3 |
-| F-9 (stale /board/ deploy — fix on main since Sep 7) | **Website** (handed off by Board session) | 1 — deploy, then verify live hash changed |
+| F-9 (stale /board/ deploy — fix on main since Sep 7) | **Website** ✅ deployed; `check:deploy` all-MATCH confirmed by both Website session and Overseer; live bundle now `CMl-1BuI` | 1 — done |
 | F-10 (iOS: tracked GoogleService plists vs lying gitignore; missing privacy manifest) | **Overseer** rec: accept-and-document + fix gitignore; privacy manifest to Scorecard/Board next quiet release | 2 |
 
 **Repo state**: unchanged. `vitest` was installed with `--no-save`, so `package.json` and `package-lock.json` were not modified. Nothing was edited or deleted during this audit.
