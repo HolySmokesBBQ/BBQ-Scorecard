@@ -95,6 +95,8 @@ Sweep at 275°F dry / 160°F wet:
 
 **0.31 RH points across 7,000 feet.** The spec's chart expects sea level → 3,400 ft alone to move this case from 9% to 11% — about +2.0 points, roughly 10× the response the code produces. Note that the two 3,400 ft failures in F-2 are the *same dry/wet pairs* as passing sea-level cases: the chart moves with altitude and the app doesn't.
 
+> **CORRECTED 2026-09-29 (late): this finding's premise was wrong — the engine is right and the chart was wrong.** Notebook session verified psychrolib against hand-derived ASHRAE 2017 (agreement to 1e-9 at every pressure tested) and supplied the physics, which the Overseer independently checked: at pit temperatures Pws(Tdb) is huge (≈313 kPa at 275°F) and depends on temperature alone; since vapor pressure cannot exceed total pressure, RH is capped at P/Pws(Tdb) — a ceiling that **falls** with altitude. The chart's +1–2 point rise with altitude was physically impossible; the near-flat pressure response this section called a defect is correct behavior. Corroborating signature: fixture error grows with dry-bulb temperature, consistent with an altitude chart built by shifting sea-level curves rather than recomputing. Resolution: three chart fixtures corrected, `pitHumidity.js` untouched, full derivation in the test-file header. F-2's open question ("math or fixtures?") is thereby answered: **fixtures.** F-4 (hardcoded call sites) was real and is fixed regardless.
+
 ---
 
 ### F-4 — HIGH: The cook-logging humidity readout hardcodes Joel's hometown pressure for every user.
@@ -247,6 +249,16 @@ Two process findings from the same incident, both adopted:
 
 ---
 
+### F-12 — HIGH: `pitWetBulbF` silently dropped from every cloud write since v3.0.1 (Jul 29) — pit humidity readings never reached Firestore
+
+*Found by the Notebook session; the teardown missed it.* The field is in neither the client `COOK_FIELD_WHITELIST` nor the rules' `cookFields()`, so `prepCookForFirestore` has stripped it on every sync since the feature shipped. Users' pit readings existed only in localStorage — lost on device change, invisible to friends. Fix is correctly sequenced: pit fields added to `firestore.rules:79` first (verified); the client whitelist deliberately waits, because `hasOnly()` would reject every cook write if the client sent fields before the rules deploy. **Blocked on the rules deploy (see F-13).**
+
+### F-13 — URGENT, predates the audit: first-time Notebook signups are being denied server-side right now
+
+Per the Notebook session: the users-rule signup fix recorded as "fixed + published 2026-09-03" never reached the **holy-smokes-bbq-notebook** project — consistent with the known console trap (shared `firebase.json` defaults to the Scorecard project; console needs the right account/project selected). Every new Notebook signup fails as what looks like a failed login. Deploy is blocked: the Firebase CLI token is expired and `firebase login --reauth` is interactive-only. Notebook session correctly refused to route around it. **Unblock paths:** (1) the Firebase *console* route that worked on 2026-09-03, if the browser session is authenticated — with the project-selector check; (2) Joel at a terminal for `firebase login --reauth`. Same deploy carries F-12's pit fields.
+
+---
+
 ## Credit where it's due
 
 Several previously-flagged problems are genuinely fixed, and I verified each:
@@ -265,7 +277,8 @@ Per session ownership — Overseer does not edit app code.
 
 | Finding | Owner | Priority |
 |---|---|---|
-| F-2, F-3, F-4 (Pit Humidity math + pressure + hardcoded call sites) | **Notebook** | 1 — fix F-4 with or before F-3 |
+| F-2, F-3, F-4 (Pit Humidity) | **Notebook** ✅ closed — F-4 fixed; F-2/F-3 resolved as chart error (engine verified vs ASHRAE; fixtures corrected). 94/94 tests green, both forks. F-6 Notebook half also ✅ | 1 — done |
+| F-12 (pitWetBulbF never synced) + F-13 (Notebook signups denied — live outage) | **Notebook**, blocked on rules deploy (console route or Joel reauth) | **0 — highest open severity** |
 | F-6 (`selfDestroying` missing) | **Scorecard** ✅ done `3a906fe`, AAB 4.2.1 built+verified · **Notebook** pending | 1 — one-line config change each |
 | F-5 (web fork auth swallowing) | **Website** ✅ ported + deployed + verified live (incl. caller hardening) | 1 — done |
 | F-5 residual (Board `handleSignIn` swallows, native + web) | **Board** — independently confirmed by Board session (second source); proposed as Board 2.4.4 (timeout race + visible error state + web mirror); **awaiting Joel's go** | 2 |
