@@ -1454,6 +1454,11 @@ function CircularScrubPanel({ region, user, onSignIn, onSignInAnon }) {
         workerPath: `${tessBase}worker.min.js`,
         corePath: tessBase,
         langPath: tessBase,
+        // We ship eng.traineddata uncompressed. tesseract.js defaults to
+        // gzip:true and asks for eng.traineddata.gz, which 404s in the app
+        // (the scan hung) and on the web gets the SPA's index.html. Every
+        // scan since self-hosting failed this way until 2.4.5.
+        gzip: false,
         logger: (m) => {
           if (m.status === 'recognizing text' && typeof m.progress === 'number') {
             setProgress(Math.round(m.progress * 100));
