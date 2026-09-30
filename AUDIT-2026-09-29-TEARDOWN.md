@@ -235,6 +235,18 @@ Gitignore never applies to already-tracked files, so line 59 is decorative — t
 
 ---
 
+### F-11 — HIGH (business-critical): AuthGate click-through closed the submit modal — signed-out users could not submit a price since ~Aug 6
+
+*Found by the Board session while implementing the F-5 residual; verified by the Overseer.*
+
+`AuthGate` rendered as a sibling of `SubmitModal`'s form, directly under a backdrop whose `onClick` closes the modal. The form stopped propagation; the gate did not — so **every click on the gate** (Google sign-in, "Continue without an account," even Cancel) bubbled to the backdrop and closed the whole modal, discarding the typed price. Board session reports Firestore's last community price is Aug 6 — just before the gate shipped — with zero since across all 40 regions, and proposes the "price drought" read as low demand was actually this bug. Fixed in `081007e` (stopPropagation on the gate root + errors now render on the gate, which previously covered them); pure sign-in logic extracted to `src/board/signIn.js` with tests. Verified: commit real (+217 lines incl. 94-line test file), stopPropagation present, 22/22 tests pass. Web copy pending the Website session (handoff note at `docs/handoffs/2026-09-29-board-web-signin-for-website.md`); **the gate bug is live on web Board today.**
+
+Two process findings from the same incident, both adopted:
+- **Bidirectional deploy/git gap**: this morning live was behind main (F-9); tonight the Website session's deployed port is live but uncommitted — live ahead of main. `check:deploy` should eventually compare live against a *clean build of main*, both directions.
+- **`git commit -- <paths>` scopes by file, not hunk**: Board's first commit nearly swept in the Website session's uncommitted edits to a shared file (caught, soft-reset). New rule: don't commit a file another session has uncommitted edits in — hand it off.
+
+---
+
 ## Credit where it's due
 
 Several previously-flagged problems are genuinely fixed, and I verified each:
