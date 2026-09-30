@@ -146,7 +146,7 @@ It is in exactly one config:
 | `vite.config.native.js` (Scorecard) | autoUpdate | **absent** ❌ |
 | `vite.config.native.notebook.js` | autoUpdate | **absent** ❌ |
 
-Scorecard (4.2.0, shipping on both stores) and Notebook still bundle a precaching auto-update service worker into their native builds — the same configuration, with the same known failure mode, in the two apps that ship most often. This is the "I updated and the new feature isn't there" class of bug, and on Board it coincided with a 37.5% uninstall rate.
+Scorecard (4.2.0 in review on both stores — Android Internal→Closed, iOS Waiting for Review) and Notebook still bundle a precaching auto-update service worker into their native builds — the same configuration, with the same known failure mode, in the two apps that ship most often. This is the "I updated and the new feature isn't there" class of bug, and on Board it coincided with a 37.5% uninstall rate.
 
 ---
 
@@ -209,6 +209,28 @@ The systemic lesson goes beyond this incident: **every surface in this audit was
 
 ---
 
+### F-10 — MEDIUM: iOS shell pass (added same day, after the "did we audit Apple?" question)
+
+**Scope note first:** every JS-layer finding above (F-1..F-5, F-7) applies to iOS identically — Capacitor wraps the same bundle, and F-5's fix was itself born from an Apple rejection. What had never been audited was the iOS-native shell: `ios/`, `ios-board/`, and the Codemagic pipeline. That pass ran 2026-09-29.
+
+**The finding: both `GoogleService-Info.plist` files are tracked in git, and `.gitignore:59` claims otherwise.**
+
+```
+git ls-files ios/App/App/GoogleService-Info.plist        → TRACKED
+git ls-files ios-board/App/App/GoogleService-Info.plist  → TRACKED
+grep -n "GoogleService" .gitignore                       → 59:GoogleService-Info.plist
+```
+
+Gitignore never applies to already-tracked files, so line 59 is decorative — the repo *says* these files are excluded while both sit in history on a GitHub remote. This is the iOS twin of the `google-services.json` file the Android side has guarded for months, with one real difference: **Codemagic builds iOS from the pushed repo, so the file being committed may be load-bearing for CI.** Untracking it without an env-var injection step would break iOS builds.
+
+**Recommendation (Overseer): accept-and-document, don't untrack.** Firebase iOS config values are public-by-design — they ship inside every IPA and are extractable in minutes, so hiding them from the repo is theater. The dishonest part is the gitignore line. Delete `.gitignore:59`, add a comment noting the files are deliberately tracked because Codemagic needs them, and keep parity guards where they matter (real secrets: keystores, `.p8`, signing passwords).
+
+**Advisory:** neither app target has an app-level `PrivacyInfo.xcprivacy`. Reviews have passed without it (4.0/4.1 approved), so it isn't blocking today, but it's the Apple requirement most likely to start rejecting builds without warning. Add one declaring the standard Capacitor required-reason APIs (UserDefaults/CA92.1 etc.) at the next quiet moment.
+
+**Clean bill on the rest of the shell:** ATS secure defaults (no `NSAllowsArbitraryLoads`) in both apps · URL schemes limited to the required GoogleSignIn reversed-client-id · Scorecard's Sign-in-with-Apple entitlement present with documented rationale · both `codemagic*.yaml` handle secrets via `@env:` vars and the managed App Store Connect integration — nothing hardcoded.
+
+---
+
 ## Credit where it's due
 
 Several previously-flagged problems are genuinely fixed, and I verified each:
@@ -228,11 +250,12 @@ Per session ownership — Overseer does not edit app code.
 | Finding | Owner | Priority |
 |---|---|---|
 | F-2, F-3, F-4 (Pit Humidity math + pressure + hardcoded call sites) | **Notebook** | 1 — fix F-4 with or before F-3 |
-| F-6 (`selfDestroying` missing) | **Scorecard** + **Notebook** | 1 — one-line config change each |
+| F-6 (`selfDestroying` missing) | **Scorecard** ✅ done `3a906fe`, AAB 4.2.1 built+verified · **Notebook** pending | 1 — one-line config change each |
 | F-5 (web fork auth swallowing) | **Website** | 1 — port the native auth block |
 | F-1 (wire vitest + `test` script + CI) | **Overseer → all** | 2 — nothing else holds without this |
 | F-7 (fork drift + CRLF/LF mismatch) | **Overseer** decides policy | 2 |
 | F-8 (`package.json`) | **Overseer** | 3 |
 | F-9 (stale /board/ deploy — fix on main since Sep 7) | **Website** (handed off by Board session) | 1 — deploy, then verify live hash changed |
+| F-10 (iOS: tracked GoogleService plists vs lying gitignore; missing privacy manifest) | **Overseer** rec: accept-and-document + fix gitignore; privacy manifest to Scorecard/Board next quiet release | 2 |
 
 **Repo state**: unchanged. `vitest` was installed with `--no-save`, so `package.json` and `package-lock.json` were not modified. Nothing was edited or deleted during this audit.
