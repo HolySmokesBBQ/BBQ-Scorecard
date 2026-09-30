@@ -1,15 +1,223 @@
 [build]
-  command = "npm run build"
+  # build:all runs both vite configs sequentially:
+  #   1. npm run build           → dist/                  (Scorecard)
+  #   2. npm run build:notebook  → dist/notebook/         (Notebook standalone)
+  # Both builds coexist in the same publish folder. Netlify CLI's
+  # local pre-deploy step re-runs this command before uploading dist/,
+  # so it MUST produce all artifacts, not just one app.
+  command = "npm run build:all"
   publish = "dist"
 
-# SPA client-side routing — real files are served as-is,
-# unknown paths fall back to index.html
+# ─── Consent region cookie (L-1) ────────────────────────────
+# Tags HTML responses with hs_geo=eu|other|unknown from Netlify geo so
+# gtm-init.js knows whether to show the analytics consent banner. Display
+# only; Consent Mode's region default is the enforcement. See
+# netlify/edge-functions/geo-region.js.
+[[edge_functions]]
+  path = "/*"
+  function = "geo-region"
+
+# ─── Board compliance pages ───────────────────────────────────
+# MUST stay above the /board/* SPA fallback: Netlify evaluates rules
+# top-down and the first match wins, so a rule placed below /board/*
+# never fires. force = true is also required, because without it the
+# stale static file wins over the redirect.
+#
+# Why these exist: the Board vite build mirrors public/, so it emitted
+# Scorecard's privacy.html and delete-account.html into /board/. Those
+# URLs served the WRONG APP'S policy — the page is titled "BBQ Scorecard"
+# and names Scorecard four times. Board's real pages live at the site
+# root (/privacy-board.html) where the Play Console URLs point.
 [[redirects]]
-  from = "/*"
-  to = "/index.html"
+  from = "/board/privacy.html"
+  to = "/privacy-board.html"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "/board/delete-account.html"
+  to = "/delete-account-board.html"
+  status = 301
+  force = true
+
+# SPA client-side routing — real files are served as-is, unknown paths
+# fall back to the right index.html for each app. The brand landing at
+# / is a single static HTML file, not a SPA, so no SPA fallback for /.
+# Order matters: app-specific fallbacks must come BEFORE any catch-all.
+[[redirects]]
+  from = "/scorecard/*"
+  to = "/scorecard/index.html"
   status = 200
 
-# Cache headers for PWA files
+[[redirects]]
+  from = "/notebook/*"
+  to = "/notebook/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/calculator/*"
+  to = "/calculator/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/catering/*"
+  to = "/catering/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/board/*"
+  to = "/board/index.html"
+  status = 200
+
+# Soft 301 from the bare /scorecard (no trailing slash) to the canonical
+# /scorecard/ URL. Browser bookmark hygiene + Search Console consistency.
+[[redirects]]
+  from = "/scorecard"
+  to = "/scorecard/"
+  status = 301
+
+[[redirects]]
+  from = "/notebook"
+  to = "/notebook/"
+  status = 301
+
+[[redirects]]
+  from = "/calculator"
+  to = "/calculator/"
+  status = 301
+
+[[redirects]]
+  from = "/catering"
+  to = "/catering/"
+  status = 301
+
+[[redirects]]
+  from = "/board"
+  to = "/board/"
+  status = 301
+
+# Notebook's static pages live under /notebook/ only, but older links
+# (and possibly Play Console entries) reference them at the site root.
+# 301 them home instead of 404ing a privacy/deletion page.
+[[redirects]]
+  from = "/privacy-notebook.html"
+  to = "/notebook/privacy-notebook.html"
+  status = 301
+
+[[redirects]]
+  from = "/delete-account-notebook.html"
+  to = "/notebook/delete-account-notebook.html"
+  status = 301
+
+[[redirects]]
+  from = "/changelog-notebook.html"
+  to = "/notebook/changelog-notebook.html"
+  status = 301
+
+# ─── Security headers ─────────────────────────────────────────
+# Applied to every response. Tune CSP if a new external API is added.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "geolocation=(self), camera=(self), microphone=(), payment=(), usb=(), interest-cohort=()"
+    Strict-Transport-Security = "max-age=31536000; includeSubDomains"
+    # CSP notes:
+    # - script-src does NOT include 'unsafe-inline'. GTM/GA inline code was
+    #   extracted to /gtm-init.js (Security Audit Finding #5).
+    # - style-src still allows 'unsafe-inline' — React's style={{...}} props
+    #   compile to inline style attributes used throughout the app. Lower
+    #   risk than script unsafe-inline (CSS-based XSS is much harder).
+    # - img-src uses https: (any https origin) to cover Firebase Storage
+    #   download URLs which include short-lived tokens in query strings.
+    Content-Security-Policy = """
+      default-src 'self';
+      script-src 'self' 'wasm-unsafe-eval' blob: https://www.googletagmanager.com https://*.googleapis.com https://apis.google.com https://www.gstatic.com https://www.google.com https://*.firebaseapp.com https://cdn.jsdelivr.net;
+      worker-src 'self' blob:;
+      style-src 'self' 'unsafe-inline';
+      font-src 'self' data:;
+      img-src 'self' data: blob: https:;
+      connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firebaseappcheck.googleapis.com https://*.firebasestorage.app https://firebasestorage.googleapis.com https://accounts.google.com https://api.weather.gov https://nominatim.openstreetmap.org https://overpass-api.de https://*.tile.openstreetmap.org https://*.google-analytics.com https://*.analytics.google.com https://www.googletagmanager.com https://www.google.com https://cdn.jsdelivr.net https://tessdata.projectnaptha.com;
+      frame-src https://*.firebaseapp.com https://accounts.google.com https://www.googletagmanager.com https://www.google.com;
+      object-src 'none';
+      base-uri 'self';
+      form-action 'self';
+      frame-ancestors 'none';
+    """
+
+# ─── Cache headers ────────────────────────────────────────────
+# Files Vite outputs with content hashes in the filename
+# (e.g. `index.AbCdEf12.js`) are safe to cache forever — the
+# hash changes whenever the file does, so the URL becomes new
+# and the browser fetches the fresh version.
+[[headers]]
+  for = "*.js"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "*.css"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# BBQ Board OCR engine (Tesseract) served from our origin, spec
+# docs/superpowers/specs/2026-09-29-board-ocr-size-design.md. The path is
+# version-pinned (/ocr/tesseract-<ver>/...) and never overwritten in place,
+# so a year-long immutable cache is safe. The app fetches these from a
+# Capacitor origin (cross-origin), verifies SHA-256 client-side, then caches
+# in IndexedDB: Access-Control-Allow-Origin is required or the fetch never
+# reaches the hash check. Covers .traineddata, which no glob above matches.
+[[headers]]
+  for = "/ocr/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+    Access-Control-Allow-Origin = "*"
+    Cross-Origin-Resource-Policy = "cross-origin"
+
+# Fonts loaded from same origin (if any) get long cache too
+[[headers]]
+  for = "*.woff2"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# Images that don't change frequently — month cache
+[[headers]]
+  for = "*.png"
+  [headers.values]
+    Cache-Control = "public, max-age=2592000"
+
+[[headers]]
+  for = "*.jpg"
+  [headers.values]
+    Cache-Control = "public, max-age=2592000"
+
+[[headers]]
+  for = "*.ico"
+  [headers.values]
+    Cache-Control = "public, max-age=2592000"
+
+# PWA control files — never cache.
+# Each app has its own service worker and manifest; all must be no-cache
+# or autoUpdate can't refresh on the next navigation (audit finding N-4).
+#
+# ORDER MATTERS: the `*.js` glob above applies `immutable` to EVERY .js
+# file, hashed or not. These explicit paths come after it and win — that
+# is the only reason /notebook/sw.js is currently served no-cache. Any
+# unhashed .js served from this site needs an override here or it gets
+# pinned in browsers for a year.
+#
+# Scorecard formerly built to the site root, so its rules used to be
+# `/sw.js` and `/manifest.webmanifest`. It now builds to /scorecard/,
+# which left those rules matching nothing and Scorecard's service worker
+# pinned immutable — autoUpdate could never fetch a new SW. The root
+# entries are kept as harmless legacy; the /scorecard/ ones are live.
 [[headers]]
   for = "/sw.js"
   [headers.values]
@@ -20,3 +228,86 @@
   [headers.values]
     Cache-Control = "no-cache"
     Content-Type = "application/manifest+json"
+
+[[headers]]
+  for = "/scorecard/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/scorecard/manifest.webmanifest"
+  [headers.values]
+    Cache-Control = "no-cache"
+    Content-Type = "application/manifest+json"
+
+[[headers]]
+  for = "/notebook/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/notebook/manifest.webmanifest"
+  [headers.values]
+    Cache-Control = "no-cache"
+    Content-Type = "application/manifest+json"
+
+[[headers]]
+  for = "/board/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/board/manifest.webmanifest"
+  [headers.values]
+    Cache-Control = "no-cache"
+    Content-Type = "application/manifest+json"
+
+# Analytics bootstrap — unhashed, shared by every app, and edited in
+# place whenever the GA4 wiring changes. The `*.js` glob was pinning it
+# immutable for a year, so a measurement-ID change could not reach any
+# returning visitor. Must revalidate. The `?v=` query param in the HTML
+# still exists as a belt-and-braces buster for already-cached copies.
+[[headers]]
+  for = "/gtm-init.js"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+# Vite's SW registration shim — also unhashed.
+[[headers]]
+  for = "/registerSW.js"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/scorecard/registerSW.js"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/notebook/registerSW.js"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/board/registerSW.js"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/.well-known/assetlinks.json"
+  [headers.values]
+    Content-Type = "application/json"
+    Cache-Control = "no-cache"
+
+# Sitemap + robots — short cache so Search Console can refresh
+[[headers]]
+  for = "/sitemap.xml"
+  [headers.values]
+    Cache-Control = "public, max-age=3600"
+    Content-Type = "application/xml"
+
+[[headers]]
+  for = "/robots.txt"
+  [headers.values]
+    Cache-Control = "public, max-age=3600"
+    Content-Type = "text/plain"
