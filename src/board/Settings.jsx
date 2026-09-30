@@ -3,6 +3,7 @@ import { signOut } from 'firebase/auth';
 import { auth } from '../firebase.board.js';
 import { STATES } from './schema.js';
 import { nativeAppVersion } from '../diagnostics.js';
+import { signInErrorMessage } from './signIn.js';
 
 // Board Settings — minimal by design. Board has less user-owned state
 // than Scorecard/Notebook (no cooks, no reviews to export). This
@@ -80,6 +81,22 @@ export default function Settings({ user, onSignIn, onClose }) {
   // at all — so treat it as absent.
   const [appVersion, setAppVersion] = useState(import.meta.env?.VITE_BUILD_VERSION || '');
   const showVersion = appVersion && appVersion !== 'unknown';
+
+  // handleSignIn throws on failure now (it used to swallow it). Catch it
+  // here and say so, rather than leaving the button looking dead.
+  const [signInBusy, setSignInBusy] = useState(false);
+  const [signInError, setSignInError] = useState('');
+  const handleSignInClick = async () => {
+    setSignInBusy(true);
+    setSignInError('');
+    try {
+      await onSignIn();
+    } catch (e) {
+      setSignInError(signInErrorMessage(e) || ''); // '' on a deliberate cancel
+    } finally {
+      setSignInBusy(false);
+    }
+  };
   useEffect(() => {
     let live = true;
     nativeAppVersion(import.meta.env?.VITE_BUILD_VERSION || '')
@@ -150,7 +167,18 @@ export default function Settings({ user, onSignIn, onClose }) {
               <div style={{ fontSize: 14, color: PAL.textDim, marginBottom: 12 }}>
                 Google Sign-In lets you submit prices and appear on the Leaderboard.
               </div>
-              <button style={S.btn} onClick={onSignIn}>Sign in with Google</button>
+              <button
+                style={{ ...S.btn, opacity: signInBusy ? 0.6 : 1 }}
+                onClick={handleSignInClick}
+                disabled={signInBusy}
+              >
+                {signInBusy ? 'Signing in…' : 'Sign in with Google'}
+              </button>
+              {signInError && (
+                <div role="alert" style={{ fontSize: 13, color: '#e8a33d', marginTop: 10, lineHeight: 1.4 }}>
+                  {signInError}
+                </div>
+              )}
             </>
           )}
         </div>

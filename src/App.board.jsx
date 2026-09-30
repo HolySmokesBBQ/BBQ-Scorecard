@@ -15,6 +15,7 @@ import {
 } from './board/schema.js';
 import { SEED_PRICES } from './board/seed.js';
 import { priceTier, scanBadgeLabel } from './board/priceTier.js';
+import { withTimeout, signInErrorMessage } from './board/signIn.js';
 import { SHOPS, shopsForRegion, shopsNear, getShop, shopLatLng } from './board/shops.js';
 import { extractPricedPhrases } from './board/circular.js';
 import Onboarding, { hasOnboarded } from './board/Onboarding.jsx';
@@ -227,16 +228,23 @@ export default function BoardApp() {
       const isCapacitor = typeof window !== 'undefined' && !!window.Capacitor?.isNativePlatform?.();
       if (isCapacitor) {
         const { FirebaseAuthentication } = await import('@capacitor-firebase/authentication');
-        const result = await FirebaseAuthentication.signInWithGoogle();
+        const result = await withTimeout(FirebaseAuthentication.signInWithGoogle(), 'Google sign-in');
         const credential = GoogleAuthProvider.credential(result.credential?.idToken);
-        await signInWithCredential(auth, credential);
+        await withTimeout(signInWithCredential(auth, credential), 'Sign-in');
       } else {
-        await signInWithPopup(auth, googleProvider);
+        await withTimeout(signInWithPopup(auth, googleProvider), 'Sign-in');
       }
       track('board_signin');
     } catch (err) {
       console.error('signin failed', err);
       track('board_signin_failed', { error: err?.code || 'unknown' });
+      // Rethrow. Swallowing this was the bug: the gates below already
+      // catch and show a message, but with nothing thrown they carried on
+      // as if sign-in SUCCEEDED — closing the gate and queueing a submit
+      // for a user who didn't exist. A failed sign-in read as a dead
+      // button, the failure App Review rejected Scorecard 4.0.0 for.
+      // Security audit AUDIT-2026-09-29-TEARDOWN.md F-5 residual.
+      throw err;
     }
   };
 
@@ -1387,6 +1395,7 @@ function CircularScrubPanel({ region, user, onSignIn, onSignInAnon }) {
   const [selectedShopId, setSelectedShopId] = useState('');
   const [showAuthGate, setShowAuthGate] = useState(false);
   const [authBusy, setAuthBusy] = useState(false);
+  const [gateError, setGateError] = useState('');
   const [pendingSubmit, setPendingSubmit] = useState(false);
 
   // If the user pressed submit while signed out, fire the write as soon
@@ -1676,19 +1685,20 @@ function CircularScrubPanel({ region, user, onSignIn, onSignInAnon }) {
       {showAuthGate && (
         <AuthGate
           busy={authBusy}
+          error={gateError}
           onSignIn={async () => {
-            setAuthBusy(true);
+            setAuthBusy(true); setGateError('');
             try { await onSignIn(); setPendingSubmit(true); setShowAuthGate(false); }
-            catch { setError('Sign in failed. Try again.'); }
+            catch (e) { setGateError(signInErrorMessage(e) || ''); }
             finally { setAuthBusy(false); }
           }}
           onSignInAnon={async () => {
-            setAuthBusy(true);
+            setAuthBusy(true); setGateError('');
             try { await onSignInAnon(); setPendingSubmit(true); setShowAuthGate(false); }
-            catch { setError('Anonymous sign-in failed. Try again.'); }
+            catch { setGateError('Anonymous sign-in failed. Try again.'); }
             finally { setAuthBusy(false); }
           }}
-          onCancel={() => setShowAuthGate(false)}
+          onCancel={() => { setGateError(''); setShowAuthGate(false); }}
         />
       )}
     </div>
@@ -1743,9 +1753,18 @@ function Footer() {
 // attribute + let them delete their own submissions later), or continue
 // anonymously (Firebase anon auth, no Google account needed). Either
 // path satisfies the isSignedIn() Firestore rules check.
-function AuthGate({ onSignIn, onSignInAnon, onCancel, busy }) {
+function AuthGate({ onSignIn, onSignInAnon, onCancel, busy, error }) {
   return (
-    <div style={{
+    // stopPropagation is load-bearing. SubmitModal renders this gate as a
+    // sibling of its <form>, directly under a backdrop with
+    // onClick={onClose}. Without it, EVERY click on the gate — Google,
+    // "Continue without an account", even Cancel — bubbled up and closed
+    // the whole submit modal, discarding the price the user had typed.
+    // That made submitting impossible for any signed-out user from the day
+    // the gate shipped; the last community price in Firestore predates it.
+    <div
+      onClick={(e) => e.stopPropagation()}
+      style={{
       position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       padding: 16, zIndex: 200,
@@ -1761,6 +1780,15 @@ function AuthGate({ onSignIn, onSignInAnon, onCancel, busy }) {
           BBQ Board attaches every price to an account so real submissions
           stand out from noise. Pick how you'd like to submit:
         </div>
+        {/* The gate is a full-screen overlay, so an error set on the modal
+            behind it is invisible. It has to render here. */}
+        {error && (
+          <div role="alert" style={{
+            fontSize: 13, color: PAL.amber, background: PAL.panelDeep,
+            border: `1px solid ${PAL.amber}55`, borderRadius: 6,
+            padding: '8px 10px', marginBottom: 12, lineHeight: 1.4,
+          }}>{error}</div>
+        )}
         <button
           type="button"
           onClick={onSignIn}
@@ -1771,7 +1799,7 @@ function AuthGate({ onSignIn, onSignInAnon, onCancel, busy }) {
             fontSize: 15, marginBottom: 10, opacity: busy ? 0.6 : 1,
           }}
         >
-          Sign in with Google
+          {busy ? 'Signing in…' : 'Sign in with Google'}
         </button>
         <button
           type="button"
@@ -1822,6 +1850,7 @@ function SubmitModal({ region, user, prefillShopId, prefillCut, onClose, onSignI
   const [error, setError] = useState('');
   const [showAuthGate, setShowAuthGate] = useState(false);
   const [authBusy, setAuthBusy] = useState(false);
+  const [gateError, setGateError] = useState('');
   const [pendingSubmit, setPendingSubmit] = useState(false);
 
   const regionShops = useMemo(() => shopsForRegion(region), [region]);
@@ -1906,12 +1935,14 @@ function SubmitModal({ region, user, prefillShopId, prefillCut, onClose, onSignI
 
   const gateSignIn = async () => {
     setAuthBusy(true);
+    setGateError('');
     try {
       await onSignIn();
       setPendingSubmit(true);
       setShowAuthGate(false);
-    } catch {
-      setError('Sign in failed. Try again.');
+    } catch (e) {
+      // null for a deliberate cancel: stay on the gate, say nothing.
+      setGateError(signInErrorMessage(e) || '');
     } finally {
       setAuthBusy(false);
     }
@@ -1919,12 +1950,13 @@ function SubmitModal({ region, user, prefillShopId, prefillCut, onClose, onSignI
 
   const gateSignInAnon = async () => {
     setAuthBusy(true);
+    setGateError('');
     try {
       await onSignInAnon();
       setPendingSubmit(true);
       setShowAuthGate(false);
     } catch {
-      setError('Anonymous sign-in failed. Try again.');
+      setGateError('Anonymous sign-in failed. Try again.');
     } finally {
       setAuthBusy(false);
     }
@@ -2048,9 +2080,10 @@ function SubmitModal({ region, user, prefillShopId, prefillCut, onClose, onSignI
       {showAuthGate && (
         <AuthGate
           busy={authBusy}
+          error={gateError}
           onSignIn={gateSignIn}
           onSignInAnon={gateSignInAnon}
-          onCancel={() => setShowAuthGate(false)}
+          onCancel={() => { setGateError(''); setShowAuthGate(false); }}
         />
       )}
     </div>
