@@ -1,4 +1,5 @@
 import { CATEGORIES, DESCRIPTORS } from './constants.js';
+import { analyticsAllowed, scrubParams, onConsentChange } from './consent.js';
 
 /* ── Scoring ── */
 export function calcScores(scores) {
@@ -112,8 +113,10 @@ const _gaContext = {
   theme: 'system',
 };
 
+// Every sender below checks consent.js first. Without consent the Google
+// tag is never loaded either, so these are no-ops twice over.
 function _flushUserProperties() {
-  if (typeof window.gtag !== 'function') return;
+  if (!analyticsAllowed() || typeof window.gtag !== 'function') return;
   // user_id goes through config, not user_properties
   const { user_id, _view, ...userProps } = _gaContext;
   try {
@@ -126,6 +129,19 @@ function _flushUserProperties() {
   } catch {}
 }
 
+// A mid-session "Allow" loads the tag asynchronously; once it's up, send
+// the user properties gathered so far so the session isn't unlabeled.
+onConsentChange((rec) => {
+  if (rec.choice !== 'granted' || typeof window === 'undefined') return;
+  let tries = 0;
+  const wait = setInterval(() => {
+    if (typeof window.gtag === 'function' || ++tries > 50) {
+      clearInterval(wait);
+      _flushUserProperties();
+    }
+  }, 200);
+});
+
 /* Update GA context. Call from AppContext effects whenever signed-in state,
    app mode, or counts change. Safe to call before gtag has loaded — the
    context is buffered and flushed on the first event. */
@@ -136,9 +152,9 @@ export function setGaContext(updates) {
 
 /* Fire a custom event with auto-injected `view` context. */
 export function track(event, params) {
-  if (typeof window.gtag !== 'function') return;
+  if (!analyticsAllowed() || typeof window.gtag !== 'function') return;
   try {
-    window.gtag('event', event, { view: _gaContext._view, ...params });
+    window.gtag('event', event, { view: _gaContext._view, ...scrubParams(params) });
   } catch {}
 }
 
@@ -146,7 +162,7 @@ export function track(event, params) {
    so subsequent events know where the user is. */
 export function trackPageView(viewName) {
   _gaContext._view = viewName;
-  if (typeof window.gtag !== 'function') return;
+  if (!analyticsAllowed() || typeof window.gtag !== 'function') return;
   try {
     window.gtag('event', 'page_view', {
       page_title: viewName,

@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App.jsx';
 import { initDiagnostics } from './diagnostics.js';
+import { startAnalyticsIfAllowed } from './consent.js';
 
 // Start the rolling error buffer before anything renders so the
 // "Report a Problem" log captures startup errors too.
@@ -14,6 +15,9 @@ initDiagnostics();
 if (typeof window !== 'undefined') {
   localStorage.setItem('bbq-app-mode', 'restaurants');
 }
+
+// Usage analytics loads only if the user already allowed it (consent.js).
+startAnalyticsIfAllowed();
 
 ReactDOM.createRoot(document.getElementById('root')).render(<App />);
 

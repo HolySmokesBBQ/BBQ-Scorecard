@@ -5,6 +5,7 @@ import { SAMPLE_REVIEW } from '../sampleData.js';
 import { NAV_V2 } from '../featureFlags.js';
 import Avatar from './Avatar.jsx';
 import NotebookAdCard from './NotebookAdCard.jsx';
+import ConsentCard from './ConsentCard.jsx';
 import ScorecardOnboarding from './ScorecardOnboarding.jsx';
 import {
   sendFriendRequest, getFriendsList,
@@ -131,6 +132,9 @@ export default function Home() {
       {/* Notebook cross-promo — shown until dismissed, then hidden for
           30 days. Lives above the search/filter row so it's visible
           without scrolling but doesn't block primary actions. */}
+      {/* Usage-analytics consent, shown until answered (consent.js). */}
+      <ConsentCard />
+
       <NotebookAdCard />
 
       <>

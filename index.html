@@ -110,7 +110,9 @@
        compete for early bandwidth. `defer` makes them run after the
        document is parsed but before DOMContentLoaded. -->
   <script>window.GA_MEASUREMENT_ID = 'G-J8VT8DT328'; window.GA_PAGE_TITLE = 'BBQ Scorecard by Holy Smokes BBQ Co'; window.GA_CONTENT_GROUP = 'scorecard';</script>
-  <script src="/gtm-init.js?v=7" defer></script>
+  <!-- gtm-init.js is NOT loaded here. src/consent.js injects it only after
+       the user allows usage analytics (audit 2026-09-29, L-1). The GA_*
+       values above are plain config and send nothing on their own. -->
   <style>
     /* Self-hosted variable fonts. Both files cover the full 400-700
        weight range in a single woff2; `font-display: swap` ensures

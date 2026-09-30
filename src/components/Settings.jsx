@@ -10,6 +10,8 @@ import { sendProblemReport } from '../diagnostics.js';
 import Avatar from './Avatar.jsx';
 import EmailSignInBox from './EmailSignInBox.jsx';
 import AboutScreen from './AboutScreen.jsx';
+import { useConsent, openPrivacyPolicy, CONSENT_PURPOSE } from './ConsentCard.jsx';
+import { setConsent } from '../consent.js';
 
 // Settings page (NAV_V2) — replaces the old Profile page. Same friends
 // and account logic, reorganized into labeled sections, plus Appearance,
@@ -32,6 +34,7 @@ export default function Settings() {
 
   const [showAbout, setShowAbout] = useState(false);
   const importRef = useRef(null);
+  const consentRec = useConsent();
 
   const Section = ({ label, children }) => (
     <div style={{ marginBottom: 22 }}>
@@ -209,6 +212,30 @@ export default function Settings() {
           <button onClick={() => importRef.current?.click()} style={{ ...sBtn(false, true), flex: 1 }}>Import Backup</button>
           <button onClick={() => { exportCSV(reviews); track('export_csv'); }} style={{ ...sBtn(false, true), flex: 1 }}>Export CSV</button>
           <input ref={importRef} type="file" accept="application/json,.json" onChange={handleImport} style={{ display: 'none' }} />
+        </div>
+      </Section>
+
+      {/* Usage analytics: withdrawing is exactly as easy as allowing. */}
+      <Section label="PRIVACY">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+          <div style={{ fontSize: 13 }}>
+            Usage analytics
+            <div style={{ fontSize: 11, color: S.muted, marginTop: 2 }}>
+              {consentRec?.choice === 'granted'
+                ? `On since ${new Date(consentRec.at).toLocaleDateString()}`
+                : consentRec?.choice === 'denied' ? 'Off' : 'Off (not answered yet)'}
+            </div>
+          </div>
+          <button
+            onClick={() => setConsent(consentRec?.choice === 'granted' ? 'denied' : 'granted')}
+            style={{ ...sBtn(false, true), whiteSpace: 'nowrap' }}
+          >
+            {consentRec?.choice === 'granted' ? 'Turn off' : 'Turn on'}
+          </button>
+        </div>
+        <div style={{ fontSize: 11, color: S.muted, lineHeight: 1.5, marginTop: 8 }}>
+          Sent to Google Analytics. {CONSENT_PURPOSE}{' '}
+          <button onClick={openPrivacyPolicy} style={{ background: 'none', border: 'none', padding: 0, color: S.accent, fontSize: 11, textDecoration: 'underline', cursor: 'pointer' }}>Privacy policy</button>
         </div>
       </Section>
 
