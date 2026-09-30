@@ -3,6 +3,7 @@ import preact from '@preact/preset-vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import { renameSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { pruneBoardNative } from './scripts/board-native-assets.mjs';
 
 // Vite config for the Capacitor (Android) build of BBQ Board.
 //
@@ -32,6 +33,19 @@ function fixupNativePaths() {
   };
 }
 
+// Drop everything publicDir copied in that Board doesn't use: the other
+// apps' logos and pages, and the Tesseract builds OEM 1 can never load
+// (~12 MB). See scripts/board-native-assets.mjs.
+function pruneUnusedPublic() {
+  return {
+    name: 'prune-board-native-public',
+    closeBundle() {
+      const removed = pruneBoardNative(resolve('dist-board-native'), resolve('public'));
+      console.log(`prune-board-native-public: removed ${removed.length} unused public files`);
+    },
+  };
+}
+
 function renameBoardIndex() {
   return {
     name: 'rename-board-index',
@@ -55,6 +69,7 @@ export default defineConfig(({ mode }) => ({
     preact(),
     fixupNativePaths(),
     renameBoardIndex(),
+    pruneUnusedPublic(),
     // selfDestroying ships a service worker whose only job is to unregister
     // itself and delete every cache it owns.
     //

@@ -34,8 +34,11 @@ const CUT_KEYWORDS = [
   { cut: 'bratwurst_fresh',  patterns: [/fresh.*bratwurst/i, /\bbratwurst\b/i, /\bbrats\b/i] },
 ];
 
+// The unit accepts OCR's usual misreads of "lb": Tesseract turns the l into
+// 1, I or | often enough ("$5.99/1b", "$2.49 Ib") that requiring a real
+// "lb" dropped most prices from a real scan.
 const PRICE_PATTERNS = [
-  /\$?\s*(\d{1,2}\.\d{2})\s*\/?\s*(?:lb|LB|Lb|per\s+(?:pound|lb))/g,
+  /\$?\s*(\d{1,2}\.\d{2})\s*\/?\s*(?:[lLI1|][bB]|per\s+(?:pound|lb))/g,
 ];
 
 function detectCut(context) {
@@ -53,13 +56,22 @@ export function extractPricedPhrases(rawText) {
   for (const pattern of PRICE_PATTERNS) {
     const p = new RegExp(pattern.source, pattern.flags);
     let match;
+    let prevEnd = 0;
     while ((match = p.exec(text)) !== null) {
+      const matchEnd = match.index + match[0].length;
       const price = parseFloat(match[1]);
+      const lookbackStart = Math.max(prevEnd, match.index - 80);
+      prevEnd = matchEnd;
       if (!(price > 0) || price > 100) continue;
       const start = Math.max(0, match.index - 80);
-      const end = Math.min(text.length, match.index + match[0].length + 20);
+      const end = Math.min(text.length, matchEnd + 20);
       const context = text.slice(start, end);
-      const cut = detectCut(context);
+      // Name the cut from the text since the previous price, so an earlier
+      // item's name can't claim this price ("BRISKET $5.99/lb PORK BUTT
+      // $2.49 lb" used to file the pork at $2.49 as brisket). Only if
+      // nothing precedes it, try the words just after the price.
+      const cut = detectCut(text.slice(lookbackStart, matchEnd))
+        || detectCut(text.slice(matchEnd, end));
       if (!cut) continue;
       results.push({ cut, cutLabel: CUTS[cut]?.label, pricePerLb: price, context: context.trim() });
     }
