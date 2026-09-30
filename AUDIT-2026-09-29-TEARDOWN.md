@@ -259,6 +259,14 @@ Per the Notebook session: the users-rule signup fix recorded as "fixed + publish
 
 ---
 
+### F-14 — HIGH: Ad scanning has been dead since H-1's self-hosting — the price pipeline had TWO stacked kill switches
+
+*Found by the Board session while executing Tier A; verified (commit, `gzip:false` at `App.board.jsx:1442`, tests).* tesseract.js 7 defaults `gzip: true` and requests `eng.traineddata.gz`; the repo ships uncompressed `eng.traineddata`. Native: the request 404s, the worker throws inside `onmessage`, and the scan hangs forever (`createWorker` never settles). Web: Netlify's SPA fallback answers the `.gz` with `index.html` — the OCR engine received HTML as language data. So **scanning has not worked since H-1 landed**, and combined with F-11 (gate bug killing signed-out submissions since ~Aug 6), the "price drought" had two independent causes, both failing silently. Note in H-1's favor: it failed **closed** — `langPath` was pinned, so nothing ever fell back to jsdelivr.
+
+Fixed in `61ce8a5` (`gzip: false`), which also fixed two parser bugs that only became visible once OCR ran on real output: `lb` misread as `1b`/`Ib` (no prices matched), and an 80-char lookback that filed "PORK BUTT $2.49" under the preceding BRISKET — reviving scans without that fix would have pushed mislabeled prices into review, pre-checked. Prevention: `sync-board`'s `KNOWN_LARGE` now pins exactly the 5 kept OCR files, and `ocrAssets.test.js` re-derives tesseract's core-selection matrix from source (10 tests). Web `gzip:false` mirror handed to the Website session. Tier A acceptance: static + forced-variant browser checks passed; on-device check rides Joel's Internal install.
+
+---
+
 ## Credit where it's due
 
 Several previously-flagged problems are genuinely fixed, and I verified each:
