@@ -10,6 +10,7 @@
     "audit": "npm audit --omit=dev --audit-level=high",
     "test": "vitest run",
     "check:drift": "node scripts/check-fork-drift.mjs",
+    "check:deploy": "node scripts/check-deploy-freshness.mjs",
     "build": "vite build --config website/vite.config.js",
     "build:native": "vite build --config vite.config.native.js",
     "build:notebook": "vite build --config website/vite.config.notebook.js",

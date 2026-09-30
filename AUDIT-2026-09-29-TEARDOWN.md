@@ -189,6 +189,26 @@ cd src && find . -name "*.jsx" -o -name "*.js" | sed 's|^\./||' | while read f; 
 
 ---
 
+### F-9 — HIGH: /board/ on the live site has served a known-crashing bundle for 22 days after its fix landed on main.
+
+*Contributed by the Board coder session in response to this audit's FYI; independently verified.*
+
+holysmokesbbqco.com/board/ serves `index.board.web.D-nylADx.js` — the bundle diagnosed broken on Sep 7: Settings crashes (`STATES.map()` on an object), no error boundary, so the whole app white-screens; plus the raw-code state picker. The fix is commit `c7d0a28` (Sep 7, "Board web: apply yesterday's state-picker fixes to the website fork"), confirmed on main with identical content for all three touched files. **The code was fixed the next day and the site was simply never deployed.** Verified live on 2026-09-29:
+
+```
+curl -s https://holysmokesbbqco.com/board/ | grep -oE 'src="[^"]*\.js[^"]*"'
+# → src="/board/index.board.web.D-nylADx.js"   (the Sep-7 broken bundle)
+```
+
+The systemic lesson goes beyond this incident: **every surface in this audit was implicitly treated as "committed on main = shipped," and that assumption was false for three weeks on a user-facing crash.** The commit message of `c7d0a28` itself records the same trap from the other direction (fixes shipped to Android while the website kept the broken build). Two mechanisms now exist to close this class:
+
+- `npm run check:deploy` (added with this finding) — fetches each live surface, extracts its hashed bundle filenames, and reports whether they exist in the local `dist/` (build first for a meaningful comparison).
+- The standing rule already in the working memory: local `dist/` is not live until the Website session deploys.
+
+**Routing**: handed to the Website session by the Board session (they own the web deploy and are already porting F-5/F-7 items; the fix is on main, so their next build+deploy resolves it). Verify after deploy: the live `/board/` bundle hash must change from `D-nylADx`.
+
+---
+
 ## Credit where it's due
 
 Several previously-flagged problems are genuinely fixed, and I verified each:
@@ -213,5 +233,6 @@ Per session ownership — Overseer does not edit app code.
 | F-1 (wire vitest + `test` script + CI) | **Overseer → all** | 2 — nothing else holds without this |
 | F-7 (fork drift + CRLF/LF mismatch) | **Overseer** decides policy | 2 |
 | F-8 (`package.json`) | **Overseer** | 3 |
+| F-9 (stale /board/ deploy — fix on main since Sep 7) | **Website** (handed off by Board session) | 1 — deploy, then verify live hash changed |
 
 **Repo state**: unchanged. `vitest` was installed with `--no-save`, so `package.json` and `package-lock.json` were not modified. Nothing was edited or deleted during this audit.
