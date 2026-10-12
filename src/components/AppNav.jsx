@@ -3,6 +3,7 @@ import { useAppContext } from '../context/AppContext.jsx';
 import { track } from '../scoring.js';
 import NavDrawer from './NavDrawer.jsx';
 import AboutScreen from './AboutScreen.jsx';
+import { belowTop } from '../safeArea.js';
 
 // App-wide navigation (NAV_V2). Mounted once in App.jsx so the ☰ menu is
 // present on EVERY screen — not just Home. This is what lets the sub-screens
@@ -10,8 +11,9 @@ import AboutScreen from './AboutScreen.jsx';
 // iOS-friendly pattern, instead of a back chevron per screen.
 //
 // The floating button sits below full-screen modals (About = z1000, the
-// drawer backdrop = z3000) so it never covers them, and respects the notch
-// via the same --safe-area-top hook index.html uses.
+// drawer backdrop = z3000) so it never covers them, and clears the status
+// bar / notch with the same inset lookup as #root in index.html (Capacitor's
+// injected --safe-area-inset-top on Android, env() on iOS).
 
 const MENU_GROUPS = [
   { title: 'BBQ SCORECARD', items: [{ label: 'Home', key: 'home' }] },
@@ -39,7 +41,7 @@ export default function AppNav() {
         aria-label="Open menu"
         style={{
           position: 'fixed',
-          top: 'calc(var(--safe-area-top, env(safe-area-inset-top, 0px)) + 10px)',
+          top: belowTop('10px'),
           right: '14px',
           zIndex: 900,
           background: S.card,

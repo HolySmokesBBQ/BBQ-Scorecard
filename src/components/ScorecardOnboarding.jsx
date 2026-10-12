@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useAppContext } from '../context/AppContext.jsx';
 import { track } from '../scoring.js';
+import { belowTop, aboveBottom } from '../safeArea.js';
 
 const ACCENT = '#d4782f';
 const ACCENT_DIM = '#a85e22';
@@ -43,6 +44,7 @@ export default function ScorecardOnboarding({ onDismiss }) {
       background: 'rgba(10, 10, 10, 0.97)',
       display: 'flex', flexDirection: 'column',
       padding: '24px',
+      paddingTop: belowTop('24px'), paddingBottom: aboveBottom('24px'),
     }}>
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
         <button onClick={() => dismiss('skip')}

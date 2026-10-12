@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { track } from '../scoring.js';
+import { belowTop } from '../safeArea.js';
 
 // Right-slide navigation drawer for BBQ Scorecard (NAV_V2).
 //
@@ -67,7 +68,8 @@ export default function NavDrawer({ open, onClose, groups, onSelect, onAbout, S,
         {/* Header row */}
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '18px 18px 14px', borderBottom: `1px solid ${S.border}`,
+          padding: '18px 18px 14px', paddingTop: belowTop('18px'),
+          borderBottom: `1px solid ${S.border}`,
         }}>
           <span style={{
             fontFamily: "'Oswald', sans-serif", fontSize: 16, fontWeight: 700,

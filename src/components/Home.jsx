@@ -12,6 +12,7 @@ import {
   loadMyCloudReviews, mergeReviews, syncReviewsUp,
 } from '../firebaseSync.js';
 import { saveLocal } from '../storage.js';
+import { aboveBottom } from '../safeArea.js';
 
 export default function Home() {
   const {
@@ -550,7 +551,7 @@ export default function Home() {
       {/* FAB — Add a new review. Notebook removed in v3.1.12 so this
           always starts a new restaurant review. */}
       <button onClick={startNew} style={{
-        position: 'fixed', bottom: '24px', right: '24px', width: '56px', height: '56px',
+        position: 'fixed', bottom: aboveBottom('24px'), right: '24px', width: '56px', height: '56px',
         borderRadius: '50%', background: S.accent, color: '#fff', border: 'none',
         fontSize: '28px', fontWeight: '700', cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
