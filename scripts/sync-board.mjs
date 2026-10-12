@@ -14,12 +14,13 @@
 
 import { existsSync, mkdirSync, cpSync, rmSync, writeFileSync, unlinkSync, readdirSync, statSync } from 'node:fs';
 import { resolve, join, extname } from 'node:path';
-import { TESSERACT_KEEP } from './board-native-assets.mjs';
+import { TESSERACT_KEEP, BOARD_NATIVE_PLUGINS } from './board-native-assets.mjs';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const SOURCE = join(ROOT, 'dist-board-native');
 const TARGET_PUBLIC = join(ROOT, 'android-board', 'app', 'src', 'main', 'assets', 'public');
 const TARGET_CONFIG = join(ROOT, 'android-board', 'app', 'src', 'main', 'assets', 'capacitor.config.json');
+const TARGET_PLUGINS = join(ROOT, 'android-board', 'app', 'src', 'main', 'assets', 'capacitor.plugins.json');
 
 if (!existsSync(SOURCE)) {
   console.error('ERROR: dist-board-native/ not found. Run `npm run build:board-native` first.');
@@ -115,6 +116,16 @@ const capConfig = {
 };
 
 writeFileSync(TARGET_CONFIG, JSON.stringify(capConfig, null, 2));
+
+// Capacitor's Android bridge registers only the plugins listed here. Stock
+// `npx cap sync` writes this file; Board's custom sync never did, so the
+// gitignored copy went stale (it listed app-check after the build dropped
+// it, and never listed filesystem/share, so Report a problem's native share
+// silently fell back to a mailto draft). Written from the same list the
+// gradle includes are tested against (src/board/nativePlugins.test.js).
+writeFileSync(TARGET_PLUGINS, JSON.stringify(BOARD_NATIVE_PLUGINS, null, '	') + '
+');
+console.log(`  + wrote ${TARGET_PLUGINS} (${BOARD_NATIVE_PLUGINS.length} plugins)`);
 console.log(`  + wrote ${TARGET_CONFIG}`);
 
 console.log('Done.');

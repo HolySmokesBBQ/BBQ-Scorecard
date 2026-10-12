@@ -82,3 +82,19 @@ export function pruneBoardNative(outDir, publicDir) {
   }
   return removed;
 }
+
+// Capacitor plugins compiled into Board's Android build. Must match the
+// includes in android-board/capacitor.settings.gradle and
+// android-board/app/capacitor.build.gradle, which nothing regenerates;
+// sync-board.mjs writes the bridge registry (capacitor.plugins.json) from
+// this list. src/board/nativePlugins.test.js fails if Board's code imports a
+// plugin that isn't here, or the gradle files disagree with it. The missing
+// direction is the silent one: every call site falls back quietly.
+export const BOARD_NATIVE_PLUGINS = [
+  { pkg: '@capacitor-firebase/analytics', classpath: 'io.capawesome.capacitorjs.plugins.firebase.analytics.FirebaseAnalyticsPlugin' },
+  { pkg: '@capacitor-firebase/authentication', classpath: 'io.capawesome.capacitorjs.plugins.firebase.authentication.FirebaseAuthenticationPlugin' },
+  { pkg: '@capacitor-firebase/crashlytics', classpath: 'io.capawesome.capacitorjs.plugins.firebase.crashlytics.FirebaseCrashlyticsPlugin' },
+  { pkg: '@capacitor/app', classpath: 'com.capacitorjs.plugins.app.AppPlugin' },
+  { pkg: '@capacitor/filesystem', classpath: 'com.capacitorjs.plugins.filesystem.FilesystemPlugin' },
+  { pkg: '@capacitor/share', classpath: 'com.capacitorjs.plugins.share.SharePlugin' },
+];
