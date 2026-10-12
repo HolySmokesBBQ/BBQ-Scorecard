@@ -11,6 +11,7 @@
 import { test, expect } from 'vitest';
 import { readFileSync, existsSync, statSync, readdirSync } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { BOARD_NATIVE_PLUGINS } from '../../scripts/board-native-assets.mjs';
 
 const ROOT = resolve(__dirname, '../..');
@@ -57,6 +58,15 @@ test('app/capacitor.build.gradle implements exactly the listed plugins', () => {
   const impl = [...read('android-board/app/capacitor.build.gradle').matchAll(/implementation project\(':(capacitor-[\w-]+)'\)/g)]
     .map(m => m[1]).sort();
   expect(impl).toEqual(listed.map(gradleName).sort());
+});
+
+// No test imports the build scripts, so a syntax error in one passed the
+// whole suite and only surfaced when the queue rebuild ran sync (d3d6412
+// shipped a raw tab/newline inside a string literal in sync-board.mjs).
+test("Board's build scripts parse", () => {
+  for (const f of ['scripts/sync-board.mjs', 'scripts/board-native-assets.mjs', 'vite.config.native.board.js']) {
+    expect(() => execFileSync(process.execPath, ['--check', resolve(ROOT, f)], { stdio: 'pipe' }), f).not.toThrow();
+  }
 });
 
 test('each listed plugin is installed and its classpath names a real plugin class', () => {

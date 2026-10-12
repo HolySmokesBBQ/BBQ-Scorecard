@@ -123,8 +123,7 @@ writeFileSync(TARGET_CONFIG, JSON.stringify(capConfig, null, 2));
 // it, and never listed filesystem/share, so Report a problem's native share
 // silently fell back to a mailto draft). Written from the same list the
 // gradle includes are tested against (src/board/nativePlugins.test.js).
-writeFileSync(TARGET_PLUGINS, JSON.stringify(BOARD_NATIVE_PLUGINS, null, '	') + '
-');
+writeFileSync(TARGET_PLUGINS, JSON.stringify(BOARD_NATIVE_PLUGINS, null, 2) + String.fromCharCode(10));
 console.log(`  + wrote ${TARGET_PLUGINS} (${BOARD_NATIVE_PLUGINS.length} plugins)`);
 console.log(`  + wrote ${TARGET_CONFIG}`);
 
