@@ -137,12 +137,21 @@
     * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
     html { background: #1a1a1a; min-height: 100%; }
     body { background: #1a1a1a; color: #f5e6d3; font-family: 'Inter', sans-serif; min-height: 100vh; }
-    /* iOS safe area: viewport-fit=cover above lets the app draw edge-to-edge,
-       and this padding keeps the header out from under the iPhone notch and
-       the bottom UI out from under the home indicator. Both env() values are
-       0 on browsers/devices that don't expose insets, so this is safe on web
-       and Android too. */
-    #root { min-height: 100vh; padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
+    /* Safe area. viewport-fit=cover lets the app draw edge-to-edge; these
+       insets keep content out from under the status bar / notch and the
+       navigation bar / home indicator.
+       iOS reports them through env(). Android 15+ forces edge-to-edge (Board
+       targets SDK 36), and there Capacitor's SystemBars sets
+       --safe-area-inset-* on <html> because Android WebView's env() can read
+       0. Board read only env(), so on a new Android phone the menu button sat
+       under the status bar (Joel, 2026-10-13). Take whichever is larger; both
+       are 0 where a platform has no insets. Use --sa-top / --sa-bottom for
+       anything positioned against the screen edges. */
+    :root {
+      --sa-top: max(var(--safe-area-inset-top, 0px), env(safe-area-inset-top, 0px));
+      --sa-bottom: max(var(--safe-area-inset-bottom, 0px), env(safe-area-inset-bottom, 0px));
+    }
+    #root { min-height: 100vh; padding-top: var(--sa-top); padding-bottom: var(--sa-bottom); }
     input, textarea, select, button { font-family: 'Inter', sans-serif; }
 
     .bbq-container-wide { max-width: 720px; margin: 0 auto; padding: 0; }

@@ -41,7 +41,7 @@ export default function BoardHamburger({ currentView, onNavigate, onAbout }) {
         aria-label="Open menu"
         style={{
           position: 'fixed',
-          top: 'calc(env(safe-area-inset-top, 0px) + 10px)',
+          top: 'calc(var(--sa-top, 0px) + 10px)',
           right: '14px',
           zIndex: 900,
           background: PAL.panel,
@@ -77,8 +77,8 @@ export default function BoardHamburger({ currentView, onNavigate, onAbout }) {
               borderLeft: `1px solid ${PAL.border}`,
               zIndex: 3000,
               display: 'flex', flexDirection: 'column',
-              paddingTop: 'env(safe-area-inset-top, 0px)',
-              paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+              paddingTop: 'var(--sa-top, 0px)',
+              paddingBottom: 'var(--sa-bottom, 0px)',
               boxShadow: '-4px 0 24px rgba(0,0,0,0.4)',
             }}
           >
