@@ -7,7 +7,7 @@ import {
 } from 'firebase/auth';
 import {
   doc, setDoc, getDoc, getDocs, collection,
-  query, where, writeBatch, deleteDoc,
+  query, where, writeBatch, deleteDoc, deleteField,
 } from 'firebase/firestore';
 import {
   ref as storageRef, uploadString, getDownloadURL, deleteObject, listAll,
@@ -66,6 +66,16 @@ function stripForFirestore(review) {
      localStorage). Photos can only be modified through the explicit save
      flow which uploads first.
 */
+// loadMyCloudReviews() tags each loaded review with `_docId`. A June 2026
+// build wrote that tag back into the cloud, and because the reviews rule only
+// allows whitelisted keys and every write here uses { merge: true }, the
+// stored `_docId` rode along on each later write and got it refused. On 4.3.0
+// those refusals sank the whole batch, so nothing synced (a review saved on
+// 2026-10-01 never reached the cloud). Deleting the field on every write
+// heals a poisoned doc on its next sync. stripForFirestore() already keeps
+// the local tag out; this removes the stored one.
+const CLEAR_STRAY_FIELDS = () => ({ _docId: deleteField() });
+
 function prepForFirestoreFull(review, userId) {
   const { photo, photos, ...rest } = stripForFirestore(review);
   const cloudPhotos = (photos || []).filter(p => typeof p === 'string' && p.startsWith('https://'));
@@ -76,6 +86,7 @@ function prepForFirestoreFull(review, userId) {
     syncedAt: new Date().toISOString(),
     photo: cloudPhotos[0] || null,
     photos: cloudPhotos,
+    ...CLEAR_STRAY_FIELDS(),
   };
 }
 
@@ -86,6 +97,7 @@ function prepForFirestoreMetadata(review, userId) {
     userId,
     restaurantKey: restaurantKey(review.restaurant, review.location),
     syncedAt: new Date().toISOString(),
+    ...CLEAR_STRAY_FIELDS(),
   };
 }
 
