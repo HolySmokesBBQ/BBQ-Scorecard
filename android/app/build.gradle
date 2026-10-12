@@ -1,0 +1,132 @@
+apply plugin: 'com.android.application'
+
+// ─────────────────────────────────────────────────────────────
+// Release signing config. Reads credentials from
+// `android/keystore.properties` (gitignored). When the file is
+// missing — e.g. a fresh clone before the developer has set up
+// signing — release builds fall through to a debug-signed AAB,
+// which is dev-only and must never be shipped.
+//
+// Schema of keystore.properties (see ../keystore.properties.template):
+//   storeFile=<path relative to android/app/>
+//   storePassword=<keystore password>
+//   keyAlias=<key alias>
+//   keyPassword=<key password>
+// ─────────────────────────────────────────────────────────────
+def keystorePropsFile = rootProject.file("keystore.properties")
+def keystoreProps = new Properties()
+if (keystorePropsFile.exists()) {
+    keystorePropsFile.withReader('UTF-8') { keystoreProps.load(it) }
+}
+
+android {
+    namespace = "com.holysmokesbbq.scorecard"
+    compileSdk = rootProject.ext.compileSdkVersion
+    defaultConfig {
+        applicationId "com.holysmokesbbq.scorecard"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode 4401
+        versionName "4.4.1"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    signingConfigs {
+        if (keystorePropsFile.exists()) {
+            release {
+                // Resolve storeFile relative to rootProject (the `android/`
+                // directory) rather than this module (`android/app/`). That
+                // matches where keystore.properties lives, so paths in it
+                // read naturally to a human looking at the file.
+                storeFile rootProject.file(keystoreProps['storeFile'])
+                storePassword keystoreProps['storePassword']
+                keyAlias keystoreProps['keyAlias']
+                keyPassword keystoreProps['keyPassword']
+            }
+        }
+    }
+    buildTypes {
+        release {
+            // Code shrinking + obfuscation via R8. Pairs with the Crashlytics
+            // Gradle plugin which auto-uploads the resulting mapping.txt
+            // so the Crashlytics dashboard can deobfuscate stack traces.
+            // The mapping file is also bundled into the AAB metadata, so
+            // Play Console picks it up automatically on upload.
+            minifyEnabled true
+            shrinkResources true
+            // Use the *optimize* default ProGuard rules — same safety as
+            // the stock ones plus inlining + dead-code elimination.
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            // Only wire the release signingConfig if it exists. Otherwise
+            // Gradle falls back to the debug key (well-known, must not ship).
+            if (keystorePropsFile.exists()) {
+                signingConfig signingConfigs.release
+            }
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+// After bundleRelease finishes, copy the signed AAB to the
+// canonical resting place under BBQ-Scorecard-Android/ with a
+// version-stamped filename like "BBQ Scorecard-signed-v3.1.5.aab".
+// Building this way preserves an archive of every release on
+// disk — each new build adds a new file rather than overwriting
+// the previous one, so rollback to any prior version is just
+// "upload the file with that version in its name."
+// Skipped if the release wasn't actually signed with the
+// production key (no keystore.properties on this machine).
+// ─────────────────────────────────────────────────────────────
+tasks.register('copyReleaseBundle', Copy) {
+    dependsOn 'bundleRelease'
+    from layout.buildDirectory.file('outputs/bundle/release/app-release.aab')
+    into rootProject.file('../BBQ-Scorecard-Android')
+    def versionName = android.defaultConfig.versionName
+    rename { "BBQ Scorecard-signed-v${versionName}.aab" }
+    onlyIf { keystorePropsFile.exists() }
+    doLast {
+        logger.lifecycle("Signed AAB archived to: ../BBQ-Scorecard-Android/BBQ Scorecard-signed-v${versionName}.aab")
+    }
+}
+
+// Make `./gradlew bundleRelease` automatically copy the result.
+tasks.matching { it.name == 'bundleRelease' }.configureEach {
+    finalizedBy 'copyReleaseBundle'
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+}
+
+apply from: 'capacitor.build.gradle'
+
+try {
+    def servicesJSON = file('google-services.json')
+    if (servicesJSON.text) {
+        apply plugin: 'com.google.gms.google-services'
+        // Crashlytics depends on the Google Services plugin being applied
+        // first (it reads project IDs from google-services.json). Only
+        // apply if we successfully loaded the services file.
+        apply plugin: 'com.google.firebase.crashlytics'
+    }
+} catch(Exception e) {
+    logger.info("google-services.json not found, google-services + crashlytics plugins not applied. Push Notifications and crash reporting won't work")
+}
