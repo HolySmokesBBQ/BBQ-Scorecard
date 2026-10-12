@@ -21,6 +21,12 @@ import { resolve } from 'node:path';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const publish = process.argv.includes('--publish');
+// --only=scorecard|notebook|board limits the run to one policy. Each app's
+// policy publishes on ITS OWN day (the later of its two store releases), so
+// a publish without --only would push the other two early.
+const only = (process.argv.find(a => a.startsWith('--only=')) || '--only=').split('=')[1].toLowerCase();
+if (only && !['scorecard', 'notebook', 'board'].includes(only)) throw new Error('--only must be scorecard, notebook or board');
+if (publish && !only) throw new Error('--publish needs --only=<app>: policies go live one app at a time');
 const md = readFileSync(resolve(ROOT, 'docs/legal/PRIVACY-POLICY-DRAFTS-2026-09-29.md'), 'utf8').replace(/\r\n/g, '\n');
 
 const POLICIES = [
@@ -107,6 +113,7 @@ const outDir = publish ? resolve(ROOT, 'public') : resolve(ROOT, 'docs/legal/sta
 mkdirSync(outDir, { recursive: true });
 
 for (const p of POLICIES) {
+  if (only && p.key !== only) continue;
   const src = readFileSync(resolve(ROOT, 'public', p.page), 'utf8');
   const crlf = src.includes('\r\n');
   const s = src.replace(/\r\n/g, '\n');
