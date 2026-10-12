@@ -141,13 +141,14 @@
     /* Keep app content below the status bar / notch on both platforms. The
        theme layer sets #root's background to the current theme, so this
        padded strip matches the screen — no off-color band.
-       Lookup order: --safe-area-top is a dev override hook (set it in the
-       browser preview to simulate a notch). --safe-area-inset-top is the
-       real status-bar height that Capacitor's SystemBars injects on Android
-       15+ when the page uses viewport-fit=cover; Android WebViews don't
-       reliably fill env() there, which put the menu button under the status
-       bar (2026-10-12). env() is what iOS fills in. */
-    #root { min-height: 100vh; padding-top: var(--safe-area-top, var(--safe-area-inset-top, env(safe-area-inset-top, 0px))); }
+       --safe-area-top is a dev override hook (set it in the browser preview
+       to simulate a notch). Otherwise: the larger of --safe-area-inset-top,
+       the real status-bar height Capacitor's SystemBars injects on Android
+       15+ when the page uses viewport-fit=cover, and env(), which iOS fills
+       in. Android WebViews don't reliably fill env() there, which put the
+       menu button under the status bar (2026-10-12). Same expression as
+       SAFE_TOP in src/safeArea.js; keep them in step. */
+    #root { min-height: 100vh; padding-top: var(--safe-area-top, max(var(--safe-area-inset-top, 0px), env(safe-area-inset-top, 0px))); }
     input, textarea, select, button { font-family: 'Inter', sans-serif; }
   </style>
 </head>

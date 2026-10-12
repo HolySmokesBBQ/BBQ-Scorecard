@@ -13,12 +13,9 @@ import { SAFE_TOP, SAFE_BOTTOM, belowTop, aboveBottom } from './safeArea.js';
 const ROOT = resolve(__dirname, '..');
 const read = (p) => readFileSync(resolve(ROOT, p), 'utf8');
 
-test("the lookup reads Capacitor's injected variable before env()", () => {
-  const order = (s) => ['--safe-area-top', '--safe-area-inset-top', 'env(safe-area-inset-top'].map((k) => s.indexOf(k));
-  const [dev, cap, env] = order(SAFE_TOP);
-  expect(dev).toBeGreaterThanOrEqual(0);
-  expect(cap).toBeGreaterThan(dev);
-  expect(env).toBeGreaterThan(cap);
+test("the inset is the larger of Capacitor's injected variable and env()", () => {
+  expect(SAFE_TOP).toBe('var(--safe-area-top, max(var(--safe-area-inset-top, 0px), env(safe-area-inset-top, 0px)))');
+  expect(SAFE_BOTTOM).toBe('var(--safe-area-bottom, max(var(--safe-area-inset-bottom, 0px), env(safe-area-inset-bottom, 0px)))');
   expect(SAFE_BOTTOM).toContain('--safe-area-inset-bottom');
   expect(belowTop('10px')).toBe(`calc(${SAFE_TOP} + 10px)`);
   expect(aboveBottom('24px')).toBe(`calc(${SAFE_BOTTOM} + 24px)`);
