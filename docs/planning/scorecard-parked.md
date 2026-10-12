@@ -8,7 +8,7 @@ trigger has fired and the step is done.
 
 | Waiting | Trigger | Then |
 |---|---|---|
-| 4.4.0 Android Open + Production | Google approves Closed (Alpha) 4400, submitted 2026-10-12 | Promote to Open (track paused on purpose) and Production 100% in ONE submission, with any Data safety fix the auditor rules on (Crash logs/Diagnostics marked optional though Crashlytics has no off switch). Then iOS 4.4.0 (16) from a side branch; release-day: Apple User-ID label revisit, consent re-prompt verified. |
+| 4.4.0 Android Open + Production | Google approves Closed (Alpha) 4400, submitted 2026-10-12 | Promote to Open (track paused on purpose) and Production 100% in ONE submission. (Data safety fix, Crash logs/Diagnostics to required, already submitted 2026-10-12 alongside Closed.) Then iOS 4.4.0 (16) from a side branch; release-day: Apple User-ID label revisit, consent re-prompt verified. |
 
 ## Requirements for the per-app consent versions (before building)
 
