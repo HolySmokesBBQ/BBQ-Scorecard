@@ -80,7 +80,6 @@ const sharedAssets = [
   'sitemap.xml',
   'robots.txt',
   'gtm-init.js',
-  'brand-font.js', // consent-aware Adobe Fonts loader; unhashed, no-cache header in netlify.toml
   'site.css',      // shared stylesheet for /, /pit, /episodes, /about; *.css is immutable, so bump ?v= on change
   'lightbox.js',   // /pit gallery dialog; external because CSP script-src has no 'unsafe-inline'; bump ?v= on change
   // SEO / verification files

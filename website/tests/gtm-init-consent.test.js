@@ -121,7 +121,8 @@ describe('banner display', () => {
   it('banner copy has the approved text, a privacy link, and no banned words', () => {
     const { banner } = run({ cookie: 'hs_geo=eu' });
     const text = allText(banner);
-    expect(text).toContain('We use Google Analytics to see which pages get used, and Adobe to load our brand font.');
+    expect(text).toContain('We use Google Analytics to see which pages get used.');
+    expect(text).not.toContain('Adobe');
     expect(text).toContain('Say no and everything still works the same.');
     expect(text.toLowerCase()).not.toContain('anonymous');
     expect(text.toLowerCase()).not.toContain('never');

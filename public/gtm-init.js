@@ -62,7 +62,7 @@ if (typeof window !== 'undefined' && /\.netlify\.app$/i.test(window.location.hos
 // grant is demonstrable under GDPR Art. 7(1)) is re-applied on every page
 // load as a consent update, before config. A choice recorded against an
 // older consentTextVersion is treated as unanswered: the wording changed
-// (it now covers the Adobe font load), so EEA visitors are asked again. Keep EEA_UK_CH in sync with the
+// (2026-10-01 it grew an Adobe font clause; 2026-10-12 that clause left again). Keep EEA_UK_CH in sync with the
 // edge function.
 window.dataLayer = window.dataLayer || [];
 function gtag() { dataLayer.push(arguments); }
@@ -75,7 +75,7 @@ var EEA_UK_CH = [
 var CONSENT_KEY = 'hs-consent-v1';
 // Bump when the banner wording changes, so a stored grant can be tied to
 // the exact text the visitor saw.
-var CONSENT_TEXT_VERSION = '2026-10-01'; // 2026-10-01: banner now also covers the Adobe font load (L-8)
+var CONSENT_TEXT_VERSION = '2026-10-01'; // 2026-10-12: Adobe clause removed again (font is self-hosted now); version kept, a shorter disclosure needs no re-ask
 
 gtag('consent', 'default', {
   analytics_storage: 'denied',
@@ -144,7 +144,7 @@ function _showConsentBanner() {
   wrap.setAttribute('aria-label', 'Analytics consent');
   var inner = el('div', 'max-width:720px;margin:0 auto;display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between');
   var text = el('p', 'margin:0;flex:1 1 320px');
-  text.textContent = 'We use Google Analytics to see which pages get used, and Adobe to load our brand font. Say no and everything still works the same. ';
+  text.textContent = 'We use Google Analytics to see which pages get used. Say no and everything still works the same. ';
   var link = el('a', 'color:#d4a64a;text-decoration:underline', 'Privacy policy');
   link.id = 'hs-consent-privacy';
   link.href = _privacyHref(_gaCfg.group);
@@ -163,7 +163,7 @@ function _showConsentBanner() {
       if (e && e.preventDefault) e.preventDefault();
       _writeConsent(choice);
       _applyConsent(choice);
-      // brand-font.js listens for this and loads the Adobe kit on a grant.
+      // Kept for any page script that wants to react to a choice (nothing listens today; the Adobe loader is gone).
       try { window.dispatchEvent(new CustomEvent('hs-consent', { detail: { choice: choice } })); } catch (e) {}
       gtag('event', 'consent_choice', { choice: choice, content_group: _gaCfg.group });
       wrap.remove();

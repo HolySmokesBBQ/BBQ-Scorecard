@@ -30,7 +30,7 @@ never call the smoker an offset; Peyton's name and face never appear; no
 exterior shots of the house. Anything drafted in Joel's name runs humanize,
 then joel, then antislop.
 
-Dial: ENERGY 2 / RHYTHM 2 / MOTION 2
+Dial: ENERGY 2 / RHYTHM 2 / MOTION 2 (logos: the 2026 Burnt Ends set from Marketing; the leaf-flame 2025 badge is retired, archive only)
 Impeccable mode: Persuade (homepage), Read (SEO and legal pages)
 
 Photo-led since 2026-10-01 (Joel: "make it as eye-catching as the light
@@ -89,39 +89,37 @@ reads as one surface. The app shells (/scorecard/, /notebook/, /board/)
 carry their own themes and are not in scope of this file's palette.
 
 ## 3. Typography Rules
-Decided 2026-10-01: Thornwood VF (Swell Type), the locked brand face
-(`marketing/brand-type-system.md`), served by the Adobe Fonts web project
-Joel created (`https://use.typekit.net/rrv8ywt.css`, family name
-`thornwood-vf`, wght 200–900; the wdth axis 50–100 is driven with
-`font-variation-settings`, verified live). One family, four roles:
+Decided 2026-10-12 (Joel, via Marketing's BRAND-UPDATE-2026-10-12.md): **Burnt
+Ends**, the house face that letters the logos, replaces Thornwood everywhere.
+Two cuts, self-hosted from `public/fonts/burnt-ends-inline.woff2` and
+`burnt-ends-solid.woff2` (`@font-face` in `public/site.css` and inline on the
+compliance and SEO pages). No Adobe kit, no third-party font host, no font
+consent gate; the L-8 gate and `brand-font.js` are retired. One weight (400):
+never let the browser synthesize bold or italic on it.
 
-- Display: XTall UltraBold, `'wdth' 50` / 900, ALL CAPS, tracking 0. h1
-  `clamp(56px, 10vw, 112px)` line-height 0.95; card h2 30px (lead 38px);
-  section h2 34px; compliance-page h1 40px, h2 24px.
-- Subheads: Tall Bold, `'wdth' 75` / 700, sentence case: h3, FAQ questions,
-  buttons (16px, tracking 0.02em).
-- Body: Tall Regular, `'wdth' 75` / 400: 17px / 1.5 on the homepage and
-  compliance pages (story 18px), 18px on the light SEO pages. The brand's
-  1.3 line height is for cards; long web paragraphs get 1.5.
-- Meta: Regular-width Medium, `'wdth' 100` / 500, ALL CAPS, tracking 0.2em:
-  the slogan, "FOLLOW ALONG", footer rows (0.08em there).
-- Numbers: Tall UltraBold, `'wdth' 75` / 900, reserved for prices and
-  figures; not yet used on the homepage.
+Burnt Ends is an **all-caps face**: lowercase glyphs render as capitals. That
+sets the roles. It is for display, headings, buttons and labels; paragraph
+text is Inter (self-hosted, as before), because 17px body copy in capitals
+is not readable.
 
-Oswald and Inter remain as self-hosted fallbacks in every stack, so a
-blocked or failed Typekit load still renders the previous design. The role
-TTFs in `marketing/fonts/` are never uploaded to the site. The app shells
-(/scorecard/, /notebook/, /board/) keep their own type; they are not on this
-kit. Adobe's kit CSS ships `font-display: auto`; the web project's Display
-setting should be "swap" (set in the Adobe Fonts project UI) to avoid a
-blank-text flash on slow loads.
+- Display: Burnt Ends Inline (the cut with the drawn highlight, which only
+  reads at about 34px and up): hero h1 `clamp(60px, 11vw, 124px)`, inner-page
+  masthead h1, band h2 (38px, 46px from 600px), lead app-card h2 38px, the
+  SEO-section h2 34px, the Board price number. Tracking 0.01em on the h1s.
+- Headings and UI: Burnt Ends Solid, 400: card h2 30px, lead-card and tile
+  h3, news h3, FAQ questions, buttons (16 to 17px), nav links, the slogan,
+  meta labels (12 to 13px, tracking 0.14 to 0.2em), figcaptions, footer.
+- Body: Inter 400: 17px / 1.5 on the homepage and compliance pages (story
+  19px / 1.55), 18px on the light SEO pages, 16px card copy.
+- Store buttons keep Inter at 12px (they imitate the store badges).
 
-Scale: h1 `clamp(40px, 6vw, 64px)` line-height 1.05; card lead h2 26px;
-card h2 22px; section h2 24px; h3 18px; body 16px line-height 1.65; story
-17px line-height 1.7 at max 68ch; card copy 15px; FAQ answers 16px; footer
-13px. Headings `text-wrap: balance`. Sentence case everywhere except the
-Oswald display elements; the slogan "Faith, Family, and Fire" keeps its title
-case because it is a name.
+Oswald and Inter remain as fallbacks in every stack. Burnt Ends covers basic
+Latin only (no accented characters); keep copy to that set or the fallback
+takes over mid-word.
+
+Scale: unchanged from the Thornwood era (sizes above). Headings
+`text-wrap: balance`. Capitals come from the face, not from
+`text-transform`, so copy is still written in sentence case in the HTML.
 
 ## 4. Component Stylings
 Buttons: Oswald 700 14px, 12px 24px padding, 8px radius, app color fill,

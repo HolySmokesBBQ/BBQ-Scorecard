@@ -130,9 +130,9 @@
     # - style-src still allows 'unsafe-inline' — React's style={{...}} props
     #   compile to inline style attributes used throughout the app. Lower
     #   risk than script unsafe-inline (CSS-based XSS is much harder).
-    # - style-src/font-src allow Adobe Fonts (Typekit) for Thornwood VF, the
+    # - style-src/font-src: no third-party font hosts since 2026-10-12
     #   brand face, via the web project Joel created 2026-10-01
-    #   (use.typekit.net serves the CSS + woff2; p.typekit.net is the
+    #   (Adobe Typekit entries removed 2026-10-12: the brand font is self-hosted now)
     #   licensing pixel CSS the kit @imports). Website pages only load it.
     # - img-src uses https: (any https origin) to cover Firebase Storage
     #   download URLs which include short-lived tokens in query strings.
@@ -140,8 +140,8 @@
       default-src 'self';
       script-src 'self' 'wasm-unsafe-eval' blob: https://www.googletagmanager.com https://*.googleapis.com https://apis.google.com https://www.gstatic.com https://www.google.com https://*.firebaseapp.com https://cdn.jsdelivr.net;
       worker-src 'self' blob:;
-      style-src 'self' 'unsafe-inline' https://use.typekit.net https://p.typekit.net;
-      font-src 'self' data: https://use.typekit.net;
+      style-src 'self' 'unsafe-inline';
+      font-src 'self' data:;
       img-src 'self' data: blob: https:;
       connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firebaseappcheck.googleapis.com https://*.firebasestorage.app https://firebasestorage.googleapis.com https://accounts.google.com https://api.weather.gov https://nominatim.openstreetmap.org https://overpass-api.de https://*.tile.openstreetmap.org https://*.google-analytics.com https://*.analytics.google.com https://www.googletagmanager.com https://www.google.com https://cdn.jsdelivr.net https://tessdata.projectnaptha.com;
       frame-src https://*.firebaseapp.com https://accounts.google.com https://www.googletagmanager.com https://www.google.com;
@@ -276,10 +276,6 @@
   [headers.values]
     Cache-Control = "no-cache"
 
-[[headers]]
-  for = "/brand-font.js"
-  [headers.values]
-    Cache-Control = "no-cache"
 
 [[headers]]
   for = "/gtm-init.js"
