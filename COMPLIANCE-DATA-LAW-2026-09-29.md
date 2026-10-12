@@ -68,7 +68,7 @@ Standing memory: Notebook and Board likely still carry the Data Safety analytics
 | Gate | Item | Owner | Status |
 |---|---|---|---|
 | **Before enabling any EEA/UK availability** | L-1 consent (web + native) | Website + 3 app sessions | **Web LIVE 2026-09-29** (EEA/UK/CH denied-by-default, banner, versioned record; one open low-residual item: EEA-IP spot check of Google's region default). **Scorecard native built** (rides 4.3.0); Notebook/Board adoptions sequenced |
-| **Before enabling any EEA/UK availability** | L-3 policies | Overseer drafts → Website publishes | **Drafts committed** (docs/legal/); publish waits ONLY on Joel's two bracketed decisions |
+| **Before enabling any EEA/UK availability** | L-3 policies | Overseer drafts → Website publishes | **SCORECARD POLICY LIVE 2026-10-12** (rev 6, later-of-both gate fired: Android 4.3.0 Production 178 countries + iOS 4.3.0 released same day; live-verified sentence-by-sentence, zero em dashes, correct date). Scorecard is the suite's first fully-closed app: consent-first live on both platforms with its accurate policy published the same day. Notebook and Board staged for their own release days; the publish script now refuses to run without --only=<app>, so no policy can go early by accident. |
 | First release after | L-2 profile split | Overseer spec → sessions | not started |
 | First release after | L-5 declarations re-check | app sessions + Overseer console pass | partially (Scorecard done) |
 | Normal cadence | L-4 deletion ops, L-6 userId | Overseer / Board | L-4 promises now true |
