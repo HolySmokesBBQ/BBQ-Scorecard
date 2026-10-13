@@ -8,7 +8,7 @@ trigger has fired and the step is done.
 
 | Waiting | Trigger | Then |
 |---|---|---|
-| 4.4.0 Android Open + Production | Google approves Closed (Alpha) 4400, submitted 2026-10-12 | Promote to Open (track paused on purpose) and Production 100% in ONE submission. (Data safety fix, Crash logs/Diagnostics to required, already submitted 2026-10-12 alongside Closed.) Then iOS 4.4.0 (16) from a side branch; release-day: Apple User-ID label revisit, consent re-prompt verified. |
+| 4.4.0 Android Production + Open (submitted 2026-10-12 evening) | Google approves (Production track shows 4400 live) | Then iOS 4.4.0 (16) from a side branch. Release day: Apple User-ID label revisit, consent re-prompt verified. Photos: billing re-enable is with the auditor; once confirmed, verify a real upload plus the repair loop. |
 | 4.4.1 (4401) rebuild | Auditor grants the gradle slot (queue 2026-10-12: Board 2.4.7, Notebook, then Scorecard). Drain the message backlog first. | ONE bundleRelease from HEAD (Burnt Ends icons 82ea033, _docId heal e2b42dc, safe area 82648c6+dec90f4). Order: build:native, then cap sync ALONE, then verify cordova.variables.gradle, then the process table, then gradle. Verify version 4401, the icons by pixel diff, safeArea/max() and deleteField in the bundle. The 4.4.1 AAB on disk is stale; overwrite it. |
 
 ## Requirements for the per-app consent versions (before building)
