@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAppContext } from '../context/AppContext.jsx';
 import { track, exportCSV } from '../scoring.js';
 import {
@@ -6,7 +6,7 @@ import {
   getIncomingFriendRequests, removeFriendConnection, getFriendsList,
   firebaseSignOut,
 } from '../firebaseSync.js';
-import { sendProblemReport } from '../diagnostics.js';
+import { sendProblemReport, nativeAppVersion } from '../diagnostics.js';
 import Avatar from './Avatar.jsx';
 import EmailSignInBox from './EmailSignInBox.jsx';
 import AboutScreen from './AboutScreen.jsx';
@@ -35,6 +35,17 @@ export default function Settings() {
   const [showAbout, setShowAbout] = useState(false);
   const importRef = useRef(null);
   const consentRec = useConsent();
+
+  // The installed version, read from Android/iOS. Scorecard showed no
+  // version anywhere, so checking whether a phone had taken an update meant
+  // digging through App info (2026-10-12). Hidden on the web, where there
+  // is no native version to read.
+  const [appVersion, setAppVersion] = useState(null);
+  useEffect(() => {
+    let live = true;
+    nativeAppVersion(null).then((v) => { if (live && v && v !== 'unknown') setAppVersion(v); });
+    return () => { live = false; };
+  }, []);
 
   const Section = ({ label, children }) => (
     <div style={{ marginBottom: 22 }}>
@@ -260,6 +271,12 @@ export default function Settings() {
           )}
         </div>
       </Section>
+
+      {appVersion && (
+        <div style={{ textAlign: 'center', fontSize: 11, color: S.muted, letterSpacing: 1, margin: '-6px 0 18px' }}>
+          BBQ Scorecard {appVersion}
+        </div>
+      )}
 
       {showAbout && <AboutScreen onClose={() => setShowAbout(false)} />}
     </div>
