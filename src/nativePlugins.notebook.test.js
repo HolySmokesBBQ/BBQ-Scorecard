@@ -52,6 +52,20 @@ function importedCapacitorPlugins() {
   return [...pkgs].sort();
 }
 
+// assets/capacitor.plugins.json is a generated build artifact and gitignored
+// (it lives beside the copied web bundle), so a fresh clone has none until
+// `npm run sync:notebook` runs. Returning null lets the registry tests pass
+// on a clean checkout instead of going red for a missing artifact. That is
+// safe because the registry is also checked at build time: the pre-gradle
+// verification step reads it, and the build flow is always sync -> verify ->
+// gradle. If you are debugging a plugin problem and these tests look quiet,
+// run the sync first.
+const REGISTRY = 'android-notebook/app/src/main/assets/capacitor.plugins.json';
+function readRegistry() {
+  if (!existsSync(resolve(ROOT, REGISTRY))) return null;
+  return JSON.parse(read(REGISTRY));
+}
+
 const listed = NOTEBOOK_NATIVE_PLUGINS.map((p) => p.pkg).sort();
 const listedGradle = NOTEBOOK_NATIVE_PLUGINS.map((p) => gradleName(p.pkg)).sort();
 
@@ -87,6 +101,74 @@ test('app/capacitor.build.gradle implements exactly the listed plugins', () => {
     .map((m) => m[1])
     .sort();
   expect(impl).toEqual(listedGradle);
+});
+
+test('the plugin registry matches the manifest exactly', () => {
+  // THE leg that was broken, and the one the gradle checks cannot see.
+  // assets/capacitor.plugins.json is what Capacitor actually reads at startup.
+  // It was a committed leftover from the last real `cap add` and nothing
+  // regenerated it, so it kept listing @capacitor-firebase/app-check after
+  // ea11c9c dropped that plugin from the build in July 2026.
+  //
+  // PluginManager.loadPluginClasses() walks the whole registry inside ONE try
+  // block and rethrows ClassNotFoundException as PluginLoadException;
+  // BridgeActivity catches it, logs "Error loading plugins." and never calls
+  // addPlugins. So ONE bad entry registers ZERO plugins, not n-1. app-check
+  // sorted first, so every Notebook build from 3.0.5 to 3.0.17 loaded no
+  // native plugins at all: no native Google sign-in on a fresh install, and
+  // the filesystem/share fix was dead at runtime even though the classes were
+  // in the dex. scripts/sync-notebook.mjs now generates this file from the
+  // manifest on every sync.
+  const registry = readRegistry();
+  if (!registry) return;   // see readRegistry: generated artifact, may be absent
+  expect(registry.map((e) => e.pkg).sort()).toEqual(listed);
+  const byPkg = Object.fromEntries(NOTEBOOK_NATIVE_PLUGINS.map((p) => [p.pkg, p.classpath]));
+  for (const entry of registry) {
+    expect(entry.classpath, `registry classpath for ${entry.pkg}`).toBe(byPkg[entry.pkg]);
+  }
+});
+
+test('every registry classpath belongs to a plugin the build compiles', () => {
+  // The fresh-install invariant, stated the way the device experiences it:
+  // anything named in the registry must be compiled in, or startup registers
+  // nothing. Checked against the gradle files rather than the manifest, so
+  // this still bites if the manifest and gradle drift together.
+  const registry = readRegistry();
+  if (!registry) return;
+  const compiled = [...read('android-notebook/app/capacitor.build.gradle')
+    .matchAll(/implementation project\(':(capacitor-[\w-]+)'\)/g)].map((m) => m[1]);
+  const orphans = registry
+    .map((e) => e.pkg)
+    .filter((pkg) => !compiled.includes(gradleName(pkg)));
+  expect(
+    orphans,
+    'these are in the startup registry but not compiled -- ZERO plugins will register',
+  ).toEqual([]);
+});
+
+test('Notebook does not use viewport-fit=cover while relying on bare env() insets', () => {
+  // A tripwire, not a fix. Capacitor's SystemBars injects --safe-area-inset-*
+  // only when the page sets viewport-fit=cover (SystemBars.java gates on
+  // hasViewportCover), and pads the WebView natively on Android 15+ either
+  // way. Notebook does not set viewport-fit=cover, so native padding keeps
+  // content clear of the status bar and the bare env() calls in
+  // NotebookHome.jsx correctly contribute 0 -- verified against Capacitor's
+  // source 2026-10-12, which is why no change was made there.
+  //
+  // Add viewport-fit=cover and that stops being true: env() stays 0 in the
+  // Android WebView while the real inset arrives only in the CSS variable, and
+  // the floating menu button slides under the status bar. That is the bug
+  // Board hit (f92b0fa). If this fails, switch NotebookHome's insets to
+  // SAFE_TOP / belowTop from src/safeArea.js in the same change.
+  const html = read('index.notebook.html');
+  if (/viewport-fit\s*=\s*cover/.test(html)) {
+    const home = read('src/components/NotebookHome.jsx');
+    const bare = [...home.matchAll(/env\(safe-area-inset-[a-z]+/g)].length;
+    expect(
+      bare,
+      'index.notebook.html now uses viewport-fit=cover, so bare env() insets read 0 on Android -- use src/safeArea.js',
+    ).toBe(0);
+  }
 });
 
 test('each listed plugin is installed and its classpath names a real plugin class', () => {
