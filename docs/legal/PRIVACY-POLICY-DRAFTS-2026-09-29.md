@@ -30,7 +30,7 @@
 
 **Last updated: [publish date]**
 
-BBQ Scorecard is made by Holy Smokes BBQ Co ("we"). This policy explains what data the app and website handle, why, and the choices you have. It applies to the BBQ Scorecard app (Android and iOS) and the web version at holysmokesbbqco.com/scorecard/.
+BBQ Scorecard is made by Holy Smokes BBQ Co ("we"). This policy explains what data the app and website handle, why, and the choices you have. It applies to the BBQ Scorecard app (Android and iOS), the web version at holysmokesbbqco.com/scorecard/, and the pages of holysmokesbbqco.com.
 
 **What we collect and why**
 
@@ -42,7 +42,7 @@ BBQ Scorecard is made by Holy Smokes BBQ Co ("we"). This policy explains what da
 
 *Crash reports.* The mobile apps send crash logs and basic diagnostics through Firebase Crashlytics so we can fix failures. Legal basis: our legitimate interest in keeping the app working (Art. 6(1)(f)). You can object using the contact below.
 
-*Location (only when you use BBQ Near Me).* If you tap BBQ Near Me and allow location access, your approximate coordinates are sent to the OpenStreetMap Overpass API to find barbecue spots near you, and OpenStreetMap map tiles load around that point. We do not store your coordinates. Legal basis: performing the lookup you asked for.
+*Location (only when you use BBQ Near Me).* If you tap BBQ Near Me and allow location access, your coordinates, at the precision your device reports, are sent to the OpenStreetMap Overpass API to find barbecue spots near you, and OpenStreetMap map tiles load around that point (the tile servers receive your IP address and the map area you view). We do not store your coordinates. Legal basis: performing the lookup you asked for.
 
 **What we don't do**
 
@@ -50,7 +50,7 @@ We do not sell your data. We do not run ads. We do not share your content with a
 
 **Who processes data for us**
 
-Google (Firebase: sign-in, database, photo storage, analytics, crash reports) and Netlify (website hosting). On our website pages (not the app), Adobe Fonts serves our brand typeface; Adobe receives your IP address and browser details to count font usage for licensing, and sets no cookies. If you are in the EEA, UK, or Switzerland, the Adobe font loads only after you say yes to our banner; until then the site uses our self-hosted fonts. These providers process data on our instructions.
+Google (Firebase: sign-in, database, photo storage, analytics, crash reports) and Netlify (website hosting). When you use BBQ Near Me, OpenStreetMap receives the coordinates you search from (Overpass API) and your IP address and the map area you view (tile servers). These providers process data on our instructions, except OpenStreetMap, which handles the lookup under its own privacy policy. Fonts are served from our own site; no font provider receives anything.
 
 **Where data is processed**
 
@@ -62,7 +62,7 @@ Account data and your content: until you delete them or your account. Analytics 
 
 **Your rights**
 
-Wherever you live, you can ask us for a copy of your data, ask us to correct or delete it, restrict or object to processing, take your data elsewhere, and withdraw consent at any time. Email datadelete@holysmokesbbqco.com and we will respond within a month. Deleting individual reviews in the app removes them from our servers immediately; full account deletion is described at our account deletion page and completed within 7 days. If you are in the EEA or UK you can also complain to your data protection authority (in the UK, the ICO).
+Wherever you live, you can ask us for a copy of your data, ask us to correct or delete it, restrict or object to processing, take your data elsewhere, and withdraw consent at any time. To withdraw analytics consent on the website, use the "Analytics choices" link in the page footer; in the app, use the analytics setting in Settings. Our website does not respond to Do Not Track or Global Privacy Control browser signals; those two controls are how you turn analytics off here. Email datadelete@holysmokesbbqco.com and we will respond within a month. Deleting individual reviews in the app removes them from our servers immediately; full account deletion is described at our account deletion page and completed within 7 days. If you are in the EEA or UK you can also complain to your data protection authority (in the UK, the ICO).
 
 **Children**
 
@@ -80,7 +80,7 @@ If this policy changes, we will update this page and the date above.
 
 **Last updated: [publish date]**
 
-BBQ Notebook is made by Holy Smokes BBQ Co ("we"). This policy explains what data the app handles, why, and the choices you have. It applies to the BBQ Notebook app (Android) and the web version at holysmokesbbqco.com/notebook/.
+BBQ Notebook is made by Holy Smokes BBQ Co ("we"). This policy explains what data the app handles, why, and the choices you have. It applies to the BBQ Notebook app (Android), the web version at holysmokesbbqco.com/notebook/, and the pages of holysmokesbbqco.com.
 
 **What we collect and why**
 
@@ -88,7 +88,7 @@ BBQ Notebook is made by Holy Smokes BBQ Co ("we"). This policy explains what dat
 
 *Your content.* Your cook logs (meat, rub, wood, temperatures, times, pit readings, notes, ratings, photos) and recipes. Photos you attach stay with your content on your device; when cloud sync is available they are stored in Google Firebase Storage. Everything else syncs to Google Firestore. Cooks and recipes are private unless you mark them shared, and shared items are visible only to friends you have approved. Legal basis: performing our agreement with you.
 
-*Weather at your location (only if you allow it).* When you log a cook, the app can fetch current weather from the US National Weather Service (api.weather.gov) using your approximate location, and saves the weather values — temperature, wind, humidity — with your cook. Your coordinates themselves are not stored on our servers. Legal basis: performing the lookup you asked for.
+*Weather at your location (only if you allow it).* When you log a cook, the app can fetch current weather from the US National Weather Service (api.weather.gov) using your location rounded to about a mile, and saves the weather values — temperature, wind, humidity — with your cook. Your coordinates themselves are not stored on our servers. Legal basis: performing the lookup you asked for.
 
 *Usage analytics (only with your consent).* With your permission we use Google Analytics and Firebase Analytics to see which features get used. In the app, this is off until you say yes and you can change your mind any time in Settings. On the website version, visitors in the EEA, UK, and Switzerland are asked before analytics runs; elsewhere on the website it runs by default. Analytics is not linked to your account, name, or email. Google Analytics also records standard device and browser information, including an approximate location estimated from your IP address. Legal basis: consent (Art. 6(1)(a)).
 
@@ -100,7 +100,7 @@ We do not sell your data. We do not run ads. We do not share your cooks or recip
 
 **Who processes data for us**
 
-Google (Firebase: sign-in, database, photo storage, analytics, crash reports) and Netlify (website hosting). On our website pages (not the app), Adobe Fonts serves our brand typeface; Adobe receives your IP address and browser details to count font usage for licensing, and sets no cookies. If you are in the EEA, UK, or Switzerland, the Adobe font loads only after you say yes to our banner; until then the site uses our self-hosted fonts. The National Weather Service receives only the coordinates needed for the weather lookup you request.
+Google (Firebase: sign-in, database, photo storage, analytics, crash reports) and Netlify (website hosting). The US National Weather Service (api.weather.gov) receives only your rounded coordinates for the weather lookup you request, under its own privacy policy. Fonts are served from our own site; no font provider receives anything.
 
 **Where data is processed**
 
@@ -112,7 +112,7 @@ Account data, cooks, recipes, and photos: until you delete them or your account.
 
 **Your rights**
 
-Wherever you live, you can ask us for a copy of your data, ask us to correct or delete it, restrict or object to processing, take your data elsewhere, and withdraw consent at any time. Email datadelete@holysmokesbbqco.com and we will respond within a month. Deleting individual cooks or recipes in the app removes them and their photos from our servers immediately; full account deletion is described at our account deletion page and completed within 7 days. If you are in the EEA or UK you can also complain to your data protection authority (in the UK, the ICO).
+Wherever you live, you can ask us for a copy of your data, ask us to correct or delete it, restrict or object to processing, take your data elsewhere, and withdraw consent at any time. To withdraw analytics consent on the website, use the "Analytics choices" link in the page footer; in the app, use the analytics setting in Settings. Our website does not respond to Do Not Track or Global Privacy Control browser signals; those two controls are how you turn analytics off here. Email datadelete@holysmokesbbqco.com and we will respond within a month. Deleting individual cooks or recipes in the app removes them and their photos from our servers immediately; full account deletion is described at our account deletion page and completed within 7 days. If you are in the EEA or UK you can also complain to your data protection authority (in the UK, the ICO).
 
 **Children**
 
@@ -130,7 +130,7 @@ If this policy changes, we will update this page and the date above.
 
 **Last updated: [publish date]**
 
-BBQ Board is made by Holy Smokes BBQ Co ("we"). This policy explains what data the app handles, why, and the choices you have. It applies to the BBQ Board app (Android and iOS) and the web version at holysmokesbbqco.com/board/.
+BBQ Board is made by Holy Smokes BBQ Co ("we"). This policy explains what data the app handles, why, and the choices you have. It applies to the BBQ Board app (Android and iOS), the web version at holysmokesbbqco.com/board/, and the pages of holysmokesbbqco.com.
 
 **The most important thing to know**
 
@@ -158,7 +158,7 @@ We do not sell your data. We do not run ads. We do not display your name or emai
 
 **Who processes data for us**
 
-Google (Firebase: sign-in, database, analytics, crash reports) and Netlify (website hosting). On our website pages (not the app), Adobe Fonts serves our brand typeface; Adobe receives your IP address and browser details to count font usage for licensing, and sets no cookies. If you are in the EEA, UK, or Switzerland, the Adobe font loads only after you say yes to our banner; until then the site uses our self-hosted fonts.
+Google (Firebase: sign-in, database, analytics, crash reports) and Netlify (website hosting). The shop map loads tiles from OpenStreetMap, which receives your IP address and the map area you view under its own privacy policy. Fonts are served from our own site; no font provider receives anything.
 
 **Where data is processed**
 
@@ -170,7 +170,7 @@ Account data: until you delete your account. Price submissions: because Board is
 
 **Your rights**
 
-Wherever you live, you can ask us for a copy of your data, ask us to correct or delete it, restrict or object to processing, take your data elsewhere, and withdraw consent at any time. Email datadelete@holysmokesbbqco.com and we will respond within a month. Full account deletion is described at our account deletion page (/delete-account-board.html) and completed within 7 days. If you are in the EEA or UK you can also complain to your data protection authority (in the UK, the ICO).
+Wherever you live, you can ask us for a copy of your data, ask us to correct or delete it, restrict or object to processing, take your data elsewhere, and withdraw consent at any time. To withdraw analytics consent on the website, use the "Analytics choices" link in the page footer; in the app, use the analytics setting in Settings. Our website does not respond to Do Not Track or Global Privacy Control browser signals; those two controls are how you turn analytics off here. Email datadelete@holysmokesbbqco.com and we will respond within a month. Full account deletion is described at our account deletion page (/delete-account-board.html) and completed within 7 days. If you are in the EEA or UK you can also complain to your data protection authority (in the UK, the ICO).
 
 **Children**
 

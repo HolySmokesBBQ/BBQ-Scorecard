@@ -1,11 +1,11 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <!-- GTM + GA4 init — external file so CSP can drop 'unsafe-inline' -->
+  <!-- GTM + GA4 init: external file so CSP can drop 'unsafe-inline' -->
   <script src="/gtm-init.js?v=7"></script>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Delete Account — BBQ Scorecard by Holy Smokes BBQ Co</title>
+  <title>Delete Account | BBQ Scorecard by Holy Smokes BBQ Co</title>
   <link rel="icon" href="/favicon.ico" />
   <style>
     @font-face {
@@ -73,13 +73,13 @@
     <p>To delete your account and all associated data from our servers, send an email to:</p>
     <div class="highlight">
       <p><a class="email-link" href="mailto:datadelete@holysmokesbbqco.com?subject=Account%20Deletion%20Request%20-%20BBQ%20Scorecard">datadelete@holysmokesbbqco.com</a></p>
-      <p style="font-size: 12px; color: #9a9084; margin-bottom: 0;">Subject: Account Deletion Request &mdash; BBQ Scorecard</p>
+      <p style="font-size: 12px; color: #9a9084; margin-bottom: 0;">Subject: Account Deletion Request: BBQ Scorecard</p>
     </div>
-    <p>Include the email address you used to sign in with Google. We will delete the following data within 7 days:</p>
+    <p>Include the email address on your account, however you signed in (Google, Apple, or email and password). We will confirm by email and delete the following data without undue delay, and within 30 days at most:</p>
     <ol>
-      <li><strong>Your profile</strong> &mdash; display name, email, photo URL, and friend code</li>
-      <li><strong>All of your reviews</strong> &mdash; restaurant scores, notes, dates, and locations stored in Cloud Firestore</li>
-      <li><strong>Your friend connections</strong> &mdash; removed from both your account and your friends' accounts</li>
+      <li><strong>Your sign-in record and profile</strong>: the Firebase Authentication account itself (email, sign-in provider and user ID), plus your display name, photo URL and friend code</li>
+      <li><strong>All of your reviews</strong>: restaurant scores, notes, dates, and locations stored in Cloud Firestore</li>
+      <li><strong>Your friend connections</strong>: removed from both your account and your friends' accounts</li>
     </ol>
 
     <div class="warning">
@@ -90,13 +90,14 @@
     <p>Data stored on your device (localStorage) is not affected by an account deletion request. To clear local data, go to your browser settings and clear site data for holysmokesbbqco.com, or uninstall the app.</p>
 
     <h2>WHAT WE KEEP</h2>
-    <p>Nothing tied to your account. When your account is deleted, all data associated with it is permanently removed from Cloud Firestore. We do not retain backups of deleted user data. Anonymised usage analytics already collected by Google Analytics are held on Google's own retention schedule and are not linked back to a deleted account.</p>
+    <p>Nothing tied to your account. When your account is deleted, all data associated with it is permanently removed from Cloud Firestore. We do not retain backups of deleted user data. Usage analytics already collected by Google Analytics are not linked to your account; if you ask, we also file a user-deletion request with Google Analytics for the device identifier the analytics used.</p>
 
     <h2>QUESTIONS</h2>
     <p>If you have questions about data deletion, contact us at <a href="mailto:datadelete@holysmokesbbqco.com">datadelete@holysmokesbbqco.com</a> or visit our <a href="/privacy.html">privacy policy</a>.</p>
 
     <div style="text-align: center; padding: 32px 0; margin-top: 16px; border-top: 1px solid #3a332c;">
       <a href="/" style="font-size: 11px; color: #9a9084;">Back to app</a>
+      <div style="font-size: 11px; margin-top: 8px;"><a href="#analytics-choices" data-analytics-choices style="color: #9a9084; display: inline-block; padding: 12px 6px;">Analytics choices</a></div>
       <div style="font-size: 10px; color: #3a332c; margin-top: 6px;">&copy; 2026 Holy Smokes BBQ Co</div>
     </div>
   </div>

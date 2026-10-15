@@ -51,6 +51,8 @@ function run({ cookie = '', stored = null, group = 'website', host = 'holysmokes
   if (stored) store.set('hs-consent-v1', JSON.stringify(stored));
   const body = makeNode('body');
   const head = makeNode('head');
+  const cookieWrites = [];
+  const listeners = {};
   const sandbox = {
     console,
     localStorage: {
@@ -59,14 +61,17 @@ function run({ cookie = '', stored = null, group = 'website', host = 'holysmokes
       removeItem: k => store.delete(k),
     },
     document: {
-      cookie, title: 'Test page', visibilityState: 'visible', head, body,
+      get cookie() { return cookie; },
+      set cookie(v) { cookieWrites.push(String(v)); },
+      title: 'Test page', visibilityState: 'visible', head, body,
       currentScript: { dataset: { gaId: 'G-TEST', gaTitle: 'T', gaGroup: group } },
       querySelector: () => null,
+      getElementById: (id) => findById(body, id),
       createElement: makeNode,
       addEventListener() {},
     },
     navigator: { userAgent: 'test' },
-    addEventListener() {},
+    addEventListener(type, fn) { listeners[type] = fn; },
     location: { hostname: host },
   };
   sandbox.window = sandbox;
@@ -74,8 +79,11 @@ function run({ cookie = '', stored = null, group = 'website', host = 'holysmokes
   vm.runInNewContext(SRC, sandbox, { filename: 'gtm-init.js' });
   const calls = (sandbox.dataLayer || []).map(a => Array.from(a));
   const consent = calls.filter(c => c[0] === 'consent');
-  return { sandbox, calls, consent, body, store, banner: findById(body, 'hs-consent') };
+  const gtagLoaded = () => head.children.some(c => /googletagmanager\.com\/gtag\/js/.test(c.src || ''));
+  return { sandbox, calls, consent, body, head, store, cookieWrites, listeners, gtagLoaded, banner: findById(body, 'hs-consent') };
 }
+const VER = SRC.match(/CONSENT_TEXT_VERSION = '([^']+)'/)[1];
+const later = r => (r.sandbox.dataLayer || []).map(a => Array.from(a));
 
 describe('gtm-init consent defaults', () => {
   it('fires a region-scoped denied default for EEA+UK+CH, then an unscoped granted default', () => {
@@ -191,5 +199,88 @@ describe('choices', () => {
   it('ignores a malformed stored value and shows the banner', () => {
     const store = { choice: 'maybe' };
     expect(run({ cookie: 'hs_geo=eu', stored: store }).banner).not.toBeNull();
+  });
+});
+
+// Register 2026-10-14 entries 3 and 12: withdrawal must bite, the tag must not
+// load without a basis, and exception events must never carry error text.
+describe('withdrawal (Art. 7(3))', () => {
+  it('a stored denial disables the tag and expires every _ga cookie on host and apex', () => {
+    const r = run({ cookie: '_ga=GA1.1.1; _ga_ABC123=GS1.1; _gid=x; hs_geo=eu', stored: { choice: 'denied', timestamp: 't', consentTextVersion: VER } });
+    expect(r.sandbox['ga-disable-G-TEST']).toBe(true);
+    const expired = r.cookieWrites.filter(w => /expires=Thu, 01 Jan 1970/.test(w));
+    for (const name of ['_ga=', '_ga_ABC123=', '_gid=']) expect(expired.some(w => w.startsWith(name))).toBe(true);
+    expect(expired.some(w => /domain=\.holysmokesbbqco\.com/.test(w))).toBe(true);
+    expect(expired.some(w => /domain=holysmokesbbqco\.com/.test(w))).toBe(true);
+  });
+  it('hsAnalyticsChoices forgets the stored choice and reopens the banner, in any region', () => {
+    const r = run({ cookie: '', stored: { choice: 'granted', timestamp: 't', consentTextVersion: VER } });
+    expect(r.banner).toBeNull();
+    r.sandbox.hsAnalyticsChoices({ preventDefault() {} });
+    expect(r.store.has('hs-consent-v1')).toBe(false);
+    expect(findById(r.body, 'hs-consent')).not.toBeNull();
+  });
+  it('withdrawing through the reopened banner stores denied, pushes denied, and purges', () => {
+    const r = run({ cookie: '_ga=GA1.1.1', stored: { choice: 'granted', timestamp: 't', consentTextVersion: VER } });
+    r.sandbox.hsAnalyticsChoices();
+    findById(r.body, 'hs-consent-no').onclick({ preventDefault() {} });
+    expect(JSON.parse(r.store.get('hs-consent-v1')).choice).toBe('denied');
+    expect(later(r).some(c => c[0] === 'consent' && c[1] === 'update' && c[2].analytics_storage === 'denied')).toBe(true);
+    expect(r.sandbox['ga-disable-G-TEST']).toBe(true);
+    expect(r.cookieWrites.some(w => w.startsWith('_ga=') && /1970/.test(w))).toBe(true);
+    expect(findById(r.body, 'hs-consent')).toBeNull();
+  });
+  it('a later grant re-enables the tag and loads it', () => {
+    const r = run({ cookie: 'hs_geo=eu', stored: { choice: 'denied', timestamp: 't', consentTextVersion: VER } });
+    r.sandbox.hsAnalyticsChoices();
+    findById(r.body, 'hs-consent-yes').onclick({ preventDefault() {} });
+    expect(r.sandbox['ga-disable-G-TEST']).toBe(false);
+    expect(r.gtagLoaded()).toBe(true);
+  });
+});
+
+describe('basic consent mode (no Google script without a basis)', () => {
+  it('loads gtag.js by default outside the EEA', () => { expect(run({ cookie: '' }).gtagLoaded()).toBe(true); });
+  it('does not load gtag.js outside the EEA for a stored denial', () => {
+    expect(run({ cookie: '', stored: { choice: 'denied', timestamp: 't', consentTextVersion: VER } }).gtagLoaded()).toBe(false);
+  });
+  it('does not load gtag.js in the EEA until a choice is made', () => { expect(run({ cookie: 'hs_geo=eu' }).gtagLoaded()).toBe(false); });
+  it('loads gtag.js in the EEA for a stored grant', () => {
+    expect(run({ cookie: 'hs_geo=eu', stored: { choice: 'granted', timestamp: 't', consentTextVersion: VER } }).gtagLoaded()).toBe(true);
+  });
+  it('loads gtag.js when the EEA visitor says yes', () => {
+    const r = run({ cookie: 'hs_geo=eu' });
+    findById(r.banner, 'hs-consent-yes').onclick({ preventDefault() {} });
+    expect(r.gtagLoaded()).toBe(true);
+  });
+});
+
+describe('exception events', () => {
+  it('send a fixed code and a bare file name, never the message or a query string', () => {
+    const r = run({ cookie: '' });
+    r.listeners.error({ message: 'Cannot read properties of undefined (user joel@example.com)', error: { name: 'TypeError' }, filename: 'https://holysmokesbbqco.com/assets/app.js?token=SECRET', lineno: 42 });
+    const ev = later(r).find(c => c[0] === 'event' && c[1] === 'exception');
+    expect(ev[2].description).toBe('TypeError');
+    expect(ev[2].source).toBe('app.js:42');
+    expect(JSON.stringify(ev)).not.toMatch(/example\.com|SECRET|Cannot read/);
+  });
+  it('map unknown errors to "other" and network failures to NetworkError', () => {
+    const r = run({ cookie: '' });
+    r.listeners.error({ message: 'Failed to fetch https://api.example.com/x?email=a@b.c', error: null, filename: '', lineno: 0 });
+    r.listeners.error({ message: 'some weird thing with a@b.c in it', error: { name: 'WeirdError' }, filename: 'x.js', lineno: 1 });
+    const evs = later(r).filter(c => c[0] === 'event' && c[1] === 'exception').map(c => c[2]);
+    expect(evs[0].description).toBe('NetworkError');
+    expect(evs[0].source).toBe('inline:0');
+    expect(evs[1].description).toBe('other');
+    expect(JSON.stringify(evs)).not.toMatch(/a@b\.c|example/);
+  });
+  it('unhandled rejections use the reason name or a code, not its text', () => {
+    const r = run({ cookie: '' });
+    r.listeners.unhandledrejection({ reason: { name: 'AbortError', message: 'aborted token=abc' } });
+    r.listeners.unhandledrejection({ reason: 'plain string with secret@example.com' });
+    const evs = later(r).filter(c => c[0] === 'event' && c[1] === 'exception').map(c => c[2]);
+    expect(evs[0].description).toBe('AbortError');
+    expect(evs[1].description).toBe('other');
+    expect(JSON.stringify(evs)).not.toMatch(/token|secret/);
   });
 });

@@ -109,6 +109,22 @@ function _writeConsent(choice) {
 }
 function _applyConsent(choice) {
   gtag('consent', 'update', { analytics_storage: choice });
+  if (choice === 'denied') _stopAnalytics();
+}
+// Withdrawal has to bite, not just be recorded (GDPR Art. 7(3)): flag the
+// tag off for this page and expire every _ga* cookie on both the host and
+// the apex domain. Same discipline as the apps' stopAnalytics().
+function _stopAnalytics() {
+  try { window['ga-disable-' + _gaCfg.id] = true; } catch (e) {}
+  try {
+    var names = (document.cookie || '').split(';').map(function (c) { return c.split('=')[0].trim(); })
+      .filter(function (n) { return n === '_ga' || n.indexOf('_ga_') === 0 || n === '_gid'; });
+    var host = (location.hostname || '').replace(/^www./, '');
+    var domains = ['', host, '.' + host];
+    for (var i = 0; i < names.length; i++) for (var j = 0; j < domains.length; j++) {
+      document.cookie = names[i] + '=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/' + (domains[j] ? '; domain=' + domains[j] : '') + '; SameSite=Lax; Secure';
+    }
+  } catch (e) {}
 }
 function _geoRegion() {
   var m = /(?:^|;\s*)hs_geo=([a-z]+)/.exec(document.cookie || '');
@@ -163,6 +179,7 @@ function _showConsentBanner() {
       if (e && e.preventDefault) e.preventDefault();
       _writeConsent(choice);
       _applyConsent(choice);
+      if (choice === 'granted') { try { window['ga-disable-' + _gaCfg.id] = false; } catch (err) {} _loadGtag(); }
       // Kept for any page script that wants to react to a choice (nothing listens today; the Adobe loader is gone).
       try { window.dispatchEvent(new CustomEvent('hs-consent', { detail: { choice: choice } })); } catch (e) {}
       gtag('event', 'consent_choice', { choice: choice, content_group: _gaCfg.group });
@@ -183,6 +200,22 @@ if (!_stored && _geoRegion() === 'eu') {
   if (document.body) _showConsentBanner();
   else document.addEventListener('DOMContentLoaded', _showConsentBanner);
 }
+// "Analytics choices" (footer link on every page that loads this script):
+// forget the stored choice and show the same banner again, so a visitor
+// can withdraw a grant, or opt out where analytics runs by default.
+function _openAnalyticsChoices(e) {
+  if (e && e.preventDefault) e.preventDefault();
+  try { localStorage.removeItem(CONSENT_KEY); } catch (err) {}
+  if (!document.getElementById('hs-consent')) _showConsentBanner();
+}
+window.hsAnalyticsChoices = _openAnalyticsChoices;
+document.addEventListener('click', function (e) {
+  var t = e.target;
+  while (t && t !== document) {
+    if (t.getAttribute && t.hasAttribute('data-analytics-choices')) return _openAnalyticsChoices(e);
+    t = t.parentNode;
+  }
+});
 
 // Per-app measurement ID from the script tag's data-ga-id (see _gaCfg).
 // Falls back to the shared website property when no override is present.
@@ -199,10 +232,20 @@ var MID = _gaCfg.id;
 // gtag.js: only G-7X235L8GQS / GT-NM8C5HG9 embed the stream's Measurement
 // ID G-5JZJ75VWR3. Do NOT use G-5JZJ75VWR3 itself here — gtag/js?id= for
 // a bare Measurement ID returns 404 and nothing is collected.
-var gtagScript = document.createElement('script');
-gtagScript.async = true;
-gtagScript.src = 'https://www.googletagmanager.com/gtag/js?id=' + MID;
-document.head.appendChild(gtagScript);
+var _gtagLoaded = false;
+function _loadGtag() {
+  if (_gtagLoaded) return;
+  _gtagLoaded = true;
+  var gtagScript = document.createElement('script');
+  gtagScript.async = true;
+  gtagScript.src = 'https://www.googletagmanager.com/gtag/js?id=' + MID;
+  document.head.appendChild(gtagScript);
+}
+// Basic consent mode: no Google script at all until there is a basis for it.
+// Outside EEA/UK/CH analytics runs by default (disclosed in every policy);
+// inside, only a stored grant loads the tag. Events pushed before the tag
+// loads sit in dataLayer and are honoured if a grant follows.
+if (_geoRegion() !== 'eu' ? !(_stored && _stored.choice === 'denied') : !!(_stored && _stored.choice === 'granted')) _loadGtag();
 
 window.gtag = gtag;
 gtag('js', new Date());
@@ -216,23 +259,39 @@ gtag('config', MID, {
 // firing it from window.onerror + unhandledrejection gives us a feed of
 // production JS errors without bolting on a separate Sentry dep. Trim
 // descriptions and stacks to stay under the GA4 100-char param limit.
-function _trimErr(s) {
-  return (s || 'unknown').toString().slice(0, 100);
+// Never the message text: a thrown error can carry an email, a token or a
+// URL. We send a fixed code from this list (the apps' analyticsCodes rule)
+// and the script's file name without its query string.
+var _ERR_CODES = ['TypeError', 'ReferenceError', 'SyntaxError', 'RangeError', 'URIError', 'EvalError', 'SecurityError', 'NetworkError', 'QuotaExceededError', 'AbortError', 'NotAllowedError'];
+function _errCode(err, msg) {
+  var name = err && err.name ? String(err.name) : '';
+  if (_ERR_CODES.indexOf(name) >= 0) return name;
+  var m = String(msg || '');
+  if (/ChunkLoadError|Loading chunk|dynamically imported module/i.test(m)) return 'ChunkLoadError';
+  if (/QuotaExceeded/i.test(m)) return 'QuotaExceededError';
+  if (/NetworkError|Failed to fetch|Load failed/i.test(m)) return 'NetworkError';
+  if (/Script error/i.test(m)) return 'CrossOriginScriptError';
+  return 'other';
+}
+function _errSource(filename, line) {
+  var f = String(filename || '').split('?')[0].split('#')[0];
+  f = f.substring(f.lastIndexOf('/') + 1) || 'inline';
+  return (f + ':' + (line || '0')).slice(0, 100);
 }
 window.addEventListener('error', function (e) {
   try {
     gtag('event', 'exception', {
-      description: _trimErr(e.message),
+      description: _errCode(e.error, e.message),
       fatal: false,
-      source: _trimErr((e.filename || '') + ':' + (e.lineno || '0')),
+      source: _errSource(e.filename, e.lineno),
     });
   } catch {}
 });
 window.addEventListener('unhandledrejection', function (e) {
   try {
-    var reason = e.reason && (e.reason.message || e.reason.toString());
+    var r = e.reason;
     gtag('event', 'exception', {
-      description: _trimErr(reason),
+      description: _errCode(r, r && (r.message || String(r))),
       fatal: false,
       source: 'unhandledrejection',
     });
