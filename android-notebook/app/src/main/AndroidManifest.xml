@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <application
+        android:allowBackup="false"
+        android:fullBackupContent="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/AppTheme">
+
+        <!-- Firebase Analytics is off at the platform level. The native SDK
+             auto-initialises and would start collecting (first_open, sessions)
+             at process start, before any JavaScript runs and so before the
+             in-app analytics consent is asked. Usage analytics goes through
+             src/consent.js instead. Crashlytics is unaffected: it runs under
+             legitimate interest and is disclosed in the privacy policy.
+             Audit 2026-09-29, L-1. -->
+        <meta-data android:name="firebase_analytics_collection_enabled" android:value="false" />
+        <meta-data android:name="firebase_analytics_collection_deactivated" android:value="true" />
+
+        <activity
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
+            android:name=".MainActivity"
+            android:label="@string/title_activity_main"
+            android:theme="@style/AppTheme.NoActionBarLaunch"
+            android:launchMode="singleTask"
+            android:exported="true">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+        </activity>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths"></meta-data>
+        </provider>
+    </application>
+
+    <!-- Permissions -->
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Location is used for one thing: finding the nearest NWS weather station
+         for temp/pressure. api.weather.gov snaps to a ~2.5 km grid and we round
+         coordinates to 2 decimals (~1.1 km) before sending, so fine precision is
+         discarded before it leaves the device.
+
+         FINE is kept with maxSdkVersion="30" and that is deliberate, reversing a
+         change of mine. I dropped FINE entirely on 2026-10-12, reasoning that the
+         permission class is what Play reads for the "Approximate location"
+         declaration. That broke the feature on every Android 7 through 11 device:
+         the Chromium WebView's navigator.geolocation needs ACCESS_FINE_LOCATION
+         before Android 12 and returns POSITION_UNAVAILABLE without it. minSdk here
+         is 24, so "Get Current Weather" and "Use my location" failed silently for
+         that whole range, and both call sites catch and fall through. Scorecard
+         carries the same maxSdkVersion="30" pattern for the same reason.
+
+         maxSdkVersion="30" means the permission is only ever requested on the
+         versions that need it; Android 12 and up get COARSE alone. The Data Safety
+         answer stays honest because truthfulness comes from what is transmitted,
+         not from which constant appears in the manifest, and what is transmitted
+         is rounded to ~1.1 km on every path. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+    <!-- Include AD_ID permission to match Play Console declaration
+         (Yes + App functionality + Analytics + Account management).
+         Firebase Analytics uses this for user identification; Play Console
+         quick-check flags manifest/declaration mismatch when this is missing. -->
+    <uses-permission android:name="com.google.android.gms.permission.AD_ID" />
+</manifest>

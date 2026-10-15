@@ -31,7 +31,7 @@ export default function NotebookHome() {
     themePref, setThemePref,
     setView, navigateTo,
     syncStatus, setSyncStatus,
-    attemptSignIn,
+    attemptSignIn, authError,
     OfflineBanner,
   } = useAppContext();
 
@@ -102,6 +102,17 @@ export default function NotebookHome() {
                 {syncStatus === 'connecting' ? 'Connecting...' : 'Sign In with Google'}
               </button>
             </div>
+            {/* Without this a failed sign-in just flipped syncStatus back to
+                '' after two seconds and the user saw nothing explaining it.
+                The shared context has always produced plain-English text in
+                authError; Notebook simply never rendered it. */}
+            {authError && (
+              <div style={{
+                fontSize: '12px', color: '#fca5a5', background: '#3a1717',
+                border: '1px solid #f87171', borderRadius: '6px',
+                padding: '8px 10px', marginTop: '10px', textAlign: 'center',
+              }}>{authError}</div>
+            )}
             <div style={{
               textAlign: 'center', fontSize: '11px', color: S.muted,
               letterSpacing: '2px', margin: '14px 0 4px',

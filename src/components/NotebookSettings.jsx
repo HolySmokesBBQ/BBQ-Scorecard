@@ -39,7 +39,7 @@ export default function NotebookSettings() {
     incomingRequests, setIncomingRequests,
     friendCodeInput, setFriendCodeInput,
     friendMsg, setFriendMsg,
-    attemptSignIn,
+    attemptSignIn, authBusy, authError,
   } = useAppContext();
   const {
     cooks, recipes,
@@ -296,12 +296,31 @@ export default function NotebookSettings() {
               <div style={{ fontSize: 13, color: S.text, marginBottom: 12, textAlign: 'center' }}>
                 Sign in to back up your cooks to the cloud and share with friends.
               </div>
+              {/* The result used to be discarded here, so a failed sign-in
+                  showed nothing and the button read as dead. That is the same
+                  pattern App Review rejected in Scorecard 4.0.0 under
+                  Guideline 2.1(a), and it was fixed there only. It cost a day
+                  of blind debugging when native Google sign-in turned out to
+                  be broken on a new device: the app had an error to show and
+                  nowhere to show it. authBusy and authError come from the
+                  shared context, which was setting them all along. */}
               <button
                 onClick={async () => { await attemptSignIn(); }}
-                style={{ ...sBtn(true, false), width: '100%', padding: '12px 24px', marginBottom: 8 }}
+                disabled={authBusy === 'google'}
+                style={{
+                  ...sBtn(true, false), width: '100%', padding: '12px 24px', marginBottom: 8,
+                  opacity: authBusy === 'google' ? 0.5 : 1,
+                }}
               >
-                Sign In with Google
+                {authBusy === 'google' ? 'Signing in…' : 'Sign In with Google'}
               </button>
+              {authError && (
+                <div style={{
+                  fontSize: 12, color: '#fca5a5', background: '#3a1717',
+                  border: '1px solid #f87171', borderRadius: 6,
+                  padding: '8px 10px', marginBottom: 8, textAlign: 'center',
+                }}>{authError}</div>
+              )}
               <div style={{ textAlign: 'center', fontSize: 11, color: S.muted, letterSpacing: 2, margin: '10px 0 6px' }}>OR</div>
               <EmailSignInBox S={S} sBtn={sBtn} sInput={sInput} />
             </div>

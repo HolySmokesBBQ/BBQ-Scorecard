@@ -442,6 +442,18 @@ export default function CookForm() {
             {weatherLoading ? 'Getting...' : 'Get Current Weather'}
           </button>
         </div>
+        {/* Just-in-time disclosure (legal register 2026-10-14, entry 6). The
+            button said only "Get Current Weather", so nothing told the user it
+            reads GPS or that anything leaves the phone. Tapping it prompts for
+            location and sends coordinates to api.weather.gov, a third party.
+            The rounding claim is literal: this call and the humidity tool both
+            use toFixed(2), about 1.1 km. If that precision ever changes, this
+            sentence changes with it. */}
+        <div style={{ fontSize: '11px', color: S.muted, lineHeight: 1.5, marginBottom: '12px' }}>
+          Finds the nearest weather station using your location. Your coordinates
+          are rounded to about a kilometre and sent only to the National Weather
+          Service. You can also type the weather in by hand.
+        </div>
         <div className="bbq-form-fields">
           <div style={{ marginBottom: '10px' }}>
             <label style={sLabel()}>TEMP (F)</label>
