@@ -72,3 +72,23 @@ as soon as he's done that.
   fix (7687f20). Notebook probably needs it too.
 - cap sync failed on the first attempt three runs in a row and passed on a
   retry each time. It's a pattern; investigate when things are quiet.
+
+## Update 2026-10-15 morning (the send_message delivery failed again)
+
+- **4401 is burned.** Play's bundle library already holds a 4401 from
+  2026-10-12, an early icon-only build, so Joel's upload of the fresh 4.4.1
+  was rejected. I did not attach the library copy (it's missing the heal, the
+  location work and the accessibility pass). Rebuilding as **4.4.2 (4402)**,
+  same content (0d5e500).
+- **Size fixed at the source.** `vite.config.native.js` NATIVE_STRIP now also
+  removes the website's press and store badge art. The web bundle went from
+  7.7 MB to 2.9 MB, so the AAB should come in under the 10 MB cap and I can
+  upload it myself. Guarded by `src/nativeAssets.scorecard.test.js`.
+- **Gradle:** Board's queue started at 07:03. I'm waiting behind it. A
+  watcher builds 4402 only after 90 seconds with no gradle running.
+- **iOS 4.4.x is on hold** until in-app account deletion (register #1) is
+  in, to avoid a 5.1.1(v) rejection. The auditor's answers on the deletion
+  shape are the critical path: (a) the two rule carve-outs, (b) wiping
+  local data, (c) outgoing friend requests.
+- **AAB folder cleaned up** per its README: superseded builds filed into
+  v3.6 and v4.1 through v4.4, nothing deleted.
