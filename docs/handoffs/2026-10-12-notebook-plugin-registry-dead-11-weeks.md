@@ -111,3 +111,52 @@ Board's bundles by construction.
   foregrounds across all three apps, inconsistently. Android 7.0/7.1 users see
   them (minSdk 24). Cosmetic; same next window.
 - **Scorecard's 4.4.1** has no owner — that session is no longer running.
+
+---
+
+## Re-verified 2026-10-14 (and a correction to the hub's premise)
+
+The auditor asked on the morning of the 14th whether the "Sunday-blessed
+3.0.9–3.0.17 queue" is marked unshippable, and planned to grant a gradle slot
+for a rebuild from fb10e46. **That rebuild already happened on the 12th**, with
+the registry-vs-dex check the auditor was specifying. No gradle was needed.
+
+The hub did not know because three reports from this session have now been held
+or expired undelivered across two different auditor session instances
+(different recipient pipes, so not a single restart — the constant is a
+permission-mode mismatch). Hence this file.
+
+**There is nothing to quarantine.** The defective Sunday builds were
+overwritten in place by the 12th's rebuild: same version numbers, same
+filenames. They no longer exist on disk. The only standing quarantine is the
+older `DO-NOT-UPLOAD-defective-consent-copy/` (7 AABs) from Sunday's separate
+consent-copy problem.
+
+### Shelf state, re-measured on the 14th rather than recalled
+
+| ver | entries | app-check | classpaths missing from dex | bundle |
+| --- | --- | --- | --- | --- |
+| 3.0.8 – 3.0.17 | 6 | no | **none** | `CrJ94GDt` |
+
+One bundle hash across all ten. Freshness oracle re-run on the 14th: current
+source still builds `index.notebook.CrJ94GDt.js`, so the queue matches HEAD.
+264/264 tests across 31 files.
+
+Only two commits have touched bundled source since the queue was built —
+`fb10e46` (which it was built from) and `cdef48e` (Scorecard's Settings version
+line). The identical bundle hash proves `cdef48e` is not in Notebook's
+reachable graph, so the queue is not stale despite being two days old.
+
+**Safely uploadable right now: 3.0.8 through 3.0.17.**
+
+### The fact that matters most
+
+**3.0.7 is what is live on Internal, and it is one of the plugin-dead
+builds.** Anyone installing fresh from Internal today still cannot use Google
+sign-in. That changes only when 3.0.8 or above is uploaded — the fix is on the
+shelf doing nothing until then.
+
+Four older AABs on the shelf (3.0.3, 3.0.5, 3.0.6, 3.0.7) are also plugin-dead
+but version-obsolete: all at or below the highest already uploaded, so Play
+rejects them on versionCode. Left in place deliberately; 3.0.7 is a useful
+record of what is live.
