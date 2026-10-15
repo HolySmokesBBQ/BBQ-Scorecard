@@ -8,9 +8,9 @@ trigger has fired and the step is done.
 
 | Waiting | Trigger | Then |
 |---|---|---|
-| 4.4.1 (4401) Internal | Joel drags BBQ-Scorecard-Android/BBQ Scorecard-signed-v4.4.1.aab (11.2 MB, over the 10 MB browser-upload cap) into the saved Internal draft (release 45, notes already in) | Save and publish Internal, then Closed, then Open + Production, as with 4.4.0. Built and verified 2026-10-14 from 91cf8da. |
+| 4.4.2 (4402) Open + Production | Google approves Closed (Alpha) 4402, submitted 2026-10-15 08:15 | Promote to Open and Production 100% in ONE submission. 4402 replaces 4401, which is burned in Play's library by an Oct 12 icon-only upload. AAB is 6.4 MB after the native press-art strip (0d5e500). |
+| In-app account deletion | Auditor commits and publishes the rules in docs/handoffs/deletion-rules-change-2026-10-15.md, then I verify the live ruleset in the console | Apply docs/handoffs/Settings.deletion-wiring.jsx.txt (Settings button), test on device, ship in the next Android version, then unblock iOS 4.4.x. Code: 900b61a. |
 | Photo end-to-end proof | Joel fully restarts Scorecard (4.4.0+) on the old phone and adds a test photo | Read-only Firestore: J's BBQ photos[] gets https URLs, Storage reviews/<uid>/... has objects. Report the drain count to the auditor. |
-| Native AAB size | Next version | dist-native carries website-only brand art from public/ (the AAB went 9.8 MB to 11.2 MB). Exclude what the app doesn't use, to get back under the 10 MB self-upload cap. |
 | iOS 4.4.x | 4.4.1 Android on Production | Codemagic build from a side branch, App Store submission, Joel's manual release. Release day: the Apple User-ID label revisit. |
 
 ## Requirements for the per-app consent versions (before building)
