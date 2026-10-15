@@ -60,6 +60,17 @@ test('app/capacitor.build.gradle implements exactly the listed plugins', () => {
   expect(impl).toEqual(listed.map(gradleName).sort());
 });
 
+// Capacitor's WebView geolocation prompt asks for COARSE and FINE together
+// and falls back to COARSE alone only on Android 12+. A COARSE-only
+// manifest (Board 2.4.6/2.4.7) denied Near me outright on Android 7-11, and
+// minSdk is 24. FINE stays, capped at API 30.
+test('manifest keeps FINE location for Android 7-11 only, plus COARSE', () => {
+  const m = read('android-board/app/src/main/AndroidManifest.xml');
+  expect(m).toMatch(/android\.permission\.ACCESS_FINE_LOCATION"\s+android:maxSdkVersion="30"/);
+  expect(m).toMatch(/android\.permission\.ACCESS_COARSE_LOCATION"/);
+  expect(m.match(/ACCESS_FINE_LOCATION/g)).toHaveLength(1);
+});
+
 // No test imports the build scripts, so a syntax error in one passed the
 // whole suite and only surfaced when the queue rebuild ran sync (d3d6412
 // shipped a raw tab/newline inside a string literal in sync-board.mjs).
