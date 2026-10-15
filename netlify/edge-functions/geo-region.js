@@ -35,7 +35,11 @@ export default async (request, context) => {
 
   const response = await context.next();
   const code = String(context.geo?.country?.code || '').toUpperCase();
-  const region = !code ? 'unknown' : (EEA_UK_CH.has(code) ? 'eu' : 'other');
+  const sub = String(context.geo?.subdivision?.code || '').toUpperCase();
+  // 'eu' means 'consent region': EEA + UK + CH, and California (US-CA) since
+  // 2026-10-14 (legal register #11). Keep in sync with gtm-init.js.
+  const consentRegion = EEA_UK_CH.has(code) || (code === 'US' && sub === 'CA');
+  const region = !code ? 'unknown' : (consentRegion ? 'eu' : 'other');
 
   const headers = new Headers(response.headers);
   headers.append('Set-Cookie', `hs_geo=${region}; Path=/; Max-Age=86400; SameSite=Lax; Secure`);

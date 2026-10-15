@@ -93,9 +93,9 @@ describe('gtm-init consent defaults', () => {
     const [regional, global] = defaults;
     expect(regional[2].analytics_storage).toBe('denied');
     expect(Array.isArray(regional[2].region)).toBe(true);
-    for (const cc of ['DE', 'FR', 'IE', 'GB', 'CH', 'NO', 'IS', 'LI']) expect(regional[2].region).toContain(cc);
+    for (const cc of ['DE', 'FR', 'IE', 'GB', 'CH', 'NO', 'IS', 'LI', 'US-CA']) expect(regional[2].region).toContain(cc);
     expect(regional[2].region).not.toContain('US');
-    expect(regional[2].region.length).toBe(32); // 27 EU + IS, LI, NO + GB + CH
+    expect(regional[2].region.length).toBe(33); // 27 EU + IS, LI, NO + GB + CH + US-CA (2026-10-14)
     expect(global[2].analytics_storage).toBe('granted');
     expect(global[2].region).toBeUndefined();
     for (const d of defaults) {

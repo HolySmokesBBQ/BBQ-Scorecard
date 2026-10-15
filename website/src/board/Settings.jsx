@@ -111,8 +111,8 @@ export default function Settings({ user, onSignIn, onClose }) {
         <div style={S.card}>
           <h2 style={S.h2}>DEFAULTS</h2>
 
-          <label style={S.label}>Default region</label>
-          <select value={region} onChange={(e) => handleRegion(e.target.value)} style={S.input}>
+          <label htmlFor="f-default-region" style={S.label}>Default region</label>
+          <select id="f-default-region" value={region} onChange={(e) => handleRegion(e.target.value)} style={S.input}>
             {STATE_OPTIONS.map(s => (
               <option key={s.code} value={s.code}>{s.label}</option>
             ))}

@@ -58,7 +58,7 @@ export default function Profile() {
               Enter their code to send a request. They must accept before you can see each other's {import.meta.env.VITE_NOTEBOOK_BUILD ? 'cooks' : 'reviews'}.
             </div>
             <div style={{ display: 'flex', gap: '8px' }}>
-              <input type="text" value={friendCodeInput} onChange={e => setFriendCodeInput(e.target.value.toUpperCase())}
+              <input aria-label="Friend code" type="text" value={friendCodeInput} onChange={e => setFriendCodeInput(e.target.value.toUpperCase())}
                 placeholder="BBQ-XXXXXX" maxLength={10}
                 onKeyDown={e => { if (e.key === 'Enter') {
                   e.preventDefault();

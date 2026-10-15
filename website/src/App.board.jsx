@@ -1173,8 +1173,8 @@ function LocationPicker({ cityId, radius, onCityChange, onRadiusChange }) {
 
       {/* Radius selector (unchanged behavior) */}
       <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: 8, alignItems: 'center' }}>
-        <label style={{ fontSize: 12, color: PAL.textDim }}>Radius</label>
-        <select
+        <label htmlFor="f-radius" style={{ fontSize: 12, color: PAL.textDim }}>Radius</label>
+        <select id="f-radius"
           value={radius}
           onChange={(e) => {
             onRadiusChange(Number(e.target.value));
@@ -1617,10 +1617,10 @@ function CircularScrubPanel({ region, user, onSignIn, onSignInAnon }) {
             />
           )}
           <div style={{ marginBottom: 12 }}>
-            <label style={{ display: 'block', fontSize: 11, color: PAL.textDim, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>
+            <label htmlFor="f-which-shop-is-this-ad-from" style={{ display: 'block', fontSize: 11, color: PAL.textDim, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>
               Which shop is this ad from?
             </label>
-            <select
+            <select id="f-which-shop-is-this-ad-from"
               value={selectedShopId}
               onChange={(e) => setSelectedShopId(e.target.value)}
               style={{
@@ -2023,7 +2023,7 @@ function SubmitModal({ region, user, prefillShopId, prefillCut, onClose, onSignI
 
         {shopMode === 'existing' ? (
           <Field label="Shop">
-            <select value={existingShopId} onChange={(e) => setExistingShopId(e.target.value)} style={input} required>
+            <select aria-label="Shop" value={existingShopId} onChange={(e) => setExistingShopId(e.target.value)} style={input} required>
               <option value="">— pick a shop —</option>
               {regionShops.map(s => (
                 <option key={s.id} value={s.id}>
@@ -2042,7 +2042,7 @@ function SubmitModal({ region, user, prefillShopId, prefillCut, onClose, onSignI
               />
             </Field>
             <Field label="Shop type">
-              <select value={newStoreType} onChange={(e) => setNewStoreType(e.target.value)} style={input}>
+              <select aria-label="Store type" value={newStoreType} onChange={(e) => setNewStoreType(e.target.value)} style={input}>
                 {Object.entries(STORE_TYPES).map(([id, t]) => (
                   <option key={id} value={id}>{t.icon} {t.label}</option>
                 ))}
@@ -2059,13 +2059,13 @@ function SubmitModal({ region, user, prefillShopId, prefillCut, onClose, onSignI
         )}
 
         <Field label="Cut">
-          <select value={cut} onChange={(e) => setCut(e.target.value)} style={input}>
+          <select aria-label="Cut" value={cut} onChange={(e) => setCut(e.target.value)} style={input}>
             {CUT_ORDER.map(id => <option key={id} value={id}>{CUTS[id].label}</option>)}
           </select>
         </Field>
 
         <Field label="Price per pound">
-          <input
+          <input aria-label="Price per pound"
             type="number" step="0.01" min="0.01" max="100"
             value={price} onChange={(e) => setPrice(e.target.value)}
             placeholder="5.99" style={input} required
@@ -2073,7 +2073,7 @@ function SubmitModal({ region, user, prefillShopId, prefillCut, onClose, onSignI
         </Field>
 
         <Field label="Notes (optional)">
-          <textarea
+          <textarea aria-label="Notes"
             value={notes} onChange={(e) => setNotes(e.target.value)}
             placeholder="Sale vs regular price, grade, cut variation, etc."
             style={{ ...input, minHeight: 60, resize: 'vertical' }}

@@ -71,6 +71,7 @@ var EEA_UK_CH = [
   'AT', 'BE', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EE', 'FI', 'FR', 'DE', 'GR', 'HU',
   'IE', 'IT', 'LV', 'LT', 'LU', 'MT', 'NL', 'PL', 'PT', 'RO', 'SK', 'SI', 'ES',
   'SE', 'IS', 'LI', 'NO', 'GB', 'CH',
+  'US-CA', // California (legal register 2026-10-14 #11): CIPA demand-letter economics; denied by default like the EEA, banner shown, withdrawal link everywhere else in the US
 ];
 var CONSENT_KEY = 'hs-consent-v1';
 // Bump when the banner wording changes, so a stored grant can be tied to

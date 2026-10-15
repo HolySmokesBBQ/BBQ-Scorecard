@@ -77,6 +77,7 @@ const sharedAssets = [
   // App Store Support URL for Scorecard (Guideline 1.5) — must be a real
   // 200 at the site root; Scorecard's App Store Connect points here.
   'support.html',
+  'accessibility.html', // accessibility statement (legal register 2026-10-14 #9)
   'sitemap.xml',
   'robots.txt',
   'gtm-init.js',
