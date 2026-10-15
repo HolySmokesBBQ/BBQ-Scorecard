@@ -2035,7 +2035,7 @@ function SubmitModal({ region, user, prefillShopId, prefillCut, onClose, onSignI
         ) : (
           <>
             <Field label="New shop name">
-              <input
+              <input aria-label="Store name"
                 value={newStore} onChange={(e) => setNewStore(e.target.value)}
                 placeholder="e.g. Nolechek's Meats"
                 style={input} maxLength={80} required
