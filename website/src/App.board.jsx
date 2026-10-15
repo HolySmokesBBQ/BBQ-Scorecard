@@ -2049,7 +2049,7 @@ function SubmitModal({ region, user, prefillShopId, prefillCut, onClose, onSignI
               </select>
             </Field>
             <Field label="Location (city or address)">
-              <input
+              <input aria-label="Location"
                 value={newLocation} onChange={(e) => setNewLocation(e.target.value)}
                 placeholder="e.g. Thorp, WI"
                 style={input} maxLength={120}
