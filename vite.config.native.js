@@ -10,11 +10,35 @@ import { resolve } from 'node:path';
 // the tesseract files add ~24 MB of dead weight to every Scorecard
 // AAB (~9 MB → ~29 MB, tripling install size for zero user value).
 // This plugin nukes them from dist-native after Vite copies them.
+//
+// The same goes for the website's press and store art (2026-10-15). The
+// Burnt Ends rebrand put full-size badge PNGs for every app into public/,
+// and they rode into the native bundle too, pushing the Scorecard AAB from
+// 9.8 MB to 11.2 MB, past the 10 MB browser-upload cap. Scorecard never
+// references any of them; src/nativeAssets.scorecard.test.js fails if that
+// stops being true, so nothing the app uses can be stripped by accident.
+export const NATIVE_STRIP = [
+  'tesseract',
+  'BBQ Board',
+  'BBQ Calculator',
+  'BBQ Notebook App Logo',
+  'BBQ Scorecard App Logo',
+  'Holy Smokes Logo',
+  'board-icon-512.png',
+  'calc-icon-512.png',
+  'bbq-calculator-logo.png',
+  'bbq-board-logo.png',
+  'bbq-board-logo@2x.png',
+  'bbq-board-logo-180.png',
+];
+
 function stripTesseract() {
   return {
     name: 'strip-tesseract',
     closeBundle() {
-      try { rmSync(resolve('dist-native/tesseract'), { recursive: true, force: true }); } catch {}
+      for (const p of NATIVE_STRIP) {
+        try { rmSync(resolve('dist-native', p), { recursive: true, force: true }); } catch {}
+      }
     },
   };
 }
