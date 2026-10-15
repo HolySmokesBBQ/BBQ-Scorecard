@@ -8,8 +8,10 @@ trigger has fired and the step is done.
 
 | Waiting | Trigger | Then |
 |---|---|---|
-| 4.4.0 Android Production + Open (submitted 2026-10-12 evening) | Google approves (Production track shows 4400 live) | Then iOS 4.4.0 (16) from a side branch. Release day: Apple User-ID label revisit, consent re-prompt verified. Photos: billing re-enable is with the auditor; once confirmed, verify a real upload plus the repair loop. |
-| 4.4.1 (4401) rebuild | Auditor grants the gradle slot (queue 2026-10-12: Board 2.4.7, Notebook, then Scorecard). Drain the message backlog first. | ONE bundleRelease from HEAD (Burnt Ends icons 82ea033, _docId heal e2b42dc, safe area 82648c6+dec90f4). Order: build:native, then cap sync ALONE, then verify cordova.variables.gradle, then the process table, then gradle. Verify version 4401, the icons by pixel diff, safeArea/max() and deleteField in the bundle. The 4.4.1 AAB on disk is stale; overwrite it. |
+| 4.4.1 (4401) Internal | Joel drags BBQ-Scorecard-Android/BBQ Scorecard-signed-v4.4.1.aab (11.2 MB, over the 10 MB browser-upload cap) into the saved Internal draft (release 45, notes already in) | Save and publish Internal, then Closed, then Open + Production, as with 4.4.0. Built and verified 2026-10-14 from 91cf8da. |
+| Photo end-to-end proof | Joel fully restarts Scorecard (4.4.0+) on the old phone and adds a test photo | Read-only Firestore: J's BBQ photos[] gets https URLs, Storage reviews/<uid>/... has objects. Report the drain count to the auditor. |
+| Native AAB size | Next version | dist-native carries website-only brand art from public/ (the AAB went 9.8 MB to 11.2 MB). Exclude what the app doesn't use, to get back under the 10 MB self-upload cap. |
+| iOS 4.4.x | 4.4.1 Android on Production | Codemagic build from a side branch, App Store submission, Joel's manual release. Release day: the Apple User-ID label revisit. |
 
 ## Requirements for the per-app consent versions (before building)
 
