@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application
+        android:allowBackup="false"
+        android:fullBackupContent="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/AppTheme">
+
+        <!-- Firebase Analytics native SDK: off. Nothing in the app uses it,
+             and it would start collecting (first_open, sessions) at process
+             start, before the in-app analytics consent is asked. Usage
+             analytics goes through src/consent.js instead. Audit L-1. -->
+        <meta-data android:name="firebase_analytics_collection_enabled" android:value="false" />
+        <meta-data android:name="firebase_analytics_collection_deactivated" android:value="true" />
+
+
+        <activity
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
+            android:name=".MainActivity"
+            android:label="@string/title_activity_main"
+            android:theme="@style/AppTheme.NoActionBarLaunch"
+            android:launchMode="singleTask"
+            android:exported="true">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+        </activity>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths"></meta-data>
+        </provider>
+    </application>
+
+    <!-- Permissions -->
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Location (legal register #6, 2026-10-14). COARSE everywhere; FINE
+         only up to Android 11 (API 30). Reason: Capacitor's WebView asks for
+         COARSE+FINE together and falls back to COARSE alone only on Android
+         12+ (BridgeWebChromeClient, the Build.VERSION_CODES.S check), so a
+         COARSE-only manifest would break "BBQ Near Me" on Android 7-11.
+         Either way, nothing more precise than a 0.1-degree (~10 km) point
+         leaves the device (src/nearbyQuery.js), which is what makes the Play
+         "Approximate location" declaration true. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- Firebase Analytics uses the Android Advertising ID by default.
+         Declared to Play Console (App content → Advertising ID → Yes,
+         Analytics) 2026-07-12; Google requires this permission on
+         Android 13+ when the declaration says Yes, otherwise SDK reads
+         return zeros and future releases get blocked. -->
+    <uses-permission android:name="com.google.android.gms.permission.AD_ID" />
+</manifest>

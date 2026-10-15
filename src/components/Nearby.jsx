@@ -1,8 +1,14 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useAppContext } from '../context/AppContext.jsx';
 import { track } from '../scoring.js';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { buildOverpassQuery, withinRadius } from '../nearbyQuery.js';
+
+// Just-in-time disclosure (legal register #6): say what happens to the
+// location BEFORE the phone's permission prompt appears, once per install.
+const NEARBY_ACK_KEY = 'hs-nearby-location-ack';
+const readAck = () => { try { return localStorage.getItem(NEARBY_ACK_KEY) === '1'; } catch { return false; } };
 
 export default function Nearby() {
   const {
@@ -12,10 +18,11 @@ export default function Nearby() {
     nearbyRadius, setNearbyRadius,
     nearbyMapRef,
   } = useAppContext();
+  const [acked, setAcked] = useState(readAck);
 
   // Nearby BBQ — Overpass API map
   useEffect(() => {
-    if (!nearbyMapRef.current) return;
+    if (!acked || !nearbyMapRef.current) return;
 
     let cancelled = false;
     let map = null;
@@ -50,7 +57,10 @@ export default function Nearby() {
 
       setNearbyStatus('searching');
       try {
-        const query = `[out:json][timeout:25];(nwr["cuisine"~"bbq|barbecue",i](around:${nearbyRadius},${userLat},${userLng});nwr["name"~"smokehouse|smokehaus",i]["amenity"](around:${nearbyRadius},${userLat},${userLng}););out center body;`;
+        // Only a rounded (about 10 km) point goes to Overpass; the radius
+        // is padded to cover the rounding and results are trimmed back to
+        // the real radius on the device below. See nearbyQuery.js.
+        const query = buildOverpassQuery(userLat, userLng, nearbyRadius);
         const resp = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`);
         const data = await resp.json();
 
@@ -76,6 +86,9 @@ export default function Nearby() {
           });
         }
 
+        const inRange = withinRadius(results, userLat, userLng, nearbyRadius);
+        results.length = 0;
+        results.push(...inRange);
         setNearbyResults(results);
         setNearbyStatus('done');
 
@@ -179,21 +192,39 @@ export default function Nearby() {
       document.documentElement.style.background = S.bg;
       document.body.style.background = S.bg;
     };
-  }, [nearbyRadius]);
+  }, [nearbyRadius, acked]);
 
   return (
     <div className="bbq-container" style={{ padding: '16px' }}>
       <h2 style={{ fontFamily: "'Oswald', sans-serif", fontSize: '20px', letterSpacing: '2px', marginBottom: '4px' }}>BBQ Near Me</h2>
-      <div style={{ fontSize: '12px', color: S.muted, marginBottom: '12px' }}>
+      {!acked && (
+        <div role="region" aria-label="About your location" style={{
+          background: S.card, border: `1px solid ${S.border}`, borderLeft: `4px solid ${S.accent}`,
+          borderRadius: '8px', padding: '14px', margin: '8px 0 12px', fontSize: '13px', lineHeight: 1.5, color: S.text,
+        }}>
+          <div style={{ marginBottom: '8px' }}>
+            BBQ Near Me needs your location to find barbecue close to you. Your phone will ask for permission next.
+          </div>
+          <div style={{ color: S.muted, marginBottom: '12px' }}>
+            Before anything leaves your phone, the location is rounded to about 10 km and sent to OpenStreetMap's search service to look up restaurants. Scorecard doesn't save it.
+          </div>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button onClick={() => navigateTo('home')} style={{ ...sBtn(false, true), flex: 1 }}>Not now</button>
+            <button onClick={() => { try { localStorage.setItem(NEARBY_ACK_KEY, '1'); } catch {} setAcked(true); }}
+              style={{ ...sBtn(true, true), flex: 1 }}>Continue</button>
+          </div>
+        </div>
+      )}
+      {acked && <div style={{ fontSize: '12px', color: S.muted, marginBottom: '12px' }}>
         {nearbyStatus === 'locating' ? 'Finding your location...' :
          nearbyStatus === 'searching' ? 'Searching for BBQ nearby...' :
          nearbyStatus === 'denied' ? 'Location access denied.' :
          nearbyStatus === 'error' ? 'Search failed. Try again.' :
          `${nearbyResults.length} BBQ spot${nearbyResults.length !== 1 ? 's' : ''} found nearby`}
-      </div>
+      </div>}
 
       {/* Radius selector */}
-      {nearbyStatus !== 'denied' && (
+      {acked && nearbyStatus !== 'denied' && (
         <div style={{ display: 'flex', gap: '6px', marginBottom: '10px', flexWrap: 'wrap' }}>
           {[{label: '10 mi', val: 16000}, {label: '25 mi', val: 40000}, {label: '50 mi', val: 80000}].map(r => (
             <button key={r.val} onClick={() => setNearbyRadius(r.val)}
@@ -205,7 +236,7 @@ export default function Nearby() {
       {nearbyStatus === 'denied' && (
         <div style={{ textAlign: 'center', padding: '40px 0' }}>
           <div style={{ fontSize: '14px', color: S.muted, marginBottom: '12px' }}>
-            Allow location access in your browser settings to find BBQ restaurants near you.
+            Allow location access for BBQ Scorecard in your phone's settings to find BBQ restaurants near you.
           </div>
           <button onClick={() => { setNearbyStatus('locating'); setView('home'); setTimeout(() => navigateTo('nearby'), 100); }}
             style={sBtn(true, false)}>Try Again</button>
@@ -213,8 +244,8 @@ export default function Nearby() {
       )}
 
       <div ref={nearbyMapRef} style={{
-        width: '100%', height: nearbyStatus === 'denied' ? '0' : '55vh',
-        borderRadius: '8px', border: nearbyStatus === 'denied' ? 'none' : `1px solid ${S.border}`,
+        width: '100%', height: (!acked || nearbyStatus === 'denied') ? '0' : '55vh',
+        borderRadius: '8px', border: (!acked || nearbyStatus === 'denied') ? 'none' : `1px solid ${S.border}`,
         background: S.dark,
       }} />
 

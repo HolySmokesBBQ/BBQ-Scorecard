@@ -67,7 +67,7 @@
 		</dict>
 	</array>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>BBQ Scorecard uses your location only when you tap "BBQ Near Me" to find barbecue restaurants close to you. Your location is never stored or shared.</string>
+	<string>BBQ Scorecard uses your location when you open BBQ Near Me, to find barbecue restaurants close to you. It's rounded to about 10 km before being sent to OpenStreetMap's search service, and the app doesn't save it.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>BBQ Scorecard uses the camera so you can take photos of your plate to attach to a review.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
