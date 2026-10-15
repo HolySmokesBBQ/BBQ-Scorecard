@@ -100,7 +100,7 @@ export default function Leaderboard() {
           <div style={{ marginBottom: '20px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
               <div style={{ fontSize: '13px', fontWeight: '600', color: S.accent, fontFamily: "'Oswald', sans-serif", letterSpacing: '1px' }}>Overall Rankings</div>
-              <select value={leaderboardSort} onChange={e => setLeaderboardSort(e.target.value)}
+              <select aria-label="Sort leaderboard" value={leaderboardSort} onChange={e => setLeaderboardSort(e.target.value)}
                 style={{ background: S.dark, color: S.text, border: `1px solid ${S.border}`, borderRadius: '6px', padding: '4px 8px', fontSize: '11px' }}>
                 <option value="reviews">Most Restaurants</option>
                 <option value="composite">Avg Overall Score</option>

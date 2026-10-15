@@ -150,6 +150,10 @@
        SAFE_TOP in src/safeArea.js; keep them in step. */
     #root { min-height: 100vh; padding-top: var(--safe-area-top, max(var(--safe-area-inset-top, 0px), env(safe-area-inset-top, 0px))); }
     input, textarea, select, button { font-family: 'Inter', sans-serif; }
+    /* Visible keyboard focus everywhere (legal register #9, WCAG 2.4.7).
+       :focus-visible only shows for keyboard focus, so taps and clicks
+       don't get a ring. Never set outline:none inline; it beats this. */
+    :focus-visible { outline: 2px solid #d4782f; outline-offset: 2px; }
   </style>
 </head>
 <body>

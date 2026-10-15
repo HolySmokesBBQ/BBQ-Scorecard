@@ -1,6 +1,7 @@
 import { useAppContext } from '../context/AppContext.jsx';
 import { track } from '../scoring.js';
 import useNotebookPromo, { NOTEBOOK_PLAY_URL, NOTEBOOK_ACCENT } from '../hooks/useNotebookPromo.js';
+import { pressable } from '../a11y.js';
 
 // Post-review cross-promo. Rendered on the Detail page — the moment
 // right after a user saves a BBQ review is the highest-intent moment
@@ -27,7 +28,7 @@ export default function NotebookReviewBanner() {
 
   return (
     <div
-      onClick={handleClick}
+      {...pressable(handleClick)}
       style={{
         background: `${NOTEBOOK_ACCENT}12`,
         border: `1px solid ${NOTEBOOK_ACCENT}`,

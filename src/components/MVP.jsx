@@ -1,4 +1,5 @@
 import { useAppContext } from '../context/AppContext.jsx';
+import { pressable } from '../a11y.js';
 
 export default function MVP() {
   const {
@@ -17,7 +18,7 @@ export default function MVP() {
       ) : (
         meatMvps.map(({ meat, restaurant, review, score, count }) => (
           <div key={meat}
-            onClick={() => viewDetail(review)}
+            {...pressable(() => viewDetail(review))}
             style={{
               padding: '14px', background: S.card, borderRadius: '8px', marginBottom: '8px',
               border: `1px solid ${S.border}`, cursor: 'pointer', transition: 'all 0.15s',

@@ -65,12 +65,12 @@ export default function EmailSignInBox({ S, sBtn, sInput, onSignedIn }) {
           style={tabBtnStyle(mode === 'reset', S)}>FORGOT</button>
       </div>
 
-      <input type="email" placeholder="Email" autoComplete="email"
+      <input aria-label="Email" type="email" placeholder="Email" autoComplete="email"
         value={email} onChange={e => setEmail(e.target.value)}
         style={{ ...sInput(), width: '100%', marginBottom: '8px' }} />
 
       {mode !== 'reset' && (
-        <input type="password" placeholder={mode === 'signUp' ? `New password (${MIN_SIGNUP_LENGTH}+ characters)` : 'Password'}
+        <input aria-label={mode === 'signUp' ? 'New password' : 'Password'} type="password" placeholder={mode === 'signUp' ? `New password (${MIN_SIGNUP_LENGTH}+ characters)` : 'Password'}
           autoComplete={mode === 'signUp' ? 'new-password' : 'current-password'}
           value={password} onChange={e => setPassword(e.target.value)}
           style={{ ...sInput(), width: '100%', marginBottom: '8px' }} />

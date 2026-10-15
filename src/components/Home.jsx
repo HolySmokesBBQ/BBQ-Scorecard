@@ -13,6 +13,7 @@ import {
 } from '../firebaseSync.js';
 import { saveLocal } from '../storage.js';
 import { aboveBottom } from '../safeArea.js';
+import { pressable } from '../a11y.js';
 
 export default function Home() {
   const {
@@ -140,7 +141,7 @@ export default function Home() {
 
       <>
       {/* Search */}
-      <input type="text" placeholder="Search restaurants..." value={search} onChange={e => setSearch(e.target.value)}
+      <input aria-label="Search restaurants" type="text" placeholder="Search restaurants..." value={search} onChange={e => setSearch(e.target.value)}
         style={{ ...sInput(), marginBottom: '10px' }} />
 
       {/* Quick filter chips — one at a time, tap active to clear. */}
@@ -180,14 +181,14 @@ export default function Home() {
       {/* Filters */}
       <div style={{ display: 'flex', gap: '8px', marginBottom: '10px', flexWrap: 'wrap' }}>
         {trips.length > 0 && (
-          <select value={tripFilter} onChange={e => { setTripFilter(e.target.value); if (e.target.value) track('filter_applied', { type: 'trip' }); }}
+          <select aria-label="Filter by trip" value={tripFilter} onChange={e => { setTripFilter(e.target.value); if (e.target.value) track('filter_applied', { type: 'trip' }); }}
             style={{ ...sInput(), width: 'auto', flex: 1, fontSize: '12px', padding: '8px' }}>
             <option value="">All Trips</option>
             {trips.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
         )}
         {cities.length > 0 && (
-          <select value={cityFilter} onChange={e => { setCityFilter(e.target.value); if (e.target.value) track('filter_applied', { type: 'city' }); }}
+          <select aria-label="Filter by city" value={cityFilter} onChange={e => { setCityFilter(e.target.value); if (e.target.value) track('filter_applied', { type: 'city' }); }}
             style={{ ...sInput(), width: 'auto', flex: 1, fontSize: '12px', padding: '8px' }}>
             <option value="">All Cities</option>
             {cities.map(c => <option key={c} value={c}>{c}</option>)}
@@ -274,7 +275,7 @@ export default function Home() {
                 <div style={{ fontSize: '11px', color: S.muted, letterSpacing: '1px', marginBottom: '8px', textAlign: 'center' }}>
                   EXAMPLE REVIEW · TAP TO SEE HOW IT WORKS
                 </div>
-                <div onClick={() => viewDetail(SAMPLE_REVIEW)}
+                <div {...pressable(() => viewDetail(SAMPLE_REVIEW), 'Open the sample review')}
                   style={{ padding: '14px', background: S.dark, borderRadius: '8px', cursor: 'pointer',
                     border: `1px dashed ${S.border}`, opacity: 0.85 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -325,6 +326,8 @@ export default function Home() {
                 // the row tap.
                 viewDetail(r);
               }}
+              role="button" tabIndex={0}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); viewDetail(r); } }}
               onTouchStart={() => startLongPress(() => { setCompareMode(true); setCompareIds([r.id]); })}
               onTouchEnd={cancelLongPress}
               onTouchMove={cancelLongPress}
@@ -450,7 +453,7 @@ export default function Home() {
               <div style={{ marginBottom: '4px' }}>
                 <div style={{ fontSize: '11px', color: S.muted, letterSpacing: '1px', marginBottom: '6px' }}>Add a Friend</div>
                 <div style={{ display: 'flex', gap: '6px' }}>
-                  <input type="text" value={friendCodeInput} onChange={e => { const v = e.target.value.toUpperCase(); setFriendCodeInput(v.startsWith('BBQ-') ? v : 'BBQ-'); }}
+                  <input aria-label="Friend code" type="text" value={friendCodeInput} onChange={e => { const v = e.target.value.toUpperCase(); setFriendCodeInput(v.startsWith('BBQ-') ? v : 'BBQ-'); }}
                     placeholder="BBQ-XXXXXX" maxLength={10}
                     onKeyDown={e => { if (e.key === 'Enter') {
                       e.preventDefault();

@@ -116,7 +116,7 @@ export default function Settings() {
               <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4, color: S.accent, fontFamily: "'Oswald', sans-serif", letterSpacing: 1 }}>Add a Friend</div>
               <div style={{ fontSize: 11, color: S.muted, marginBottom: 10 }}>Enter their code to send a request. They must accept before you can see each other's reviews.</div>
               <div style={{ display: 'flex', gap: 8 }}>
-                <input type="text" value={friendCodeInput} onChange={e => setFriendCodeInput(e.target.value.toUpperCase())}
+                <input aria-label="Friend code" type="text" value={friendCodeInput} onChange={e => setFriendCodeInput(e.target.value.toUpperCase())}
                   placeholder="BBQ-XXXXXX" maxLength={10}
                   style={{ ...sInput(), flex: 1, fontFamily: "'Oswald', sans-serif", fontSize: 16, letterSpacing: 2, textAlign: 'center' }} />
                 <button onClick={async () => {

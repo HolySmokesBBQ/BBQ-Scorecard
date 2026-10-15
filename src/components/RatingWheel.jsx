@@ -171,7 +171,10 @@ export default function RatingWheel({
           margin: '0 auto',
           touchAction: 'none',
           cursor: active ? 'grabbing' : 'grab',
-          outline: 'none',
+          // No `outline: 'none'` here: keyboard users need to see when the
+          // wheel has focus (legal register #9). :focus-visible shows the
+          // ring for keyboard focus only, not for a mouse or touch drag.
+          borderRadius: '50%',
         }}
       >
         <svg width={size} height={size} style={{ display: 'block' }} aria-hidden="true">

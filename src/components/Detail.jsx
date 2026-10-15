@@ -5,6 +5,7 @@ import { calcScores, track } from '../scoring.js';
 import { buildGoogleDraft, GOOGLE_EXTRAS, groupSize } from '../googleDraft.js';
 import NotebookReviewBanner from './NotebookReviewBanner.jsx';
 import { findLastVisit, compareVisits, shortVisitDate } from '../rematch.js';
+import { pressable } from '../a11y.js';
 
 export default function Detail() {
   const {
@@ -115,7 +116,7 @@ export default function Detail() {
               <div style={{ position: 'absolute', bottom: '8px', left: '50%', transform: 'translateX(-50%)',
                 display: 'flex', gap: '6px' }}>
                 {photos.map((_, i) => (
-                  <div key={i} onClick={() => setGalleryIndex(i)} style={{
+                  <div key={i} {...pressable(() => setGalleryIndex(i), `Photo ${i + 1}`)} aria-current={i === galleryIndex ? 'true' : undefined} style={{
                     width: '8px', height: '8px', borderRadius: '50%', cursor: 'pointer',
                     background: i === galleryIndex ? '#fff' : 'rgba(255,255,255,0.4)',
                   }} />

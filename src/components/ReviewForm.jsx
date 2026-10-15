@@ -4,6 +4,7 @@ import { CATEGORIES, DESCRIPTORS, MEATS, SIDES_LIST, SAUCE_DEP_OPTIONS, RETURN_O
 import { calcScores, track } from '../scoring.js';
 import { findLastVisit, compareVisits, shortVisitDate } from '../rematch.js';
 import { PARTY_OPTIONS, GOOGLE_EXTRAS, defaultGoogleRatings } from '../googleDraft.js';
+import { pressable } from '../a11y.js';
 
 const ALL_CATEGORIES = [...CATEGORIES.bbq, ...CATEGORIES.family];
 
@@ -174,7 +175,7 @@ export default function ReviewForm() {
         <div className="bbq-form-fields">
         <div style={{ marginBottom: '10px', position: 'relative' }}>
           <label style={sLabel()}>RESTAURANT</label>
-          <input type="text"
+          <input aria-label="Restaurant" type="text"
             value={currentReview.restaurant}
             onChange={e => { update('restaurant', e.target.value); setShowRestaurantList(true); }}
             onFocus={() => setShowRestaurantList(true)}
@@ -194,6 +195,8 @@ export default function ReviewForm() {
                   // onMouseDown (not onClick) so it fires before the input's
                   // blur; preventDefault keeps focus from bouncing.
                   onMouseDown={(e) => { e.preventDefault(); update('restaurant', name); setShowRestaurantList(false); }}
+                  role="option" aria-selected="false" tabIndex={0}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); update('restaurant', name); setShowRestaurantList(false); } }}
                   style={{
                     padding: '10px 12px', fontSize: '14px', color: S.text, cursor: 'pointer',
                     borderTop: i === 0 ? 'none' : `1px solid ${S.border}`,
@@ -207,17 +210,17 @@ export default function ReviewForm() {
 
         <div style={{ marginBottom: '10px' }}>
           <label style={sLabel()}>DATE</label>
-          <input type="date" value={currentReview.date} onChange={e => update('date', e.target.value)} style={sInput()} />
+          <input aria-label="Date" type="date" value={currentReview.date} onChange={e => update('date', e.target.value)} style={sInput()} />
         </div>
 
         <div style={{ marginBottom: '10px' }}>
           <label style={sLabel()}>LOCATION</label>
-          <input type="text" value={currentReview.location} onChange={e => update('location', e.target.value)} placeholder="City, State" style={sInput()} />
+          <input aria-label="Location" type="text" value={currentReview.location} onChange={e => update('location', e.target.value)} placeholder="City, State" style={sInput()} />
         </div>
 
         <div style={{ marginBottom: '10px' }}>
           <label style={sLabel()}>TRIP</label>
-          <input type="text" value={currentReview.trip || ''} onChange={e => update('trip', e.target.value)} placeholder="e.g. San Antonio 2026" style={sInput()}
+          <input aria-label="Trip" type="text" value={currentReview.trip || ''} onChange={e => update('trip', e.target.value)} placeholder="e.g. San Antonio 2026" style={sInput()}
             list="trip-suggestions" />
           {trips.length > 0 && (
             <datalist id="trip-suggestions">
@@ -229,7 +232,7 @@ export default function ReviewForm() {
         <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
           <div style={{ flex: 2 }}>
             <label style={sLabel()}>PRICE ($)</label>
-            <input type="number" inputMode="decimal" value={currentReview.price || ''} onChange={e => update('price', e.target.value)} placeholder="Total" style={sInput()} />
+            <input aria-label="Price in dollars" type="number" inputMode="decimal" value={currentReview.price || ''} onChange={e => update('price', e.target.value)} placeholder="Total" style={sInput()} />
           </div>
           <div style={{ flex: 1 }}>
             <label style={sLabel()}>SPLIT</label>
@@ -285,14 +288,14 @@ export default function ReviewForm() {
 
         <div style={{ marginBottom: '10px' }}>
           <label style={sLabel()}>GOOGLE REVIEW URL</label>
-          <input type="url" value={currentReview.googleReviewUrl || ''} onChange={e => update('googleReviewUrl', e.target.value)} placeholder="https://..." style={sInput()} />
+          <input aria-label="Google review URL" type="url" value={currentReview.googleReviewUrl || ''} onChange={e => update('googleReviewUrl', e.target.value)} placeholder="https://..." style={sInput()} />
         </div>
       </div>
 
       {/* Order style — how the meal was ordered (plate, by the pound, sandwich…) */}
       <div style={{ marginBottom: '16px' }}>
         <label style={sLabel()}>ORDER STYLE</label>
-        <input type="text" value={currentReview.orderStyle || ''} onChange={e => update('orderStyle', e.target.value)} placeholder="Plate, by the pound, sandwich, combo…" style={sInput()} />
+        <input aria-label="Order style" type="text" value={currentReview.orderStyle || ''} onChange={e => update('orderStyle', e.target.value)} placeholder="Plate, by the pound, sandwich, combo…" style={sInput()} />
       </div>
 
       {/* Meats */}
@@ -304,7 +307,7 @@ export default function ReviewForm() {
               style={sBtn((currentReview.meats || []).includes(m), true)}>{m}</button>
           ))}
         </div>
-        <input type="text" value={currentReview.meatOther || ''} onChange={e => update('meatOther', e.target.value)} placeholder="Other meat..." style={{ ...sInput(), fontSize: '12px' }} />
+        <input aria-label="Other meat" type="text" value={currentReview.meatOther || ''} onChange={e => update('meatOther', e.target.value)} placeholder="Other meat..." style={{ ...sInput(), fontSize: '12px' }} />
       </div>
 
       {/* Sides */}
@@ -316,18 +319,18 @@ export default function ReviewForm() {
               style={sBtn((currentReview.sides || []).includes(s), true)}>{s}</button>
           ))}
         </div>
-        <input type="text" value={currentReview.sideOther || ''} onChange={e => update('sideOther', e.target.value)} placeholder="Other side..." style={{ ...sInput(), fontSize: '12px' }} />
+        <input aria-label="Other side" type="text" value={currentReview.sideOther || ''} onChange={e => update('sideOther', e.target.value)} placeholder="Other side..." style={{ ...sInput(), fontSize: '12px' }} />
       </div>
 
       {/* Dessert + Drinks — side by side */}
       <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
         <div style={{ flex: 1 }}>
           <label style={sLabel()}>DESSERT</label>
-          <input type="text" value={currentReview.dessert || ''} onChange={e => update('dessert', e.target.value)} placeholder="What'd you have?" style={sInput()} />
+          <input aria-label="Dessert" type="text" value={currentReview.dessert || ''} onChange={e => update('dessert', e.target.value)} placeholder="What'd you have?" style={sInput()} />
         </div>
         <div style={{ flex: 1 }}>
           <label style={sLabel()}>DRINKS</label>
-          <input type="text" value={currentReview.drinks || ''} onChange={e => update('drinks', e.target.value)} placeholder="Sweet tea, beer…" style={sInput()} />
+          <input aria-label="Drinks" type="text" value={currentReview.drinks || ''} onChange={e => update('drinks', e.target.value)} placeholder="Sweet tea, beer…" style={sInput()} />
         </div>
       </div>
 
@@ -347,7 +350,7 @@ export default function ReviewForm() {
           </div>
         )}
         <div style={{ display: 'flex', gap: '6px' }}>
-          <input type="text" value={friendName} onChange={e => setFriendName(e.target.value)}
+          <input aria-label="Friend's name" type="text" value={friendName} onChange={e => setFriendName(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addFriend(); } }}
             placeholder="Add a friend..." style={{ ...sInput(), flex: 1 }} list="friend-suggestions" />
           <button onClick={addFriend} disabled={!friendName.trim()}
@@ -471,7 +474,9 @@ export default function ReviewForm() {
           {(currentReview.friends || []).map(friend => (
             <div key={friend.name} style={{ background: S.dark, borderRadius: '8px', padding: '12px', marginBottom: '8px', border: `1px solid ${S.border}` }}>
               <div
-                onClick={() => blindTable && !revealed && setOpenScorer(openScorer === friend.name ? null : friend.name)}
+                {...(blindTable && !revealed
+                  ? pressable(() => setOpenScorer(openScorer === friend.name ? null : friend.name))
+                  : {})}
                 style={{
                   fontWeight: '600', fontSize: '14px', marginBottom: '10px', color: S.accent,
                   display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -659,7 +664,7 @@ export default function ReviewForm() {
           </div>
         )}
         <div style={{ display: 'flex', gap: '6px' }}>
-          <textarea value={currentReview.notes || ''} onChange={e => update('notes', e.target.value)}
+          <textarea aria-label="Add a note" value={currentReview.notes || ''} onChange={e => update('notes', e.target.value)}
             placeholder="Add a note..." rows={2}
             style={{ ...sInput(), resize: 'vertical', flex: 1 }} />
           <button onClick={addTimestampedNote} disabled={!currentReview.notes?.trim()}
@@ -682,7 +687,7 @@ export default function ReviewForm() {
           ))}
         </div>
         {(currentReview.party === 'Family' || currentReview.party === 'Group') && (
-          <input type="number" min="2" inputMode="numeric" placeholder="How many?"
+          <input aria-label="How many in your group" type="number" min="2" inputMode="numeric" placeholder="How many?"
             value={currentReview.partySize || ''} onChange={e => update('partySize', e.target.value)}
             style={{ ...sInput(), width: '120px', marginBottom: '8px' }} />
         )}
@@ -692,10 +697,10 @@ export default function ReviewForm() {
             value={(currentReview.scores || {}).atmosphere}
             onPick={(n) => updateScore('atmosphere', n)} />
         </div>
-        <input type="text" placeholder="Atmosphere note (optional)"
+        <input aria-label="Atmosphere note" type="text" placeholder="Atmosphere note (optional)"
           value={currentReview.atmosphereNote || ''} onChange={e => update('atmosphereNote', e.target.value)}
           style={{ ...sInput(), width: '100%', marginBottom: '8px' }} />
-        <input type="text" placeholder="Service note (optional, no staff names)"
+        <input aria-label="Service note" type="text" placeholder="Service note (optional, no staff names)"
           value={currentReview.serviceNote || ''} onChange={e => update('serviceNote', e.target.value)}
           style={{ ...sInput(), width: '100%', marginBottom: '12px' }} />
 

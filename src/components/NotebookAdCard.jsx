@@ -1,6 +1,7 @@
 import { useAppContext } from '../context/AppContext.jsx';
 import { track } from '../scoring.js';
 import useNotebookPromo, { NOTEBOOK_PLAY_URL, NOTEBOOK_ACCENT } from '../hooks/useNotebookPromo.js';
+import { pressable } from '../a11y.js';
 
 // Cross-promo card for the standalone BBQ Notebook app. Lives on the
 // Scorecard Home screen, above the review list.
@@ -24,7 +25,7 @@ export default function NotebookAdCard() {
 
   return (
     <div
-      onClick={handleClick}
+      {...pressable(handleClick)}
       style={{
         background: S.card,
         border: `1px solid ${NOTEBOOK_ACCENT}`,

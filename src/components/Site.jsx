@@ -2,6 +2,7 @@ import { useAppContext } from '../context/AppContext.jsx';
 import { CATEGORIES } from '../constants.js';
 import { calcScores, track } from '../scoring.js';
 import Avatar from './Avatar.jsx';
+import { pressable } from '../a11y.js';
 
 export default function Site() {
   const {
@@ -189,7 +190,7 @@ export default function Site() {
           </h2>
           <div style={{ background: S.card, borderRadius: '10px', padding: '16px',
             border: `1px solid ${S.border}`, cursor: 'pointer' }}
-            onClick={() => { track('skip_sign_in'); navigateTo('home'); }}>
+            {...pressable(() => { track('skip_sign_in'); navigateTo('home'); })}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div style={{ flex: 1 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
