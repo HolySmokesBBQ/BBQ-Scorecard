@@ -1131,7 +1131,7 @@ function LocationPicker({ cityId, radius, onCityChange, onRadiusChange }) {
       </div>
 
       {/* State selector + state's cities */}
-      <select
+      <select aria-label="State"
         value={browseState}
         onChange={onStateChange}
         style={{
