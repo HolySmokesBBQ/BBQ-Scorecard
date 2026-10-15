@@ -1068,7 +1068,7 @@ function LocationPicker({ cityId, radius, onCityChange, onRadiusChange }) {
 
       {/* Search input */}
       <div style={{ position: 'relative', marginBottom: 8 }}>
-        <input
+        <input aria-label="Search shops and cuts"
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
