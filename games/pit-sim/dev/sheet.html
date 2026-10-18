@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pit sim sprite sheet</title>
+  <style>
+    :root { --k: #1b1714; --u: #2a2015; --c: #E6D8B8; --m: #bfb39a; --h: #3a332c; --y: #F3CF6D; --g: #5f7f4c; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--k); color: var(--c); font: 13px/1.4 ui-monospace, Menlo, Consolas, monospace; padding: 16px; }
+    h1 { font-size: 16px; margin-bottom: 8px; }
+    p { color: var(--m); margin-bottom: 12px; }
+    #bar { display: flex; gap: 12px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
+    button { font: inherit; min-height: 32px; padding: 0 12px; background: var(--u); color: var(--c); border: 1px solid var(--h); cursor: pointer; }
+    button[aria-pressed="true"] { outline: 2px solid var(--y); }
+    h2 { font-size: 14px; margin: 20px 0 8px; color: var(--y); }
+    .set { display: flex; flex-wrap: wrap; gap: 12px; }
+    figure { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px; border: 1px solid var(--h); background: var(--k); }
+    figure.grass { background: var(--g); }
+    figure.cream { background: var(--c); }
+    figure.cream figcaption { color: var(--k); }
+    figcaption { font-size: 11px; color: var(--m); white-space: nowrap; }
+    canvas { image-rendering: pixelated; image-rendering: crisp-edges; display: block; }
+    #err { color: #ff9a2e; white-space: pre-wrap; }
+  </style>
+  <script src="../sprites.js" defer></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      var art = window.PitSim && window.PitSim.art;
+      var err = document.getElementById('err');
+      if (!art) { err.textContent = 'PitSim.art is missing.'; return; }
+      try { art.build(); } catch (e) { err.textContent = String(e && e.message || e); return; }
+
+      var SCALE = 3;
+      var groups = [
+        ['People', /^(player|buddy|tender|cust\d)_|^shadow$/],
+        ['Hands', /^hand_/],
+        ['Icons, plates, pieces', /^(icon|plate|piece)_|^mark_x$/],
+        ['Stations', /^(kettle|drum|outline|cooler|board|table_mid|table_end|canopy|canopy_pole|pile|trash|gate|fence_h|fence_v|hedge|grass|path)$/],
+        ['Effects and text', /^(bubble|smoke|fire|coin|font)$/]
+      ];
+      var names = Object.keys(art.SPRITES);
+      var root = document.getElementById('sheet');
+      var bg = 'grass';
+      var total = 0;
+
+      function figure(name, f) {
+        var fig = document.createElement('figure');
+        fig.className = bg;
+        fig.appendChild(art.canvasFor(name, f, SCALE));
+        var cap = document.createElement('figcaption');
+        var s = art.SPRITES[name];
+        cap.textContent = name + (s.frames.length > 1 ? ' [' + f + ']' : '') + ' ' + s.w + 'x' + s.h;
+        fig.appendChild(cap);
+        return fig;
+      }
+
+      function render() {
+        root.textContent = '';
+        total = 0;
+        var seen = {};
+        groups.forEach(function (g) {
+          var h = document.createElement('h2');
+          h.textContent = g[0];
+          root.appendChild(h);
+          var set = document.createElement('div');
+          set.className = 'set';
+          names.forEach(function (name) {
+            if (!g[1].test(name) || seen[name]) return;
+            seen[name] = true;
+            for (var f = 0; f < art.frames(name); f++) { set.appendChild(figure(name, f)); total++; }
+          });
+          root.appendChild(set);
+        });
+        var left = names.filter(function (n) { return !seen[n]; });
+        if (left.length) {
+          var h2 = document.createElement('h2');
+          h2.textContent = 'Not grouped';
+          root.appendChild(h2);
+          var set2 = document.createElement('div');
+          set2.className = 'set';
+          left.forEach(function (name) { for (var f = 0; f < art.frames(name); f++) { set2.appendChild(figure(name, f)); total++; } });
+          root.appendChild(set2);
+        }
+
+        // Flip and text samples
+        var h3 = document.createElement('h2');
+        h3.textContent = 'Flip and text';
+        root.appendChild(h3);
+        var set3 = document.createElement('div');
+        set3.className = 'set';
+        ['player_side', 'cust1_side', 'table_end'].forEach(function (name) {
+          var fig = document.createElement('figure');
+          fig.className = bg;
+          var s = art.SPRITES[name];
+          var c = document.createElement('canvas');
+          c.width = s.w * 2 * SCALE; c.height = s.h * SCALE;
+          var ctx = c.getContext('2d');
+          ctx.imageSmoothingEnabled = false;
+          ctx.scale(SCALE, SCALE);
+          art.draw(ctx, name, 0, 0, 0, false);
+          art.draw(ctx, name, s.w, 0, 0, true);
+          fig.appendChild(c);
+          var cap = document.createElement('figcaption');
+          cap.textContent = name + ' + flip';
+          fig.appendChild(cap);
+          set3.appendChild(fig);
+        });
+        var sample = 'GATE OPENS IN 10 LAST CALL +5:30';
+        var fig = document.createElement('figure');
+        fig.className = bg;
+        var tc = document.createElement('canvas');
+        tc.width = (art.textWidth(sample) + 2) * SCALE; tc.height = 8 * SCALE;
+        var tctx = tc.getContext('2d');
+        tctx.imageSmoothingEnabled = false;
+        tctx.scale(SCALE, SCALE);
+        art.text(tctx, sample, 1, 1);
+        fig.appendChild(tc);
+        var cap2 = document.createElement('figcaption');
+        cap2.textContent = 'art.text, width ' + art.textWidth(sample);
+        fig.appendChild(cap2);
+        set3.appendChild(fig);
+        root.appendChild(set3);
+
+        document.getElementById('count').textContent = names.length + ' sprites, ' + total + ' frames, drawn at ' + SCALE + 'x.';
+      }
+
+      document.getElementById('bar').addEventListener('click', function (e) {
+        var b = e.target.closest('button');
+        if (!b) return;
+        if (b.dataset.bg) {
+          bg = b.dataset.bg;
+          Array.prototype.forEach.call(document.querySelectorAll('[data-bg]'), function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+          render();
+        } else if (b.dataset.scale) {
+          SCALE = Number(b.dataset.scale);
+          Array.prototype.forEach.call(document.querySelectorAll('[data-scale]'), function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+          render();
+        }
+      });
+      render();
+    });
+  </script>
+</head>
+<body>
+  <h1>Pit sim sprite sheet</h1>
+  <p>Dev only. Loads ../sprites.js and draws every sprite and frame with its name under it. <span id="count"></span></p>
+  <div id="bar">
+    <span>Background:</span>
+    <button type="button" data-bg="grass" aria-pressed="true">Grass</button>
+    <button type="button" data-bg="dark" aria-pressed="false">Near black</button>
+    <button type="button" data-bg="cream" aria-pressed="false">Cream</button>
+    <span>Scale:</span>
+    <button type="button" data-scale="2" aria-pressed="false">2x</button>
+    <button type="button" data-scale="3" aria-pressed="true">3x</button>
+    <button type="button" data-scale="6" aria-pressed="false">6x</button>
+  </div>
+  <pre id="err"></pre>
+  <div id="sheet"></div>
+</body>
+</html>
