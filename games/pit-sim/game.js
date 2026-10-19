@@ -526,6 +526,7 @@ const warnOn = Object.create(null);   // cooker id -> its warning bubble showed 
 
 // Season screens (v3.0).
 let rowSink = [];               // where cartRow, ownRow, goalRow and hireRow put their refreshers
+let armedBuy = null;           // feedback audit item 22: the gear or decor row whose Buy waits on Confirm
 let sheetKind = null;           // 'shop' | 'gear' | 'menu' | 'crew' while #sheet is open
 let sheetOpener = null;         // the hub card that opened the sheet (focus returns there)
 let sheetRows = [];
@@ -1673,6 +1674,7 @@ function noteSaveOff() {
 
 function openPanel(name, focusId) {
   howtoOpen = false; howtoFrom = null;
+  armedBuy = null;
   if (name === 'pause') buildPauseBody();
   if (name === 'week' || name === 'sheet' || name === 'creator' || name === 'season-end' || name === 'till' || name === 'hiring' || name === 'card' || name === 'daycard') dropClipboard();
   for (let i = 0; i < PANEL_IDS.length; i++) el[PANEL_IDS[i]].hidden = PANEL_IDS[i] !== name;
@@ -2194,7 +2196,7 @@ function ownRow(item) {
   const name = nameCell(item, false);
   const eff = name.querySelector('.effect');
   const row = mk('div', { cls: 'row', attrs: { 'data-item': item.id } }, [name, price]);
-  let ctl = null, ctlOwned = null;
+  let ctl = null, ctlOwned = null, ctlArmed = null;
   rowSink.push(function () {
     const s = sim.state;
     const isOwned = (isDecor ? s.decor : s.gear)[item.id] === true;
@@ -2213,18 +2215,31 @@ function ownRow(item) {
     price.textContent = (locked && !isOwned) ? item.needsText : String(item.price);
     price.classList.toggle('muted', isOwned || locked || !canPay);
     price.style.whiteSpace = (locked && !isOwned) ? 'normal' : '';
-    if (ctl === null || ctlOwned !== isOwned) {
+    // Feedback audit item 22: Buy spends at once, so the first tap only arms the row ("Buy for N?")
+    // with Confirm and Back, as the morning shop does. Only Confirm calls sim.buy.
+    if (isOwned || locked || !canPay) { if (armedBuy === item.id) armedBuy = null; }
+    const armed = !isOwned && armedBuy === item.id;
+    if (ctl === null || ctlOwned !== isOwned || ctlArmed !== armed) {
+      const hadFocus = !!(ctl && ctl.contains(document.activeElement));
       if (ctl) row.removeChild(ctl);
       if (isOwned) {
         ctl = mk('span', { id: 'buy-' + item.id, cls: 'muted', text: 'Owned' });
+      } else if (armed) {
+        const ok = btn('buy-' + item.id + '-ok', 'Confirm', 'primary', function () { armedBuy = null; sim.buy(item.id, 1); afterAct(); });
+        ok.setAttribute('aria-label', 'Confirm: buy ' + item.label + ' for ' + item.price);
+        const no = btn('buy-' + item.id + '-back', 'Back', 'alt', function () { armedBuy = null; afterAct(); const b = document.getElementById('buy-' + item.id); if (b) b.focus(); });
+        no.setAttribute('aria-label', 'Back, do not buy ' + item.label);
+        ctl = mk('span', { cls: 'buy-arm', attrs: { role: 'group', 'aria-label': 'Buy ' + item.label + ' for ' + item.price + '?' } },
+          [mk('span', { cls: 'buy-ask', text: 'Buy for ' + item.price + '?' }), no, ok]);
       } else {
-        ctl = btn('buy-' + item.id, 'Buy', 'primary', function () { sim.buy(item.id, 1); afterAct(); });
+        ctl = btn('buy-' + item.id, 'Buy', 'primary', function () { armedBuy = item.id; afterAct(); const o = document.getElementById('buy-' + item.id + '-ok'); if (o) o.focus(); });
         ctl.setAttribute('aria-label', 'Buy ' + item.label);
       }
-      ctlOwned = isOwned;
+      ctlOwned = isOwned; ctlArmed = armed;
       row.appendChild(ctl);
+      if (hadFocus && !isOwned) { const f = armed ? ctl.querySelector('.primary') : ctl; if (f) f.focus(); }
     }
-    if (!isOwned) ctl.disabled = locked || !canPay;
+    if (!isOwned && !armed) ctl.disabled = locked || !canPay;
   });
   return row;
 }
@@ -6800,7 +6815,16 @@ function camHome() {
   cam.follow = true;
   cam.homed = true;
   cam.moved = false;
-  if (cam.mode === 'near' && b) { camCenter((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2); camKeepWork(); }
+  if (cam.mode === 'near' && b) {
+    camCenter((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2);
+    // Feedback audit item 19: on a narrow phone (375 CSS px: 250 rp for a 240 rp home box) centring,
+    // then keeping 12 rp right of the line, cut the drum and the charcoal pile at the left edge. When
+    // the box has under 16 rp to spare, the kitchen side (left) gets the margin, up to 12 rp, and the
+    // line only has to fit.
+    const slack = cam.vw - (b.x1 - b.x0);
+    if (slack < 16) { cam.x0 = b.x0 - Math.max(0, Math.min(12, slack)); camClamp(); }
+    camKeepWork();
+  }
   else camClamp();
 }
 function camSet(mode, X, Y) {
@@ -6895,13 +6919,16 @@ function camKeepWork() {
   if (cam.mode !== 'near') return;
   const b = workBox();
   if (!b) return;
-  const fit = function (v, lo0, hi0, span) {
-    const m = Math.max(0, Math.min(12, (span - (hi0 - lo0)) / 2));
+  // Feedback audit item 19: when the home box has under 16 rp to spare across, the line keeps no
+  // margin across (it only has to fit), so the kitchen side keeps the room camHome gave it.
+  const hb = homeBox(), xMax = hb && cam.vw - (hb.x1 - hb.x0) < 16 ? 0 : 12;
+  const fit = function (v, lo0, hi0, span, mMax) {
+    const m = Math.max(0, Math.min(mMax, (span - (hi0 - lo0)) / 2));
     const lo = hi0 + m - span, hi = lo0 - m;
     return lo <= hi ? Math.max(lo, Math.min(hi, v)) : (lo + hi) / 2;
   };
-  cam.x0 = fit(cam.x0, b.x0, b.x1, cam.vw);
-  cam.y0 = fit(cam.y0, b.y0, b.y1, cam.vh);
+  cam.x0 = fit(cam.x0, b.x0, b.x1, cam.vw, xMax);
+  cam.y0 = fit(cam.y0, b.y0, b.y1, cam.vh, 12);
   camClamp();
 }
 // The corner button: four brackets out (to far) or in (back to near). Phones only.
@@ -7390,12 +7417,22 @@ function drawPieces(st, ck, name, X, Y) {
       const p = list[i];
       const late = p.state === 'done' && p.warn === true;
       if (late !== (pass === 1)) continue;
-      const q = spots[p.slot] || spots[0], pos = piecePos(st, p), f = pieceFrame(p), nm = 'piece_' + p.meat;
+      let q = spots[p.slot] || spots[0], cell = G.cell;
+      const pos = piecePos(st, p), f = pieceFrame(p), nm = 'piece_' + p.meat;
+      // Feedback audit item 18: on the drum a piece that takes k slots (a 4 slot brisket) sits in
+      // the middle of its k cells and is scaled to their width, so it fills the drum's mouth.
+      const span = name === 'drum' ? Math.max(1, Math.min(n - (p.slot | 0), p.size | 0)) : 1;
+      if (span > 1) {
+        let sx = 0, sy = 0;
+        for (let k = 0; k < span; k++) { const sp = spots[(p.slot | 0) + k] || q; sx += sp[0]; sy += sp[1]; }
+        q = [sx / span, sy / span];
+        cell = G.cell * Math.min(span, 2) + 4;
+      }
       const me = MEATS[p.meat];
       if (!A3 || !A3.has(nm)) { D(nm, pos.x, pos.y, f); continue; }
       const m0 = maskOf(nm, 0, false), m = maskOf(nm, f, false);
       const ow = m0.x1 >= m0.x0 ? m0.x1 - m0.x0 + 1 : m0.w;
-      const sc = Math.max(0.25, Math.min(1, Math.floor(G.cell * 4 / ow) / 4));
+      const sc = Math.max(0.25, Math.min(1, Math.floor(cell * 4 / ow) / 4));
       const foot = m.y1 >= 0 ? m.y1 + 1 : m.ay, top = m.y1 >= 0 ? m.y0 : 0;
       const PX = Math.round(X + q[0]), PY = Math.round(Y + q[1] + 1 + (m.ay - foot) * sc);
       onWorld(function () {
@@ -7675,9 +7712,16 @@ function drawOverhead(s) {
       const ck = s.stations[st.id];
       if (!ck || PitSim.fireBand(ck.fire) === 'out') continue;
       const a = stationArt(st), v = ventRp(a);
+      // Feedback audit items 18 and 19: the overhead smoke is lighter (0.45, was 0.7) and squashed to
+      // 60 percent of its height (the short column on every cooker), so it no longer hides the meat on
+      // the next cooker, the cutting board or a station badge behind it.
       octx.save();
-      octx.globalAlpha = 0.7;
-      onWorld(function () { A3.fx.drawAt(octx, a.name === 'drum' ? 'smoke_column' : 'smoke_column_short', Math.round(v[0]), Math.round(v[1]), (fr + i) % 3); });
+      octx.globalAlpha = 0.45;
+      onWorld(function () {
+        octx.translate(Math.round(v[0]), Math.round(v[1]));
+        octx.scale(1, 0.6);
+        A3.fx.drawAt(octx, 'smoke_column_short', 0, 0, (fr + i) % 3);
+      });
       octx.restore();
     }
   }

@@ -332,18 +332,34 @@ function trailerRig(r, f) {
 }
 
 /* ================================================================ fuel, cooler, board, counter */
+// Feedback audit item 10: the open bag, a heap of black briquettes over its mouth and a pile
+// spilled at its foot, with a wide charcoal band round both lit faces, so it reads as charcoal and
+// not as a tan box at both zooms. The heap and the spill shrink as the bag empties (frames 0 to 2).
+function lump(r, P, u, v, z) {
+  const p = P(u, v, z);
+  r.rect(p[0] - 1, p[1] - 2, 3, 2, CH.base); r.px(p[0] - 1, p[1] - 2, CH.hi); r.px(p[0] + 1, p[1] - 1, CH.dark);
+}
 function pile(r, f) {
   const P = r.F(1, 1), H = [12, 9, 6, 2][f];
   r.obj(function () {
-    if (f === 3) { r.box(P, 5, 8, 19, 18, 0, 2, BD, { rim: false }); return; }
+    if (f === 3) { r.box(P, 5, 8, 19, 18, 0, 2, BD, { rim: false }); r.q(P, [[5, 18, 0.5], [19, 18, 0.5], [19, 18, 1.5], [5, 18, 1.5]], CH.base); lump(r, P, 20, 17, 0); lump(r, P, 15, 20, 0); return; }
     r.box(P, 7, 7, 18, 18, 0, H, BD, { crease: false });
-    r.q(P, [[7, 18, 1], [18, 18, 1], [18, 18, Math.min(H - 1, 5)], [7, 18, Math.min(H - 1, 5)]], CH.base);   // black band
-    const l = P(11, 18, Math.max(2, H - 4)); r.rect(l[0], l[1], 3, 2, OR.base); r.px(l[0] + 1, l[1] - 1, EM.hi);
-    r.box(P, 7, 7, 18, 18, H, 1, BD, { top: BD.shade, rim: false });                                           // rolled top
+    const b0 = H > 6 ? 3 : 1, b1 = H > 6 ? 7 : H - 2;
+    r.q(P, [[7, 18, b0], [18, 18, b0], [18, 18, b1], [7, 18, b1]], CH.base);   // the charcoal band, front
+    r.q(P, [[18, 7, b0], [18, 18, b0], [18, 18, b1], [18, 7, b1]], CH.dark);   // and the side
+    const l = P(10, 18, b1 - 1); r.rect(l[0], l[1], 3, 2, OR.base); r.px(l[0] + 1, l[1] - 1, EM.hi);
+    r.q(P, [[7, 7, H], [18, 7, H], [18, 18, H], [7, 18, H]], CH.dark);          // the open mouth
+    r.seg(P, [7, 18, H], [18, 18, H], BD.hi); r.seg(P, [18, 7, H], [18, 18, H], BD.base);
   });
-  r.obj(function () {
-    const spill = f === 0 ? [[20, 14], [21, 19], [16, 21]] : f === 1 ? [[20, 16], [17, 21]] : f === 2 ? [[19, 19]] : [];
-    spill.forEach(function (s) { const p = P(s[0], s[1], 0); r.rect(p[0], p[1] - 2, 2, 2, CH.base); r.px(p[0], p[1] - 2, CH.hi); });
+  r.obj(function () {                                                            // the heap over the mouth
+    const top = [3, 2, 1][f];
+    const heap = [[9, 9, 0], [13, 9, 0], [16, 10, 0], [9, 13, 0], [12, 12, 1], [15, 13, 0], [10, 16, 0], [14, 16, 0], [16, 16, 0], [12, 14, 2], [13, 11, 2], [12, 13, 3]];
+    heap.forEach(function (h) { if (h[2] <= top) lump(r, P, h[0], h[1], H + h[2]); });
+  });
+  r.obj(function () {                                                            // spilled at the foot
+    const spill = f === 0 ? [[20, 11, 0], [21, 15, 0], [20, 19, 0], [16, 21, 0], [12, 20, 0], [20, 15, 1.5], [19, 20, 1.5]]
+      : f === 1 ? [[20, 14, 0], [21, 18, 0], [17, 21, 0], [20, 17, 1.5]] : [[20, 18, 0], [17, 20, 0]];
+    spill.forEach(function (s) { lump(r, P, s[0], s[1], s[2]); });
   });
 }
 
@@ -596,12 +612,13 @@ function windowBox(r) {
     for (let u = -17, i = 0; u < 19; u += 5, i++) { const p = P(u, 2.5, 34); r.rect(p[0] - 1, p[1] - 2, 3, 2, FLW[i % FLW.length]); r.px(p[0], p[1] - 1, RP.bloom.base); }
   });
 }
-const SIGN = { bw: 60, bh: 22, z0: 38 };
+// Feedback audit item 14: 72 wide (was 60) so a 20 character pit name fits on two lines.
+const SIGN = { bw: 72, bh: 22, z0: 38 };
 function wallSign(r, f) {
   const W = SIGN.bw, x0 = r.ax - W / 2, yb = r.ay - SIGN.z0, yt = yb - SIGN.bh;
   r.obj(function () {
-    r.rect(r.ax - 23, yt - 6, 2, 6, K.shade); r.rect(r.ax + 21, yt - 6, 2, 6, K.shade);
-    r.rect(r.ax - 25, yt - 7, 6, 2, K.base); r.rect(r.ax + 19, yt - 7, 6, 2, K.base);
+    r.rect(r.ax - 29, yt - 6, 2, 6, K.shade); r.rect(r.ax + 27, yt - 6, 2, 6, K.shade);
+    r.rect(r.ax - 31, yt - 7, 6, 2, K.base); r.rect(r.ax + 25, yt - 7, 6, 2, K.base);
   });
   r.obj(function () {
     r.rect(x0, yt, W, 22, WM.base); r.rect(x0, yt, W, 1, WM.hi); r.rect(x0, yb - 1, W, 1, WM.dark); r.rect(x0 + W - 1, yt, 1, 22, WM.shade);
@@ -842,7 +859,7 @@ def('wall_barn', 356, 284, 8, 146, 1, wallBarn, { wall: { length: BARN.L } });
 def('shed', 36, 76, 18, 66, 1, wallDoor, { wall: true });
 def('barn_window', 44, 82, 22, 76, 1, wallWindow, { wall: true });
 def('window_box', 56, 56, 27, 50, 1, windowBox, { wall: true });
-def('sign', 68, 80, 34, 76, 3, wallSign, { wall: true, text: { x: 34 - 27, y: 76 - SIGN.z0 - SIGN.bh + 3, w: 54, h: 16 } });
+def('sign', 76, 80, 38, 76, 3, wallSign, { wall: true, text: { x: 38 - 33, y: 76 - SIGN.z0 - SIGN.bh + 3, w: 66, h: 16 } });
 // yard: fences. fence_diag: the whole back fence on column 0's outer edge (anchor: the back corner).
 def('fence_diag', 294, 186, 290, 38, 1, function (r) { fenceRun(r, 'v', 0, 288, 32, [0, 72, 144, 216, 287], false); }, { run: { along: 'v', tiles: 12 } });
 def('fence_back', 30, 52, 14, 44, 2, function (r, f) { fenceRun(r, 'v', -12, 12, 32, f ? [-12] : [], false); });
@@ -901,7 +918,7 @@ const SIZE = Object.freeze({
   shed: { h: 52, extra: 7, w: 30, rule: 'barn door 52 by 28' },
   barn_window: { h: 58, extra: 9, w: 36, rule: '26 high, sill at 32, 34 wide' },
   window_box: { h: 36, extra: 10, w: null, rule: '7 high under the sill, flowers 4 above, 40 long' },
-  sign: { h: 66, extra: 0, w: 60, rule: 'board 60 by 22, bottom at 38, on wall hooks to 66 (added to B)' },
+  sign: { h: 66, extra: 0, w: 72, rule: 'board 72 by 22 (feedback item 14: 20 character names on two lines), bottom at 38, on wall hooks to 66 (added to B)' },
   fence_diag: { h: 32, extra: 0, w: null, rule: 'back fence 32' },
   fence_back: { h: 32, extra: 6, w: null, rule: 'back fence 32' },
   fence_front: { h: 14, extra: 6, w: null, rule: 'front picket 14' },

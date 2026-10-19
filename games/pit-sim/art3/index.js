@@ -188,7 +188,7 @@ const RULE_MANIFEST = Object.freeze([
   ['platter_brisket', 'rule', 22, 16, 1, 11, 11, 0], ['platter_empty', 'rule', 22, 16, 1, 11, 11, 0], ['paver', 'rule', 48, 24, 4, 24, 12, 0],
   ['lawn_a', 'rule', 48, 24, 3, 24, 12, 0], ['lawn_b', 'rule', 48, 24, 3, 24, 12, 0], ['stone_step', 'rule', 48, 24, 2, 24, 12, 0],
   ['wall_barn', 'rule', 356, 284, 1, 8, 146, 0], ['shed', 'rule', 36, 76, 1, 18, 66, 0], ['barn_window', 'rule', 44, 82, 1, 22, 76, 0],
-  ['window_box', 'rule', 56, 56, 1, 27, 50, 0], ['sign', 'rule', 68, 80, 3, 34, 76, 0], ['fence_diag', 'rule', 294, 186, 1, 290, 38, 0],
+  ['window_box', 'rule', 56, 56, 1, 27, 50, 0], ['sign', 'rule', 76, 80, 3, 38, 76, 0], ['fence_diag', 'rule', 294, 186, 1, 290, 38, 0],
   ['fence_back', 'rule', 30, 52, 2, 14, 44, 0], ['fence_front', 'rule', 30, 34, 1, 14, 26, 0], ['fence_side', 'rule', 30, 34, 2, 14, 26, 0],
   ['fence_corner', 'rule', 12, 24, 4, 6, 20, 0], ['gate', 'rule', 40, 44, 2, 18, 34, 0], ['tree', 'rule', 92, 140, 1, 46, 134, 0],
   ['tree_trunk', 'rule', 92, 140, 1, 46, 134, 0], ['tree_canopy', 'rule', 92, 140, 1, 46, 134, 0], ['pot', 'rule', 20, 24, 3, 10, 20, 0],

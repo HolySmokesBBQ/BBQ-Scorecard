@@ -250,8 +250,9 @@ function fillDiamond(g, cx, cy, hw, h, col) {
 }
 
 // The pit name on the wall sign's board (meta('sign').text): bold caps on one line when they fit,
-// else two lines split at the space that best balances them, else plain caps, else cut. The same
-// order the hub sign (fitSign) uses, so the yard sign reads like every other sign of the pit.
+// else two lines split at the space that best balances them, else plain caps, else (feedback audit
+// item 14) two plain lines split at the letter that best balances them. The board fits 11 plain
+// caps a line, so every name up to the creator's 20 characters fits; cut is only a guard.
 function signLines(str) {
   const s = String(str || '').toUpperCase().trim();
   const box = art3.rule && art3.rule.meta ? art3.rule.meta('sign').text : { w: 54, h: 16 };
@@ -268,6 +269,14 @@ function signLines(str) {
     }
     if (best) return { lines: best.lines, bold: bold };
   }
+  let split = null;
+  for (let i = 1; i < s.length; i++) {
+    const a = s.slice(0, i).trim(), b = s.slice(i).trim();
+    if (!a || !b) continue;
+    const w = Math.max(wOf(a, false), wOf(b, false));
+    if (w <= box.w && (!split || w < split.w)) split = { w: w, lines: [a, b] };
+  }
+  if (split) return { lines: split.lines, bold: false };
   let t = s;
   while (t.length > 1 && wOf(t, false) > box.w) t = t.slice(0, -1);
   return { lines: [t], bold: false, cut: true };
@@ -340,7 +349,9 @@ function stage(ctx, map, opts) {
     (o.windows || [48, 168]).forEach(function (u) { const w = wallAt(u); put(g, 'barn_window', 0, w[0], w[1]); put(g, 'window_box', 0, w[0], w[1]); });
     if (typeof o.door === 'number') { const d = wallAt(24 * o.door + 12); put(g, 'shed', 0, d[0], d[1]); }
     if (o.sign) {
-      const sg = wallAt(12 * (o.sign[0] + o.sign[1] + 1));
+      // Feedback audit item 14: the wider board sits 8 along the wall (level, not lower), clear of
+      // the left window box and above the door.
+      const sg = wallAt(12 * (o.sign[0] + o.sign[1] + 1) + 8); sg[1] -= 4;
       put(g, 'sign', 0, sg[0], sg[1]);
       c.sign = signText(g, sg[0], sg[1], o.name || '');
       c.signAt = { x: sg[0], y: sg[1] };

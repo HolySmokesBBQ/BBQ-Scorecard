@@ -1089,6 +1089,7 @@ const ID = {
   dec: (id) => 'dec-' + id,
   chip: (id) => 'chip-' + id,
   buy: (id) => 'buy-' + id,
+  buyOk: (id) => 'buy-' + id + '-ok',   // feedback audit item 22: the armed row's Confirm
   // Game deviation 6 adds #howto-btn; the other names are fallbacks if a later build renames it.
   howtoButtons: ['howto-btn', 'help', 'how-to', 'btn-howto', 'controls']
 };
@@ -6376,7 +6377,12 @@ async function v3BrowserSteps(captures) {
     const wh = await text(ID3.weekH);
     const whWant = MARTY.pit + ', ' + fill(UI.weekOf, { w: 1 });
     assert(wh === whWant, '#week-h is ' + describe(wh) + ', wanted ' + describe(whWant));
-    return describe(sign.text) + ' in ' + sign.font + ' at x ' + sign.x + ', ' + glyphs.length + ' glyphs; header ' + describe(wh);
+    // Feedback audit item 14: the yard wall sign never cuts a name the creator allows (20 characters):
+    // each comes back on one or two lines that rebuild the whole name, inside the board's text box.
+    const maxPit = await ev('$("cr-pit") ? $("cr-pit").maxLength : 20');
+    const longFit = await ev('(() => { const B = PitSim.bridge3, tw = PitSim.art3.textWidth, box = PitSim.art3.rule.meta("sign").text, n = ' + maxPit + '; const names = ["Holy Smokes BBQ Co", "Holy Smokes BBQ", "ABCDEFGHIJKLMNO", "Smokehouse 12345", "W".repeat(n), "M".repeat(n), "A " + "W".repeat(n - 2), "W".repeat(n - 2) + " A", "WWWWW WWWWW WWWWW W".slice(0, n)]; return names.map((nm) => { const L = B.signLines(nm), up = nm.toUpperCase(); const w = Math.max.apply(null, L.lines.map((t) => tw(t, { bold: L.bold }))); const ok = !L.cut && L.lines.length <= 2 && w <= box.w && L.lines.join("").replace(/ /g, "") === up.replace(/ /g, ""); return ok ? null : nm + " " + JSON.stringify(L) + " w " + w + " of " + box.w; }).filter(Boolean); })()');
+    assert(maxPit >= 15 && longFit.length === 0, 'the yard sign cuts or overflows (max ' + maxPit + '): ' + describe(longFit));
+    return describe(sign.text) + ' in ' + sign.font + ' at x ' + sign.x + ', ' + glyphs.length + ' glyphs; header ' + describe(wh) + '; yard sign fits ' + maxPit + ' character names';
   });
 
   await step('week hub', async () => {
@@ -7494,7 +7500,14 @@ async function browserChecks() {
     await advance(0);
     assert(await visible(ID3.sheet), '#sheet hidden after #card-gear');
     const n0 = await eventCount();
+    // Feedback audit item 22: one tap on Buy arms the row and spends nothing; Confirm buys.
+    const c0 = await ev('S().cash');
     await click(ID.buy(DECOR_BUY.id));
+    await advance(0);
+    const armed = await ev('({ cash: S().cash, owned: S().decor.' + DECOR_BUY.id + ' === true, ok: !!$(' + JSON.stringify(ID.buyOk(DECOR_BUY.id)) + '), ask: (($(' + JSON.stringify(ID.buyOk(DECOR_BUY.id)) + ') || {}).parentNode || {}).textContent || "" })');
+    assert(armed.cash === c0 && !armed.owned && armed.ok && /Buy for \d+\?/.test(armed.ask), 'one tap on Buy spent or did not arm ' + describe(armed) + ', cash before ' + c0);
+    assert((await eventsSince(n0, EVENT.purchase)).length === 0, 'one tap on Buy fired a purchase');
+    await click(ID.buyOk(DECOR_BUY.id));
     await advance(0);
     const bought = (await eventsSince(n0, EVENT.purchase)).filter((e) => e.kind === 'decor');
     assert(bought.length === 1 && bought[0].id === DECOR_BUY.id, 'decor purchase events ' + describe(bought));
@@ -7997,6 +8010,10 @@ async function browserChecks() {
     assert(b.dis === false, '#buy-kettle2 disabled with cash ' + s0.cash + ', deposit ' + s0.dep + ', cart ' + s0.cart);
     assert(!/Leaves /.test(b.eff), 'the kettle row warns ' + describe(b.eff) + ' with a booking picked');
     await click('buy-kettle2');
+    await advance(0);
+    const a1 = await ev('({ cash: S().cash, k2: S().gear.kettle2 === true, ok: !!$("buy-kettle2-ok") })');
+    assert(a1.cash === s0.cash && !a1.k2 && a1.ok, 'one tap on Buy spent or did not arm (item 22) ' + describe(a1));
+    await click('buy-kettle2-ok');
     await advance(0);
     const s1 = await ev('({ k2: S().gear.kettle2, cash: S().cash, id: S().season.booking.id, safe: S().season.booking.safe, can: sim.canLoadUp() })');
     assert(s1.k2 === true && s1.id === 'picnic' && s1.safe === true && s1.can.ok === true && s1.cash >= 0, 'after the buy ' + describe(s1));
