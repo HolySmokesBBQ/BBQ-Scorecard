@@ -419,6 +419,7 @@ const C = Object.freeze({
   CHARCOAL_MAX: 200, WOOD_MAX: 100,
   // names [S 19.2]
   NAME_MAX: 14,
+  PIT_NAME_MAX: 20,   // Joel 2026-10-19: room for a name like "Holy Smokes BBQ Co" (18)
   NAME_PUNCT: " '.-",                 // allowed besides ASCII A to Z, a to z and 0 to 9
   // season end [S 3.6]
   SEASON_CARRY_REP: 0.75, SEASON_REP_FLOOR: 20,
@@ -1093,7 +1094,7 @@ const STRINGS = Object.freeze({
     crRandom: 'Random',
     crName: 'Your name',
     crPit: 'Pit name',
-    crCount: '{n}/14',
+    crCount: '{n}/{max}',
     crSkin: 'Skin',
     crHair: 'Hair',
     crHairColor: 'Hair color',
@@ -1311,9 +1312,11 @@ function nameString(str) {
 }
 
 // Allowed: ASCII letters and digits and C.NAME_PUNCT. Curly apostrophes become straight ones,
-// runs of spaces collapse to one, the result is cut to C.NAME_MAX. No trim (game.js runs it on
+// runs of spaces collapse to one, the result is cut to max (default C.NAME_MAX; pit names use
+// C.PIT_NAME_MAX). No trim (game.js runs it on
 // every input event so a typed trailing space survives).
-function filterName(str) {
+function filterName(str, max) {
+  const lim = max > 0 ? max : C.NAME_MAX;
   const s = nameString(str);
   let out = '';
   for (let i = 0; i < s.length; i++) {
@@ -1326,12 +1329,13 @@ function filterName(str) {
     if (ch === ' ' && out.length > 0 && out[out.length - 1] === ' ') continue;
     out += ch;
   }
-  return out.slice(0, C.NAME_MAX);
+  return out.slice(0, lim);
 }
 
-function cleanName(str, fallback) {
+function cleanName(str, fallback, max) {
   try {
-    const s = filterName(str).trim().slice(0, C.NAME_MAX).trim();
+    const lim = max > 0 ? max : C.NAME_MAX;
+    const s = filterName(str, lim).trim().slice(0, lim).trim();
     if (s !== '') return s;
     return nameString(fallback);
   } catch (e) {
@@ -2193,7 +2197,7 @@ function validateSave(obj) {
     let player = isPlainObject(playerIn)
       ? { name: cleanName(readKey(playerIn, 'name'), STRINGS.defaultName), look: cleanLook(readKey(playerIn, 'look')) }
       : null;
-    const pitName = v >= 4 ? cleanName(readKey(obj, 'pitName'), STRINGS.defaultPit) : STRINGS.defaultPit;
+    const pitName = v >= 4 ? cleanName(readKey(obj, 'pitName'), STRINGS.defaultPit, C.PIT_NAME_MAX) : STRINGS.defaultPit;
     const lenIn = v >= 4 ? readKey(readKey(obj, 'settings'), 'length') : undefined;
     const settings = { length: C.LENGTH_ORDER.includes(lenIn) ? lenIn : 'normal' };
     if (owed) {
@@ -4996,7 +5000,7 @@ function createSim(saved, seed) {
   function setPlayer(look, name, pitName) {
     const lk = cleanLook(look);
     const nm = cleanName(name, STRINGS.defaultName);
-    const pit = cleanName(pitName, STRINGS.defaultPit);
+    const pit = cleanName(pitName, STRINGS.defaultPit, C.PIT_NAME_MAX);
     state.profile = { name: nm, look: lk };
     state.pitName = pit;
     emit('player_set', { name: nm, pitName: pit });
@@ -5952,7 +5956,7 @@ function createSim(saved, seed) {
     out.player = state.profile !== null
       ? { name: cleanName(state.profile.name, STRINGS.defaultName), look: cleanLook(state.profile.look) }
       : null;
-    out.pitName = cleanName(state.pitName, STRINGS.defaultPit);
+    out.pitName = cleanName(state.pitName, STRINGS.defaultPit, C.PIT_NAME_MAX);
     out.settings = { length: C.LENGTH_ORDER.includes(state.settings.length) ? state.settings.length : 'normal' };
     return out;
   }

@@ -3072,14 +3072,52 @@ function signWords(sign, pit, share, host) {
   const vw = document.documentElement.clientWidth || 375;
   const panel = host && host.clientWidth > 0 ? host.clientWidth - 24 : (vw >= 900 ? 296 : Math.min(480, vw) - 24);
   const room = Math.floor(panel * share) - 32;
-  const big = uiCanvas(pit.toUpperCase(), 3, UI.signText, { bold: true, shadow: UI.woodX });
-  if (big && parseFloat(big.style.width) <= room) {
+  const big = fitSign(pit, room, [3, 2], UI.signText, { bold: true, shadow: UI.woodX });
+  if (big) {
     sign.appendChild(big);
     sign.appendChild(mk('span', { cls: 'sr', text: pit }));
   } else {
     uiPut(sign, pit.toUpperCase(), 2, UI.signText, { bold: true, shadow: UI.woodX }, pit);
   }
   return sign;
+}
+
+// A pit name sized to fit `room` CSS px: one line at each scale in `scales`, then two lines at the
+// smallest scale split at the space that best balances them, then one line at 1x. Returns a canvas,
+// a span holding two stacked canvases, or null when the UI font is unavailable. Long names such as
+// "Holy Smokes BBQ Co" (Joel, 2026-10-19) land on two lines instead of running off the board.
+function fitSign(text, room, scales, color, opts) {
+  const s = String(text).toUpperCase();
+  const w = function (c) { return c ? parseFloat(c.style.width) : Infinity; };
+  let last = null;
+  for (let i = 0; i < scales.length; i++) {
+    const c = uiCanvas(s, scales[i], color, opts);
+    if (!c) return null;
+    last = c;
+    if (w(c) <= room) return c;
+  }
+  const sc = scales[scales.length - 1];
+  let best = null;
+  for (let i = 1; i < s.length - 1; i++) {
+    if (s[i] !== ' ') continue;
+    const a = s.slice(0, i).trim(), b = s.slice(i + 1).trim();
+    if (!a || !b) continue;
+    const ca = uiCanvas(a, sc, color, opts), cb = uiCanvas(b, sc, color, opts);
+    const m = Math.max(w(ca), w(cb));
+    if (!best || m < best.m) best = { ca: ca, cb: cb, m: m };
+  }
+  if (best && best.m <= room) {
+    const box = mk('span', { cls: 'sign2' });
+    box.style.display = 'inline-flex';
+    box.style.flexDirection = 'column';
+    box.style.alignItems = 'center';
+    box.style.gap = Math.max(2, sc * 2) + 'px';
+    box.appendChild(best.ca);
+    box.appendChild(best.cb);
+    return box;
+  }
+  const one = uiCanvas(s, 1, color, opts);
+  return one && w(one) <= room ? one : last;
 }
 
 // Q-5: words in groups of at most `max` characters, a group a line (the pill labels, the fans box).
@@ -4547,13 +4585,13 @@ function refreshSheet() {
 
 // ---------------------------------------------------------------- the creator (W17.5)
 
-function filterName(v) {
-  if (typeof PitSim.filterName === 'function') return PitSim.filterName(v);
-  return String(v === undefined || v === null ? '' : v).slice(0, C.NAME_MAX || 14);
+function filterName(v, max) {
+  if (typeof PitSim.filterName === 'function') return PitSim.filterName(v, max);
+  return String(v === undefined || v === null ? '' : v).slice(0, max || C.NAME_MAX || 14);
 }
-function cleanName(v, fb) {
-  if (typeof PitSim.cleanName === 'function') return PitSim.cleanName(v, fb);
-  const t = filterName(v).trim();
+function cleanName(v, fb, max) {
+  if (typeof PitSim.cleanName === 'function') return PitSim.cleanName(v, fb, max);
+  const t = filterName(v, max).trim();
   return t || fb;
 }
 
@@ -4636,6 +4674,8 @@ function buildCreator() {
 }
 
 function nameField(id, label, value, fallback) {
+  // The pit name gets more room than the player name (Joel, 2026-10-19: "Holy Smokes BBQ Co").
+  const lim = id === 'cr-pit' ? (C.PIT_NAME_MAX || 20) : (C.NAME_MAX || 14);
   const wrap = mk('div', { cls: 'field' });
   // Q-6: the label in the UI font, white, and gold while its field has focus (two canvases, CSS picks).
   const lab = mk('label', { id: id + '-l', attrs: { for: id } });
@@ -4652,20 +4692,20 @@ function nameField(id, label, value, fallback) {
   }
   wrap.appendChild(lab);
   const inp = mk('input', { id: id, type: 'text', attrs: {
-    maxlength: String(C.NAME_MAX || 14), autocomplete: 'off', autocapitalize: 'words', spellcheck: 'false',
+    maxlength: String(lim), autocomplete: 'off', autocapitalize: 'words', spellcheck: 'false',
     enterkeyhint: 'done', 'aria-describedby': id + '-count'
   } });
   // R-14: the default name shows as the placeholder and the field starts empty (cleanName falls back).
   inp.placeholder = fallback || '';
-  inp.value = value === fallback ? '' : filterName(value);
-  const cnt = mk('span', { id: id + '-count', cls: 'count', text: U('crCount', { n: inp.value.length }) });
+  inp.value = value === fallback ? '' : filterName(value, lim);
+  const cnt = mk('span', { id: id + '-count', cls: 'count', text: U('crCount', { n: inp.value.length, max: lim }) });
   inp.addEventListener('input', function () {
-    const v = filterName(inp.value);
+    const v = filterName(inp.value, lim);
     if (v !== inp.value) {
       inp.value = v;
       try { inp.setSelectionRange(v.length, v.length); } catch (e) { /* not a text field */ }
     }
-    cnt.textContent = U('crCount', { n: v.length });
+    cnt.textContent = U('crCount', { n: v.length, max: lim });
     if (id === 'cr-pit') drawCrSign();
   });
   inp.addEventListener('keydown', function (e) {
@@ -4763,13 +4803,12 @@ function drawCrSign() {
   const sign = document.getElementById('cr-sign');
   if (!sign) return;
   const inp = document.getElementById('cr-pit');
-  const name = cleanName(inp ? inp.value : pitName(sim.state), STRINGS.defaultPit || 'Your Pit');
+  const name = cleanName(inp ? inp.value : pitName(sim.state), STRINGS.defaultPit || 'Your Pit', C.PIT_NAME_MAX);
   clear(sign);
   const room = Math.max(120, ((sign.parentNode && sign.parentNode.clientWidth) || 330) - 56);
   // R-14: the sticky phone preview keeps the sign at 2x so the scene stays the larger part.
   const big = (document.documentElement.clientWidth || 375) >= 900;
-  let c = big ? uiCanvas(name.toUpperCase(), 3, '#fff0c8', { bold: true, shadow: '#120c08' }) : null;
-  if (!c || parseFloat(c.style.width) > room) c = uiCanvas(name.toUpperCase(), 2, '#fff0c8', { bold: true, shadow: '#120c08' });
+  const c = fitSign(name, room, big ? [3, 2] : [2], '#fff0c8', { bold: true, shadow: '#120c08' });
   if (c) {
     sign.appendChild(c);
     sign.appendChild(mk('span', { cls: 'sr', text: name }));

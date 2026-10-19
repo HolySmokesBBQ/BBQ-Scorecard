@@ -404,7 +404,7 @@ const C_W2 = {
   STAR_EDGES: [40, 60, 75, 90], STAR_FANS: [-5, -2, 2, 4, 6],
   ARRIVAL_CURVE: 1.3, ARRIVAL_SPAN: 0.9, PARTY_MIN: 1, PARTY_MAX: 4, PARTY_GAP_S: 0.6,
   COOLER_CAP: [0, 12, 24, 40], CHARCOAL_MAX: 200, WOOD_MAX: 100,
-  NAME_MAX: 14, NAME_PUNCT: " '.-",
+  NAME_MAX: 14, PIT_NAME_MAX: 20, NAME_PUNCT: " '.-",
   SEASON_CARRY_REP: 0.75, SEASON_REP_FLOOR: 20,
   DRIVEWAY_REP: 34
 };
@@ -905,7 +905,7 @@ const W15 = ({
     crRandom: 'Random',
     crName: 'Your name',
     crPit: 'Pit name',
-    crCount: '{n}/14',
+    crCount: '{n}/{max}',
     crSkin: 'Skin',
     crHair: 'Hair',
     crHairColor: 'Hair color',
@@ -5102,14 +5102,16 @@ async function v3BrowserSteps(captures) {
     const v1 = await typeInto(ID3.crName, 'Ana<b>!\u{1F600} Q');
     assert(v1 === 'Anab Q', '#cr-name value ' + describe(v1) + ', wanted "Anab Q"');
     const c1 = await accText(ID3.crNameCount);
-    assert(c1 === fill(UI.crCount, { n: 6 }), '#cr-name-count ' + describe(c1));
-    const v2 = await typeInto(ID3.crPit, 'ABCDEFGHIJKLMNOPQRST');
-    assert(v2.length === 14, '#cr-pit value ' + describe(v2) + ' after 20 letters');
+    assert(c1 === fill(UI.crCount, { n: 6, max: 14 }), '#cr-name-count ' + describe(c1));
+    const v2 = await typeInto(ID3.crPit, 'ABCDEFGHIJKLMNOPQRSTUVWX');
+    assert(v2.length === 20, '#cr-pit value ' + describe(v2) + ' after 24 letters');
     const c2 = await accText(ID3.crPitCount);
-    assert(c2 === fill(UI.crCount, { n: 14 }), '#cr-pit-count ' + describe(c2));
+    assert(c2 === fill(UI.crCount, { n: 20, max: 20 }), '#cr-pit-count ' + describe(c2));
+    const v2b = await typeInto(ID3.crPit, 'Holy Smokes BBQ Co');
+    assert(v2b === 'Holy Smokes BBQ Co', '#cr-pit value ' + describe(v2b) + ', wanted the full 18 character name');
     const v3 = await typeInto(ID3.crPit, 'Marty’s Pit');
     assert(v3 === MARTY.pit, '#cr-pit value ' + describe(v3) + ', wanted ' + describe(MARTY.pit));
-    return describe(v1) + ' (' + c1 + '), 20 letters to ' + c2 + ', curly apostrophe to ' + describe(v3);
+    return describe(v1) + ' (' + c1 + '), 24 letters to ' + c2 + ', ' + describe(v2b) + ' kept, curly apostrophe to ' + describe(v3);
   });
 
   await step('creator by real taps', async () => {
@@ -5135,9 +5137,9 @@ async function v3BrowserSteps(captures) {
       }
     }
     const nm = await typeInto(ID3.crName, MARTY.name);
-    assert(nm === MARTY.name && (await accText(ID3.crNameCount)) === fill(UI.crCount, { n: 5 }), '#cr-name ' + describe(nm) + ', count ' + describe(await accText(ID3.crNameCount)));
+    assert(nm === MARTY.name && (await accText(ID3.crNameCount)) === fill(UI.crCount, { n: 5, max: 14 }), '#cr-name ' + describe(nm) + ', count ' + describe(await accText(ID3.crNameCount)));
     const pt = await valueOf(ID3.crPit);
-    assert(pt === MARTY.pit && (await accText(ID3.crPitCount)) === fill(UI.crCount, { n: 11 }), '#cr-pit ' + describe(pt) + ', count ' + describe(await accText(ID3.crPitCount)));
+    assert(pt === MARTY.pit && (await accText(ID3.crPitCount)) === fill(UI.crCount, { n: 11, max: 20 }), '#cr-pit ' + describe(pt) + ', count ' + describe(await accText(ID3.crPitCount)));
     const sign = await srText(ID3.crSign);
     assert(sign === MARTY.pit, '#cr-sign .sr text ' + describe(sign));
     await screenshot(SCREENSHOTS.creator);
