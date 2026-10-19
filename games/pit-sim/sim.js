@@ -3,6 +3,35 @@
 // no browser storage. Randomness only through the seeded generator on the sim object. Runs in
 // Node under vm.runInThisContext and in the browser as a classic deferred script.
 //
+// v3.2 Days: docs/superpowers/specs/2026-10-19-pit-sim-v3-2-days-contract.md (D1 to D12) wins
+//           over everything below. Sim builder deviations, for D12:
+//   V32-1. A weekday opens with an empty cart; Monday (as startWeek() leaves it) and the cook day
+//          get the prefill, and after the booking has played the cart is empty. A prefilled
+//          Friday cart committed by Load-in spoiled overnight without a cooler and cost the
+//          steady bot its drum band (S2W5 against S1W8).
+//   V32-2. A Market run or a Load-in commits only a cart the cash pays for (no deposit before the
+//          booked day); a Market run it cannot pay for reads ui.goCash.
+//   V32-3. Train with no crew card reads ui.crewEmpty (D4.1 says ui.trainDone, which would claim a
+//          training that never happened).
+//   V32-4. A booked day whose event cannot load also offers Day off, so the week never strands.
+//   V32-5. The bare train(id) keeps v3.1's rule and does not end the day; chooseDay('train')
+//          applies the same rule and ends it.
+//   V32-6. Saves: a report save is the next morning (Sunday's report the next Monday); a mid event
+//          save keeps the pick, the walk-ins and the training pick (live); a v6 save may hold this
+//          week's result once the booking played; the day keeps without a pick, Load-in never.
+//   V32-7. till.cashStart is the cash this day opened with (quick days move cash mid week).
+//   V32-8. (playtest) Monday opens with an empty cart too: only the booked day (or a Yard week's
+//          weekend day) gets the prefill, so a Monday Market run or Yard day never buys the
+//          weekend's meat to spoil Monday night. Picking or changing a booking still prefills.
+//   V32-9. (playtest) dayOptions() rows carry warn: a Market run, Yard day or Load-in whose meat
+//          is past tonight's cooler room says so (ui.marketSpoil, ui.yardSpoil); a Load-in after
+//          Prep with nothing to put on overnight says it only locks the booking (ui.loadinSame),
+//          and its card reads ui.cardLoadinSame instead of a second Prep line.
+//   V32-10. (playtest) a Monday to Friday Yard day scales the gate by YARD_DAY_FRAC as well, so
+//          the half day keeps its service window instead of losing it to setup.
+//   V32-11. (playtest) the DayCard adds trained ({ id, name, xp } after Train), moodTop (a Day off
+//          that moved no mood because the crew is already at the cap) and loadinSame.
+//
 // Contract: docs/superpowers/specs/2026-10-19-pit-sim-v3-1-contract.md (X0 to X18, the v3.1
 //           round) first, then docs/superpowers/specs/2026-10-18-pit-sim-v3-0-contract.md (W0 to
 //           W26, the v3.0 round), then docs/superpowers/specs/2026-10-18-pit-sim-contract.md (the
@@ -377,7 +406,7 @@ const C = Object.freeze({
   // weather
   RAIN_FROM_DAY: 4, RAIN_CHANCE: 0.15, RAIN_ARRIVALS: 0.6,
   // save clamps
-  SAVE_VERSION: 5, MAX_DAY: 999, MAX_CASH: 999999, MAX_STAT: 9999999,   // X2: 5 (was 4)
+  SAVE_VERSION: 6, MAX_DAY: 999, MAX_CASH: 999999, MAX_STAT: 9999999,   // D2: 6 (was 5)
   // v3.0 season and week [S 3], contract W2
   SEASON_WEEKS: 9,
   YEAR_MAX: 99,
@@ -463,6 +492,18 @@ const C = Object.freeze({
   SETTLE_XP: 30,                                         // dev: XP each lineup card gets from settle(stars)
   RAISE_FRAC: 0.2,
   PREP_WAIT: 2,                                          // cooked pieces the board holds for the PREP card
+  // v3.2 days of the week [S 19.6], contract D2
+  WEEK_DAYS: 7,
+  YARD_DAY_FRAC: 0.5,                 // a Monday to Friday Yard day: the length row's seconds and window times 0.5, rounded [S 19.6]
+  DAY_PRICE: Object.freeze([0.85, 0.9, 1.0, 1.1, 1.0, 1.0, 1.0]),   // meat and charcoal price by DayIdx; Mon to Thu per [S 19.6]; Fri to Sun 1.0 (OC)
+  PREP_QUALITY: 4,                    // Quality points of cushion a prepped booked event starts with (D4.4)
+  OVERNIGHT_HEAD: 0.5,                // share of MEATS[m].cook a load-in piece starts with
+  OVERNIGHT_PIECES: 2,                // butt or brisket pieces that get the head start (OC)
+  OVERNIGHT_BAGS: 2,                  // charcoal bags the overnight smoke burns at load-in (OC)
+  OVERNIGHT_MEATS: Object.freeze(['butt', 'brisket']),
+  DAYOFF_MOOD: 1,                     // mood steps every card gains on a Day off [S 19.6]
+  DAYOFF_MOOD_CAP: 1,                 // a Day off lifts mood to Happy at most (OC)
+  BOOK_DAY: Object.freeze({ birthday: 5, picnic: 6, finale: 5, yard: null }),   // [S 19.6]; finale Saturday (OC)
   // offers that vary week to week (X3, carry-forward 1 and 2)
   SAFE_SIZES: Object.freeze([0.8, 0.9, 1.0]),            // the safe card's headcount factor, one draw
   STRETCH_SIZE: 1.2, STRETCH_MIN: 1.1,                   // the stretch card's headcount factor: the largest that fits, from 1.2 down to 1.1 (review 1: 1.4 and 1.15)
@@ -526,6 +567,8 @@ const STAT_IDS_V1 = Object.freeze(['days', 'served', 'walkouts', 'past', 'burnt'
 const STAT_IDS = Object.freeze(['days', 'served', 'walkouts', 'past', 'burnt', 'seated']);
 const GOAL_ORDER = Object.freeze(['kettle2', 'drum', 'bigtable', 'driveway']);   // R-3: the drum second; X4.1: no buddy step (Hiring Day replaces it)
 const ROLE_IDS = Object.freeze(['run', 'fire', 'prep']);   // X1
+const DAY_IDS = Object.freeze(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']);   // D1
+const DAY_KINDS = Object.freeze(['yard', 'prep', 'market', 'train', 'off', 'loadin', 'event']);   // D1 DayKind
 const DIRS = Object.freeze({
   up: Object.freeze({ dx: 0, dy: -1 }),
   down: Object.freeze({ dx: 0, dy: 1 }),
@@ -886,6 +929,29 @@ const STRINGS = Object.freeze({
     rested: '{name} rested.'
   }),
   hostThird: Object.freeze(['', 'Folks at the last event asked who cooked, {name}.', 'People ask for you by name now, {name}.']),
+  // v3.2 days of the week (contract D8.1, exact text)
+  dayName: Object.freeze(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']),
+  dayShort: Object.freeze(['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']),
+  dayKind: Object.freeze({ yard: 'Yard day', prep: 'Prep', market: 'Market run', train: 'Train', off: 'Day off', loadin: 'Load-in', event: 'Booked event' }),
+  dayHint: Object.freeze({
+    yard: 'Open the yard for a short cook. Walk-ins pay.',
+    prep: 'Trim and rub the weekend meat. Quality starts higher.',
+    market: "Buy what is in the cart at today's price.",
+    train: 'One crew card trains this week.',
+    off: 'Crew mood goes up. Nothing earned.',
+    loadin: 'Prep the booking and put the big meat on overnight.',
+    event: 'Today is the booking. Load up and go.'
+  }),
+  // v3.2 playtest: the one line hints a tall hub shows in place of dayHint (game.js fitWeek step 8).
+  dayHintShort: Object.freeze({
+    yard: 'Half day, walk-ins pay',
+    prep: 'Quality up at booking',
+    market: 'Buy the cart today',
+    train: 'One card gains XP',
+    off: 'Mood up, no pay',
+    loadin: 'Prep plus overnight',
+    event: 'Today is the booking'
+  }),
   say: Object.freeze({
     picked: '{label}. {n} guests. Pay {fee}.',
     pickedYard: 'Yard day. Guests pay for each plate.',
@@ -916,7 +982,11 @@ const STRINGS = Object.freeze({
     raise: '{name} got a raise to {w}.',
     leftFor: '{name} has the {label}.',
     notice: '{name} gave notice.',
-    left: '{name} moved on.'
+    left: '{name} moved on.',
+    // v3.2 (contract D8.1)
+    dayDone: Object.freeze({ prep: 'Prep done.', market: 'Market run done.', train: 'Training done.', off: 'A day off.', loadin: 'Loaded in.' }),
+    dayStart: 'It is {day}.',
+    overnight: '{meat} on overnight.'
   }),
   ui: Object.freeze({
     // header and HUD
@@ -963,6 +1033,37 @@ const STRINGS = Object.freeze({
     loadUp: 'Load up and go',
     goPick: 'Pick a booking first.',
     goCash: 'Not enough cash for this cart. Take something out.',
+    // v3.2 days of the week (contract D8.1)
+    dayStripAria: 'This week, today is {day}',
+    dayDoneAria: '{day}, {kind}',
+    dayAheadAria: '{day}, ahead',
+    dayBookedAria: '{day}, booked: {label}',
+    dayPick: 'What is today?',
+    priceDay: 'Prices today: {n} percent',
+    goNotToday: 'The booking is on {day}.',
+    bookLocked: 'Loaded in. The booking is set.',
+    bookPast: 'That day has gone by.',
+    trainDays: 'Training is Monday to Thursday.',
+    prepNeedsBooking: 'Pick a booking to prep for.',
+    prepDone: 'Already prepped this week.',
+    cartEmpty: 'Put something in the cart first.',
+    loadinDone: 'Already loaded in.',
+    nextDay: 'Next day',
+    cardBought: 'Bought {list}. {n} spent.',
+    cardPrep: 'Prep done. The booking starts {n} Quality ahead.',
+    cardOvernight: '{n} {meat} on overnight. They start half done.',
+    cardMood: 'Crew mood: {list}.',
+    cardSpoiled: '{n} spoiled tonight.',
+    cardNothing: 'A quiet day.',
+    // v3.2 playtest fixes (V32-8 to V32-11)
+    cardTrain: '{name} trained. Plus {xp} XP.',
+    cardMoodTop: 'The crew was already {mood} or better. Nothing changed.',
+    cardLoadinSame: 'Already prepped, so Load-in only locked the booking.',
+    marketSpoil: 'No cooler room tonight: {n} meat from this buy spoils.',
+    yardSpoil: 'No cooler room tonight: raw meat left after the cook spoils.',
+    loadinSame: 'Already prepped and nothing goes on overnight. This only locks the booking.',
+    eventDone: 'Event done',
+    bookPlayed: 'Played on {day}. New offers come Monday.',
     // the 2 by 2 grid
     crew: 'Crew',
     crewLine: '{n} of {s} on the crew',          // X10 (was '{n} of 2 hired')
@@ -1666,6 +1767,7 @@ function resizeOffer(o, h, k) {
 
 function freezeOffer(o, host) {
   o.host = host;
+  o.day = C.BOOK_DAY[o.type] === undefined ? null : C.BOOK_DAY[o.type];   // D3.3
   o.menu = Object.freeze(o.menu);
   o.rail = Object.freeze(o.rail);
   return Object.freeze(o);
@@ -1898,12 +2000,13 @@ function scoreEvent(input) {
   const burnt = Math.max(0, finiteOr0(readKey(input, 'burnt')));
   const offMenu = Math.max(0, finiteOr0(readKey(input, 'offMenu')));
   const cold = Math.max(0, finiteOr0(readKey(input, 'cold')));
+  const prepBonus = Math.max(0, finiteOr0(readKey(input, 'prepBonus')));   // D4.4: 0 when absent
   const unfed = Math.max(0, booked - fed);
   const avgWait = booked > 0 ? (waitSum + C.WAIT_ZERO_S * unfed) / booked : C.WAIT_ZERO_S;
   const fedPts = booked > 0 ? C.SCORE_FED * fed / booked : 0;
   const waitPts = C.SCORE_WAIT * clamp((C.WAIT_ZERO_S - avgWait) / (C.WAIT_ZERO_S - C.WAIT_FULL_S), 0, 1);
   // P-2: quality scales with the share fed, and cold booked plates cost COLD_PENALTY each.
-  const qualRaw = Math.max(0, C.SCORE_QUALITY - C.BURNT_PENALTY * burnt - C.OFFMENU_PENALTY * offMenu - C.COLD_PENALTY * cold);
+  const qualRaw = Math.max(0, Math.min(C.SCORE_QUALITY, C.SCORE_QUALITY + prepBonus - C.BURNT_PENALTY * burnt - C.OFFMENU_PENALTY * offMenu - C.COLD_PENALTY * cold));
   const qualPts = booked > 0 ? qualRaw * Math.min(1, fed / booked) : 0;
   const score = Math.round(fedPts + waitPts + qualPts);
   return {
@@ -1941,6 +2044,18 @@ function toBool(v) {
 }
 
 // W22.15: plain objects with a known type, a finale only as the ninth entry, at most nine.
+// D9: seven entries, a DayKind below `day` (a bad entry reads 'off'), null from `day` on.
+function readDayLog(arr, day) {
+  const out = [];
+  for (let i = 0; i < C.WEEK_DAYS; i++) {
+    if (i >= day) { out.push(null); continue; }
+    let e;
+    try { e = Array.isArray(arr) ? arr[i] : undefined; } catch (x) { e = undefined; }
+    out.push(typeof e === 'string' && DAY_KINDS.includes(e) ? e : 'off');
+  }
+  return out;
+}
+
 function readResults(arr) {
   const out = [];
   if (!Array.isArray(arr)) return out;
@@ -2134,7 +2249,7 @@ function validateSave(obj) {
   try {
     if (!isPlainObject(obj)) return null;
     const v = readKey(obj, 'v');
-    if (v !== 1 && v !== 2 && v !== 3 && v !== 4 && v !== 5) return null;
+    if (v !== 1 && v !== 2 && v !== 3 && v !== 4 && v !== 5 && v !== 6) return null;
     const day = toInt(readKey(obj, 'day'), 1, 1, C.MAX_DAY);
     const cash = toInt(readKey(obj, 'cash'), C.START_CASH, 0, C.MAX_CASH);
     const rep = toInt(readKey(obj, 'rep'), C.START_REP, 0, 100);
@@ -2169,6 +2284,7 @@ function validateSave(obj) {
     // W13.3: the season. v1 to v3 start season 1 week 1.
     const fallbackSeed = mix32(day, cash, stats.served);
     const season = { year: 1, week: 1, seed: fallbackSeed, pick: null, addon: null, weekCash: cash, results: [] };
+    let savedWeek = 0, v6Day = 0, v6Log, holdsWeek = false;
     const seasonIn = v >= 4 ? readKey(obj, 'season') : undefined;
     if (isPlainObject(seasonIn)) {
       season.year = toInt(readKey(seasonIn, 'year'), 1, 1, C.YEAR_MAX);
@@ -2178,13 +2294,21 @@ function validateSave(obj) {
       season.weekCash = toInt(readKey(seasonIn, 'weekCash'), cash, 0, C.MAX_CASH);
       season.results = readResults(readKey(seasonIn, 'results'));
       let week = toInt(readKey(seasonIn, 'week'), 1, 1, C.SEASON_WEEKS);
-      if (season.results.length >= C.SEASON_WEEKS) week = C.SEASON_WEEKS;
+      savedWeek = week;
+      // D9: a v6 save may already hold this week's result (the booking played, a later day open).
+      if (v === 6) {
+        v6Day = toInt(readKey(seasonIn, 'day'), 0, 0, C.WEEK_DAYS - 1);
+        v6Log = readDayLog(readKey(seasonIn, 'dayLog'), v6Day);
+        holdsWeek = v6Log.includes('event') && season.results.length === week;
+      }
+      if (holdsWeek) { /* week kept with its result */ }
+      else if (season.results.length >= C.SEASON_WEEKS) week = C.SEASON_WEEKS;
       else {
         if (season.results.length > week - 1) season.results.length = week - 1;
         week = season.results.length + 1;
       }
       season.week = week;
-      const complete = season.results.length >= C.SEASON_WEEKS;
+      const complete = season.results.length >= C.SEASON_WEEKS && !holdsWeek;
       const pickIn = readKey(seasonIn, 'pick');
       const pickOk = week === C.SEASON_WEEKS ? pickIn === 'finale'
         : (pickIn === 'birthday' || pickIn === 'picnic' || pickIn === 'yard' || pickIn === 'invite');   // X11.2: 'invite' in weeks 1 to 8
@@ -2205,20 +2329,31 @@ function validateSave(obj) {
       season.results = [];
       season.week = 1;
     }
+    // D9: the five v3.2 day keys. A v5 or older save, or a week that did not hold, opens on Monday.
+    const sameWeek = v === 6 && !owed && isPlainObject(seasonIn) && season.week === savedWeek
+      && (season.results.length === season.week - 1 || holdsWeek);
+    season.day = sameWeek ? v6Day : 0;
+    season.dayLog = sameWeek ? v6Log : readDayLog(undefined, 0);
+    season.prepped = sameWeek && toBool(readKey(seasonIn, 'prepped'));
+    season.loadin = sameWeek && season.pick !== null && season.day >= 5 && toBool(readKey(seasonIn, 'loadin'));
+    const onIn = sameWeek && season.loadin && season.day === 5 ? readKey(seasonIn, 'overnight') : undefined;
+    const onMeat = readKey(onIn, 'meat'), onN = readKey(onIn, 'n');
+    season.overnight = (typeof onMeat === 'string' && C.OVERNIGHT_MEATS.includes(onMeat) && (!MEATS[onMeat].drumOnly || gear.drum)
+      && typeof onN === 'number' && Number.isInteger(onN) && onN >= 1 && onN <= C.OVERNIGHT_PIECES) ? { meat: onMeat, n: onN } : null;
     // X11.2 and X11.3: the crew, the next card id, Hiring Day and the three season keys.
-    const seasonV5 = v === 5 && isPlainObject(seasonIn) ? seasonIn : undefined;
-    const crew = v === 5 ? readCrew(readKey(obj, 'crew')) : migrateHires(hires, season.seed);
+    const seasonV5 = v >= 5 && isPlainObject(seasonIn) ? seasonIn : undefined;
+    const crew = v >= 5 ? readCrew(readKey(obj, 'crew')) : migrateHires(hires, season.seed);
     let maxId = 0;
     for (const c of crew) maxId = Math.max(maxId, c.id);
     const seqLo = Math.min(9999, maxId + 1);
-    const crewSeq = v === 5 ? clamp(toInt(readKey(obj, 'crewSeq'), seqLo, 1, 9999), seqLo, 9999) : seqLo;
+    const crewSeq = v >= 5 ? clamp(toInt(readKey(obj, 'crewSeq'), seqLo, 1, 9999), seqLo, 9999) : seqLo;
     const draftedIn = readKey(seasonV5, 'drafted');
     season.drafted = typeof draftedIn === 'boolean' ? draftedIn : (season.results.length > 0 || crew.length > 0);
     const trainedIn = readKey(seasonV5, 'trained');
     season.trained = (typeof trainedIn === 'number' && Number.isInteger(trainedIn) && trainedIn >= 1 && trainedIn <= crewSeq - 1) ? trainedIn : null;
-    season.walkins = v === 5 ? readWalkins(readKey(seasonV5, 'walkins')) : [];
+    season.walkins = v >= 5 ? readWalkins(readKey(seasonV5, 'walkins')) : [];
     let hiring = null;
-    if (v === 5 && season.results.length === 0 && season.drafted === false && player !== null && !owed) {
+    if (v >= 5 && season.results.length === 0 && season.drafted === false && player !== null && !owed) {
       hiring = readHiring(readKey(obj, 'hiring'), season.year);
     }
     return {
@@ -2339,7 +2474,9 @@ function createSim(saved, seed) {
       fireGoodS: { kettle1: 0, kettle2: 0, drum: 0 },
       fireDipped: { kettle1: false, kettle2: false, drum: false },
       fireHotS: { kettle1: 0, kettle2: 0, drum: 0 },   // review 1: seconds after the gate at FIRE_HOT or above
-      third: 0
+      third: 0,
+      // v3.2 (D3.4)
+      weekday: false, prepBonus: 0, overnight: null, dayIdx: 0
     };
   }
 
@@ -2427,8 +2564,15 @@ function createSim(saved, seed) {
       // v3.1 (X4.1): createSim() restores the saved trained pick and walk-ins after startWeek().
       drafted: ss ? ss.drafted === true : false,
       trained: null,
-      walkins: []
+      walkins: [],
+      // v3.2 (D3.1): createSim() restores the saved day keys after startWeek().
+      day: 0,
+      dayLog: new Array(C.WEEK_DAYS).fill(null),
+      prepped: false,
+      loadin: false,
+      overnight: null
     };
+    state.dayCard = null;
     state.profile = s && s.player ? { name: s.player.name, look: cleanLook(s.player.look) } : null;
     state.pitName = s ? s.pitName : STRINGS.defaultPit;
     state.settings = { length: s ? s.settings.length : 'normal' };
@@ -3194,7 +3338,11 @@ function createSim(saved, seed) {
         if (slot < 0) return noop('Grate is full', stationId);
         return act('Put ' + m.label + ' on', true, stationId, () => {
           pieceSeq += 1;
-          cooker.pieces.push({ id: pieceSeq, meat: m.id, slot, size: m.slots, prog: 0, state: 'cooking', putOn: state.clock, burntAt: null, warn: false });
+          // D4.5: the first overnight pieces of that meat start part done.
+          const on = state.today.overnight;
+          let prog0 = 0;
+          if (on !== null && on.left > 0 && on.meat === m.id) { prog0 = Math.round(C.OVERNIGHT_HEAD * m.cook); on.left -= 1; }
+          cooker.pieces.push({ id: pieceSeq, meat: m.id, slot, size: m.slots, prog: prog0, state: 'cooking', putOn: state.clock, burntAt: null, warn: false });
           state.today.foodCost += m.unit;
           p.carrying = null;
         });
@@ -4263,7 +4411,7 @@ function createSim(saved, seed) {
     if (isBooking) {
       if (t.pending > 0) { t.missed += t.pending; t.pending = 0; }
       // W8.1, W8.2, W9: client stars, the rest of the fee, the Menu bonus, word of mouth by stars.
-      sc = forced || scoreEvent({ booked: t.booked, fed: t.fed, waitSum: t.waitSum, burnt: t.burnt, offMenu: t.offMenu, cold: t.cold });
+      sc = forced || scoreEvent({ booked: t.booked, fed: t.fed, waitSum: t.waitSum, burnt: t.burnt, offMenu: t.offMenu, cold: t.cold, prepBonus: t.prepBonus });
       stars = sc.stars;
       fee = t.booking.pay;
       payRest = Math.max(0, Math.round(fee * (C.PAY_BASE + C.PAY_PER_STAR * stars)) - t.deposit);
@@ -4307,7 +4455,7 @@ function createSim(saved, seed) {
     state.day += 1;
     state.stats.days += 1;
     state.yesterday = { served: t.served, walkouts: t.walkouts, past: t.past };
-    if (t.kind !== 'tutorial') s.results.push({ type: isBooking ? t.booking.type : 'yard', stars: isBooking ? stars : 0 });
+    if (isBooking) s.results.push({ type: t.booking.type, stars });   // D4.3: a Yard day never writes a result
     const till = {};
     for (const k of Object.keys(t)) {
       const v = t[k];
@@ -4345,7 +4493,7 @@ function createSim(saved, seed) {
     // R-4: what the shop took that morning besides the cart, and the cash the morning opened with.
     till.gearSpent = morningBuys.reduce((a, b) => a + b.price, 0);
     till.gearBought = morningBuys.map((b) => b.label);
-    till.cashStart = t.kind === 'tutorial' ? morningCash : s.weekCash;
+    till.cashStart = morningCash;   // v3.2: the cash this day opened with (quick days move cash mid week)
     // X4.4: the crew rows, who moved on, signing fees and send-offs, and the fan thirds.
     till.crew = crewOut.rows;
     till.left = crewOut.left.map((c) => ({ id: c.id, name: c.name }));
@@ -4454,9 +4602,27 @@ function createSim(saved, seed) {
 
   // ---- shop ---------------------------------------------------------------------------------
 
+  // D4.2: meat and charcoal at today's price in the week, gear and decor at list.
+  function dayMult() {
+    return state.loop === 'week' ? C.DAY_PRICE[state.season.day] : 1;
+  }
+
+  function lineCost(id, qty) {
+    return qty > 0 ? Math.round(qty * CATALOG_BY_ID[id].price * dayMult()) : 0;
+  }
+
+  // The most of row `id` that `budget` pays for at today's price.
+  function affordQty(id, budget) {
+    if (budget < 0) return 0;
+    let q = Math.floor(budget / (CATALOG_BY_ID[id].price * dayMult()));
+    while (lineCost(id, q + 1) <= budget) q += 1;
+    while (q > 0 && lineCost(id, q) > budget) q -= 1;
+    return q;
+  }
+
   function cartTotal() {
-    let total = state.cart.charcoal * CATALOG_BY_ID.charcoal.price;
-    for (const m of MEAT_IDS) total += state.cart.meat[m] * CATALOG_BY_ID[m].price;
+    let total = lineCost('charcoal', state.cart.charcoal);
+    for (const m of MEAT_IDS) total += lineCost(m, state.cart.meat[m]);
     return total;
   }
 
@@ -4491,8 +4657,8 @@ function createSim(saved, seed) {
       }
       const b = state.loop === 'week' ? state.season.booking : null;
       const deposit = b !== null ? b.deposit : 0;
-      const others = cartTotal() - cur * rowDef.price;
-      const affordable = Math.floor((state.cash + deposit - others) / rowDef.price);
+      const others = cartTotal() - lineCost(id, cur);
+      const affordable = affordQty(id, state.cash + deposit - others);
       if (next > cur) next = Math.min(next, Math.max(cur, affordable));
       if (next === cur) {
         let message = '';
@@ -4756,11 +4922,17 @@ function createSim(saved, seed) {
     s.addon = null;
     state.loop = 'week';
     state.phase = 'morning';
-    state.cart = prefill();
     // X6.3: this week's walk-ins and an open training pick; signing fees count from here (item 32).
     s.walkins = genWalkins({ seed: s.seed, year: s.year, week: s.week, rep: state.rep, avoid: avoidNames() })
       .map((a) => Object.assign(a, { hired: false }));
     s.trained = null;
+    s.day = 0;
+    s.dayLog = new Array(C.WEEK_DAYS).fill(null);
+    s.prepped = false;
+    s.loadin = false;
+    s.overnight = null;
+    state.dayCard = null;
+    state.cart = morningCart();   // V32-8
     crewSpend = [];
     emitOffersReady();
     state.broke = brokeTest();
@@ -4810,6 +4982,8 @@ function createSim(saved, seed) {
     const s = state.season;
     const o = s.offers.find((x) => x.id === id) || null;
     if (o === null) return { ok: false, message: '' };
+    if (s.loadin) return { ok: false, message: STRINGS.ui.bookLocked };   // D4.5
+    if ((o.day !== null && o.day < s.day) || eventPlayed()) return { ok: false, message: STRINGS.ui.bookPast };   // D5
     s.booking = o;
     s.addon = null;
     state.cart = prefill();
@@ -4822,6 +4996,7 @@ function createSim(saved, seed) {
     if (!inWeek()) return { ok: false, message: '' };
     const s = state.season;
     if (s.booking === null) return { ok: false, message: '' };
+    if (s.loadin) return { ok: false, message: STRINGS.ui.bookLocked };   // D4.5
     if (meat !== null && !addonLegal(s.booking, meat)) return { ok: false, message: STRINGS.ui.addonNo };
     s.addon = meat;
     state.cart = prefill();
@@ -4833,6 +5008,10 @@ function createSim(saved, seed) {
     if (!inWeek() || state.broke) return { ok: false, reason: '' };
     const b = state.season.booking;
     if (b === null) return { ok: false, reason: STRINGS.ui.goPick };
+    // D5: only on the booked day (a Yard week cooks through chooseDay('yard')).
+    const bd = bookedDay();
+    if (bd === null) return { ok: false, reason: '' };
+    if (bd !== state.season.day || eventPlayed()) return { ok: false, reason: fillText(STRINGS.ui.goNotToday, { day: STRINGS.dayName[bd] }) };
     if (!b.safe) return { ok: false, reason: b.needs };
     // X5.4: the lineup's wages against the payroll budget (Yard days too, X18.1 item 41).
     const pr = payroll();
@@ -4851,13 +5030,30 @@ function createSim(saved, seed) {
 
   // W5.1 and W7.1: the deposit in, the cart charged, service set up for the booking or Yard day.
   function loadUp() {
-    const can = canLoadUp();
-    if (!can.ok) return { ok: false, message: can.reason };
+    return loadUpCore(false);
+  }
+
+  // D4.3 and D4.5: `yardDay` is chooseDay('yard') (half length Monday to Friday), else the booked day.
+  function loadUpCore(yardDay) {
     const s = state.season;
-    const b = s.booking;
-    const isBooking = b.type !== 'yard';
+    if (yardDay) {
+      const why = yardWhy();
+      if (why !== null) return { ok: false, message: why };
+    } else {
+      const can = canLoadUp();
+      if (!can.ok) return { ok: false, message: can.reason };
+    }
+    const b = yardDay ? freezeOffer(offerFields(BOOKINGS.yard, state.gear, state.settings.length, undefined, 1), null) : s.booking;
+    const isBooking = !yardDay;
     const L = lengthRow(state.settings.length);
-    const endAt = b.type === 'finale' ? C.FINALE_SECONDS : L.seconds;   // Q-2
+    const weekday = yardDay && s.day <= 4;
+    const endAt = b.type === 'finale' ? C.FINALE_SECONDS : (weekday ? Math.round(L.seconds * C.YARD_DAY_FRAC) : L.seconds);   // Q-2, D4.3
+    let overnight = null;
+    if (isBooking && s.overnight !== null) {
+      state.stock[s.overnight.meat] = Math.min(C.STEPPER_MAX, state.stock[s.overnight.meat] + s.overnight.n);
+      overnight = { meat: s.overnight.meat, n: s.overnight.n, left: s.overnight.n };
+      s.overnight = null;
+    }
     const charcoalStart = state.charcoal, stockStart = Object.assign({}, state.stock);   // Q-9
     state.cash += b.deposit;
     commitCart();
@@ -4866,9 +5062,13 @@ function createSim(saved, seed) {
     t.deposit = b.deposit;
     t.charcoalStart = charcoalStart;
     t.stockStart = stockStart;
-    t.gateAt = C.GATE_OPENS;
-    t.lastCallAt = Math.min(t.gateAt + (isBooking ? b.window : L.window), endAt - C.LAST_CALL_GUARD);
+    t.gateAt = weekday ? Math.round(C.GATE_OPENS * C.YARD_DAY_FRAC) : C.GATE_OPENS;   // V32-10
+    t.lastCallAt = Math.min(t.gateAt + (isBooking ? b.window : (weekday ? Math.round(L.window * C.YARD_DAY_FRAC) : L.window)), endAt - C.LAST_CALL_GUARD);
     t.endAt = endAt;
+    t.weekday = weekday;
+    t.dayIdx = s.day;
+    t.prepBonus = isBooking && s.prepped ? C.PREP_QUALITY : 0;
+    t.overnight = overnight;
     if (isBooking) {
       t.booking = Object.freeze(Object.assign({}, b));
       t.addon = s.addon;
@@ -4889,7 +5089,7 @@ function createSim(saved, seed) {
       state.spawnAt = t.gateAt;
       if (!(state.stock[state.selected] > 0)) autoSelect();
     }
-    s.offers = [];
+    if (isBooking) s.offers = [];   // v3.2: a Yard day keeps the week's offers
     state.loop = 'prep';
     if (b.deposit > 0) emit('deposit', { amount: b.deposit });
     emit('save_wanted', { reason: 'open' });
@@ -4897,8 +5097,248 @@ function createSim(saved, seed) {
     return { ok: true, message: '' };
   }
 
-  // W5.1: the till or report is done. Tutorial: the creator (or the week); report: the next week
-  // or, after week 9, the season end card.
+  // ---- v3.2 days of the week (contract D4 to D6) -----------------------------------------------
+
+  // The booked day of the picked offer; null for the Yard offer or no pick.
+  function bookedDay() {
+    const b = state.season.booking;
+    return b !== null && b.type !== 'yard' && typeof b.day === 'number' ? b.day : null;
+  }
+
+  function eventPlayed() {
+    return state.season.dayLog.includes('event');
+  }
+
+  // A morning's cart (v3.2): Monday (as startWeek() leaves it) and the cook day get the prefill; a
+  // weekday in between opens empty, so a Market run or a Load-in buys only what the player put in
+  // (a prefilled Friday cart would spoil overnight without a cooler). A Yard week's weekend days
+  // are cook days; after the booking has played the cart is empty.
+  function morningCart() {
+    const s = state.season;
+    const bd = bookedDay();
+    const cookDay = !eventPlayed() && (bd !== null ? s.day === bd : s.day >= 5);   // V32-8: Monday too
+    return cookDay ? prefill() : { meat: zeroByMeat(), charcoal: 0 };
+  }
+
+  // What canLoadUp() asks of a Yard day: null when it can cook, else the reason.
+  function yardWhy() {
+    if (state.broke) return '';
+    const pr = payroll();
+    if (pr.now > pr.budget) return fillText(STRINGS.ui.goPayroll, { p: pr.now, b: pr.budget });
+    if (state.charcoal + state.cart.charcoal === 0) return 'Buy at least one bag of charcoal.';
+    if (totalStock() + sumValues(state.cart.meat) === 0) return 'Buy at least one unit of meat.';
+    if (cartTotal() > state.cash) return STRINGS.ui.goCash;
+    return null;
+  }
+
+  function cartCount() {
+    return sumValues(state.cart.meat) + state.cart.charcoal;
+  }
+
+  // V32-9: units of meat past tonight's cooler room once today's cart is bought.
+  function spillTonight() {
+    return Math.max(0, totalStock() + sumValues(state.cart.meat) - coolerCap());
+  }
+  // V32-9: whether a Load-in today would put meat on overnight (D4.5), the cart bought first.
+  function overnightCan() {
+    const s = state.season;
+    if (bookedDay() !== 5) return false;
+    const pay = cartCount() > 0 && cartTotal() <= state.cash;
+    if (state.charcoal + (pay ? state.cart.charcoal : 0) < C.OVERNIGHT_BAGS) return false;
+    const rail = railFor(s.booking, s.addon);
+    return C.OVERNIGHT_MEATS.some((m) => rail[m] > 0 && state.stock[m] + (pay ? state.cart.meat[m] : 0) > 0);
+  }
+
+  // D4.1
+  function dayOptions() {
+    if (!inWeek()) return { ok: false, message: '' };
+    const s = state.season;
+    const d = s.day;
+    const bd = bookedDay();
+    const booked = bd !== null && bd === d && !eventPlayed();
+    const options = [];
+    const add = (kind, why, warn) => options.push({ kind, ok: why === null, reason: why === null ? '' : why, warn: why === null && warn ? warn : '' });
+    const U = STRINGS.ui;
+    const spill = spillTonight();
+    const buyWarn = spill > 0 ? fillText(U.marketSpoil, { n: spill }) : '';
+    const yardWarn = spill > 0 ? U.yardSpoil : '';
+    if (d <= 3) {
+      add('yard', yardWhy(), yardWarn);
+      add('prep', bd === null ? U.prepNeedsBooking : (s.prepped ? U.prepDone : null));
+      add('market', cartCount() === 0 ? U.cartEmpty : (cartTotal() > state.cash ? U.goCash : null), buyWarn);
+      add('train', state.crew.length === 0 ? U.crewEmpty : (s.trained !== null ? U.trainDone : null));
+      add('off', null);
+    } else if (d === 4) {
+      const buys = cartCount() > 0 && cartTotal() <= state.cash;
+      add('loadin', bd === null ? U.prepNeedsBooking : (s.loadin ? U.loadinDone : null),
+        s.prepped && !overnightCan() ? U.loadinSame : (buys ? buyWarn : ''));
+      add('yard', yardWhy(), yardWarn);
+      add('off', null);
+    } else if (booked) {
+      const can = canLoadUp();
+      add('event', can.ok ? null : can.reason);
+      if (!can.ok) add('off', null);   // a booking that cannot load never strands the week
+    } else {
+      add('yard', yardWhy(), yardWarn);
+      add('off', null);
+    }
+    return { day: d, booked, price: C.DAY_PRICE[d], options };
+  }
+
+  function cartLines() {
+    const out = [];
+    for (const m of MEAT_IDS) if (state.cart.meat[m] > 0) out.push({ id: m, qty: state.cart.meat[m], cost: lineCost(m, state.cart.meat[m]) });
+    if (state.cart.charcoal > 0) out.push({ id: 'charcoal', qty: state.cart.charcoal, cost: lineCost('charcoal', state.cart.charcoal) });
+    return out;
+  }
+
+  // D4.7 step 1 off a cook day: the cooler keeps its cap overnight, costliest first; the rest spoils.
+  function spoilTonight() {
+    const cap = coolerCap();
+    const meat = zeroByMeat();
+    let units = 0;
+    if (totalStock() > cap) {
+      let room = cap;
+      for (const m of KEEP_ORDER) {
+        const keep = Math.min(state.stock[m], room);
+        room -= keep;
+        const gone = state.stock[m] - keep;
+        if (gone > 0) { meat[m] = gone; state.stock[m] = keep; units += gone; }
+      }
+    }
+    if (units > 0) emit('spoiled', { units, meat });
+    return units;
+  }
+
+  // D4.7: the day tick, the only place a day ends. `cooked`: spoilage already ran in endDay().
+  // Returns the units that spoiled tonight.
+  function nextDay(kind, cooked, moodChanges) {
+    const s = state.season;
+    if (s.overnight !== null && s.day >= 5) {   // the booked Saturday went by without the event
+      state.stock[s.overnight.meat] = Math.min(C.STEPPER_MAX, state.stock[s.overnight.meat] + s.overnight.n);
+      s.overnight = null;
+    }
+    const spoiled = cooked ? 0 : spoilTonight();
+    if (moodChanges && moodChanges.length > 0) emit('crew_mood', { changes: moodChanges });
+    s.dayLog[s.day] = kind;
+    if (s.day < C.WEEK_DAYS - 1) {
+      s.day += 1;
+      beginMorning('week');
+      state.cart = morningCart();
+      emit('day_start', { day: s.day });
+    } else {
+      if (s.results.length < s.week) s.results.push({ type: 'yard', stars: 0 });
+      if (s.results.length < C.SEASON_WEEKS) {
+        s.week = s.results.length + 1;
+        beginMorning('week');
+        emit('week_start', { year: s.year, week: s.week });
+        startWeek();
+      } else {
+        toSeasonEnd();
+      }
+    }
+    emit('save_wanted', { reason: 'day' });
+    return spoiled;
+  }
+
+  // D5
+  function chooseDay(kind, opt) {
+    if (!inWeek()) return { ok: false, message: '' };
+    const view = dayOptions();
+    const o = view.options.find((x) => x.kind === kind) || null;
+    if (o === null) return { ok: false, message: '' };
+    if (!o.ok) return { ok: false, message: o.reason };
+    if (kind === 'yard') return loadUpCore(true);
+    if (kind === 'event') return loadUpCore(false);
+    const s = state.season;
+    const day = s.day;
+    const card = { day, kind, bought: [], spent: 0, prepBonus: 0, overnight: null, mood: [], spoiled: 0, trained: null, moodTop: false, loadinSame: false };
+    const changes = [];
+    if (kind === 'train') {
+      const tid = isPlainObject(opt) ? readKey(opt, 'id') : undefined;
+      const r = trainRule(tid);
+      if (!r.ok) return r;
+      const tc = findCard(tid);
+      if (tc !== null) card.trained = { id: tc.id, name: tc.name, xp: C.TRAIN_XP };   // V32-11
+    } else if (kind === 'market' || kind === 'loadin') {
+      // D4.2: the cart commits at today's price (a Load-in it cannot pay for keeps it for the booked day).
+      if (cartCount() > 0 && cartTotal() <= state.cash) {
+        card.bought = cartLines();
+        card.spent = cartTotal();
+        commitCart();
+      }
+      if (kind === 'loadin') {
+        const wasPrepped = s.prepped;
+        s.prepped = true;
+        s.loadin = true;
+        card.prepBonus = wasPrepped ? 0 : C.PREP_QUALITY;   // V32-9: no second Prep line
+        // D4.5: the overnight smoke, Saturday bookings only.
+        if (bookedDay() === 5) {
+          const rail = railFor(s.booking, s.addon);
+          let meat = null;
+          for (const m of C.OVERNIGHT_MEATS) {
+            if (rail[m] > 0 && state.stock[m] > 0 && (meat === null || MEATS[m].cook > MEATS[meat].cook)) meat = m;
+          }
+          if (meat !== null && state.charcoal >= C.OVERNIGHT_BAGS) {
+            state.charcoal -= C.OVERNIGHT_BAGS;
+            const n = Math.min(C.OVERNIGHT_PIECES, state.stock[meat]);
+            state.stock[meat] -= n;
+            s.overnight = { meat, n };
+            card.overnight = { meat, n };
+            emit('overnight_on', { meat, n });
+          }
+        }
+        card.loadinSame = wasPrepped && card.overnight === null;
+      }
+    } else if (kind === 'prep') {
+      s.prepped = true;
+      card.prepBonus = C.PREP_QUALITY;
+    } else if (kind === 'off') {
+      // D4.6: a step of mood up to the cap; notice clears above Done. No wages, no daily costs.
+      for (const c of state.crew.slice().sort(byId)) {
+        const from = c.mood;
+        if (c.mood < C.DAYOFF_MOOD_CAP) c.mood = Math.min(C.DAYOFF_MOOD_CAP, c.mood + C.DAYOFF_MOOD);
+        if (c.mood > -2) c.notice = false;
+        if (c.mood !== from) {
+          changes.push({ id: c.id, from, to: c.mood });
+          card.mood.push({ id: c.id, name: c.name, from, to: c.mood });
+        }
+      }
+      card.moodTop = state.crew.length > 0 && card.mood.length === 0;   // V32-11
+    }
+    emit('day_done', { day, kind, spent: card.spent, prepBonus: card.prepBonus,
+      overnight: card.overnight !== null ? { meat: card.overnight.meat, n: card.overnight.n } : null, moodUp: card.mood.length });
+    card.spoiled = nextDay(kind, false, changes);
+    state.dayCard = card;
+    if (state.loop === 'week') state.phase = 'evening';
+    return { ok: true, message: '' };
+  }
+
+  // D5: the result card is read; the next morning (the tick already ran) opens.
+  function advanceDay() {
+    if (state.loop !== 'week' || state.phase !== 'evening') return { ok: false, message: '' };
+    state.dayCard = null;
+    state.phase = 'morning';
+    return { ok: true, message: '' };
+  }
+
+  function dayCardView() {
+    const c = state.dayCard;
+    if (c === null || c === undefined) return null;
+    return {
+      day: c.day, kind: c.kind,
+      bought: c.bought.map((b) => ({ id: b.id, qty: b.qty, cost: b.cost })),
+      spent: c.spent, prepBonus: c.prepBonus,
+      overnight: c.overnight !== null ? { meat: c.overnight.meat, n: c.overnight.n } : null,
+      mood: c.mood.map((m) => ({ id: m.id, name: m.name, from: m.from, to: m.to })),
+      spoiled: c.spoiled,
+      trained: c.trained ? { id: c.trained.id, name: c.trained.name, xp: c.trained.xp } : null,
+      moodTop: c.moodTop === true, loadinSame: c.loadinSame === true
+    };
+  }
+
+  // W5.1: the till or report is done. Tutorial: the creator (or the week); report: the day tick
+  // (D4.7), which opens the next morning, the next week or, after week 9, the season end card.
   function finishReport() {
     if (state.phase !== 'evening') return;
     const s = state.season;
@@ -4920,14 +5360,15 @@ function createSim(saved, seed) {
       return;
     }
     if (state.loop !== 'report') return;
-    if (s.results.length < C.SEASON_WEEKS) {
-      s.week = s.results.length + 1;
-      beginMorning('week');
-      emit('week_start', { year: s.year, week: s.week });
-      startWeek();
-      emit('save_wanted', { reason: 'week' });
-      return;
-    }
+    // D5: a cook day's report ends that day.
+    const kind = state.today.kind === 'booking' ? 'event' : 'yard';
+    state.loop = 'week';
+    state.dayCard = null;
+    nextDay(kind, true);
+  }
+
+  function toSeasonEnd() {
+    const s = state.season;
     clearYard();   // deviation 45: no rain roll
     state.cart = { meat: zeroByMeat(), charcoal: 0 };
     s.offers = [];
@@ -5125,8 +5566,8 @@ function createSim(saved, seed) {
       return meat;
     }
     function total(meat, bags) {
-      let tot = bags * CATALOG_BY_ID.charcoal.price;
-      for (const m of MEAT_IDS) tot += meat[m] * priceOf(m);
+      let tot = lineCost('charcoal', bags);
+      for (const m of MEAT_IDS) tot += lineCost(m, meat[m]);
       return tot;
     }
     // R-5: BAGS_PER_COOKER is a Normal cook's worth; a Short or Long cook scales it by its seconds.
@@ -5806,8 +6247,14 @@ function createSim(saved, seed) {
     return { ok: true, message, swapped };
   }
 
+  // D4.6: the v3.1 call stands Monday to Thursday; chooseDay('train') applies the same rule and ends the day.
   function train(id) {
     if (!inWeek()) return { ok: false, message: '' };
+    if (state.season.day > 3) return { ok: false, message: STRINGS.ui.trainDays };
+    return trainRule(id);
+  }
+
+  function trainRule(id) {
     const c = findCard(id);
     if (c === null) return { ok: false, message: '' };
     if (state.season.trained !== null) return { ok: false, message: STRINGS.ui.trainDone };
@@ -5927,23 +6374,45 @@ function createSim(saved, seed) {
     out.drivewayShown = state.drivewayShown === true;
     out.tutorial = { done: state.tutorial.done === true };
     const s = state.season;
-    const results = s.results.slice(0, C.SEASON_WEEKS)
+    // D9: in the week and mid event the save is this morning; a report save is the next morning
+    // (the tick runs in finishReport()), on Sunday the next week's Monday as v3.1 did.
+    const report = state.loop === 'report';
+    const live = state.loop === 'week' || inEvent || (report && s.day < C.WEEK_DAYS - 1);
+    let resultsIn = s.results.slice(0, C.SEASON_WEEKS);
+    if (report && !live && resultsIn.length < s.week) resultsIn = resultsIn.concat([{ type: 'yard', stars: 0 }]);
+    const results = resultsIn.slice(0, C.SEASON_WEEKS)
       .map((x) => ({ type: x.type, stars: x.type === 'yard' ? 0 : clamp(Math.trunc(x.stars), 1, 5) }));
-    const week = results.length >= C.SEASON_WEEKS ? C.SEASON_WEEKS : results.length + 1;
-    const live = state.loop === 'week' && week === s.week;
+    const week = live ? clamp(Math.trunc(s.week), 1, C.SEASON_WEEKS) : (results.length >= C.SEASON_WEEKS ? C.SEASON_WEEKS : results.length + 1);
+    let dayOut = 0;
+    let logOut = new Array(C.WEEK_DAYS).fill(null);
+    if (live) {
+      dayOut = clamp(Math.trunc(s.day), 0, C.WEEK_DAYS - 1);
+      logOut = s.dayLog.slice(0, C.WEEK_DAYS);
+      if (report) {
+        logOut[dayOut] = state.today.kind === 'booking' ? 'event' : 'yard';
+        dayOut += 1;
+      }
+      for (let i = 0; i < C.WEEK_DAYS; i++) if (i >= dayOut) logOut[i] = null;
+    }
     out.season = {
       year: clamp(Math.trunc(s.year), 1, C.YEAR_MAX),
       week,
       seed: s.seed >>> 0,
       pick: live && s.booking !== null ? s.booking.id : null,
       addon: live ? s.addon : null,
-      weekCash: clamp(Math.trunc(state.loop === 'report' ? state.cash : s.weekCash), 0, C.MAX_CASH),
+      weekCash: clamp(Math.trunc(report && !live ? state.cash : s.weekCash), 0, C.MAX_CASH),
       results,
       // X11.1 and X18.1 item 31: walk-ins and the training pick only while the week is live.
       drafted: s.drafted === true,
       trained: live ? s.trained : null,
       walkins: live ? s.walkins.map((w) => ({ name: w.name, role: w.role, skills: w.skills.slice(), potential: w.potential, mood: w.mood,
-        look: cleanLook(w.look), hired: w.hired === true })) : []
+        look: cleanLook(w.look), hired: w.hired === true })) : [],
+      // D9: the five v3.2 day keys
+      day: dayOut,
+      dayLog: logOut,
+      prepped: live && s.prepped === true,
+      loadin: live && s.loadin === true,
+      overnight: live && s.overnight !== null ? { meat: s.overnight.meat, n: s.overnight.n } : null
     };
     out.crew = state.crew.slice().sort(byId).map(copyCard);
     out.crewSeq = clamp(Math.trunc(state.crewSeq), 1, 9999);
@@ -5980,7 +6449,7 @@ function createSim(saved, seed) {
     beginMorning('hiring');
     openHiring(true, save !== null && save.hiring !== null ? save.hiring : null);
     events.length = mark;
-  } else if (state.season.results.length >= C.SEASON_WEEKS) {
+  } else if (state.season.results.length >= C.SEASON_WEEKS && !(save !== null && save.season.pick !== null)) {
     state.loop = 'seasonEnd';
     state.phase = 'morning';
   } else {
@@ -6007,6 +6476,15 @@ function createSim(saved, seed) {
       });
     }
     s.trained = save.season.trained;
+    // D9: the saved day of the week (a v5 or older save opens Monday).
+    s.day = save.season.day;
+    s.dayLog = save.season.dayLog.slice();
+    s.prepped = save.season.prepped === true;
+    s.loadin = save.season.loadin === true;
+    s.overnight = save.season.overnight !== null && s.loadin && s.day === 5 && bookedDay() === 5
+      ? { meat: save.season.overnight.meat, n: save.season.overnight.n } : null;
+    if (eventPlayed()) s.offers = [];
+    state.cart = morningCart();
   }
 
   const sim = {
@@ -6025,7 +6503,9 @@ function createSim(saved, seed) {
     gateWaiting,   // Q-6
     // v3.1 (X7)
     crewView, payroll, hiringView, tryout, hireApplicant, passRound, finishHiring, hireWalkin,
-    setBring, train, levelUp, giveRaise, letGo
+    setBring, train, levelUp, giveRaise, letGo,
+    // v3.2 (D5)
+    dayOptions, chooseDay, advanceDay, dayCardView
   };
   return sim;
 }
@@ -6063,5 +6543,7 @@ PitSim.genWalkins = genWalkins;
 PitSim.cardStars = cardStars;
 PitSim.wageFor = wageFor;
 PitSim.skillValue = skillValue;
+// v3.2 (D1): the one new top level name
+PitSim.DAY_IDS = DAY_IDS;
 
 })();

@@ -351,9 +351,11 @@ const SHELL_IDS = [
   'week', 'week-h', 'week-top', 'week-body', 'week-foot', 'sheet', 'sheet-h', 'sheet-body',
   'creator', 'creator-h', 'creator-body', 'season-end', 'season-end-h', 'season-end-body',
   // v3.1 (X14): Hiring Day and the card sheet.
-  'hiring', 'hiring-h', 'hiring-top', 'hiring-body', 'hiring-foot', 'card', 'card-h', 'card-body'
+  'hiring', 'hiring-h', 'hiring-top', 'hiring-body', 'hiring-foot', 'card', 'card-h', 'card-body',
+  // v3.2 Days (D8.3): the result card after a quick day.
+  'daycard', 'daycard-h', 'daycard-body'
 ];
-const PANEL_IDS = ['clipboard', 'till', 'pause', 'newgame', 'broke', 'week', 'sheet', 'creator', 'season-end', 'hiring', 'card'];
+const PANEL_IDS = ['clipboard', 'till', 'pause', 'newgame', 'broke', 'week', 'sheet', 'creator', 'season-end', 'hiring', 'card', 'daycard'];
 // v3.0: the mock palette (screen-1-season, screen-3-week, screen-4-report, screen-6-creator).
 const UI = {
   K: '#1b1714', cream: '#E6D8B8', creamL: '#fff4dc', creamDim: '#b9a888', gold: '#F3CF6D', white: '#ffffff',
@@ -546,6 +548,7 @@ let crOff = null;               // the creator preview's 96 x 64 offscreen canva
 const lastChips = { charcoal: '' };
 
 // Crew cards (v3.1).
+let crewPick = false;           // v3.2 (D8.2): the crew sheet opened from #day-train; Train spends the day
 let sheetFrom = 'week';         // the panel the sheet returns to: 'week' or 'hiring' (X13.1)
 let hirePage = 1;               // the Hiring Day page on screen (X13.2)
 let hireHelpOpen = false;       // hire-help is showing
@@ -1142,7 +1145,8 @@ function readSave() {
   let valid = null;
   try { valid = PitSim.validateSave(parsed); } catch (e) { valid = null; }
   migrated = old && valid !== null;
-  noticeKey = migrated && valid && Array.isArray(valid.crew) && valid.crew.length > 0 && STRINGS.ui.noticeCrew ? 'noticeCrew' : 'notice';
+  // D9: a raw v of 5 (v3.1) shows ui.notice once, whatever the crew holds.
+  noticeKey = migrated && parsed.v !== 5 && valid && Array.isArray(valid.crew) && valid.crew.length > 0 && STRINGS.ui.noticeCrew ? 'noticeCrew' : 'notice';
   return valid;
 }
 
@@ -1541,6 +1545,15 @@ function onEvent(ev) {
     case 'crew_notice': announce(SAY('notice', { name: ev.name || '' })); break;
     case 'crew_left': announce(SAY('left', { name: ev.name || '' })); break;
     case 'bring_set': case 'crew_mood': case 'slice_done': break;
+    // v3.2 Days (D7): a quick day's sentence, then its result card; the next morning; the overnight smoke.
+    case 'day_done': {
+      const dd = STRINGS.say && STRINGS.say.dayDone ? STRINGS.say.dayDone[ev.kind] : '';
+      if (dd) announce(dd);
+      openDayCard();
+      break;
+    }
+    case 'day_start': announce(SAY('dayStart', { day: dayNameOf(ev.day | 0) })); break;
+    case 'overnight_on': announce(SAY('overnight', { meat: ev.meat && MEATS[ev.meat] ? MEATS[ev.meat].label : '' })); break;
     case 'burn_warning': {
       const W = STRINGS.burnWarn && STRINGS.burnWarn[ev.meat];
       announce(W || ('The ' + (L ? L.toLowerCase() : 'meat') + ' is about to burn.'));
@@ -1718,7 +1731,7 @@ function noteSaveOff() {
 function openPanel(name, focusId) {
   howtoOpen = false; howtoFrom = null;
   if (name === 'pause') buildPauseBody();
-  if (name === 'week' || name === 'sheet' || name === 'creator' || name === 'season-end' || name === 'till' || name === 'hiring' || name === 'card') dropClipboard();
+  if (name === 'week' || name === 'sheet' || name === 'creator' || name === 'season-end' || name === 'till' || name === 'hiring' || name === 'card' || name === 'daycard') dropClipboard();
   for (let i = 0; i < PANEL_IDS.length; i++) el[PANEL_IDS[i]].hidden = PANEL_IDS[i] !== name;
   currentPanel = name;
   syncPanels();
@@ -1796,7 +1809,7 @@ function showLoop() {
   if (loop === 'creator') { openCreator(false); return; }
   if (loop === 'hiring') { openHiring(true); return; }   // X8, X13.1
   if (loop === 'seasonEnd') { openSeasonEnd(); return; }
-  if (loop === 'week') { if (s.broke) openBroke(); else openWeek(); return; }
+  if (loop === 'week') { if (s.broke) openBroke(); else if (s.phase === 'evening' && dayCardNow()) openDayCard(); else openWeek(); return; }
   if (loop === 'report' || (loop === 'tutorial' && s.phase === 'evening')) { openTill(); return; }
   if (s.phase === 'morning') { if (s.broke) openBroke(); else openClipboard(); return; }
   closePanel();
@@ -2131,6 +2144,14 @@ function cartRoom(s) {
   const dep = loopOf(s) === 'week' && se && se.booking ? se.booking.deposit | 0 : 0;
   return s.cash + dep - sim.cartTotal();
 }
+// D4.2: in the week a meat or charcoal unit costs its price times today's C.DAY_PRICE, rounded; gear
+// and decor stay at list price, and the tutorial clipboard is not a week.
+function unitPrice(item, s) {
+  const se = s.season;
+  if (loopOf(s) !== 'week' || !se || !Array.isArray(C.DAY_PRICE) || (item.kind !== 'meat' && item.kind !== 'fuel')) return item.price;
+  const m = C.DAY_PRICE[se.day | 0];
+  return typeof m === 'number' ? Math.round(item.price * m) : item.price;
+}
 function meatRoomNow() { return typeof sim.meatRoom === 'function' ? sim.meatRoom() : Infinity; }
 
 // A meat or charcoal stepper. With extras (the week's shop sheet) it also shows have-{id} and after-{id},
@@ -2178,19 +2199,20 @@ function cartRow(item, extras, rail) {
     const owned = isMeat ? (s.stock[item.id] | 0) : (s.charcoal | 0);
     const locked = lockedBy(item, s);
     const remaining = cartRoom(s);
+    const up = unitPrice(item, s);
     const cap = isMeat ? q + owned >= C.STEPPER_MAX || meatRoomNow() <= 0
       : q + owned >= (typeof C.CHARCOAL_MAX === 'number' ? C.CHARCOAL_MAX : C.STEPPER_MAX);
     if (priceNum) {
-      priceNum.textContent = locked ? item.needsText : String(item.price);
+      priceNum.textContent = locked ? item.needsText : String(up);
       if (priceCoin) priceCoin.hidden = locked;
     } else {
-      price.textContent = locked ? item.needsText : String(item.price);
+      price.textContent = locked ? item.needsText : String(up);
     }
-    price.classList.toggle('muted', locked || remaining < item.price);
+    price.classList.toggle('muted', locked || remaining < up);
     price.style.whiteSpace = locked ? 'normal' : '';
     qty.textContent = String(q);
     dec.disabled = locked || q <= 0;
-    inc.disabled = locked || cap || remaining < item.price;
+    inc.disabled = locked || cap || remaining < up;
     if (inc5) inc5.disabled = inc.disabled;
     step.hidden = locked;
     if (have) {
@@ -2331,6 +2353,9 @@ function repBox(id, title, cls, titleIcon) {
 function nextLabel() {
   const s = sim.state;
   if (loopOf(s) === 'tutorial') return U('cont');
+  // v3.2 playtest: a cook day before Sunday ends the day, not the week.
+  const se = s.season;
+  if (se && Array.isArray(se.dayLog) && typeof se.day === 'number' && se.day < (C.WEEK_DAYS || 7) - 1) return U('nextDay');
   const done = s.season && s.season.results ? s.season.results.length : 0;
   return done >= (C.SEASON_WEEKS || 9) ? U('seeSeason') : U('nextWeek');
 }
@@ -2371,7 +2396,10 @@ function repTop(t) {
   const s = sim.state;
   const top = mk('div', { id: 'rep-top' });
   // Q-8: the week and the cash in the UI font, as the pit name beside them.
-  top.appendChild(uiPut(mk('span', { cls: 'rw' }), U('hudWeek', { w: t.week || (s.season ? s.season.week : 1) }), 2, UI.cream));
+  // v3.2 playtest: the header names the day the report closes ("Week 1, Mon").
+  const di = typeof t.dayIdx === 'number' ? t.dayIdx : (s.season && Array.isArray(s.season.dayLog) ? s.season.day : null);
+  const dw = typeof di === 'number' && dayNameOf(di) ? ', ' + dayNameOf(di).slice(0, 3) : '';
+  top.appendChild(uiPut(mk('span', { cls: 'rw' }), U('hudWeek', { w: t.week || (s.season ? s.season.week : 1) }) + dw, 2, UI.cream));
   const pit = mk('span', { cls: 'rp' });
   uiPut(pit, pitName(s).toUpperCase(), 2, UI.creamDim, null, pitName(s));
   top.appendChild(pit);
@@ -3004,7 +3032,8 @@ function weekSig(s) {
     !!s.comingNext, s.day >= C.RAIN_FROM_DAY, cl.ok ? '' : cl.reason, window.innerHeight, document.documentElement.clientWidth,
     rail ? !!mixHint(rail) : '', se.week | 0, !!s.gear.bigtable,   // R-7, R-3, Q-4: the hint line and the finale news lines
     typeof sim.fanThird === 'function' ? sim.fanThird() : 0,     // X13.6: #third-line and the notice lines
-    crewList().filter(function (c) { return c.notice; }).map(function (c) { return c.id; }).join('.')].join('|');
+    crewList().filter(function (c) { return c.notice; }).map(function (c) { return c.id; }).join('.'),
+    daySig(s)].join('|');
 }
 function fitWeek() {
   const w = el.week;
@@ -3016,7 +3045,15 @@ function fitWeek() {
   const lim = 2 * (window.innerHeight || 812);
   let lvl = 0;
   if (weekFit !== 0) buildWeekAt(0);
-  while (w.scrollHeight > lim && lvl < 4) { lvl++; buildWeekAt(lvl); }
+  // D8.2 with the v3.2 playtest: steps 6 and 7 (index.html) come first; step 8 swaps each plain day
+  // hint for its one line dayHintShort; step 9 hides the plain hints. A greyed option's reason or a
+  // spoil warning (.why) never hides. Step 5 is now a no-op. Step 9 stays only when it makes the hub
+  // fit: hiding the hints of a hub that is over either way would leave bare buttons for nothing.
+  while (w.scrollHeight > lim && lvl < 8) { lvl++; buildWeekAt(lvl); }
+  if (w.scrollHeight > lim) {
+    buildWeekAt(9);
+    if (w.scrollHeight > lim) buildWeekAt(8); else lvl = 9;
+  }
   if (id) { const f = document.getElementById(id); if (f && f !== document.activeElement) f.focus(); }
   weekFit = lvl;
   weekFitSig = sig;
@@ -3049,7 +3086,7 @@ function fitScale(name, maxW, maxH) {
 
 function buildWeekAt(level) {
   const s = sim.state;
-  for (let k = 1; k <= 4; k++) el.week.classList.toggle('fit' + k, level >= k);
+  for (let k = 1; k <= 9; k++) el.week.classList.toggle('fit' + k, level >= k);
   const se = s.season || { year: 1, week: 1, offers: [], booking: null, addon: null, results: [] };
   const w = se.week || 1;
   const yr = se.year || 1;
@@ -3091,12 +3128,21 @@ function buildWeekAt(level) {
   for (let i = 1; i <= n; i++) strip.appendChild(stripTile(se, i, n));
   body.appendChild(strip);
 
+  // v3.2 Days (D8.2): the day strip, then what today is spent on. On the booked day Load up and go
+  // moves into the day choice with its ids; on other days it stays hidden on the next event card.
+  const dv = dayView(s);
+  const goEls = goControls(s, se, dv);
+  if (dv) {
+    body.appendChild(dayStrip(se));
+    body.appendChild(dayChoice(se, dv, goEls));
+  }
+
   // The phone rings: this week's offers.
   const offers = mk('section', { id: 'offers', attrs: { 'aria-labelledby': 'offers-h' } });
   const oh = mk('div', { cls: 'offers-head' });
   oh.appendChild(uiPut(mk('h3', { id: 'offers-h' }), U('thisWeek').toUpperCase(), 3, UI.white, { bold: true, shadow: UI.ink }, U('thisWeek')));
   const list = se.offers || [];
-  if (list.length > 1) oh.appendChild(mk('span', { cls: 'pick-one', text: U('pickOne') }));   // R-8
+  if (list.length > 1 && !se.loadin) oh.appendChild(mk('span', { cls: 'pick-one', text: U('pickOne') }));   // R-8; not once Load-in locked it
   offers.appendChild(oh);
   const grid = mk('div', { cls: 'offer-grid' });
   const pickedId = se.booking ? se.booking.id : null;
@@ -3105,7 +3151,7 @@ function buildWeekAt(level) {
   body.appendChild(offers);
 
   // Next event and Load up and go.
-  body.appendChild(nextCard(s, se));
+  body.appendChild(nextCard(s, se, dv && dv.goHere ? null : goEls));
 
   // The 2 by 2 grid of sheets.
   body.appendChild(hubGrid(s, se));
@@ -3272,6 +3318,8 @@ function offerCard(o, pickedId, level, idx) {
   // card's top left corner over the band's fence, so the scene stays in view (deviation 53).
   const tag = offerTag(o);
   if (tag) card.appendChild(tag);
+  const dtag = offerDay(o);   // D8.2: SAT or SUN on every booking card
+  if (dtag) card.appendChild(dtag);
   const info = mk('div', { cls: 'oinfo' });
   info.appendChild(uiPut(mk('h4', { id: 'offer-' + o.id + '-t', cls: 'olabel' }), o.label, 2, UI.creamL, { shadow: UI.K }));
   if (!isYard && o.host) {
@@ -3309,6 +3357,8 @@ function offerCard(o, pickedId, level, idx) {
   }
   card.appendChild(info);
   card.appendChild(bookButton(o, picked, row1));
+  const shut = picked ? '' : bookShut(o);
+  if (shut) { card.classList.add('shut'); card.appendChild(mk('p', { id: 'offer-' + o.id + '-why', cls: 'ohint owhy', text: shut })); }
   return card;
 }
 
@@ -3419,15 +3469,33 @@ function bookButton(o, picked, small) {
     const ck = checkEl(2);
     if (ck) { ck.classList.add('badge'); b.appendChild(ck); }
   }
-  b.addEventListener('click', function () { sim.bookOffer(o.id); afterAct(); });
+  const shut = picked ? '' : bookShut(o);
+  if (shut) { b.disabled = true; b.setAttribute('aria-describedby', 'offer-' + o.id + '-why'); }
+  b.addEventListener('click', function () {
+    const r = sim.bookOffer(o.id);
+    if (r && !r.ok && r.message) announce(String(r.message));
+    afterAct();
+  });
   return b;
 }
 
-function nextCard(s, se) {
+// v3.2 playtest: this week's booking has played (the day log holds the event).
+function eventDone(se) { return !!(se && Array.isArray(se.dayLog) && se.dayLog.indexOf('event') !== -1 && se.booking && se.booking.type !== 'yard'); }
+// v3.2 playtest: why an offer's Pick is shut (Load-in locked the week, or its day has gone by).
+function bookShut(o) {
+  const se = sim.state.season;
+  if (!se || !Array.isArray(se.dayLog)) return '';
+  if (se.loadin) return U('bookLocked');
+  if ((typeof o.day === 'number' && o.day < (se.day | 0)) || se.dayLog.indexOf('event') !== -1) return U('bookPast');
+  return '';
+}
+
+function nextCard(s, se, goEls) {
   const o = se.booking;
   const sec = mk('section', { id: 'next-event', cls: 'next-card', attrs: { 'aria-labelledby': 'next-h' } });
   const head = mk('div', { cls: 'next-head' });
-  head.appendChild(uiPut(mk('h3', { id: 'next-h' }), U('nextEvent').toUpperCase(), 2, UI.gold, { bold: true, shadow: '#000000' }, U('nextEvent')));
+  const nh = eventDone(se) ? U('eventDone') : U('nextEvent');
+  head.appendChild(uiPut(mk('h3', { id: 'next-h' }), nh.toUpperCase(), 2, UI.gold, { bold: true, shadow: '#000000' }, nh));
   if (o) {
     const right = mk('span', { cls: 'next-pay' });
     if (o.type === 'yard') right.textContent = U('perPlate');
@@ -3467,6 +3535,13 @@ function nextCard(s, se) {
   sec.appendChild(mk('p', { id: 'next-crew', cls: 'ncrew', text: lineup.length
     ? U('crewNext', { names: andList(lineup.map(function (c) { return c.name; })), w: wages })
     : U('crewNone') }));
+  if (goEls) { sec.appendChild(goEls[0]); sec.appendChild(goEls[1]); }
+  return sec;
+}
+
+// #go and #go-why. With the day choice (D8.2) and today not the booked day, #go is hidden and #go-why
+// names the booked day (ui.goNotToday); a Yard week leaves it empty, since its cook is #day-yard.
+function goControls(s, se, dv) {
   const cl = typeof sim.canLoadUp === 'function' ? sim.canLoadUp() : { ok: false, reason: '' };
   const go = mk('button', { id: 'go', cls: 'primary big go', type: 'button' });
   const fl = flameEl(true, 2);
@@ -3474,9 +3549,13 @@ function nextCard(s, se) {
   uiPut(go, U('loadUp').toUpperCase(), 2, UI.white, { bold: true, shadow: '#8a3a14' }, U('loadUp'));
   go.disabled = !cl.ok;
   go.addEventListener('click', onGo);
-  sec.appendChild(go);
-  sec.appendChild(mk('p', { id: 'go-why', cls: 'muted', text: cl.ok ? '' : String(cl.reason || '') }));
-  return sec;
+  let why = cl.ok ? '' : String(cl.reason || '');
+  if (dv && !dv.goHere) {
+    go.hidden = true;
+    const bd = bookedDayOf(se);
+    why = bd === null ? '' : eventDone(se) ? U('bookPlayed', { day: dayNameOf(bd) }) : U('goNotToday', { day: dayNameOf(bd) });
+  }
+  return [go, mk('p', { id: 'go-why', cls: 'muted', text: why })];
 }
 
 function onGo() {
@@ -3701,6 +3780,187 @@ function lengthSection(s) {
   return sec;
 }
 
+// ---------------------------------------------------------------- v3.2 days of the week (D8.2, D8.3)
+
+function dayNameOf(i) { return STRINGS.dayName ? STRINGS.dayName[i] || '' : ''; }
+function dayKindWord(k) { return STRINGS.dayKind && STRINGS.dayKind[k] ? STRINGS.dayKind[k] : ''; }
+function dayCardNow() { return typeof sim.dayCardView === 'function' ? sim.dayCardView() : null; }
+// The booked day (D1): the picked offer's day, or null for the Yard offer or no pick.
+function bookedDayOf(se) {
+  const o = se && se.booking;
+  if (!o || o.type === 'yard') return null;
+  if (typeof o.day === 'number') return o.day;
+  const bd = C.BOOK_DAY ? C.BOOK_DAY[o.type] : null;
+  return typeof bd === 'number' ? bd : null;
+}
+// Today's options in loop 'week', with goHere when today is the booked day; null without the days sim.
+function dayView(s) {
+  if (loopOf(s) !== 'week' || typeof sim.dayOptions !== 'function' || typeof sim.chooseDay !== 'function') return null;
+  let v = null;
+  try { v = sim.dayOptions(); } catch (e) { v = null; }
+  if (!v || !Array.isArray(v.options)) return null;
+  v.goHere = v.options.some(function (o) { return o.kind === 'event'; });
+  return v;
+}
+// What changes the day part of the hub's height (weekSig).
+function daySig(s) {
+  const v = dayView(s);
+  if (!v) return '';
+  return (s.season.day | 0) + ':' + v.options.map(function (o) { return o.kind + (o.ok ? '' : '!'); }).join(',');
+}
+
+// ol#day-strip: seven display tiles, done days checked, today lit, the booked day marked (D8.2).
+function dayStrip(se) {
+  const today = se.day | 0;
+  const log = Array.isArray(se.dayLog) ? se.dayLog : [];
+  const bd = bookedDayOf(se);
+  const n = C.WEEK_DAYS || 7;
+  const ol = mk('ol', { id: 'day-strip', attrs: { 'aria-label': U('dayStripAria', { day: dayNameOf(today) }) } });
+  for (let i = 0; i < n; i++) {
+    const done = i < today;
+    const li = mk('li', { id: 'day-' + i, cls: 'dy ' + (done ? 'done' : i === today ? 'now' : 'ahead') + (i === bd ? ' booked' : '') });
+    let aria;
+    if (done) aria = U('dayDoneAria', { day: dayNameOf(i), kind: dayKindWord(log[i]) || dayKindWord('off') });
+    else if (i === bd) aria = U('dayBookedAria', { day: dayNameOf(i), label: se.booking.label || bookingLabel(se.booking.type) });
+    else aria = U('dayAheadAria', { day: dayNameOf(i) });
+    li.setAttribute('aria-label', aria);
+    const inner = mk('div', { cls: 'tin', attrs: { 'aria-hidden': 'true' } });
+    const word = STRINGS.dayShort ? STRINGS.dayShort[i] || '' : '';
+    const color = i === today ? UI.K : done || i === bd ? UI.white : UI.blueL;
+    inner.appendChild(uiPut(mk('span', { cls: 'tn' }), word, 2, color, i === today ? undefined : { shadow: UI.ink }));
+    if (done) {
+      const badge = mk('span', { cls: 'badge' });
+      const ck = checkEl(2);
+      if (ck) badge.appendChild(ck);
+      inner.appendChild(badge);
+    }
+    li.appendChild(inner);
+    ol.appendChild(li);
+  }
+  return ol;
+}
+
+// section#day-choice: the heading, today's price, a button and a hint per option; on the booked day
+// #go and #go-why stand in for the event option.
+function dayChoice(se, v, goEls) {
+  const sec = mk('section', { id: 'day-choice', attrs: { 'aria-labelledby': 'day-choice-h' } });
+  const head = mk('div', { cls: 'offers-head' });
+  head.appendChild(uiPut(mk('h3', { id: 'day-choice-h', attrs: { tabindex: '-1' } }), U('dayPick').toUpperCase(), 2, UI.white, { bold: true, shadow: UI.ink }, U('dayPick')));
+  const mult = typeof v.price === 'number' ? v.price : (Array.isArray(C.DAY_PRICE) ? C.DAY_PRICE[se.day | 0] : 1);
+  const pct = Math.round(mult * 100);
+  head.appendChild(mk('p', { id: 'day-price', cls: pct < 100 ? 'low' : pct > 100 ? 'high' : '', text: U('priceDay', { n: pct }) }));
+  sec.appendChild(head);
+  const grid = mk('div', { cls: 'day-opts' });
+  for (let i = 0; i < v.options.length; i++) {
+    const o = v.options[i];
+    const hint = STRINGS.dayHint && STRINGS.dayHint[o.kind] ? STRINGS.dayHint[o.kind] : '';
+    if (o.kind === 'event') {
+      const cell = mk('div', { cls: 'dopt devent' });
+      cell.appendChild(mk('p', { id: 'day-event-hint', cls: 'dhint muted', text: hint }));
+      cell.appendChild(goEls[0]);
+      cell.appendChild(goEls[1]);
+      grid.appendChild(cell);
+      continue;
+    }
+    const cell = mk('div', { cls: 'dopt' });
+    const b = pixBtn('day-' + o.kind, dayKindWord(o.kind), 'alt', function () { onDay(o.kind); }, 12);
+    b.disabled = !o.ok;
+    b.setAttribute('aria-describedby', 'day-' + o.kind + '-hint');
+    cell.appendChild(b);
+    const warn = o.ok && o.warn ? String(o.warn) : '';   // V32-9: say what spoils before the tap
+    const hp = mk('p', { id: 'day-' + o.kind + '-hint', cls: 'dhint muted' + (!o.ok || warn ? ' why' : '') + (warn ? ' warn' : '') });
+    const short = STRINGS.dayHintShort && STRINGS.dayHintShort[o.kind] ? STRINGS.dayHintShort[o.kind] : '';
+    if (!o.ok || warn || !short) hp.textContent = o.ok ? (warn || hint) : String(o.reason || '');
+    else { hp.appendChild(mk('span', { cls: 'hl', text: hint })); hp.appendChild(mk('span', { cls: 'hs', text: short })); }
+    cell.appendChild(hp);
+    grid.appendChild(cell);
+  }
+  // v3.2 playtest: a last option alone on its row puts its hint beside the button (fitWeek step 8).
+  const cells = grid.children;
+  const last = cells.length ? cells[cells.length - 1] : null;
+  const plain = grid.querySelectorAll('.dopt:not(.devent)').length;
+  if (last && !last.classList.contains('devent') && plain % 2 === 1) last.classList.add('lone');
+  sec.appendChild(grid);
+  return sec;
+}
+
+// A day option. Train opens the crew sheet to pick the card; Yard day and the quick days go to the sim.
+function onDay(kind) {
+  if (kind === 'train') { crewPick = true; openSheet('crew', 'day-train'); return; }
+  const r = sim.chooseDay(kind);
+  pump();
+  if (!r || !r.ok) {
+    if (currentPanel === 'week') rebuildKeepFocus(buildWeek, 'week');
+    const h = document.getElementById('day-' + kind + '-hint');
+    if (h && r && r.message) h.textContent = String(r.message);
+  }
+  updateDom();
+}
+
+// The offer's day tag (offer-{id}-day): SAT or SUN on a booking card, none on the Yard card.
+function offerDay(o) {
+  if (!o || o.type === 'yard' || typeof o.day !== 'number' || !STRINGS.dayShort) return null;
+  const w = STRINGS.dayShort[o.day];
+  if (!w) return null;
+  const t = mk('span', { id: 'offer-' + o.id + '-day', cls: 'oday' });
+  uiPut(t, w, 2, UI.gold, null, dayNameOf(o.day));
+  return t;
+}
+
+// #daycard (D8.3), opened on day_done: what the day did, the cash, then Next day.
+function openDayCard() {
+  const c = dayCardNow();
+  if (!c) return;
+  dropSheet();
+  cardCtx = null;
+  buildDayCard(c);
+  openPanel('daycard');
+}
+function itemWord(id) {
+  for (let i = 0; i < CATALOG.length; i++) if (CATALOG[i].id === id) return String(CATALOG[i].label).toLowerCase();
+  if (MEATS[id]) return MEATS[id].label.toLowerCase();
+  return String(id);
+}
+function buildDayCard(c) {
+  const h = el['daycard-h'];
+  clear(h);
+  const title = dayNameOf(c.day | 0) + ', ' + dayKindWord(c.kind);
+  pixLines(h, title.toUpperCase(), 24, 2, UI.white, { bold: true, shadow: UI.ink }, title);
+  const body = el['daycard-body'];
+  clear(body);
+  const card = mk('div', { cls: 'card3 dc-card' });
+  let any = false;
+  const line = function (id, text) { card.appendChild(mk('p', { id: id, text: text })); any = true; };
+  const bought = Array.isArray(c.bought) ? c.bought.filter(function (b) { return b && (b.qty | 0) > 0; }) : [];
+  if (bought.length) line('daycard-bought', U('cardBought', { list: andList(bought.map(function (b) { return (b.qty | 0) + ' ' + itemWord(b.id); })), n: c.spent | 0 }));
+  if ((c.prepBonus | 0) > 0) line('daycard-prep', U('cardPrep', { n: C.PREP_QUALITY }));
+  if (c.loadinSame) line('daycard-loadin', U('cardLoadinSame'));
+  if (c.trained && c.trained.name) line('daycard-train', U('cardTrain', { name: c.trained.name, xp: c.trained.xp | 0 }));
+  const ov = c.overnight;
+  if (ov && (ov.n | 0) > 0) line('daycard-overnight', U('cardOvernight', { n: ov.n | 0, meat: MEATS[ov.meat] ? MEATS[ov.meat].plateLabel.toLowerCase() : '' }));
+  const mood = Array.isArray(c.mood) ? c.mood : [];
+  if (mood.length) line('daycard-mood', U('cardMood', { list: andList(mood.map(function (m) { return m.name + ' ' + moodWord(m.to).toLowerCase(); })) }));
+  else if (c.moodTop) line('daycard-mood', U('cardMoodTop', { mood: moodWord(C.DAYOFF_MOOD_CAP) }));
+  if ((c.spoiled | 0) > 0) line('daycard-spoiled', U('cardSpoiled', { n: c.spoiled | 0 }));
+  if (!any) line('daycard-nothing', U('cardNothing'));
+  body.appendChild(card);
+  body.appendChild(mk('div', { id: 'daycard-cash', cls: 'pill' }, [coinEl(2), pillLabel(U('cash')), pillValue(fmt(sim.state.cash))]));
+  const nx = mk('button', { id: 'daycard-next', cls: 'primary big', type: 'button' });
+  uiPut(nx, U('nextDay').toUpperCase(), 3, UI.creamL, { bold: true, shadow: UI.orangeLo }, U('nextDay'));
+  nx.addEventListener('click', onNextDay);
+  body.appendChild(nx);
+}
+// Next day: the sim clears the card (the tick already ran), then the hub, focus on the day choice.
+function onNextDay() {
+  const r = typeof sim.advanceDay === 'function' ? sim.advanceDay() : null;
+  pump();
+  if (r && r.ok && loopOf(sim.state) === 'week' && !sim.state.broke) openWeek(); else showLoop();
+  pump();
+  updateDom();
+  const f = document.getElementById('day-choice-h');
+  if (f && currentPanel === 'week') f.focus();
+}
+
 // ---------------------------------------------------------------- sheets (W17.3)
 
 function openSheet(kind, openerId, from) {
@@ -3730,6 +3990,7 @@ function closeSheet() {
 }
 
 function dropSheet() {
+  crewPick = false;
   sheetKind = null;
   sheetOpener = null;
   sheetRows = [];
@@ -3929,7 +4190,8 @@ function onBring(id, on) {
 }
 function onTrain(id) {
   if (typeof sim.train !== 'function') return;
-  const r = sim.train(id);
+  // v3.2 (D4.6): with days on, every Train tap spends the day, from the pick sheet or not.
+  const r = typeof sim.chooseDay === 'function' ? sim.chooseDay('train', { id: id }) : sim.train(id);
   crewMsg = r && r.ok === false && r.message ? String(r.message) : '';
   afterAct();
 }
@@ -4468,7 +4730,9 @@ function cardCrewActs(act, d) {
   if (weekOnly()) {
     const tid = trainedId();
     const tr = pixBtn('card-train', tid !== null ? U('trainDone') : U('train'), 'alt', function () {
-      const r = sim.train(id);
+      const r = typeof sim.chooseDay === 'function' ? sim.chooseDay('train', { id: id }) : sim.train(id);
+      pump();
+      if (currentPanel === 'daycard') { updateDom(); return; }
       done(r && r.ok === false ? r : null, 'card-level');
     });
     tr.disabled = tid !== null;

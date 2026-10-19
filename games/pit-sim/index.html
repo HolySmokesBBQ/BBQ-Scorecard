@@ -98,7 +98,7 @@
     .dl dd { margin-left: 0; color: var(--c); }
 
     @media (min-width: 900px) {
-      #root { max-width: 960px; display: grid; grid-template-columns: 1fr 320px; grid-template-areas: "hdr hdr" "stage side" "foot foot"; column-gap: 24px; }
+      #root { max-width: 1120px; display: grid; grid-template-columns: 1fr 320px; grid-template-areas: "hdr hdr" "stage side" "foot foot"; column-gap: 24px; }
       #hdr { grid-area: hdr; }
       #stage { grid-area: stage; }
       #foot { grid-area: foot; }
@@ -167,6 +167,51 @@
     .tfin .tfw { display: block; line-height: 0; }
     .wk .badge { position: absolute; top: -9px; right: -7px; line-height: 0; }
     .tstars { display: flex; gap: 1px; line-height: 0; }
+    /* v3.2 Days (D8.2): the day strip in the season strip's family, then the day choice */
+    #day-strip { list-style: none; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; margin: 0 0 10px; padding: 6px 0 0; }
+    #day-strip .dy { position: relative; display: flex; min-width: 0; min-height: 34px; background: var(--blue-d); border: 2px solid #fff; box-shadow: 0 3px 0 var(--blue-dd); }
+    #day-strip .dy .tin { flex: 1; display: flex; align-items: center; justify-content: center; padding: 4px 0; overflow: hidden; }
+    #day-strip .dy.ahead { background: #2c56d4; border-color: #6f92f5; }
+    #day-strip .dy.booked { background: var(--o); border-color: var(--gold); }
+    #day-strip .dy.now { background: var(--gold); border-color: #fff; outline: 2px solid var(--k); box-shadow: inset 0 -5px 0 #d9a93e, 0 4px 0 var(--blue-dd); }
+    #day-strip .dy .badge { position: absolute; top: -9px; right: -6px; line-height: 0; }
+    #day-choice { margin-bottom: 12px; }
+    #panels #day-choice-h { line-height: 0; }
+    #panels #day-price { flex: 0 1 auto; margin: 0; color: #dbe6ff; font-size: 12px; font-weight: 700; line-height: 1.2; text-align: right; }
+    #panels #day-price.low { color: #9ff0a8; }
+    #panels #day-price.high { color: #ffb070; }
+    .day-opts { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 8px; }
+    .dopt { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+    .dopt.devent { grid-column: 1 / -1; }
+    #panels .hub .dopt button.alt { width: 100%; }
+    #panels .dopt .dhint { margin: 0; font-size: 12px; line-height: 1.3; }
+    #panels .hub .dopt .go { width: 100%; margin: 0; }
+    #panels #day-choice #go-why { padding: 2px 0 0; color: #dbe6ff; }
+    #panels #day-choice #go-why:empty { display: none; }
+    .dopt .dhint .hs, .fit8 .dopt .dhint .hl { display: none; }
+    .fit8 .dopt .dhint .hs { display: inline; }
+    .fit9 .dopt .dhint:not(.why) { display: none; }
+    .fit8 .dopt.lone { grid-column: 1 / -1; flex-direction: row; align-items: center; gap: 8px; }
+    #panels .fit8 .dopt.lone button.alt { width: calc(50% - 4px); flex: none; }
+    #panels .dopt .dhint.warn { color: #ffb070; }
+    #panels .offer .owhy { color: #ffb070; }
+    .offer.shut .book { opacity: 0.6; }
+    @container (max-width: 330px) { #day-strip { gap: 2px; } #day-strip .dy .badge { right: -4px; } }
+    /* past the day hints (D8.2, game.js fitWeek): step 6 drops the hub tiles' windows and the mix hint, step 7 sets the season strip on one row with numbers, checks and the cup only */
+    .fit6 #hub-grid .tile .win { display: none; }
+    #panels .fit6 #next-hint { display: none; }
+    .fit7 #season-strip { grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 6px 4px; }
+    .fit7 #season-strip .wk { min-height: 34px; }
+    .fit7 #next-event .next-txt .oline { display: none; }
+    .fit7 #season-strip .tnow, .fit7 #season-strip .tq, .fit7 #season-strip .tstars, .fit7 #season-strip .tfin, .fit7 #season-strip .tyard { display: none; }
+    .oday { position: absolute; right: 8px; top: -9px; z-index: 1; padding: 2px 3px 3px; background: var(--k); border: 1px solid var(--gold); line-height: 0; }
+    /* v3.2 Days (D8.3): the result card */
+    #panels #daycard-h { display: flex; flex-direction: column; justify-content: center; gap: 4px; min-height: 44px; line-height: 0; }
+    #panels .dc-card { margin-bottom: 12px; padding: 10px 12px; }
+    #panels .dc-card p { margin: 0 0 6px; }
+    #panels .dc-card p:last-child { margin-bottom: 0; }
+    #daycard-cash { margin-bottom: 14px; }
+    #panels .hub #daycard-next { width: 100%; }
     #offers { margin-bottom: 12px; }
     .offers-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
     .pick-one { color: #dbe6ff; font-size: 13px; }
@@ -708,6 +753,9 @@
       </section>
       <section id="card" class="hub" role="dialog" aria-modal="true" aria-labelledby="card-h" hidden>
         <h2 id="card-h" tabindex="-1"></h2><div id="card-body"></div>
+      </section>
+      <section id="daycard" class="hub" role="dialog" aria-modal="true" aria-labelledby="daycard-h" hidden>
+        <h2 id="daycard-h" tabindex="-1"></h2><div id="daycard-body"></div>
       </section>
     </div>
 

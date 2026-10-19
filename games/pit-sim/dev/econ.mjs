@@ -282,6 +282,46 @@ function playEvent(sim) {
   return sim.state.phase !== 'service';
 }
 
+// v3.2 (D10.2): one quick day by tap, chooseDay then the result card's Next day. Returns the events.
+function quickDay(sim, kind, opt) {
+  const r = sim.chooseDay(kind, opt);
+  const evs = sim.drainEvents();
+  if (r.ok && sim.state.loop === 'week' && sim.state.phase === 'evening') sim.advanceDay();
+  return { ok: r.ok, message: r.message, evs };
+}
+const dayOk = (sim, kind) => {
+  const v = sim.dayOptions();
+  return !!(v && Array.isArray(v.options) && v.options.some((o) => o.kind === kind && o.ok));
+};
+// Days off until `kind` is on today's list (or the week ends). Returns the quick days tapped.
+function offUntil(sim, kind) {
+  const s = sim.state;
+  const week = s.season.week, year = s.season.year;
+  let n = 0;
+  while (s.loop === 'week' && s.season.week === week && s.season.year === year && n < 7) {
+    const v = sim.dayOptions();
+    if (v.options.some((o) => o.kind === kind)) break;
+    quickDay(sim, 'off');
+    n += 1;
+  }
+  return n;
+}
+// The grinder's weekday Yard day cart: half a Yard day's crowd in sausage and chicken, plus bags.
+function weekdayYardCart(sim) {
+  const s = sim.state;
+  for (const m of MEAT_IDS) if (s.cart.meat[m]) sim.buy(m, -999);
+  if (s.cart.charcoal) sim.buy('charcoal', -999);
+  const cookers = 1 + (s.gear.kettle2 ? 1 : 0) + (s.gear.drum ? 1 : 0);
+  const crowd = Math.ceil(sim.expectedCrowd() * C.YARD_DAY_FRAC);
+  const have = MEAT_IDS.reduce((a, m) => a + s.stock[m] * MEATS[m].plates, 0);
+  const units = Math.ceil(Math.max(0, Math.ceil(1.1 * crowd) + 1 - have) / 2);
+  const chicken = Math.floor(units / 2);
+  if (units - chicken) sim.buy('sausage', units - chicken);
+  if (chicken) sim.buy('chicken', chicken);
+  const bags = Math.max(0, Math.ceil(C.BAGS_PER_COOKER * C.YARD_DAY_FRAC) * cookers - s.charcoal);
+  if (bags) sim.buy('charcoal', bags);
+}
+
 // v3.1 (X16): Hiring Day. Season 1 drafts the best FIRE, then the best RUN, then passes; later seasons
 // hire only for a role the crew lacks. Over the slots, the fewest stars go first. Returns the events.
 function hiringDay(sim, firstSeason) {
@@ -409,7 +449,15 @@ function dayRun(seed, days) {
     }
     for (const b of m.bought) if (!(b in firsts)) firsts[b] = s.day;
     if (m.broke) { if (!('broke' in firsts)) firsts.broke = s.day; break; }
-    const lu = sim.loadUp();
+    // v3.2: days off to the weekend (the cart rides along), then a full length Yard day or the finale.
+    const cart = { meat: Object.assign({}, s.cart.meat), charcoal: s.cart.charcoal };
+    if (finale) offUntil(sim, 'event');
+    else while (s.loop === 'week' && s.season.day < 5) quickDay(sim, 'off');
+    if (!finale) {
+      for (const k of MEAT_IDS) if (s.cart.meat[k] !== cart.meat[k]) sim.buy(k, cart.meat[k] - s.cart.meat[k]);
+      if (s.cart.charcoal !== cart.charcoal) sim.buy('charcoal', cart.charcoal - s.cart.charcoal);
+    }
+    const lu = finale ? sim.chooseDay('event') : sim.chooseDay('yard');
     sim.drainEvents();
     if (!lu.ok) { if (!('stuck' in firsts)) firsts.stuck = 'day ' + s.day + ': ' + (sim.canLoadUp().reason || lu.message); break; }
     playEvent(sim);
@@ -421,6 +469,8 @@ function dayRun(seed, days) {
     if (s.cash >= C.DRIVEWAY_PRICE && s.gear.drum && !('driveway' in firsts)) firsts.driveway = t.day;
     sim.finishReport();
     sim.drainEvents();
+    const wk = s.season.week;
+    while (s.loop === 'week' && s.season.week === wk) { quickDay(sim, 'off'); }
   }
   return { rows, firsts };
 }
@@ -453,7 +503,8 @@ const POLICIES = [
   { id: 'sharp', stars: 5, drumBand: 4, drivewayBand: 9 },     // S1W4 / S1W9
   { id: 'steady', stars: 3, drumBand: 8, drivewayBand: 13 },   // S1W8 / S2W4
   { id: 'rough', stars: 2, drumBand: 18, drivewayBand: 27 },   // S2W9 / S3W9
-  { id: 'eager', stars: 3, drumBand: Infinity, drivewayBand: Infinity, eager: true, info: true }   // X18.1 item 47, information only
+  { id: 'eager', stars: 3, drumBand: Infinity, drivewayBand: Infinity, eager: true, info: true },   // X18.1 item 47, information only
+  { id: 'grinder', stars: 3, drumBand: Infinity, drivewayBand: Infinity, grinder: true, info: true }   // v3.2 (D10.2): steady stars, a Yard day every weekday, no Load-in; information only
 ];
 const V30_SEASON_CASH = { sharp: [827, 2361, 3895, 5429, 6963] };   // [S 10.7], the v3.0 result X16 check 5 prints beside
 const W = () => C.SEASON_WEEKS;
@@ -525,7 +576,8 @@ function seasonRun(policy, seed, seasons, length) {
   const s = sim.state;
   const bdayCost = birthdayMeatCost(length);
   const res = { seed, drum: null, driveway: null, seasonCash: [], stuck: null, underZero: [], idle: [], weeks: [], fallbacks: 0,
-    maxWages: 0, overBudget: [], wagesBySeason: [], payBySeason: [], left1: 0, sendoffs1: 0, walkins1: 0, crewAt: [], stretchLow: [] };
+    maxWages: 0, overBudget: [], wagesBySeason: [], payBySeason: [], left1: 0, sendoffs1: 0, walkins1: 0, crewAt: [], stretchLow: [],
+    secsBySeason: [], yardDays: 0, noCook: 0 };   // v3.2: play seconds a season (2 s a quick day, cooks at endAt), the grinder's weekday Yard days
   const count = (evs) => {
     if (s.season.year !== 1) return;
     for (const e of evs) {
@@ -537,8 +589,22 @@ function seasonRun(policy, seed, seasons, length) {
   count(hiringDay(sim, true));
   if (length && length !== 'normal') { sim.setLength(length); sim.drainEvents(); }   // setLength is week only (sim.js V-10)
   let lowStreak = 0;
-  let wages = 0, pay = 0;
+  let wages = 0, pay = 0, secs = 0;
   const total = seasons * W();
+  // v3.2: the season end after a week's last day (Sunday's tick opens it).
+  const seasonEnded = () => {
+    if (s.loop !== 'seasonEnd') return;
+    res.seasonCash.push(s.cash);
+    res.wagesBySeason.push(wages);
+    res.payBySeason.push(pay);
+    res.secsBySeason.push(secs);
+    res.crewAt.push(s.crew.map((c) => c.role + ' ' + P.cardStars(c.skills) + ' at ' + c.wage).join(', '));
+    wages = 0; pay = 0; secs = 0;
+    sim.startSeason();
+    count(sim.drainEvents());
+    if (s.loop === 'hiring') count(hiringDay(sim, false));
+  };
+  const quick = (kind, opt) => { const r = quickDay(sim, kind, opt); count(r.evs); if (r.ok) secs += 2; return r; };
   for (let n = 1; n <= total + 1; n++) {
     if (s.loop !== 'week' || s.phase !== 'morning') { res.stuck = res.stuck || ('loop ' + s.loop + ' at ' + fmtWeek(n)); break; }
     const abs = absWeek(s.season.year, s.season.week);
@@ -623,24 +689,93 @@ function seasonRun(policy, seed, seasons, length) {
       if (sim.payroll().now <= budget) break;
       for (const c of s.crew) if (c.bring && c.role === role) sim.setBring(c.id, false);
     }
-    // X16: train the lowest id card each week; spend every banked level on skill 0, then skill 1.
-    if (s.crew.length && s.season.trained === null) sim.train(s.crew.slice().sort((a, b) => a.id - b.id)[0].id);
-    for (const c of s.crew) {
-      let guard = 0;
-      while (c.banked > 0 && guard++ < 20) if (!sim.levelUp(c.id, 0).ok && !sim.levelUp(c.id, 1).ok) break;
-    }
-    count(sim.drainEvents());
-    // 5. load up (a refused pick falls back to the Yard day with nobody brought).
-    let lu = sim.loadUp();
-    if (!lu.ok) {
-      const yard = s.season.offers.find((o) => o.type === 'yard');
-      if (yard && yard.id !== booked.id) {
-        for (const c of s.crew) if (c.bring) sim.setBring(c.id, false);
-        sim.bookOffer(yard.id); lu = sim.loadUp(); booked = yard; res.fallbacks += 1;
+    // X16: spend every banked level on skill 0, then skill 1 (the training pick is Wednesday's day).
+    const levels = () => {
+      for (const c of s.crew) {
+        let guard = 0;
+        while (c.banked > 0 && guard++ < 20) if (!sim.levelUp(c.id, 0).ok && !sim.levelUp(c.id, 1).ok) break;
       }
+      count(sim.drainEvents());
+    };
+    levels();
+    // 5. v3.2 (D10.2) Monday to Friday the way [S 19.6]'s weekend player taps them: Monday a Market
+    // run of the prefill when the cooler holds it, else Prep; Tuesday Prep when not prepped, else a
+    // Day off; Wednesday Train (the lowest id card) when there is a card; Thursday off; Friday
+    // Load-in. A Yard week trains on Wednesday and rests. The grinder cooks a Yard day every weekday
+    // it can and skips Load-in.
+    const weekNo = s.season.week, yearNo = s.season.year;
+    const inThisWeek = () => s.loop === 'week' && s.season.week === weekNo && s.season.year === yearNo;
+    const isBookingWeek = booked.type !== 'yard';
+    while (inThisWeek() && s.phase === 'morning' && s.season.day <= 4) {
+      const d = s.season.day;
+      if (policy.grinder) {
+        weekdayYardCart(sim);
+        const brought = s.crew.filter((c) => c.bring).map((c) => c.id);
+        for (const id of brought) sim.setBring(id, false);   // a weekday Yard day cooks with nobody brought
+        const yardOk = dayOk(sim, 'yard') && sim.chooseDay('yard').ok;
+        for (const id of brought) sim.setBring(id, true);
+        if (yardOk) {
+          count(sim.drainEvents());
+          playEvent(sim);
+          count(sim.drainEvents());
+          const ty = s.till;
+          wages += ty.wages | 0;
+          pay += (ty.revenue | 0) + (ty.tips | 0) + (ty.seatTips | 0);
+          secs += ty.endAt | 0;
+          res.yardDays += 1;
+          sim.finishReport();
+          count(sim.drainEvents());
+          levels();
+          continue;
+        }
+        sim.bookOffer(s.season.booking.id);   // the booking's prefill back in the cart
+        sim.drainEvents();
+      }
+      let kind = 'off';
+      let opt;
+      if (d === 2 && s.crew.length && s.season.trained === null) { kind = 'train'; opt = { id: s.crew.slice().sort((a, b) => a.id - b.id)[0].id }; }
+      if (isBookingWeek && !policy.grinder) {
+        if (d === 0) {
+          const cartMeat = MEAT_IDS.reduce((a, m) => a + s.cart.meat[m], 0);
+          const holds = cartMeat > 0 && MEAT_IDS.reduce((a, m) => a + s.stock[m], 0) + cartMeat <= sim.coolerCap();
+          kind = holds && dayOk(sim, 'market') ? 'market' : 'prep';
+        } else if (d === 1) kind = s.season.prepped ? 'off' : 'prep';
+        else if (d === 4) kind = 'loadin';
+      }
+      if (!dayOk(sim, kind)) { kind = 'off'; opt = undefined; }
+      quick(kind, opt);
+      levels();
+    }
+    // The weekend: the booked day, the other day off. A Yard week cooks Saturday's Yard day (Sunday's
+    // when Saturday cannot). A booking that cannot load rests everyone and tries again; when it still
+    // cannot, the week falls back to a later weekend Yard day, if one is left.
+    let lu = { ok: false, message: '' };
+    let wantYard = !isBookingWeek;
+    while (inThisWeek() && s.phase === 'morning') {
+      const opts = sim.dayOptions().options;
+      if (opts.some((o) => o.kind === 'event')) {
+        if (!dayOk(sim, 'event')) for (const c of s.crew) if (c.bring) sim.setBring(c.id, false);
+        lu = sim.chooseDay('event');
+        if (lu.ok) break;
+        res.fallbacks += 1;
+        wantYard = true;
+        quick('off');
+        continue;
+      }
+      if (wantYard && dayOk(sim, 'yard')) {
+        if (isBookingWeek) for (const c of s.crew) if (c.bring) sim.setBring(c.id, false);
+        lu = sim.chooseDay('yard');
+        if (lu.ok) { booked = { type: 'yard' }; break; }
+      }
+      quick('off');
     }
     count(sim.drainEvents());
-    if (!lu.ok) { res.stuck = res.stuck || ('loadUp refused at ' + fmtWeek(abs) + ': ' + (sim.canLoadUp().reason || lu.message)); break; }
+    if (!lu.ok) {
+      // No cook this week: the Sunday tick wrote { yard, 0 } and opened the next week.
+      if ((s.loop === 'week' && s.phase === 'morning') || s.loop === 'seasonEnd') { res.noCook += 1; seasonEnded(); continue; }
+      res.stuck = res.stuck || ('no cook at ' + fmtWeek(abs) + ': ' + (sim.canLoadUp().reason || lu.message));
+      break;
+    }
     const cashAfterLoad = s.cash;
     // 6. the cook.
     const kind = s.today.kind;
@@ -659,20 +794,13 @@ function seasonRun(policy, seed, seasons, length) {
     if ((t.wages | 0) > C.PAYROLL[0]) res.overBudget.push(fmtWeek(abs) + ' ' + t.wages);
     wages += t.wages | 0;
     pay += (t.deposit | 0) + (t.payRest | 0) + (t.menuBonus | 0) + (t.tips | 0) + (t.seatTips | 0) + (t.revenue | 0);
-    res.weeks.push({ abs, type: booked.type, stars: t.stars | 0, cash: s.cash, rep: s.rep, wages: t.wages | 0, crew: s.crew.length, bought: bought.join(' ') });
-    // 7. next.
+    secs += t.endAt | 0;
+    // 7. next: the report ends the day, then the rest of the week off.
     sim.finishReport();
     count(sim.drainEvents());
-    if (s.loop === 'seasonEnd') {
-      res.seasonCash.push(s.cash);
-      res.wagesBySeason.push(wages);
-      res.payBySeason.push(pay);
-      res.crewAt.push(s.crew.map((c) => c.role + ' ' + P.cardStars(c.skills) + ' at ' + c.wage).join(', '));
-      wages = 0; pay = 0;
-      sim.startSeason();
-      count(sim.drainEvents());
-      if (s.loop === 'hiring') count(hiringDay(sim, false));
-    }
+    while (inThisWeek() && s.phase === 'morning') quick('off');
+    res.weeks.push({ abs, type: booked.type, stars: t.stars | 0, cash: s.cash, rep: s.rep, wages: t.wages | 0, crew: s.crew.length, bought: bought.join(' ') });
+    seasonEnded();
   }
   return res;
 }
@@ -691,7 +819,8 @@ function birthdayRun(seed, length) {
   const s = sim.state;
   const b = s.season.offers.find((o) => o.type === 'birthday');
   if (!b || !sim.bookOffer(b.id).ok) return { seed, error: 'no Birthday on offer' };
-  const lu = sim.loadUp();
+  offUntil(sim, 'event');   // v3.2: days off to the booked Saturday
+  const lu = sim.chooseDay('event');
   sim.drainEvents();
   if (!lu.ok) return { seed, error: 'loadUp ' + (sim.canLoadUp().reason || lu.message) };
   let gap = 0, maxGap = 0, guard = 0;
@@ -738,7 +867,17 @@ function seasonMode() {
     const payMed = medianNum(runs.map((r) => perSeason(r, 'payBySeason')));
     const share = wagesMed / payMed;
     summary[pol.id] = { drumMed, dwMed, se, share, wagesMed, payMed };
-    if (pol.info) {
+    // v3.2 (D10.2): play minutes a season, 2 s a quick day and every cook at its seconds, against the 45 minute target.
+    const mins = [];
+    for (let k = 0; k < SEASONS; k++) mins.push(Math.round(medianNum(runs.map((r) => r.secsBySeason[k])) / 6) / 10);
+    extra.push(pol.id + ' minutes a season (2 s a quick day, cooks at their seconds; target under 45): ' + mins.join(' ')
+      + (pol.grinder ? '; weekday Yard days ' + runs.reduce((a, r) => a + r.yardDays, 0) + ' over ' + runs.length + ' seeds' : '')
+      + '; weeks with no cook ' + runs.reduce((a, r) => a + r.noCook, 0));
+    if (pol.grinder) {
+      const base = summary.steady ? summary.steady.se : [];
+      extra.push('grinder (information) cash at each season end ' + se.join(' ') + ' against the base policy at the same stars (steady) ' + base.join(' ')
+        + '; stuck ' + stuck.length + '/' + runs.length + ', under 0 ' + under.length + '/' + runs.length);
+    } else if (pol.info) {
       // X18.1 item 47: the eager policy is information only.
       const s1 = medianNum(runs.map((r) => r.seasonCash[0]));
       extra.push(pol.id + ' (information): stuck ' + stuck.length + '/' + runs.length + ', under 0 ' + under.length + '/' + runs.length + ', median season 1 cash ' + s1

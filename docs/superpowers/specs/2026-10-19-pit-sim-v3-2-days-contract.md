@@ -270,4 +270,35 @@ Every v3.1 step that reached Load up and go from the week hub first runs a helpe
 
 ## D12. Integration record
 
-(The integrator fills this: suites run, step results, econ bands, any tuning, deviations.)
+Integrated 2026-10-19 on top of 89d7137. Files: `sim.js`, `game.js`, `index.html`, `dev/smoke.mjs`, `dev/econ.mjs`.
+
+**Suites.** `node --check` on all four scripts; no U+2013 or U+2014 in any edited file, and no banned word added (the existing hits are v3.1 DOM and CSS property names).
+
+| Run | Result |
+|---|---|
+| `smoke.mjs --out` (phone 375 by 812) | 85/85 ok, 0 console errors |
+| `smoke.mjs --desktop --out` | 85/85 ok, 0 console errors |
+| `smoke.mjs --node-only` | 27/27 ok |
+| `econ.mjs --season` (Normal, 50 seeds, 5 seasons) | every enforced check passed |
+
+D10.1 steps 72, 73, 74, 76, 77 and 78 run as harness steps 79 to 84 (the v3.1 numbering already reached 78); the Node legs of 73 and 75 are Node steps. The v3.1 Node steps run in a `legacyDays` wrapper (one cook a week on its booked day, list prices) so they test what they tested; v3.1 browser steps use `toBookedDay()` and `restOfWeek()`; every fixture writes `v: 6`. Screenshots added: `days-week.png` (Monday hub, day strip), `days-card.png` (Market run result card), `days-weekend.png` (Saturday's Birthday in service).
+
+**Econ bands (base policy, D10.2), no tuning:** `PREP_QUALITY` 4 and `DAY_PRICE` as written.
+
+| Policy | Drum median | v3.1 | Band |
+|---|---|---|---|
+| sharp | S1W4 | S1W4 | S1W4 |
+| steady | S1W5 | S1W5 | S1W8 |
+| rough | S1W9 | S1W6 | S2W9 |
+
+Never stuck 0/50 for all three, rough never under 0, payroll checks pass. Info: the base policy plays 21.1 minutes a season against the 45 minute target; the grinder plays 62 to 67 and ends S1 to S5 at 1021, 3774, 6526, 9301, 12068 against steady's 289, 1423, 2597, 3806, 5089.
+
+**Sim deviations** (full text in the `sim.js` header): V32-1 a weekday opens with an empty cart (Monday and the booked day get the prefill), because a prefilled Friday cart spoiled overnight and put steady at S2W5; V32-2 a Market run or Load-in commits only a cart the cash pays for (no deposit before the booked day); V32-3 Train with no card reads `ui.crewEmpty`; V32-4 a booked day whose event cannot load also offers Day off; V32-5 bare `train(id)` does not end the day (D4.6 said it is the same call); V32-6 save timing (report save is the next morning, mid event save stays live, a v6 save may hold the week's result); V32-7 `till.cashStart` is the cash the day opened with.
+
+**UI deviations:** hub shrink steps 6 (hide hub tile pictures and `#next-hint`) and 7 (season strip on one row, next event guest and meat lines hidden) beyond D8.2's hint step, because week 1 measured 1817 px against 1624; now 1598 (Saturday 1548). `#go` still calls `loadUp()` on the booked day, not `chooseDay('event')`.
+
+**Integrator seam fix:** with V32-5 the crew sheet's `#train-{id}` and the card's `#card-train` trained for free outside pick mode. `game.js` now sends every Train tap through `chooseDay('train', { id })` when the sim has days, so D4.6 holds in the UI; v3.1 step 74 now taps the result card's Next day and reopens the sheet before it reads the xp (the day spent, Tuesday next).
+
+**Harness deviations:** step 74 (day prices) charges chicken at its catalog price 6, not 8 (8 is the plate price); v3.1 steps 60 and 73 load v6 fixtures on Saturday and Sunday so their checks keep their meaning; on Monday `#go-why` reads `ui.goNotToday`.
+
+**Open for the Overseer:** a weekday Yard day sells for only about 10 s (gate at 30, end at 45 of a half length day); the grinder earns about 2.4 times the base policy and reaches word of mouth 100 by week 3, which may be too strong; the grinder's payroll reads 0 (its bring flags are likely not restored after a weekday Yard day; bot only, not enforced).
