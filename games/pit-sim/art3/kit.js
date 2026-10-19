@@ -953,6 +953,38 @@ function platter(r, m) {
   });
 }
 
+// Carried in the hands (v3.4 polish): a small charcoal bag (the pile's kraft paper, orange band and
+// cream flame) and a to go box (a white clamshell, lid lit from the top left, a red sticker).
+function carryBag(r) {
+  r.obj(function () {
+    r.rect(3, 5, 10, 11, BD.base);                     // lit front face
+    r.rect(13, 6, 3, 10, BD.shade);                    // shaded side
+    r.rect(3, 2, 10, 3, BD.hi);                        // rolled lip, lit
+    r.rect(13, 3, 3, 3, BD.base);
+    r.rect(3, 5, 10, 1, BD.dark);                      // crease under the lip
+    r.rect(13, 6, 3, 1, BD.dark);
+    r.rect(4, 6, 1, 9, BD.hi);                         // top left light down the front
+    r.rect(3, 9, 10, 4, RP.orange.base);               // the band
+    r.rect(3, 9, 10, 1, RP.orange.hi);
+    r.rect(13, 9, 3, 4, RP.orange.shade);
+    r.grid(GRIDS.flameSmall, { '#': CREAM }, 7, 9);
+    r.px(3, 2, 0); r.px(15, 3, 0);                     // slumped corners
+  });
+  r.obj(function () { r.rect(5, 1, 3, 1, CH.base); r.px(9, 1, CH.base); });   // briquettes at the mouth
+}
+function carryTogo(r) {
+  r.obj(function () {
+    r.rect(2, 6, 13, 6, CW.base);                      // front face
+    r.rect(15, 5, 2, 7, CW.shade);                     // side
+    r.rect(3, 2, 13, 4, WHITE);                        // lid top, lit
+    r.rect(2, 5, 13, 1, CW.shade);                     // lid seam
+    r.rect(2, 11, 13, 1, CW.shade);
+    r.rect(3, 3, 4, 1, CW.base);                       // lid crease
+    r.rect(7, 7, 3, 3, RP.drum.base);                  // sticker
+    r.px(7, 7, RP.drum.hi);
+  });
+}
+
 /* ---------------------------------------------------------------- meat on the grate */
 // Paint one meat shape with ramp mr ({hi, base, shade, dark}) plus extras; state drives detail.
 function meatShape(r, m, st) {
@@ -1195,6 +1227,9 @@ MEAT_IDS.forEach(function (m) { def('plate_' + m, 20, 13, 10, 7, 1, function (r,
 def('plate_empty', 20, 13, 10, 7, 1, function (r, f) { plate(r, f, null); });
 // Carried platters (round 1): a server's plate, larger than a table plate, with a lit rim.
 MEAT_IDS.forEach(function (m) { def('platter_' + m, 26, 16, 13, 9, 1, function (r) { platter(r, m); }); });
+def('platter_empty', 26, 16, 13, 9, 1, function (r) { platter(r, null); });
+def('carry_charcoal', 18, 18, 9, 15, 1, carryBag);
+def('carry_togo', 18, 14, 9, 11, 1, carryTogo);
 // Dish dock plates (round 2): card size, for dishCard().
 MEAT_IDS.forEach(function (m) { def('dish_' + m, 48, 30, 24, 15, 1, function (r) { dish(r, m); }); });
 def('gauge', 8, 40, 4, 40, GAUGE_STEPS + 1, gauge);

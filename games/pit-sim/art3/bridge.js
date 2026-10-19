@@ -25,8 +25,11 @@ const CARRY = { down: 'carry_down', up: 'carry_up', side: 'carry_side' };
 const POSE3 = { down: 'down', up: 'up', side: 'side', carry_down: 'carryDown', carry_up: 'carryUp', carry_side: 'carrySide', sit: 'sit' };
 // v2 names that are the same thing under another art3 name.
 const ALIAS = { fence_h: 'fence_front', fence_v: 'fence_side', hand_burnt: ['piece_brisket', 3], planter: ['pot', 0],
-  picnic: ['picnic_small', 0], picnic_bench: ['bench_small', 0] };
+  picnic: ['picnic_small', 0], picnic_bench: ['bench_small', 0],
+  hand_tray: 'platter_empty', hand_charcoal: 'carry_charcoal', hand_togo: 'carry_togo' };
 let ext = null;        // the counter extension's v2 rect, drawn with the counter as counter_long
+let signAt = null;
+let lastCounter = null; // the plain counter's v2 rect, for the extension's ghost     // where the last art3 sign drew (its anchor, render px), for signText
 
 let ready = false;
 let who = null;        // the guest id for the next cust_* draw
@@ -109,6 +112,9 @@ function draw(ctx, name, x, y, w, h, frame, flip) {
   } else if (name === 'counter_ext' && ctx.globalAlpha >= 1) {
     ext = { x: x, y: y, w: w, h: h };
     return true;
+  } else if (name === 'counter' && frame !== 1) {
+    lastCounter = { x: x, y: y, w: w, h: h };
+    a = function () { art3.drawAt(ctx, 'counter', fx, fy, 0, false); };
   } else if (name === 'counter' && frame === 1 && ext && art3.has('counter_long')) {
     const e = ext, x0 = Math.min(e.x, x), x1 = Math.max(e.x + e.w, x + w), yb = Math.max(e.y + e.h, y + h);
     ext = null;
@@ -129,11 +135,81 @@ function draw(ctx, name, x, y, w, h, frame, flip) {
     // The v2 bubble frames the plate drawn inside it; the art3 bubble is taller, so it drops to
     // keep that plate on its body above the tail.
     const dy = /^bubble/.test(n3) && n3 !== 'bubble_warn' ? BUBBLE_DROP : 0;
+    if (n3 === 'sign') signAt = { x: fx, y: fy };
     a = function () { art3.drawAt(ctx, n3, fx, fy + dy, wrap(n3, f3), flip === true); };
   }
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   try { a(); } finally { ctx.setTransform(S, 0, 0, S, 0, 0); }
   who = null; carrying = false;
+  return true;
+}
+
+// The unbought counter extension (v2 rect e) as a ghost: the long counter clipped to the
+// extension's side of the plain counter (v2 rect c, else where it drew last).
+function extGhost(ctx, e, cRect) {
+  const c = cRect || lastCounter;
+  if (!ready || !c || !art3.has('counter_long') || !art3.has('counter')) return false;
+  const x0 = Math.min(e.x, c.x), x1 = Math.max(e.x + e.w, c.x + c.w), yb = Math.max(e.y + e.h, c.y + c.h);
+  const ca = art3.anchor('counter');
+  const cl = Math.round(c.x * S + c.w) - ca.ax, cr = cl + ca.w;
+  const left = e.x < c.x;
+  inRender(ctx, function () {
+    ctx.save();
+    ctx.beginPath();
+    if (left) ctx.rect(0, 0, cl + 2, ctx.canvas.height); else ctx.rect(cr - 2, 0, ctx.canvas.width, ctx.canvas.height);
+    ctx.clip();
+    art3.drawAt(ctx, 'counter_long', Math.round(x0 + x1), Math.round(yb * S), 0, false);
+    ctx.restore();
+  });
+  return true;
+}
+
+// The box (sim px) the art3 sprite for v2 sprite `name` at (x, y), v2 size w by h, covers on
+// screen, for tap rects. Null when art3 has no sprite for the name (the caller keeps the v2 box).
+function bounds(name, x, y, w, h, frame) {
+  if (!ready) return null;
+  let n3 = name;
+  const al = ALIAS[name];
+  if (Array.isArray(al)) n3 = al[0]; else if (al) n3 = al;
+  if (!art3.has(n3)) return null;
+  const a = art3.anchor(n3, frame | 0);
+  const fx = Math.round(x * S + w), fy = Math.round((y + h) * S);
+  const x0 = Math.floor((fx - a.ax) / S), y0 = Math.floor((fy - a.ay) / S);
+  return { x: x0, y: y0, w: Math.ceil((fx - a.ax + a.w) / S) - x0, h: Math.ceil((fy - a.ay + a.h) / S) - y0 };
+}
+
+// Runs f with ctx in render px (the identity transform), then puts the 2x transform back.
+function inRender(ctx, f) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  try { f(); } finally { ctx.setTransform(S, 0, 0, S, 0, 0); }
+}
+// The art3 font at (x, y) sim px, top left of the caps, upper cased with a v2 colour key.
+// opts as art3.text (scale, bold, shadow, outline). Returns false before boot.
+function text(ctx, str, x, y, colorKey, opts) {
+  if (!ready) return false;
+  inRender(ctx, function () { art3.textTinted(ctx, str, Math.round(x * S), Math.round(y * S), colorKey || 'C', opts); });
+  return true;
+}
+// Its width in sim px (may be a half px).
+function textWidth(str, opts) {
+  if (!ready) return 0;
+  return art3.textWidth(String(str).toUpperCase(), opts) / S;
+}
+// A floating number (art3.floatNum) with its top left at (x, y) sim px. kind: cash, tip, fan.
+// clampW keeps it inside the yard's width in sim px.
+function floatNum(ctx, str, x, y, kind, clampW) {
+  if (!ready) return false;
+  inRender(ctx, function () {
+    art3.floatNum(ctx, String(str).toUpperCase(), Math.round(x * S), Math.round(y * S), kind, clampW ? { clamp: [0, clampW * S] } : null);
+  });
+  return true;
+}
+// The pit name on the art3 sign's panel, where the sign drew last. False when no art3 sign drew.
+function signText(ctx, str) {
+  if (!ready || !signAt || typeof art3.signText !== 'function') return false;
+  const a = art3.anchor('sign');
+  const at = signAt;
+  inRender(ctx, function () { art3.signText(ctx, String(str), at.x - a.ax, at.y - a.ay); });
   return true;
 }
 
@@ -164,6 +240,7 @@ PitSim.bridge3 = {
   boot: boot, get ready() { return ready; },
   toParts: toParts, setPlayer: setPlayer, setCrew: setCrew, person: person,
   draw: draw, ground: ground, portrait: portrait, figure: figure,
+  text: text, textWidth: textWidth, floatNum: floatNum, signText: signText, extGhost: extGhost, bounds: bounds,
   misses: function () { return Object.assign({}, misses); }
 };
 })();

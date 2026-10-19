@@ -4946,9 +4946,17 @@ function setupInput() {
 }
 
 // The drawn boxes of a station: its sprite, plus the counter extension when owned (D13).
+// With the art3 look the sprite's box is the art3 sprite's on screen, clipped to the yard.
 function stationRects(st) {
   const sz = size(st.sprite);
-  const out = [{ x: st.draw.x, y: st.draw.y, w: sz[0], h: sz[1] }];
+  let r0 = { x: st.draw.x, y: st.draw.y, w: sz[0], h: sz[1] };
+  const b3 = B3 && B3.bounds ? B3.bounds(st.sprite, st.draw.x, st.draw.y, sz[0], sz[1], 0) : null;
+  if (b3) {
+    const x0 = Math.max(0, b3.x), y0 = Math.max(0, b3.y);
+    const x1 = Math.min(VW, b3.x + b3.w), y1 = Math.min(VH, b3.y + b3.h);
+    if (x1 > x0 && y1 > y0) r0 = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+  }
+  const out = [r0];
   if (st.type === 'table' && extTile && owned(extTile)) out.push(extRect());
   return out;
 }
@@ -5454,6 +5462,14 @@ function D(name, x, y, frame, flip) {
   if (capturing) recs.push({ name: name, frame: f, x: x, y: y, w: sz[0], h: sz[1] });
 }
 
+// The capture record D() would make, with no draw.
+function recOnly(name, x, y, frame) {
+  if (!capturing) return;
+  const sz = size(name);
+  if (!inView(name, x, y, sz[0], sz[1])) return;
+  recs.push({ name: name, frame: normFrame(frame, sz[2]), x: x, y: y, w: sz[0], h: sz[1] });
+}
+
 function DS(name, x, y, w, h, frame, flip) {
   if (!inView(name, x, y, w, h)) return;
   const f = normFrame(frame, size(name)[2]);
@@ -5505,7 +5521,9 @@ function drawSign(s) {
   const st = MAP.signText;
   const info = signInfo();
   if (!info) return;
-  if (typeof art.textFit === 'function') {
+  if (B3 && B3.signText(octx, pitName(s))) {
+    recordGlyphs(info.font, info.text, info.x, info.font === 'font_s' ? st.y + 1 : st.y);
+  } else if (typeof art.textFit === 'function') {
     art.textFit(octx, pitName(s), st.x, st.y, st.w);
     recordGlyphs(info.font, info.text, info.x, info.font === 'font_s' ? st.y + 1 : st.y);
   } else {
@@ -5592,6 +5610,11 @@ function drawRail(r, s) {
 function T(str, x, y, colorKey) {
   if (!colorKey || colorKey === 'C') art.text(octx, str, x, y);
   else art.textTinted(octx, str, x, y, colorKey);
+  recT(str, x, y);
+}
+
+// captureFrame records for a T() string at (x, y), in the v2 font's advances, whichever font drew it.
+function recT(str, x, y) {
   if (!capturing) return;
   const fs = size('font');
   const s = String(str).toUpperCase();
@@ -5608,7 +5631,9 @@ function T(str, x, y, colorKey) {
 
 // Floating number: the string in the outline color at four 1 px offsets, then in its color on
 // top (round 2; no box). Only the colored pass is recorded by captureFrame.
+const FLOAT_KIND = { yellow: 'cash', white: 'tip', pink: 'fan' };
 function popText(str, x, y, colorKey) {
+  if (B3 && B3.floatNum(octx, str, x, y, FLOAT_KIND[colorKey] || 'plain', VW)) { recT(str, x, y); return; }
   art.textTinted(octx, str, x - 1, y, 'outline');
   art.textTinted(octx, str, x + 1, y, 'outline');
   art.textTinted(octx, str, x, y - 1, 'outline');
@@ -5618,6 +5643,19 @@ function popText(str, x, y, colorKey) {
 
 // Canvas text in an umber box: the box 1 px up and left of the text, width + 3 by 8.
 function boxText(str, x, y, colorKey) {
+  if (B3 && B3.ready) {
+    // The art3 font at 2x (5 by 7 sim px caps) in an umber box with an outline edge.
+    const w3 = Math.ceil(B3.textWidth(str, { scale: 2 }));
+    octx.fillStyle = COLOR.outline;
+    octx.fillRect(x - 1, y - 1, w3 + 3, 10);
+    octx.fillStyle = COLOR.U;
+    octx.fillRect(x - 0.5, y - 0.5, w3 + 2, 9);
+    B3.text(octx, str, x + 0.5, y + 1, 'K', { scale: 2 });
+    B3.text(octx, str, x + 0.5, y + 0.5, colorKey || 'C', { scale: 2 });
+    recT(str, x + 1, y + 1);
+    recT(str, x, y);
+    return;
+  }
   octx.fillStyle = COLOR.U;
   octx.fillRect(x - 1, y - 1, art.textWidth(str) + 3, 8);
   T(str, x + 1, y + 1, 'K');
@@ -5964,7 +6002,16 @@ function drawSorted(s) {
         push(st.sortRow * TILE + 15, 1, st.draw.x, function () { ghost(st.sprite, st.draw.x, st.draw.y, 0); });
       } else if (st.type === 'table' && extTile && !owned(extTile)) {
         const r = extRect();
-        push(st.sortRow * TILE + 15, 1, r.x, function () { ghost('counter_ext', r.x, r.y, 0); });
+        push(st.sortRow * TILE + 15, 1, r.x, function () {
+          if (B3) {
+            octx.globalAlpha = GHOST_ALPHA;
+            const csz = size(st.sprite);
+            const hit = B3.extGhost(octx, r, { x: st.draw.x, y: st.draw.y, w: csz[0], h: csz[1] });
+            octx.globalAlpha = 1;
+            if (hit) { const n = recs.length; recOnly('counter_ext', r.x, r.y, 0); if (capturing) for (let i = n; i < recs.length; i++) recs[i].ghost = true; return; }
+          }
+          ghost('counter_ext', r.x, r.y, 0);
+        });
       }
     }
     for (let i = 0; i < MAP.decor.length; i++) {
@@ -6224,7 +6271,9 @@ function drawTop(s) {
     const age = tAnim - n.at;
     if (age < 0 || age >= FX.NUMBER_S) continue;
     octx.globalAlpha = numAlpha(age);
-    D('coin', n.x - 9, n.y - numRise(age), reduced ? 0 : Math.floor(tAnim * 8) % 2);
+    // art3.floatNum draws the cash coin with the number; the v2 coin keeps its capture record.
+    if (B3 && B3.ready) recOnly('coin', n.x - 9, n.y - numRise(age), reduced ? 0 : Math.floor(tAnim * 8) % 2);
+    else D('coin', n.x - 9, n.y - numRise(age), reduced ? 0 : Math.floor(tAnim * 8) % 2);
     octx.globalAlpha = 1;
   }
   // Sparkles.
@@ -6295,6 +6344,23 @@ function drawBanner(b) {
   if (st) bannerBottom = st.draw.y < VH / 3;
   const h = b.lines.length > 1 ? 21 : 11;
   const y = bannerBottom ? VH - 2 - h : 2;
+  // The art3 font at 2x when every line fits the yard's width; the box grows to the widest line.
+  let w3 = 0;
+  if (B3 && B3.ready) for (let i = 0; i < b.lines.length; i++) w3 = Math.max(w3, B3.textWidth(b.lines[i], { scale: 2 }));
+  if (w3 > 0 && w3 + 7 <= VW - 4) {
+    const bw = Math.max(BANNER_W, Math.ceil(w3) + 7);
+    octx.fillStyle = COLOR.outline;
+    octx.fillRect(2, y, bw, h);
+    octx.fillStyle = COLOR.C;
+    octx.fillRect(2.5, y + 0.5, bw - 1, h - 1);
+    octx.fillStyle = COLOR.K;
+    octx.fillRect(3, y + 1, bw - 2, h - 2);
+    for (let i = 0; i < b.lines.length; i++) {
+      B3.text(octx, b.lines[i], 5, y + 2 + 8 * i, 'C', { scale: 2, shadow: 'outline' });
+      recT(b.lines[i], 5, y + 3 + 8 * i);
+    }
+    return;
+  }
   octx.fillStyle = COLOR.C;
   octx.fillRect(2, y, BANNER_W, h);
   octx.fillStyle = COLOR.K;
