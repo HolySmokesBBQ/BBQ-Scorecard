@@ -114,7 +114,7 @@ Window is how long the gate is open in a Normal event (v2: gate at 30 s, last ca
 
 | Booking | Guests | Menu asks | Fee | Venue | Window | Patience | Difficulty | Unlocked by |
 |---|---|---|---|---|---|---|---|---|
-| Birthday | 12 | sausage, chicken | 100 | Backyard | 80 s | 45 s | 1 flame | start |
+| Birthday | 12 | sausage, chicken | 100 | Backyard | 60 s | 45 s | 1 flame | start |
 | Church picnic | 20 | chicken, pulled pork | 275 | Church lot | 80 s | 50 s | 2 flames | start |
 | Block party | 16 | sausage, ribs | 160 | Backyard | 80 s | 40 s | 2 flames | Driveway rung |
 | Park reunion | 18 | chicken, ribs | 215 | Park | 80 s | 45 s | 2 flames | fan rating 34 |
@@ -123,6 +123,8 @@ Window is how long the gate is open in a Normal event (v2: gate at 30 s, last ca
 | Homecoming | 40 | chicken, pulled pork, brisket | 665 | Church lot | 90 s | 50 s | 3 flames | Trailer rung and fan rating 67 |
 | Yard day | walk-ins | your pick | per plate | Backyard | v2 rules | v2 rules | 1 flame | always |
 | Competition | judges | four turn-ins | prize by placing | Competition grounds | see 3.5 | none | 3 flames | week 9 |
+
+The Birthday's window was 80 s until playtest round 3, where the twelve guests left half the cook idle; at 60 s it is a short, dense easy week that still fits one kettle. **Overseer's call** (contract W26 Q-5).
 
 Rules for every booking:
 
@@ -151,6 +153,7 @@ How the setting meets booking windows and the pre-gate time. **Overseer's call**
 - Headcount is the booking's guests x the setting's factor, rounded.
 - The event ends at the setting's hard end, or sooner by v2's early end rule.
 - The competition always runs 180 s and ignores the setting.
+- Until v3.2 builds the competition, v3.0's Season finale ignores the setting too: it runs 160 s with a 105 s window at Normal's headcount, so a 5 meat, 40 guest rail can finish. **Overseer's call** (contract W26 Q-2).
 - The toggle sits in a Settings row at the bottom of the week screen (4.2).
 
 ### 3.5 The championship: a competition BBQ weekend
@@ -292,6 +295,8 @@ After last call and the last plate, the host rates the event from a 100 point sc
 Pay after the event = fee x (0.5 + 0.1 x stars), less the deposit already paid, plus tips and seat tips as v2 computes them. One star pays 60 percent of the fee, three pays 80, five pays 100. Booked guests pay nothing per plate; the fee is the pay, and per-plate revenue applies only on Yard days. The minus 2 for off-menu plates stays in the scoring code as a guard, though with the hands rule limited to menu meats (3.3) it will rarely fire.
 
 Yard days are not starred. They pay per plate as in v2 and move fan rating by v2's per-serve rules.
+
+**Amended after playtest round 1 (2026-10-19, v3.0 contract W24).** Quality scales with the share of booked guests fed, and a booked plate served 30 s or more after it was sliced costs 2 quality points. Pay after the event is fee x (0.3 + 0.14 x stars): one star pays 44 percent, three 72, five 100. A booking whose rail needs more grate time than the owned cookers give before last call is a stretch with a Needs line (the one kettle Church picnic: "Needs a second kettle."). **Overseer's call.**
 
 ---
 
@@ -568,6 +573,68 @@ Two global rules for every policy, over 5 seasons and 50 seeds:
 
 `node dev/econ.mjs --season --seeds 50` prints the median week each milestone is reached per policy and exits non-zero outside the bands. The bands are the contract. Every price and fee in this file is a starting value the bot may move.
 
+### 10.4 The v3.0 built result (2026-10-18, integration)
+
+Run: `node games/pit-sim/dev/econ.mjs --season` (50 seeds, 5 seasons, Normal length), against the v3.0 `sim.js` with every `C` value at its contract starting value (nothing tuned). Exit 0.
+
+| Policy | Stars | Owns the drum (median) | Band | Driveway affordable (median, information until v3.3) | Band | Stuck | Idle |
+|---|---|---|---|---|---|---|---|
+| Sharp | 5 | S1W4 | S1W4 | S1W8 | S1W9 | 0 of 50 | 0 of 50 |
+| Steady | 3 | S1W6 | S1W8 | S2W4 | S2W4 | 0 of 50 | 0 of 50 |
+| Rough | 2 | S1W9 | S2W9 | S2W9 | S3W9 | 0 of 50 | 0 of 50 |
+
+Rough never ended an event under 0. Median cash at each season end: sharp 1002, 2590, 4178, 5766, 7354; steady 364, 1200, 2036, 2872, 3708; rough 278, 573, 1025, 1522, 1974. Season 1 cash and word of mouth after each week (median): sharp ends week 9 at 1002 and 74, steady at 364 and 38, rough at 278 and 30.
+
+How the bot spends (contract W23 I-2): it walks the gear rows of the order (kettle2, drum, tray, cooler, canopy, bigtable) with W22.19's continue rule, and opens the decor stage only once all six are owned, the way the v2 bot bought decor only once gear was covered. With the decor stage open from week 1 (W20 read literally), sharp spends about 610 on cheaper gear and every decor piece while the drum is out of reach, and its drum median lands at S1W6, two weeks past the band (steady S1W8, rough S2W2, both inside). No allowed `C` value moves sharp two weeks; `FEE_MULT` would, but it would also pull steady and rough far ahead of their targets.
+
+What the numbers say for later rounds:
+
+- After the drum, v3.0 has nothing left to buy: sharp holds 7354 by the end of season 5. "Never idle" passes only because it is checked while something unbought exists. The Driveway (400, buyable in v3.3) and the v3.1 payroll are the sinks this needs.
+- Rough reaches the drum in season 1 because it plays Yard days while word of mouth is under 34, and a well run Yard day moves word of mouth up to 12. Its band (end of season 2) is loose by a full season.
+- Played tick by tick (not settled), big bookings lose guests at the gate: the line holds 3, and late guests give up at last call. The Sim builder's competent bot fed 9 of 20 at a Church picnic on one kettle and 24 to 26 of 40 at the Season finale with two kettles (3 or 4 stars). That is the W7.2 and W7.3 rule as built; it is the first thing to check in Joel's v3.0 playtest.
+
+The day runs (`node games/pit-sim/dev/econ.mjs`, Yard days through the week hub, seeds 1 to 8, 25 events) buy the second kettle on event 3 or 4, the drum on event 10 to 12, and reach the driveway price on event 18. No seed went broke.
+
+### 10.5 Playtest round 1 result (2026-10-19)
+
+Run: `node games/pit-sim/dev/econ.mjs --season` (50 seeds, 5 seasons, Normal), after the W24 fixes of the v3.0 contract: the grate time test (the one kettle Church picnic is a stretch), quality by the share fed and cold plates, pay at 0.3 + 0.14 per star, the take after what the cook used, no spare without a cooler, gear bought leaning on the deposit, and the bot buying gear strictly in order and picking again after it spends. Exit 0.
+
+| Policy | Stars | Owns the drum (median) | Band | Driveway affordable (median, information until v3.3) | Band | Stuck | Idle |
+|---|---|---|---|---|---|---|---|
+| Sharp | 5 | S1W4 | S1W4 | S1W9 | S1W9 | 0 of 50 | 0 of 50 |
+| Steady | 3 | S1W5 | S1W8 | S2W7 | S2W4 | 0 of 50 | 0 of 50 |
+| Rough | 2 | S1W7 | S2W9 | S4W7 | S3W9 | 0 of 50 | 0 of 50 |
+
+Median cash at each season end: sharp 885, 2473, 4061, 5649, 7237; steady 301, 746, 1361, 1976, 2591; rough 151, 198, 356, 545, 745. Steady and rough reach the Driveway price later than their v3.3 bands; that is for the v3.1 payroll and v3.3 tuning. Long length passes; Short misses sharp's drum band by a week, as it did before the round.
+
+### 10.6 Playtest round 2 result (2026-10-19)
+
+Run: `node games/pit-sim/dev/econ.mjs --season` (50 seeds, 5 seasons, Normal), after the W25 fixes of the v3.0 contract: `sim.canBuy` (the second kettle's Buy no longer greys out on the deposit), a board of one 14 plate stack per meat, the Season finale sized to the owned grate (9 guests on one kettle, 25 on two, 40 with the drum, at Normal), the drum second in the goal order, and 6 prefill bags a cooker at Normal (scaled by the length). Exit 0.
+
+| Policy | Stars | Owns the drum (median) | Band | Driveway affordable (median, information until v3.3) | Band | Stuck | Idle |
+|---|---|---|---|---|---|---|---|
+| Sharp | 5 | S1W4 | S1W4 | S1W9 | S1W9 | 0 of 50 | 0 of 50 |
+| Steady | 3 | S1W5 | S1W8 | S2W8 | S2W4 | 0 of 50 | 0 of 50 |
+| Rough | 2 | S1W7 | S2W9 | S4W9 | S3W9 | 0 of 50 | 0 of 50 |
+
+Median cash at each season end: sharp 839, 2373, 3907, 5441, 6975; steady 282, 668, 1229, 1790, 2351; rough 233, 200, 326, 471, 622. Long passes. Short misses sharp's drum band by a week as before and now puts rough under 0 in 3 of 50 seeds (1 before), because its two kettle finale is smaller. **Overseer's call** (W25): the finale's 40 guests in section 15 hold only with the drum; without it the finale books what the grate can cook, and the card and Pit news say what the drum would make of it.
+
+**Overseer's call** (W26, playtest round 3): the finale was still the worst cook of a good season, because booked guests gave up at last call while the grate had plates coming, and the 125 s day was too short for a 5 meat, 40 guest rail. Booked guests now wait at the gate until the hard end, and the finale runs 160 s with a 105 s window at any length (3.4). Results in 10.7.
+
+### 10.7 Playtest round 3 result (2026-10-19)
+
+Run: `node games/pit-sim/dev/econ.mjs --season` (50 seeds, 5 seasons, Normal), after the W26 fixes of the v3.0 contract: booked guests waiting until the hard end, the 160 s finale at any length (16 guests on one kettle, 33 on two, 40 with the drum), the Birthday's 60 s window, the pick carried from last week and the Driveway card held until v3.3. Exit 0.
+
+| Policy | Stars | Owns the drum (median) | Band | Driveway affordable (median, information until v3.3) | Band | Stuck | Idle |
+|---|---|---|---|---|---|---|---|
+| Sharp | 5 | S1W4 | S1W4 | S1W9 | S1W9 | 0 of 50 | 0 of 50 |
+| Steady | 3 | S1W5 | S1W8 | S2W8 | S2W4 | 0 of 50 | 0 of 50 |
+| Rough | 2 | S1W7 | S2W9 | S4W9 | S3W9 | 0 of 50 | 0 of 50 |
+
+Median cash at each season end: sharp 827, 2361, 3895, 5429, 6963; steady 295, 656, 1217, 1778, 2339; rough 221, 200, 314, 459, 610. Long passes. Short misses sharp's drum band by a week and puts rough under 0 in 3 seeds as before, and now leaves rough stuck in 2 seeds (its season start spending after the larger Short finale); Normal is the canonical run.
+
+The finale played tick by tick by the econ competent bot over seeds 1 to 10: 36.3 of 40 fed at 4.5 stars with the drum, 39.0 at 5.0 with the drum and the bigger table, 30.0 of 33 at 4.9 on two kettles. A slowest meat first bot gets 2.2, 3.9 and 3.4 stars on the same three. The Birthday feeds 12 of 12 at 5 stars and ends at 98.6 s on one kettle (106.6 before); the Church picnic on two kettles feeds 18 of 20 at 5 stars.
+
 ---
 
 ## 11. Save
@@ -771,7 +838,7 @@ The harness grows with each step: venue reachability (venues x decor sets x the 
 
 ## 17. Overseer's calls in this file, collected
 
-Portrait only. Hybrid oblique art over true isometric, pending the proof. A 9-week season with the competition always in week 9. Fees from one formula. Guests in parties on a fixed curve. A 30 percent deposit. An add-on meat as the menu decision. Bookings play in the backyard until their venue exists. The event length setting. Season scaling and the difficulty swing. No skip for any event. No new hero verb. Two skills per role and the star-to-constant table. Five mood states with notice before leaving. Wages per event worked. Payroll budget and slots by rung. Hiring Day every season with other outfits taking cards. Walk-ins with a signing fee. One training pick a week. 200 XP levels with a skill choice. Moving on with referrals instead of aging. Traits instead of coordinators. The "Word of mouth" label kept; star-based fan rating moves with +2 at 3 stars; 75 percent carry-over. Cash as the only currency. No decay. The Driveway rung at 400 and the full rung and cooker price tables. Decor charm that travels. Prep Station and Crew Tent. The competition tiers, prizes and scoring. The cook kit fixed in rows 1 to 6 at every venue. The build order. The door shipping after v3.0. The tutorial day as a pre-season Yard day. How offers are generated. Switching offers until Load up and go, with the deposit credited then. The add-on meat split and the Menu bonus. The hands rule limited to menu meats. Rain on Yard days only. Streaks that skip Yard days. How event length meets booking windows. The competition's turn-in order, boxes, Hold clock and mood. The v3.0 season end card and Season finale menu. v2 hires kept as rows in v3.0. RUN Friendliness on every carry. How the felt-difference check measures. Effective skill clamped to 1 through 5. Potential capping each skill. Banked levels and the raise button. The big-cooker bay with a trade-in at every step. The two highest-charm decor items travel. Yard days in the season bot and the canopy in its upgrade order. The Yard day ticket rail and the Coming next card at 400. The stick burner runnable from the Driveway rung. The Driveway goal at 400 from v3.0, buyable in v3.3. TILL starting values and restaurant night starting values. A free let-go for a card that never worked. Two options on every host feedback card. One moving-on reason per card. The Artifact save not carrying to the site.
+Portrait only. Hybrid oblique art over true isometric, pending the proof. A 9-week season with the competition always in week 9. Fees from one formula. Guests in parties on a fixed curve. A 30 percent deposit. An add-on meat as the menu decision. Bookings play in the backyard until their venue exists. The event length setting. Season scaling and the difficulty swing. No skip for any event. No new hero verb. Two skills per role and the star-to-constant table. Five mood states with notice before leaving. Wages per event worked. Payroll budget and slots by rung. Hiring Day every season with other outfits taking cards. Walk-ins with a signing fee. One training pick a week. 200 XP levels with a skill choice. Moving on with referrals instead of aging. Traits instead of coordinators. The "Word of mouth" label kept; star-based fan rating moves with +2 at 3 stars; 75 percent carry-over. Cash as the only currency. No decay. The Driveway rung at 400 and the full rung and cooker price tables. Decor charm that travels. Prep Station and Crew Tent. The competition tiers, prizes and scoring. The cook kit fixed in rows 1 to 6 at every venue. The build order. The door shipping after v3.0. The tutorial day as a pre-season Yard day. How offers are generated. Switching offers until Load up and go, with the deposit credited then. The add-on meat split and the Menu bonus. The hands rule limited to menu meats. Rain on Yard days only. Streaks that skip Yard days. How event length meets booking windows. The competition's turn-in order, boxes, Hold clock and mood. The v3.0 season end card and Season finale menu. v2 hires kept as rows in v3.0. RUN Friendliness on every carry. How the felt-difference check measures. Effective skill clamped to 1 through 5. Potential capping each skill. Banked levels and the raise button. The big-cooker bay with a trade-in at every step. The two highest-charm decor items travel. Yard days in the season bot and the canopy in its upgrade order. The Yard day ticket rail and the Coming next card at 400. The stick burner runnable from the Driveway rung. The Driveway goal at 400 from v3.0, buyable in v3.3. TILL starting values and restaurant night starting values. A free let-go for a card that never worked. Two options on every host feedback card. One moving-on reason per card. The Artifact save not carrying to the site. Playtest round 3 (contract W26): booked guests waiting at the gate until the hard end; v3.0's finale at 160 s whatever the length; the Birthday's 60 s window; last week's booking preselected when it is offered and safe; the Driveway goal and Coming next card held until v3.3 can sell the rung; the cream shirt under the Blue apron.
 
 ---
 

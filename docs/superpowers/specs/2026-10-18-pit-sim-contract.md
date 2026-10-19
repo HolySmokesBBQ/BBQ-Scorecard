@@ -10,6 +10,14 @@ Every rule of play (numbers, step order, order rule, pull order, strings) lives 
 
 ---
 
+## v3.0 season
+
+**Date:** 2026-10-18, night. The v3.0 round (the season, the week screen hub, bookings with deposits and client stars, the ticket rail, fan rating thirds, the event length setting, the season end card, the character creator with player and pit names, the visible rolling inventory, save version 4, the econ season bot, and two tutorial strand fixes) has its own contract: `docs/superpowers/specs/2026-10-18-pit-sim-v3-0-contract.md`, sections W0 to W21. It is law for the v3.0 builders: where it and anything below disagree, it wins, and everything below stands unless a W section names it. Rules of play are in `docs/superpowers/specs/2026-10-18-pit-sim-v3-season-design.md`.
+
+The headline changes to this document's names: `C.SAVE_VERSION` 4 and `validateSave` accepts 1 to 4; `C.DRIVEWAY_PRICE` 400; `PitSim.game.version` `'0.5.0'`; nine new top level names from `sim.js` (`BOOKINGS`, `BOOKING_IDS`, `LOOK_KEYS`, `LOOK_COUNTS`, `DEFAULT_LOOK`, `genOffers`, `scoreEvent`, `cleanName`, `filterName`); `state.loop`, `state.season`, `state.player`, `state.pitName`, `state.settings`, `state.wood`; `openGate()` only on the tutorial day and `loadUp()` everywhere else; `PALETTE` 36 entries; 123 required sprites; the 62 step harness of W19.
+
+---
+
 ## v2.1 tutorial, burn warning, charcoal
 
 **Date:** 2026-10-18, late. **Rules:** `docs/superpowers/specs/2026-10-18-pit-sim-v2-1-tutorial.md`, cited here as [T n]. This section is law for the v2.1 builders exactly as the v2 delta was for v2: where it and anything below disagree, this section wins. Everything below it stands unless a K section names it. Builder deviations are listed in each file header as before.

@@ -3,14 +3,20 @@
 // no browser storage. Randomness only through the seeded generator on the sim object. Runs in
 // Node under vm.runInThisContext and in the browser as a classic deferred script.
 //
-// Contract: docs/superpowers/specs/2026-10-18-pit-sim-contract.md (the v2.1 section K0 to K12
-//           first, then the v2 delta D0 to D10, then section 2 read with v2 coordinates).
-// Rules:    docs/superpowers/specs/2026-10-18-pit-sim-v2-1-tutorial.md (sections 2, 3 and 5),
+// Contract: docs/superpowers/specs/2026-10-18-pit-sim-v3-0-contract.md (W0 to W22, the v3.0
+//           round) first, then docs/superpowers/specs/2026-10-18-pit-sim-contract.md (the v2.1
+//           section K0 to K14, then the v2 delta D0 to D16, then section 2 read with v2
+//           coordinates).
+// Rules:    docs/superpowers/specs/2026-10-18-pit-sim-v3-season-design.md (section 19 first),
+//           then docs/superpowers/specs/2026-10-18-pit-sim-v2-1-tutorial.md (sections 2, 3 and 5),
 //           then docs/superpowers/specs/2026-10-18-pit-sim-design.md, top section "v2" first.
 //
-// Version: v2.1 (2026-10-18, late). Guided tutorial on day 1, wider done windows with a warning
-//          stage, a hot fire that no longer burns faster, save version 3. v2 underneath: 11 by 12
-//          yard, seats, decor and charm.
+// Version: v3.0 (2026-10-18, night). The season: nine weeks with Birthday and Church picnic
+//          bookings, the Yard day and the Season finale in week 9; deposits, booked headcounts
+//          and menus, client stars and the fee, fan rating thirds, the event length setting, the
+//          season end, the creator's profile and pit name, the rolling inventory with cooler
+//          capacity, save version 4 and two tutorial strand fixes. v2.1 underneath: the guided
+//          tutorial day, the burn warning, the 11 by 12 yard, seats, decor and charm.
 //
 // Deviations
 // 1. (Now the contract rule, section 1 as corrected; kept so the numbers below stay stable.) The
@@ -89,6 +95,128 @@
 //    same check (a to go serve sets served and togo together) the sim emits tutorial_step for
 //    seated and then for end in that one call, never skipping an id.
 // 27. v2.1: no shop line names a done window ([T 3.5]), so CATALOG text is unchanged.
+//
+// v3.0 deviations (contract W21 item 24 names the first three as Overseer's calls to restate here)
+// 28. W22.1, Overseer's call: state.player stays the v2 mover (x, y, carrying, busy, path...). The
+//     creator data lives in state.profile, null or { name, look }. The save key stays player;
+//     serialize() and validateSave() map it to and from state.profile.
+// 29. W22.9, Overseer's call overriding [S 5.4] and [S 3.3]: quality counts every piece that
+//     burnt during the event (today.burnt, pieces left on the grate included), and the Menu bonus
+//     needs at least one add-on plate served with no add-on piece burnt. An unfed booked guest
+//     (walked out, missed or closed out) counts as 60 s of wait.
+// 30. W22.12, Overseer's call: hire('buddy') keeps its day 2 rule only in loop 'tutorial'; in
+//     loop 'week' the buddy has no day gate. The tender keeps its drum need.
+// 31. W22.18: no C value moved. Every W2 key ships at its contract starting value. A scratch run
+//     of the W20 and W22.19 season bot against this file (50 seeds, 5 seasons, settle() for
+//     bookings, the v2.1 competent bot for Yard days; the official run is dev/econ.mjs's) gave
+//     drum medians sharp S1W6, steady S1W8, rough S2W2 with the decor in the spend order, so
+//     sharp misses its S1W4 band by two weeks: the continue rule spends on the tray, cooler,
+//     canopy, bigger table and decor while the drum is out of reach. With gear only in the order
+//     the medians are S1W4, S1W6 and S1W9 and every band passes. Driveway affordable (info):
+//     S1W8, S2W4, S2W9 (decor) or S1W7, S2W4, S2W7 (gear only). Never stuck, never under 0 and
+//     never idle in both. None of the keys W22.18 lets this builder tune moves sharp two weeks,
+//     so the call (the bot's spend rule or the fee multiplier) is the Overseer's.
+// 32. filterName() and cleanName() read undefined and null as the empty string, so a missing
+//     name falls back to Pitmaster or Your Pit; every other input goes through String() in a try.
+// 33. The W12.2 tutorial refills run only before the gate (clock under C.GATE_OPENS), which is
+//     every unlatched step, since the tutorial clock holds at 0 until the first plate lands. That
+//     is how W22.16 (b) keeps a sold out tutorial day ending once the customer steps start.
+// 34. beginMorning() skips the Broke test when the next loop is 'creator' as well as 'week'
+//     (W22.4 names 'week'). The Broke card belongs to the week hub; startWeek() runs the test with
+//     the deposit on offer when the creator hands over.
+// 35. prefill() and the Yard day plate count take Math.ceil(x - 1e-9) where the contract writes
+//     Math.ceil(x), so a float product that lands a hair over a whole number reads as that number.
+// 36. prefill() keeps the cart inside the W10.2 meat room by taking one unit at a time off the
+//     costliest meat line, so a cooler full of off menu meat gives a smaller cart instead of one
+//     that buy() would refuse. This runs before the affordability phases of W22.14.
+// 37. createSim(saved) runs every save through validateSave() first (a valid v4 save comes back
+//     unchanged); an object that does not validate starts a new game.
+// 38. setLength() in the tutorial morning sets the setting and emits save_wanted
+//     { reason: 'settings' }; the tutorial day itself always runs at Normal (W7.1).
+// 39. A buy() increase that meatRoom() cuts short keeps the part that fits (ok true) and carries
+//     the coolerFull message; one with no room at all returns ok false with it.
+// 40. setAddon(null) is legal on any week pick, the Yard day included; a meat on the Yard day is
+//     refused with STRINGS.ui.addonNo.
+// 41. guests_missed at last call is emitted right after last_call in the same tick.
+// 42. Till.label on the tutorial day reads STRINGS.booking.yard (the tutorial day is a pre season
+//     Yard day). game.js keeps its own Day 1 till heading.
+// 43. canLoadUp() also returns { ok: false, reason: '' } while the Broke card is up (state.broke),
+//     as v2's canOpen() did. In v3.0 the Broke test never fires in the week.
+// 44. settle(stars) needs an integer 1 to 5; anything else returns false.
+// 45. Leaving the report for the season end card clears the yard as a morning does (customers,
+//     helpers, seats, slicing) without the rain roll, and empties the cart.
+// Integration (v3.0 integrator, recorded in contract W23):
+// I-1. booking_picked carries { id, booking } instead of W14's { id, type }: emit() builds { type, ...payload },
+//      so a payload key named type replaced the event type ('picnic' instead of 'booking_picked').
+// Playtest round 1 (2026-10-19, recorded in contract W24; each is an Overseer's call):
+// P-1. A booking is a stretch when its rail needs more grate time than the owned cookers give:
+//      slot seconds = sum over rail meats of ceil(plates / MEATS[m].plates) * slots * cook, against
+//      grate slots * (GATE_OPENS + window) * C.SAFE_LOAD. The Needs line names the cooker that
+//      makes it fit (ui.needsKettle2, then ui.needsDrum). The finale and the Yard day are exempt.
+//      The one kettle Church picnic (270 against 176) is a stretch; on two kettles it is safe.
+// P-2. Client stars: quality scales with the share of booked guests fed, and a booked plate served
+//      HOT_PLATE_SECONDS or more after it was sliced costs C.COLD_PENALTY (today.cold). Pay:
+//      PAY_BASE 0.3 and PAY_PER_STAR 0.14 (was 0.5 and 0.1): 1 star pays 44 percent of the fee,
+//      2 stars 58, 3 stars 72, 4 stars 86, 5 stars 100. (The playtest's 0.2 and 0.16 put rough
+//      under 0 in 7 of 50 seasons: a Yard day with the fire tender's wage on low cash.)
+// P-3. Till.net for a booking also takes off the meat used (foodCost plus raw meat thrown out,
+//      today.rawWaste), the charcoal burnt and tonight's spoilage, so the report's rows add up to
+//      Take today. The Yard day and the tutorial keep the v2 formula.
+// P-4. Gear and decor bought in the week may count the picked offer's deposit toward the cart:
+//      price <= cash and cash + deposit - cart >= price. Cash never goes under 0 at the purchase.
+// P-5. prefill() adds the spare (SPARE_FRAC, the Yard day's 1.1 and +1) only with a cooler, so the
+//      default cart does not spoil a unit of each meat every night without one.
+// P-6. The tutorial's full grate row points at the cooler (put it back, no waste) with a two line
+//      banner; pending guests turned away by the sold out rule set today.soldOutMiss.
+// Playtest round 2 (2026-10-19, recorded in contract W25; each is an Overseer's call):
+// R-1. canBuy(id) is the gear and decor rule of P-4 as a pure check, { ok, message, left }, where
+//      left is cash + the picked deposit - cart - price. buy() runs it, and game.js greys the Buy
+//      button and words the "Leaves N" line from it, so a buy the sim allows is never shown as dead.
+// R-2. The board takes one stack per meat (C.BOARD_STACKS 5) of up to C.BOARD_STACK 14 plates, two
+//      of the largest piece; a slice that would overrun its meat's stack opens a second one while a
+//      stack is free. Two pork butts in a row (10 plates) no longer leave a cooked butt stuck in the
+//      hands. When nothing fits, the button reads "Board is full. Use the trash".
+// R-3. The Season finale books the most guests, up to its row's 40 at the length, whose rail fits the
+//      owned grate at SAFE_LOAD (slotSeconds against grateSeconds, the P-1 test): 9 on one kettle, 25
+//      on two, 40 with the drum, at Normal. The fee follows the formula. GOAL_ORDER puts the drum
+//      second, so Pit news points at it once the second kettle is owned.
+// R-4. The till carries gearSpent and gearBought (gear and decor bought that morning, from purchase
+//      calls; not saved) and cashStart (the week's weekCash, or the cash the tutorial morning opened
+//      with), so the report can show the rows between Take today and Cash.
+// R-5. BAGS_PER_COOKER 6 (was 5): a full cook with the fire kept in the good band burnt the prefill
+//      to 0 or 1 bags. Bags roll over, so the spare is never lost. It is a Normal cook's worth: the
+//      prefill scales it by the length's seconds, rounded up (5 a cooker at Short, 8 at Long).
+// Playtest round 3 (2026-10-19, recorded in contract W26; each is an Overseer's call):
+// Q-1. Booked guests keep joining the line until the hard end (less LAST_CALL_GUARD), not until last
+//      call: last call only closes the gate to new arrivals of a Yard day. Guests still waiting at
+//      the hard end give up then (missPending() before endDay()), and guests_missed fires there.
+// Q-2. The Season finale ignores the length setting, as [S 3.4] already says of the competition: it
+//      runs C.FINALE_SECONDS (160) with a 105 s window at Normal's headcount factor, so a 5 meat,
+//      40 guest rail can finish. R-3's grate sizing reads the longer window: 16 guests on one kettle
+//      (fee 190), 33 on two (390), 40 with the drum (560), at every length. Prefill bags scale by the
+//      finale's 160 s (8 a cooker).
+// Q-3. The cooler's put back runs on a tap (auto) when no owned cooker has a free slot for the raw
+//      piece in hand, so the tutorial's full grate row, whose arrow points at the cooler, works by
+//      tapping the cooler. With room on a grate it stays a button verb, so a second tap on the
+//      cooler never undoes a take.
+// Q-4. Hands full with a cooked or burnt piece names where it goes ('Slice it at the board',
+//      "That's burnt. Trash it"), as plates already do.
+// Q-5. The Birthday's window is 60 s (was 80): the twelve guests arrive in about 54 s, so the easy
+//      week is a shorter, denser cook. It still fits one kettle (108 slot seconds of 144).
+// Q-6. sim.gateWaiting(): booked guests whose time has come but who wait off canvas for a line spot,
+//      so the rail can show them.
+// Q-7. startWeek() preselects last week's booking type when it is offered and safe this week, else
+//      the first card (W21 item 5 still holds for week 1 and after a Yard day).
+// Q-8. C.DRIVEWAY_BUYABLE false (v3.3 flips it): the Coming next card never shows and goal() skips
+//      the driveway, so Pit news names something the player can buy.
+// Q-9. The till carries charcoalStart and stockStart (the pile and cooler before the cart went in),
+//      so the report can say what the stock row holds.
+// Q-10. New W15 keys for game.js: ui.covers, ui.otherMeats, ui.offMenu and ui.noSpare (the shop at a
+//      booking), ui.practice (the tutorial morning), ui.mixShort (the pre-gate status line),
+//      ui.missedTable and ui.finaleTable (the bigger table). ui.coolerRoom and ui.coolerNone say
+//      units of meat. The charcoal row says six bags a cook.
+// Q-11. ui.rowKept reads "Bought for later" and ui.rowDrawn "Paid for in an earlier week" (the report
+//      shows them as information rows with the items in the detail).
 
 (function () {
 'use strict';
@@ -120,7 +248,7 @@ const C = Object.freeze({
   PATIENCE_BASE: 45, PATIENCE_SPREAD: 10, PATIENCE_WARN_FRAC: 0.2, PATIENCE_MID_FRAC: 0.5,
   ORDER_FROM_TABLE: 0.8, HOT_PLATE_SECONDS: 30, TIP_RATE: 0.25, HOT_PLATE_TIP: 1,
   QUEUE_SPOTS: 3, QUEUE_SPOTS_BIG: 5, TABLE_SPOTS: 3, TABLE_SPOTS_BIG: 5,
-  TABLE_STACK: 6, BOARD_STACKS: 4, BOARD_STACK: 8, TRAY_PLATES: 2,
+  TABLE_STACK: 6, BOARD_STACKS: 5, BOARD_STACK: 14, TRAY_PLATES: 2,   // R-2: one stack per meat, two of the largest piece
   WALK_PAST_PAUSE: 0.8, LEAVE_TURN_SECONDS: 0.2,
   // staff
   BUDDY_HANDLE: 0.4, BUDDY_WAGE: 20, TENDER_WAGE: 30,
@@ -129,11 +257,58 @@ const C = Object.freeze({
   REP_DAY_MAX: 12, REP_DAY_MIN: -15, CLOSE_PENALTY: 0,
   // money
   DAILY_COSTS: 10, SELL_BACK: 0.5, STEPPER_MAX: 99, CASH_FLOOR: 0,
-  DRIVEWAY_PRICE: 1000, GEAR_RESERVE: 30,
+  DRIVEWAY_PRICE: 400, GEAR_RESERVE: 30,
   // weather
   RAIN_FROM_DAY: 4, RAIN_CHANCE: 0.15, RAIN_ARRIVALS: 0.6,
   // save clamps
-  SAVE_VERSION: 3, MAX_DAY: 999, MAX_CASH: 999999, MAX_STAT: 9999999,
+  SAVE_VERSION: 4, MAX_DAY: 999, MAX_CASH: 999999, MAX_STAT: 9999999,
+  // v3.0 season and week [S 3], contract W2
+  SEASON_WEEKS: 9,
+  YEAR_MAX: 99,
+  LENGTHS: Object.freeze({
+    short: Object.freeze({ seconds: 90, window: 55, factor: 0.7 }),
+    normal: Object.freeze({ seconds: 125, window: 80, factor: 1.0 }),
+    long: Object.freeze({ seconds: 160, window: 105, factor: 1.3 })
+  }),
+  LENGTH_ORDER: Object.freeze(['short', 'normal', 'long']),
+  BASE_WINDOW: 80,                    // the Normal window every booking window is written in
+  LAST_CALL_GUARD: 5,                 // last call is never later than the hard end minus this
+  // fees and pay [S 3.2], [S 3.3], [S 5.4]
+  FEE_MULT: 1.25, FEE_ROUND: 5,       // fee = round to 5 of headcount x average plate price of the asked meats x 1.25
+  DEPOSIT_FRAC: 0.3,                  // deposit = Math.round(fee * 0.3), credited at loadUp()
+  PAY_BASE: 0.3, PAY_PER_STAR: 0.14,  // pay at the end = Math.round(fee * (0.3 + 0.14 * stars)) - deposit (P-2; was 0.5 and 0.1)
+  ADDON_SHARE: 0.25,                  // share of the guests who order the add-on meat
+  MENU_BONUS: 0.1,                    // Math.round(fee * 0.1) when the add-on was served with none burnt
+  SPARE_FRAC: 0.1,                    // the cart prefill covers booked plates plus 10 percent
+  BAGS_PER_COOKER: 6,                 // prefill bags per owned cooker, less the bags in the pile (R-5; was 5)
+  LOW_CASH_BIRTHDAY: 60,              // cash under this at week start: a Birthday is always offered
+  SAFE_LOAD: 0.8,                     // P-1: a booking is safe when its slot seconds fit this share of the grate time
+  FINALE_SECONDS: 160,                // Q-2: the Season finale's hard end, whatever the length setting
+  // offers by fan rating third [S 9]
+  THIRD_EDGES: Object.freeze([34, 67]),   // rep >= 34 is the middle third, rep >= 67 the top third
+  OFFER_SLOTS: Object.freeze([2, 3, 3]),  // booking slots per third, before the dedupe by type
+  INVITE_THIRD: 2,                        // the top third adds one invite
+  // client stars [S 5.4], [S 9]
+  SCORE_FED: 60, SCORE_WAIT: 20, SCORE_QUALITY: 20,
+  WAIT_FULL_S: 20, WAIT_ZERO_S: 60,   // average wait at or under 20 s scores full, at 60 s zero; an unfed booked guest counts 60 s
+  BURNT_PENALTY: 4, OFFMENU_PENALTY: 2,
+  COLD_PENALTY: 2,                    // P-2: per booked plate served HOT_PLATE_SECONDS or more after slicing
+  STAR_EDGES: Object.freeze([40, 60, 75, 90]),   // score >= 90 is 5 stars, >= 75 is 4, >= 60 is 3, >= 40 is 2, else 1
+  STAR_FANS: Object.freeze([-5, -2, 2, 4, 6]),   // word of mouth change for 1 to 5 stars
+  // booked arrivals [S 3.3]
+  ARRIVAL_CURVE: 1.3, ARRIVAL_SPAN: 0.9,         // party k of P arrives at gateAt + 0.9 * window * ((k + 0.5) / P) ^ 1.3
+  PARTY_MIN: 1, PARTY_MAX: 4, PARTY_GAP_S: 0.6,  // party size 1 to 4; members arrive 0.6 s apart
+  // inventory [S 19.3]
+  COOLER_CAP: Object.freeze([0, 12, 24, 40]),    // overnight units by cooler level; v3.0 level = gear.cooler ? 1 : 0
+  CHARCOAL_MAX: 200, WOOD_MAX: 100,
+  // names [S 19.2]
+  NAME_MAX: 14,
+  NAME_PUNCT: " '.-",                 // allowed besides ASCII A to Z, a to z and 0 to 9
+  // season end [S 3.6]
+  SEASON_CARRY_REP: 0.75, SEASON_REP_FLOOR: 20,
+  // the driveway goal [S 7.1]
+  DRIVEWAY_REP: 34,
+  DRIVEWAY_BUYABLE: false,            // Q-8: v3.3 builds the Driveway; until then no Coming next card and no driveway goal
   // seating and charm [V2.5], [V2.6]
   EAT_MIN: 8, EAT_MAX: 12,            // seconds a seated customer eats: EAT_MIN + (EAT_MAX - EAT_MIN) * rng()
   HEART_SECONDS: 0.6,                 // seated pause after the bonus is paid, before standing up
@@ -187,7 +362,7 @@ const HIRE_IDS = Object.freeze(['buddy', 'tender']);
 const COOKER_IDS = Object.freeze(['kettle1', 'kettle2', 'drum']);
 const STAT_IDS_V1 = Object.freeze(['days', 'served', 'walkouts', 'past', 'burnt']);
 const STAT_IDS = Object.freeze(['days', 'served', 'walkouts', 'past', 'burnt', 'seated']);
-const GOAL_ORDER = Object.freeze(['kettle2', 'buddy', 'bigtable', 'drum', 'driveway']);
+const GOAL_ORDER = Object.freeze(['kettle2', 'drum', 'buddy', 'bigtable', 'driveway']);   // R-3: the drum second
 const DIRS = Object.freeze({
   up: Object.freeze({ dx: 0, dy: -1 }),
   down: Object.freeze({ dx: 0, dy: 1 }),
@@ -295,7 +470,7 @@ function prop(id, sprite, frame, tx, ty, dx, dy, blocks, sortRow) {
 // Fixed props, [V2.2.2] and contract D4, in this order.
 const PROPS = list([
   prop('shed', 'shed', 0, 1, 1, 16, 0, [[1, 0], [2, 0], [3, 0], [1, 1], [2, 1], [3, 1]], 1),
-  prop('sign', 'sign', 0, 4, 0, 68, 2, [], 0),
+  prop('sign', 'sign', 0, 4, 0, 65, 2, [], 0),
   prop('tree', 'tree', 0, 9, 2, 128, 0, [[9, 2]], 2),
   prop('woodpile', 'woodpile', 0, 9, 1, 144, 16, [[9, 1]], 1),
   prop('tools', 'tools', 0, 1, 2, 16, 24, [[1, 2]], 2),
@@ -396,7 +571,7 @@ const MAP = Object.freeze({
   dogHome: px(4, 7),
   dogRoam: list([px(2, 7), px(3, 7), px(4, 7), px(5, 7), px(6, 7), px(7, 8), px(8, 8)]),
   overhead: Object.freeze({ lights: px(71, 80), canopy: px(76, 106) }),
-  signText: px(70, 5)
+  signText: Object.freeze({ x: 67, y: 5, w: 58 })   // W16.5: the pit name is drawn into this box
 });
 
 // Contract D4: works on stations, footprint tiles, use tiles, queue entries and seats. The v1
@@ -423,9 +598,9 @@ const CATALOG = Object.freeze([
   row('ribs', 'meat', 'Pork ribs', 12, 'Pork ribs: 3 plates, 32 seconds, sells for 11.', null, '', 'cart.meat.ribs'),
   row('butt', 'meat', 'Pork butt', 20, 'Pork butt: 5 plates of pulled pork, 40 seconds, both grate slots, sells for 14.', null, '', 'cart.meat.butt'),
   row('brisket', 'meat', 'Brisket', 38, 'Brisket: 7 plates, 50 seconds on the drum, sells for 18.', { gear: 'drum' }, 'Needs the drum smoker.', 'cart.meat.brisket'),
-  row('charcoal', 'fuel', 'Charcoal', 2, 'One bag lights a cold cooker to 60 or adds 30 to a lit one. A kettle burns through about five bags a day. Bags left over keep.', null, '', 'cart.charcoal, then charcoal on open'),
+  row('charcoal', 'fuel', 'Charcoal', 2, 'One bag lights a cold cooker to 60 or adds 30 to a lit one. A kettle burns about six bags a cook. Bags left over keep.', null, '', 'cart.charcoal, then charcoal on open'),
   row('kettle2', 'gear', 'Second kettle', 90, 'Two more grate slots. Twice the meat on the fire.', null, '', 'gear.kettle2, stations.kettle2 becomes active'),
-  row('cooler', 'gear', 'Cooler', 60, 'Raw meat keeps overnight instead of spoiling.', null, '', 'gear.cooler'),
+  row('cooler', 'gear', 'Cooler', 60, 'Keeps ' + C.COOLER_CAP[1] + ' units of raw meat overnight. Without it, meat left after a cook spoils.', null, '', 'gear.cooler'),
   row('bigtable', 'gear', 'Bigger table', 70, 'Five people can wait instead of three, and five plate spots instead of three.', null, '', 'gear.bigtable, table.spots grows to 5, queue spots 4 and 5 activate'),
   row('tray', 'gear', 'Serving tray', 50, 'Carry two plates at a time.', null, '', 'gear.tray'),
   row('canopy', 'gear', 'Canopy', 80, 'Rain days run at full crowd.', null, '', 'gear.canopy'),
@@ -438,7 +613,7 @@ const CATALOG = Object.freeze([
   decorRow('picnic2', 'Second picnic table', 80, 2, 6, 'Two more seats on the lawn. Charm 6.', null, '', 'decor.picnic2, seats pt2b and pt2a'),
   row('buddy', 'hire', 'Buddy', 20, 'Runs plates from the board to the table so you can stay on the fire. Paid each evening.', { day: 2 }, 'From day 2.', 'hires.buddy'),
   row('tender', 'hire', 'Fire tender', 30, "Keeps every cooker above 55 as long as there are bags in the pile. Buy about seven bags a cooker when he's on.", { gear: 'drum' }, 'Needs the drum smoker.', 'hires.tender'),
-  row('driveway', 'goal', 'Driveway pop-up', 1000, 'The next rung. Not built in this prototype.', { gear: 'drum' }, 'Needs the drum smoker.', 'nothing; goal line and Coming next card only')
+  row('driveway', 'goal', 'Driveway pop-up', C.DRIVEWAY_PRICE, 'The next rung. Not built yet.', { gear: 'drum', rep: C.DRIVEWAY_REP }, 'Needs the drum smoker and word of mouth ' + C.DRIVEWAY_REP + '.', 'nothing; goal line and Coming next card only')
 ]);
 
 const CATALOG_BY_ID = Object.freeze(CATALOG.reduce((acc, r) => { acc[r.id] = r; return acc; }, {}));
@@ -469,7 +644,10 @@ const STRINGS = Object.freeze({
     plate: 'Set the plate on the counter.',
     customer: 'Here comes your first customer.',
     seated: 'Served. They will sit and eat, then tip a little more.',
-    end: 'You have the hang of it. Keep the fire fed and keep them happy.'
+    end: 'You have the hang of it. Keep the fire fed and keep them happy.',
+    // v3.0 off the happy path (contract W12.1, W15)
+    full: 'The grate is full. Put it back in the cooler.',
+    fullGrate: 'Kettle 1 is full. Put this piece on the other cooker.'
   }),
   tutorialOrder: Object.freeze(['open', 'charcoal', 'light', 'meat', 'puton', 'cook', 'slice', 'plate', 'customer', 'seated', 'end']),
   pullNow: 'Pull it now',
@@ -479,12 +657,261 @@ const STRINGS = Object.freeze({
     ribs: 'The ribs are about to burn.',
     butt: 'The pork butt is about to burn.',
     brisket: 'The brisket is about to burn.'
+  }),
+  // v3.0 (contract W15, exact text)
+  booking: Object.freeze({ birthday: 'Birthday', picnic: 'Church picnic', finale: 'Season finale', yard: 'Yard day' }),
+  venue: Object.freeze({ backyard: 'Backyard' }),
+  weekLabel: Object.freeze(['Early spring', 'Spring', 'Late spring', 'Early summer', 'Summer', 'Late summer', 'Early fall', 'Fall', 'Season finale']),
+  thirdName: Object.freeze(['Neighbors', "Word's out", 'In demand']),
+  flames: Object.freeze(['Easy', 'Medium', 'Hard']),
+  lengthLabel: Object.freeze({ short: 'Short', normal: 'Normal', long: 'Long' }),
+  defaultName: 'Pitmaster',
+  defaultPit: 'Your Pit',
+  names: Object.freeze(['June', 'Marcus', 'Rosa', 'Theo', 'Maya', 'Dale', 'Nora', 'Gus', 'Ivy', 'Hank',
+    'Lena', 'Otis', 'Ruth', 'Cal', 'Bea', 'Walt', 'Faye', 'Abe', 'Dot', 'Lou',
+    'Edna', 'Hal', 'Mae', 'Vern', 'Gail', 'Ray', 'Opal', 'Earl', 'Jo', 'Mack',
+    'Pearl', 'Ned', 'Iris', 'Clem', 'Wanda', 'Russ', 'Hazel', 'Burt', 'Lottie', 'Wes',
+    'Greta', 'Roy', 'Della', 'Floyd', 'Tess', 'Amos', 'Lucille', 'Chet', 'Nell', 'Boyd',
+    'Dora', 'Lyle', 'Vi', 'Hollis', 'Ada', 'Mel', 'Rita', 'Sid', 'Fern', 'Tad']),          // 60, fixed order
+  look: Object.freeze({
+    skin: Object.freeze(['Skin tone 1', 'Skin tone 2', 'Skin tone 3', 'Skin tone 4', 'Skin tone 5', 'Skin tone 6']),
+    hair: Object.freeze(['Short', 'Curly', 'Long', 'Buzz', 'Bun', 'Bald']),
+    hairColor: Object.freeze(['Black', 'Dark brown', 'Auburn', 'Blond', 'Ginger', 'Gray']),
+    face: Object.freeze(['None', 'Mustache', 'Beard', 'Glasses']),
+    hat: Object.freeze(['None', 'Cap', 'Cowboy hat', 'Bandana']),
+    apron: Object.freeze(['Red', 'Orange', 'Green', 'Blue', 'Charcoal', 'Pink'])
+  }),
+  hostSays: Object.freeze([
+    'Folks went home hungry, {name}.',
+    'The line was slow, {name}. Some folks gave up.',
+    'Thanks, {name}. The food was good.',
+    'Thanks, {name}. Everyone ate well.',
+    'Thanks, {name}. We will call you again next year.'
+  ]),                                                     // index stars - 1; {name} is state.player.name
+  say: Object.freeze({
+    picked: '{label}. {n} guests. Pay {fee}.',
+    pickedYard: 'Yard day. Guests pay for each plate.',
+    deposit: 'The host paid a deposit of {d}.',
+    open: '{label}. {n} guests: {list}. Gate opens in {s} seconds.',   // {list}: "10 Chicken thighs, 10 Pulled pork" (plateLabel, rail order)
+    servedBooked: 'Served {L}, {tip} tip.',
+    servedBookedNoTip: 'Served {L}.',
+    missed: '{n} guests gave up at the gate.',
+    missedOne: 'One guest gave up at the gate.',
+    stars: 'The host gave {n} stars.',
+    starsOne: 'The host gave 1 star.',
+    reportOpen: 'Done. Opening the report.',
+    week: 'Week {w}. {when}.',
+    seasonEnd: 'Season {y} is done.',
+    refillMeat: 'One more {label} is in the cooler.',               // {label}: MEATS[meat].label
+    refillCharcoal: 'One more bag is on the pile.'
+  }),
+  ui: Object.freeze({
+    // header and HUD
+    hudWeek: 'Week {w}',
+    weekOf: 'Week {w} of 9',
+    weekOfYear: 'Season {y}, week {w} of 9',     // R-6: the hub heading from season 2
+    seasonWhen: 'Season {y}, {when}',            // R-6: #week-when from season 2
+    cash: 'Cash',
+    fans: 'Word of mouth',
+    fansAria: 'Word of mouth {n} of 100, {third}',
+    // season strip
+    stripAria: 'Season {y}',
+    wkDone: 'Week {w}, {label}, {stars}',
+    starsOne: '1 star',
+    starsMany: '{n} stars',
+    noStars: 'no stars on a Yard day',
+    wkNow: 'Week {w}, this week',
+    wkLater: 'Week {w}, {when}',
+    wkFinale: 'Week 9, Season finale',
+    nowTag: 'NOW',
+    // offers
+    thisWeek: 'This week',
+    pickOne: 'Pick one',
+    host: 'Host {name}',
+    guests: '{n} guests',
+    walkIns: 'Walk-ins',
+    yourPick: 'Your pick of meat',
+    perPlate: 'Sales per plate',
+    noFee: 'No fee',
+    pay: 'Pay {fee}',
+    deposit: 'Deposit {d}',
+    book: 'Pick',
+    booked: 'Picked',
+    bookAria: 'Pick the {label}',
+    needsKettle2: 'Needs a second kettle.',
+    needsDrum: 'Needs the drum smoker.',
+    finaleDrum: 'With the drum smoker: {n} guests, pay {fee}.',      // R-3
+    mixHint: 'Tip: cook one {big} at a time and keep {small} on the other grate, so plates are ready at the gate.',   // R-7
+    mixShort: 'One {big} at a time.',            // Q-6: the pre-gate status line after the countdown
+    // next event and Load up and go
+    nextEvent: 'Next event',
+    depositLine: 'The host pays {d} when you load up. The rest comes after the cook.',
+    yardLine: 'Guests pay for each plate.',
+    loadUp: 'Load up and go',
+    goPick: 'Pick a booking first.',
+    goCash: 'Not enough cash for this cart. Take something out.',
+    // the 2 by 2 grid
+    crew: 'Crew',
+    crewLine: '{n} of 2 hired',
+    crewSub: 'Buddy and fire tender',
+    gear: 'Gear',
+    gearLine: '{n} of 6 owned',
+    gearNext: 'Next: {label}, {price}',
+    gearAll: 'All gear owned',
+    menu: 'Menu',
+    menuOne: '1 meat',
+    menuMany: '{n} meats',
+    menuYard: 'Your pick',
+    shop: 'Shop',
+    shopLine: 'Cart {t}',
+    shopOne: '1 item',
+    shopMany: '{n} items',
+    // inventory
+    inventory: 'Inventory',
+    invCharcoalOne: 'Charcoal: 1 bag',
+    invCharcoal: 'Charcoal: {n} bags',
+    invWood: 'Wood: {n} splits',
+    invMeat: '{n} {label}',
+    invEmpty: 'The cooler is empty.',
+    invCooler: 'Cooler {u} of {cap}',
+    invNoCooler: 'No cooler. Meat left after the cook spoils tonight.',
+    invOver: '{n} more than the cooler holds. Cook it or it spoils tonight.',
+    // news, settings, foot
+    news: 'Pit news',
+    finaleNews: 'The finale is week 9. With the drum smoker it is a {n} guest cook.',   // R-3
+    finaleTable: 'The finale is {n} guests. A bigger table lets five wait in line.',   // Q-6
+    lengthH: 'Event length',
+    lengthHelp: '{s} seconds a cook.',
+    controls: 'Controls',
+    newGame: 'New game',
+    // sheets
+    back: 'Back',
+    youHave: 'You have {n}',
+    afterBags: 'After this: {n} bags',
+    afterUnits: 'After this: {n}',
+    pileFull: 'The pile holds 200 bags.',
+    coolerRoom: 'The cooler holds {cap} units overnight. This cook can use about {e} more units of meat.',
+    coolerNone: 'No cooler. This cook can use about {e} more units of meat.',   // R-8: coolerRoom with no cooler
+    covers: 'Covers {p} of {r} plates',          // Q-10: on each rail meat's shop row
+    otherMeats: 'Other meats',                   // Q-10: the shop's off-menu rows at a booking, folded
+    offMenu: 'Not on this menu. Add one in Menu.',
+    noSpare: 'No spare. One burnt piece leaves guests without a plate.',
+    practice: 'A practice day before your first season.',
+    coolerFull: 'No more room. The cooler holds {cap} overnight.',
+    coolerFullNone: 'No more room. There is no cooler to keep the rest.',   // R-8: coolerFull with no cooler
+    cartLine: 'Total {t}. Deposit {d}. Cash after {c}.',
+    cartLineYard: 'Total {t}. Cash after {c}.',
+    menuAsk: '{label}: {n} plates',
+    addonH: 'Add one meat',
+    addonNone: 'None',
+    addonNote: 'About a quarter of the guests order it. Serve it with none burnt and the host adds {b} to the pay.',
+    addonNo: 'That meat is already on the menu or needs gear you do not have.',
+    yardMenu: 'Yard day. Guests order what you cook.',
+    // report
+    reportH: '{label}: done',
+    reportHLow: '{label}: over',                  // R-9: the hero at 1 or 2 stars
+    score: 'Score',
+    of5: '{n} of 5',
+    partFed: 'Fed',
+    partWait: 'Wait',
+    partQuality: 'Quality',
+    partOf: '{p} of {max}',
+    result: 'Guests fed {f} of {b}. {w} walked out. Average wait {s} s.',
+    missedLine: '{n} gave up at the gate. The line stayed full to the end.',   // Q-1
+    missedTable: 'A bigger table lets five wait.',                              // Q-6: after missedLine without the bigger table
+    missedOutLine: '{n} gave up at the gate. The food ran out.',
+    howWent: 'How it went',
+    coldLine: '{n} plates sat too long before they went out.',
+    coldLineOne: '1 plate sat too long before it went out.',
+    counted: 'counted in food cost',
+    cashFrom: '{a} at week start',
+    fansWas: 'was {a}',
+    inc5: '+5',
+    inc5Aria: 'Five more bags',
+    money: 'Money',
+    rowFeeOne: 'Fee at 1 star',
+    rowFee: 'Fee at {n} stars',
+    rowDeposit: 'Deposit paid before',
+    rowTips: 'Tips',
+    rowMenuBonus: 'Menu bonus',
+    rowSeatTips: 'Seat tips',
+    rowFood: 'Food cost',
+    rowCharcoal: 'Charcoal used',
+    rowWages: 'Wages',
+    rowDaily: 'Daily costs',
+    rowSpoiled: 'Spoiled tonight',
+    rowThrown: 'Thrown out',
+    rowGrate: 'Left on the grate',
+    rowBurnt: 'Burnt',
+    rowTake: 'Take today',
+    takeDetail: 'pay and tips after what the cook used',
+    rowGear: 'Gear bought',                       // R-4: the rows between Take today and Cash
+    rowKept: 'Bought for later',                  // Q-11: stock the cart added to the pile and cooler
+    rowDrawn: 'Paid for in an earlier week',      // Q-11: stock an earlier cart paid for, used today
+    rowShop: 'Paid at the shop',
+    rowCash: 'Cash',
+    fansH: 'Word of mouth',
+    fansLine: 'Word of mouth {a} to {b}',
+    fansReasonOne: '1 star event {d}',
+    fansReason: '{n} star event {d}',
+    fansServes: 'From the plates you served.',
+    hostH: 'What the host said',
+    cooler: 'In the cooler now: {list}.',
+    coolerNothing: 'In the cooler now: nothing.',
+    charcoalLeftOne: 'Charcoal left: 1 bag.',
+    charcoalLeft: 'Charcoal left: {n} bags.',
+    spoilFull: 'The cooler holds {cap}. {n} spoiled.',
+    spoilNone: 'No cooler. {n} spoiled.',
+    nextWeek: 'Next week',
+    seeSeason: 'See the season',
+    cont: 'Continue',
+    // season end
+    seasonH: 'Season {y} done',
+    record: 'Your season',
+    seCash: 'Cash carries over: {c}.',
+    seRep: 'Word of mouth starts at {b}. It ended at {a}.',
+    seMeat: 'Meat in the cooler spoils over the break: {list}.',
+    seMeatNone: 'Nothing in the cooler to spoil.',
+    seCharcoal: 'Charcoal keeps: {n} bags.',
+    seNext: 'Start season {n}',
+    // creator
+    creatorH: 'Your pitmaster',
+    crSubDone: 'Tutorial done. Make it yours.',
+    crSub: 'Make it yours.',
+    crRandom: 'Random',
+    crName: 'Your name',
+    crPit: 'Pit name',
+    crCount: '{n}/14',
+    crSkin: 'Skin',
+    crHair: 'Hair',
+    crHairColor: 'Hair color',
+    crFace: 'Face',
+    crHat: 'Hat',
+    crApron: 'Apron',
+    crPrev: 'Previous {row}',
+    crNext: 'Next {row}',
+    crSwatch: '{row}: {label}',
+    crGo: 'Fire it up',
+    crNote: 'Names stay in this browser.',
+    crBack: 'Back',
+    pauseLook: 'Pitmaster',
+    // save notice
+    notice: 'Your save was updated for the season.'
   })
 });
 
-// Hands full while carrying plates: name where they go instead (round 2 finding).
+// Hands full while carrying plates: name where they go instead (round 2 finding). Q-4: a cooked or a
+// burnt piece names its place too.
 const PLATES_GO = 'Plates go on the table';
-function fullLabel(c) { return c !== null && c.kind === 'plates' ? PLATES_GO : STRINGS.handsFull; }
+const COOKED_GO = 'Slice it at the board';
+const BURNT_GO = "That's burnt. Trash it";
+function fullLabel(c) {
+  if (c === null) return STRINGS.handsFull;
+  if (c.kind === 'plates') return PLATES_GO;
+  if (c.kind === 'cooked') return COOKED_GO;
+  if (c.kind === 'burnt') return BURNT_GO;
+  return STRINGS.handsFull;
+}
 
 // ---------------------------------------------------------------------------------------------
 // 2.7.3 Fire helpers (pure)
@@ -511,7 +938,349 @@ function burnMult(fire) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// D9 and K6 Save validation: accepts v 1, 2 and 3, always returns v 3
+// W3.1 Bookings, W4.3 looks (pure data)
+// ---------------------------------------------------------------------------------------------
+
+const BOOKING_IDS = Object.freeze(['birthday', 'picnic', 'finale', 'yard']);
+
+function bookingRow(id, guests, menu, patience, win, flames, icon) {
+  return Object.freeze({
+    id, label: STRINGS.booking[id], guests,
+    menu: menu === null ? null : Object.freeze(menu.slice()),
+    patience, window: win, flames, venue: 'backyard', icon, unlock: null
+  });
+}
+
+// Row shape { id, label, guests, menu, patience, window, flames, venue, icon, unlock }. The finale
+// menu is null: every meat the owned gear can cook (W3.2). Every row plays in the backyard in v3.0.
+const BOOKINGS = Object.freeze({
+  birthday: bookingRow('birthday', 12, ['sausage', 'chicken'], 45, 60, 1, 'ev_birthday'),   // Q-5: 60 s window (was 80)
+  picnic: bookingRow('picnic', 20, ['chicken', 'butt'], 50, 80, 2, 'ev_picnic'),
+  finale: bookingRow('finale', 40, null, 50, 105, 3, 'ev_finale'),   // Q-2: 105 s window, any length
+  yard: bookingRow('yard', 0, [], C.PATIENCE_BASE, 80, 1, 'ev_yard')
+});
+
+// The rows genOffers draws from when no types list is passed (weeks 1 to 8).
+const DEFAULT_TYPES = Object.freeze([BOOKINGS.birthday, BOOKINGS.picnic]);
+
+const LOOK_KEYS = Object.freeze(['skin', 'hair', 'hairColor', 'face', 'hat', 'apron']);
+const LOOK_COUNTS = Object.freeze({ skin: 6, hair: 6, hairColor: 6, face: 4, hat: 4, apron: 6 });
+const DEFAULT_LOOK = Object.freeze({ skin: 1, hair: 0, hairColor: 1, face: 0, hat: 1, apron: 0 });
+
+// Units kept overnight go costliest first (W10.4): brisket, butt, ribs, chicken, sausage.
+const KEEP_ORDER = Object.freeze(MEAT_IDS.slice().sort((a, b) => MEATS[b].unit - MEATS[a].unit || MEAT_IDS.indexOf(a) - MEAT_IDS.indexOf(b)));
+
+// ---------------------------------------------------------------------------------------------
+// W4.4 Names and W4.3 look validation (pure, never throw)
+// ---------------------------------------------------------------------------------------------
+
+function nameString(str) {
+  if (str === undefined || str === null) return '';   // deviation 32
+  try { return String(str); } catch (e) { return ''; }
+}
+
+// Allowed: ASCII letters and digits and C.NAME_PUNCT. Curly apostrophes become straight ones,
+// runs of spaces collapse to one, the result is cut to C.NAME_MAX. No trim (game.js runs it on
+// every input event so a typed trailing space survives).
+function filterName(str) {
+  const s = nameString(str);
+  let out = '';
+  for (let i = 0; i < s.length; i++) {
+    let ch = s[i];
+    if (ch === '\u2018' || ch === '\u2019') ch = "'";
+    const code = ch.charCodeAt(0);
+    const ok = (code >= 48 && code <= 57) || (code >= 65 && code <= 90) || (code >= 97 && code <= 122)
+      || C.NAME_PUNCT.indexOf(ch) >= 0;
+    if (!ok) continue;
+    if (ch === ' ' && out.length > 0 && out[out.length - 1] === ' ') continue;
+    out += ch;
+  }
+  return out.slice(0, C.NAME_MAX);
+}
+
+function cleanName(str, fallback) {
+  try {
+    const s = filterName(str).trim().slice(0, C.NAME_MAX).trim();
+    if (s !== '') return s;
+    return nameString(fallback);
+  } catch (e) {
+    return '';
+  }
+}
+
+// A valid look: every key an integer index in range; anything else takes the default's value.
+function cleanLook(look) {
+  const out = {};
+  for (const k of LOOK_KEYS) {
+    const v = readKey(look, k);
+    out[k] = (typeof v === 'number' && Number.isInteger(v) && v >= 0 && v < LOOK_COUNTS[k]) ? v : DEFAULT_LOOK[k];
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------------------------
+// W3.2 to W3.4 The offer generator (pure, deterministic)
+// ---------------------------------------------------------------------------------------------
+
+function mix32(a, b, c) {
+  let h = (a >>> 0) ^ Math.imul(b | 0, 0x9E3779B1) ^ Math.imul(c | 0, 0x85EBCA77);
+  h ^= h >>> 16; h = Math.imul(h, 0x7FEB352D); h ^= h >>> 15; h = Math.imul(h, 0x846CA68B); h ^= h >>> 16;
+  return h >>> 0;
+}
+
+function lengthRow(len) {
+  return C.LENGTH_ORDER.includes(len) ? C.LENGTHS[len] : C.LENGTHS.normal;
+}
+
+function hasGear(gear, id) {
+  return readKey(gear, id) === true;
+}
+
+function unlockMet(rowDef, rep, gear) {
+  const u = readKey(rowDef, 'unlock');
+  if (!isPlainObject(u)) return true;
+  if (u.rep !== undefined && !(rep >= u.rep)) return false;
+  if (u.gear !== undefined && !hasGear(gear, u.gear)) return false;
+  return true;
+}
+
+// The finale menu: every meat the owned gear can cook, in MEAT_IDS order (brisket needs the drum).
+function finaleMenu(gear) {
+  return MEAT_IDS.filter((m) => !MEATS[m].drumOnly || hasGear(gear, 'drum'));
+}
+
+function menuOf(rowDef, gear) {
+  if (rowDef.id === 'yard') return [];
+  const menu = rowDef.menu === null || rowDef.menu === undefined ? finaleMenu(gear) : rowDef.menu;
+  return MEAT_IDS.filter((m) => menu.includes(m));
+}
+
+// The Needs line for a menu the owned gear cannot cook, '' when it can.
+function needsFor(menu, gear) {
+  for (const m of menu) {
+    const r = CATALOG_BY_ID[m];
+    if (r.needs && r.needs.gear && !hasGear(gear, r.needs.gear)) return r.needsText;
+  }
+  return '';
+}
+
+// W3.2 rail split: the add-on takes ADDON_SHARE of the headcount, the rest splits evenly over
+// the menu with the first (rest % n) meats in menu order getting one more.
+function railSplit(headcount, menu, addon) {
+  const rail = zeroByMeat();
+  let rest = headcount;
+  if (addon !== null) {
+    const a = Math.round(C.ADDON_SHARE * headcount);
+    rail[addon] += a;
+    rest -= a;
+  }
+  const n = menu.length;
+  if (n > 0 && rest > 0) {
+    const base = Math.floor(rest / n);
+    const extra = rest % n;
+    for (let i = 0; i < n; i++) rail[menu[i]] += base + (i < extra ? 1 : 0);
+  }
+  return rail;
+}
+
+// P-1: slot seconds a rail needs, ceil(plates / plates a unit) * slots * cook per rail meat.
+function slotSeconds(rail) {
+  let need = 0;
+  for (const m of MEAT_IDS) if (rail[m] > 0) need += Math.ceil(rail[m] / MEATS[m].plates) * MEATS[m].slots * MEATS[m].cook;
+  return need;
+}
+
+// P-1: the grate seconds the cookers give before last call, at SAFE_LOAD.
+function grateSeconds(k2, drum, win) {
+  return (C.KETTLE_SLOTS * (k2 ? 2 : 1) + (drum ? C.DRUM_SLOTS : 0)) * (C.GATE_OPENS + win) * C.SAFE_LOAD;
+}
+
+// P-1: the Needs line when the rail needs more grate time than the owned cookers give before last
+// call, '' when it fits. Names the cooker that makes it fit. The finale (sized to the grate, R-3)
+// and the Yard day are exempt.
+function capacityNeeds(rowDef, rail, gear, win) {
+  if (rowDef.id === 'yard' || rowDef.id === 'finale') return '';
+  const need = slotSeconds(rail);
+  const fits = (k2, drum) => need <= grateSeconds(k2, drum, win) + 1e-9;
+  const k2 = hasGear(gear, 'kettle2'), dr = hasGear(gear, 'drum');
+  if (fits(k2, dr)) return '';
+  if (!k2 && fits(true, dr)) return STRINGS.ui.needsKettle2;
+  if (!dr && fits(true, true)) return STRINGS.ui.needsDrum;
+  return '';
+}
+
+// R-3: the Season finale books the most guests, up to its row's headcount at the length, whose rail
+// fits the owned grate at SAFE_LOAD; never fewer than one guest a meat.
+function finaleHeadcount(rowDef, menu, gear, L, win) {
+  const top = Math.round(rowDef.guests * L.factor);
+  const least = Math.min(top, menu.length);
+  const cap = grateSeconds(hasGear(gear, 'kettle2'), hasGear(gear, 'drum'), win) + 1e-9;
+  for (let h = top; h > least; h--) if (slotSeconds(railSplit(h, menu, null)) <= cap) return h;
+  return least;
+}
+
+// Fee, deposit and the rest of an offer at a length, without the host. Q-2: the Season finale
+// ignores the length (its own window, Normal's headcount factor).
+function offerFields(rowDef, gear, len) {
+  const L = rowDef.id === 'finale' ? C.LENGTHS.normal : lengthRow(len);
+  const isYard = rowDef.id === 'yard';
+  const menu = menuOf(rowDef, gear);
+  const win = rowDef.window * L.window / C.BASE_WINDOW;
+  const headcount = isYard ? 0 : (rowDef.id === 'finale' ? finaleHeadcount(rowDef, menu, gear, L, win) : Math.round(rowDef.guests * L.factor));
+  const rail = railSplit(headcount, menu, null);
+  let pay = 0;
+  if (!isYard && menu.length > 0) {
+    let sum = 0;
+    for (const m of menu) sum += MEATS[m].price;
+    const avg = sum / menu.length;
+    pay = Math.round(headcount * avg * C.FEE_MULT / C.FEE_ROUND) * C.FEE_ROUND;
+  }
+  const deposit = isYard ? 0 : Math.round(pay * C.DEPOSIT_FRAC);
+  const needs = isYard ? '' : (needsFor(menu, gear) || capacityNeeds(rowDef, rail, gear, win));
+  return {
+    id: rowDef.id, type: rowDef.id, label: rowDef.label, venue: rowDef.venue, host: null,
+    headcount, menu, rail, pay, deposit,
+    difficulty: rowDef.flames, window: win,
+    patience: rowDef.patience, safe: needs === '', needs, icon: rowDef.icon
+  };
+}
+
+function freezeOffer(o, host) {
+  o.host = host;
+  o.menu = Object.freeze(o.menu);
+  o.rail = Object.freeze(o.rail);
+  return Object.freeze(o);
+}
+
+// W3.4. input = { seed, year, week, rep, cash, gear, length, types? }. Returns Offer[] in display
+// order. The only randomness is mulberry32(mix32(seed, year, week)).
+function genOffers(input) {
+  const inp = isPlainObject(input) ? input : {};
+  let seedN;
+  try { seedN = Number(readKey(inp, 'seed')); } catch (e) { seedN = 0; }
+  const seed = Number.isFinite(seedN) ? (seedN >>> 0) : 0;
+  const year = toInt(readKey(inp, 'year'), 1, 1, C.YEAR_MAX);
+  const week = toInt(readKey(inp, 'week'), 1, 1, C.SEASON_WEEKS);
+  const repN = Number(readKey(inp, 'rep'));
+  const rep = Number.isFinite(repN) ? repN : 0;
+  const cashN = Number(readKey(inp, 'cash'));
+  const cash = Number.isFinite(cashN) ? cashN : 0;
+  const gearIn = readKey(inp, 'gear');
+  const gear = isPlainObject(gearIn) ? gearIn : {};
+  const len = C.LENGTH_ORDER.includes(readKey(inp, 'length')) ? readKey(inp, 'length') : 'normal';
+  const r = mulberry32(mix32(seed, year, week));
+  const names = STRINGS.names;
+  const used = new Set();
+  function drawHost() {
+    let i = Math.floor(r() * names.length);
+    for (let k = 0; k < names.length && used.has(names[i]); k++) i = (i + 1) % names.length;
+    used.add(names[i]);
+    return names[i];
+  }
+
+  // 1. Week 9: the Season finale alone, one host draw.
+  if (week === C.SEASON_WEEKS) return [freezeOffer(offerFields(BOOKINGS.finale, gear, len), drawHost())];
+
+  // 2. Slots by the fan rating third.
+  const third = rep >= C.THIRD_EDGES[1] ? 2 : (rep >= C.THIRD_EDGES[0] ? 1 : 0);
+  const slots = C.OFFER_SLOTS[third];
+  const invite = third === C.INVITE_THIRD;
+
+  // 3. The unlocked types, once each, with their index in the types input for ties.
+  const typesIn = readKey(inp, 'types');
+  const types = Array.isArray(typesIn) ? typesIn : DEFAULT_TYPES;
+  const info = [];
+  const seen = new Set();
+  for (let i = 0; i < types.length; i++) {
+    const t = types[i];
+    if (!isPlainObject(t) || typeof t.id !== 'string' || t.id === 'yard' || seen.has(t.id)) continue;
+    if (!unlockMet(t, rep, gear)) continue;
+    seen.add(t.id);
+    info.push({ row: t, idx: i, o: offerFields(t, gear, len) });
+  }
+
+  // 4. Low cash: the Birthday first.
+  const picked = [];
+  const bday = info.find((x) => x.row.id === 'birthday') || null;
+  if (cash < C.LOW_CASH_BIRTHDAY && bday !== null) picked.push(bday);
+
+  // 5. Fisher Yates over the rest, from the last index down to 1, one draw a swap.
+  const rest = info.filter((x) => !picked.includes(x));
+  for (let i = rest.length - 1; i >= 1; i--) {
+    const j = Math.floor(r() * (i + 1));
+    const tmp = rest[i]; rest[i] = rest[j]; rest[j] = tmp;
+  }
+  for (const x of rest) {
+    if (picked.length >= slots) break;
+    picked.push(x);
+  }
+  if (picked.length > 0 && !picked.some((x) => x.o.safe)) {
+    let best = null;
+    for (const x of info) {
+      if (!x.o.safe) continue;
+      if (best === null || x.o.pay < best.o.pay || (x.o.pay === best.o.pay && x.idx < best.idx)) best = x;
+    }
+    if (best !== null) picked[picked.length - 1] = best;
+  }
+
+  // 6. The invite: the highest fee safe type not yet picked.
+  if (invite) {
+    let best = null;
+    for (const x of info) {
+      if (!x.o.safe || picked.includes(x)) continue;
+      if (best === null || x.o.pay > best.o.pay || (x.o.pay === best.o.pay && x.idx < best.idx)) best = x;
+    }
+    if (best !== null) picked.push(best);
+  }
+
+  // 7. Display order: safe by difficulty then pay, then stretch the same way; the Yard day last.
+  picked.sort((a, b) => (a.o.safe === b.o.safe ? 0 : (a.o.safe ? -1 : 1))
+    || a.o.difficulty - b.o.difficulty || a.o.pay - b.o.pay || a.idx - b.idx);
+  const out = picked.map((x) => freezeOffer(x.o, drawHost()));
+  out.push(freezeOffer(offerFields(BOOKINGS.yard, gear, len), null));
+  return out;
+}
+
+// ---------------------------------------------------------------------------------------------
+// W8.1 Client stars (pure)
+// ---------------------------------------------------------------------------------------------
+
+function finiteOr0(v) {
+  let n;
+  try { n = Number(v); } catch (e) { n = NaN; }
+  return Number.isFinite(n) ? n : 0;
+}
+
+function starsFor(score) {
+  const E = C.STAR_EDGES;
+  return score >= E[3] ? 5 : (score >= E[2] ? 4 : (score >= E[1] ? 3 : (score >= E[0] ? 2 : 1)));
+}
+
+function scoreEvent(input) {
+  const booked = Math.max(0, finiteOr0(readKey(input, 'booked')));
+  const fed = Math.max(0, finiteOr0(readKey(input, 'fed')));
+  const waitSum = Math.max(0, finiteOr0(readKey(input, 'waitSum')));
+  const burnt = Math.max(0, finiteOr0(readKey(input, 'burnt')));
+  const offMenu = Math.max(0, finiteOr0(readKey(input, 'offMenu')));
+  const cold = Math.max(0, finiteOr0(readKey(input, 'cold')));
+  const unfed = Math.max(0, booked - fed);
+  const avgWait = booked > 0 ? (waitSum + C.WAIT_ZERO_S * unfed) / booked : C.WAIT_ZERO_S;
+  const fedPts = booked > 0 ? C.SCORE_FED * fed / booked : 0;
+  const waitPts = C.SCORE_WAIT * clamp((C.WAIT_ZERO_S - avgWait) / (C.WAIT_ZERO_S - C.WAIT_FULL_S), 0, 1);
+  // P-2: quality scales with the share fed, and cold booked plates cost COLD_PENALTY each.
+  const qualRaw = Math.max(0, C.SCORE_QUALITY - C.BURNT_PENALTY * burnt - C.OFFMENU_PENALTY * offMenu - C.COLD_PENALTY * cold);
+  const qualPts = booked > 0 ? qualRaw * Math.min(1, fed / booked) : 0;
+  const score = Math.round(fedPts + waitPts + qualPts);
+  return {
+    score,
+    stars: starsFor(score),
+    parts: { fed: Math.round(fedPts), wait: Math.round(waitPts), quality: Math.round(qualPts) },
+    avgWait: Math.round(avgWait)
+  };
+}
+
+// ---------------------------------------------------------------------------------------------
+// D9, K6 and W13.3 Save validation: accepts v 1, 2, 3 and 4, always returns v 4
 // ---------------------------------------------------------------------------------------------
 
 function isPlainObject(v) {
@@ -536,11 +1305,28 @@ function toBool(v) {
   return v === true;
 }
 
+// W22.15: plain objects with a known type, a finale only as the ninth entry, at most nine.
+function readResults(arr) {
+  const out = [];
+  if (!Array.isArray(arr)) return out;
+  const n = Math.min(arr.length >>> 0, 10000);
+  for (let i = 0; i < n && out.length < C.SEASON_WEEKS; i++) {
+    let e;
+    try { e = arr[i]; } catch (x) { continue; }
+    if (!isPlainObject(e)) continue;
+    const type = readKey(e, 'type');
+    if (typeof type !== 'string' || !BOOKING_IDS.includes(type)) continue;
+    if (type === 'finale' && out.length !== C.SEASON_WEEKS - 1) continue;
+    out.push({ type, stars: type === 'yard' ? 0 : toInt(readKey(e, 'stars'), 1, 1, 5) });
+  }
+  return out;
+}
+
 function validateSave(obj) {
   try {
     if (!isPlainObject(obj)) return null;
     const v = readKey(obj, 'v');
-    if (v !== 1 && v !== 2 && v !== 3) return null;
+    if (v !== 1 && v !== 2 && v !== 3 && v !== 4) return null;
     const out = { v: C.SAVE_VERSION };
     out.day = toInt(readKey(obj, 'day'), 1, 1, C.MAX_DAY);
     out.cash = toInt(readKey(obj, 'cash'), C.START_CASH, 0, C.MAX_CASH);
@@ -548,7 +1334,8 @@ function validateSave(obj) {
     const stockIn = readKey(obj, 'stock');
     out.stock = {};
     for (const m of MEAT_IDS) out.stock[m] = toInt(readKey(stockIn, m), 0, 0, C.STEPPER_MAX);
-    out.charcoal = toInt(readKey(obj, 'charcoal'), 0, 0, C.STEPPER_MAX);
+    out.charcoal = toInt(readKey(obj, 'charcoal'), 0, 0, C.CHARCOAL_MAX);
+    out.wood = v === 4 ? toInt(readKey(obj, 'wood'), 0, 0, C.WOOD_MAX) : 0;
     const gearIn = readKey(obj, 'gear');
     out.gear = {};
     for (const g of GEAR_IDS) out.gear[g] = toBool(readKey(gearIn, g));
@@ -568,10 +1355,49 @@ function validateSave(obj) {
     for (const s of STAT_IDS_V1) out.stats[s] = toInt(readKey(statsIn, s), 0, 0, C.MAX_STAT);
     out.stats.seated = v >= 2 ? toInt(readKey(statsIn, 'seated'), 0, 0, C.MAX_STAT) : 0;
     out.drivewayShown = toBool(readKey(obj, 'drivewayShown'));
-    // [T 2.8]: only a version 3 day 1 save can still owe the tutorial. v1 and v2 players have played.
-    const tutIn = v === 3 ? readKey(obj, 'tutorial') : undefined;
+    // [T 2.8]: only a version 3 or 4 day 1 save can still owe the tutorial. v1 and v2 players have played.
+    const tutIn = v >= 3 ? readKey(obj, 'tutorial') : undefined;
     const owed = isPlainObject(tutIn) && readKey(tutIn, 'done') === false && out.day === 1;
     out.tutorial = { done: !owed };
+    // W13.3: the season. v1 to v3 start season 1 week 1.
+    const fallbackSeed = mix32(out.day, out.cash, out.stats.served);
+    const season = { year: 1, week: 1, seed: fallbackSeed, pick: null, addon: null, weekCash: out.cash, results: [] };
+    const seasonIn = v === 4 ? readKey(obj, 'season') : undefined;
+    if (isPlainObject(seasonIn)) {
+      season.year = toInt(readKey(seasonIn, 'year'), 1, 1, C.YEAR_MAX);
+      let seedN;
+      try { seedN = Number(readKey(seasonIn, 'seed')); } catch (e) { seedN = NaN; }
+      season.seed = Number.isFinite(seedN) ? (seedN >>> 0) : fallbackSeed;
+      season.weekCash = toInt(readKey(seasonIn, 'weekCash'), out.cash, 0, C.MAX_CASH);
+      season.results = readResults(readKey(seasonIn, 'results'));
+      let week = toInt(readKey(seasonIn, 'week'), 1, 1, C.SEASON_WEEKS);
+      if (season.results.length >= C.SEASON_WEEKS) week = C.SEASON_WEEKS;
+      else {
+        if (season.results.length > week - 1) season.results.length = week - 1;
+        week = season.results.length + 1;
+      }
+      season.week = week;
+      const complete = season.results.length >= C.SEASON_WEEKS;
+      const pickIn = readKey(seasonIn, 'pick');
+      const pickOk = week === C.SEASON_WEEKS ? pickIn === 'finale' : (pickIn === 'birthday' || pickIn === 'picnic' || pickIn === 'yard');
+      season.pick = !complete && pickOk ? pickIn : null;
+      const addonIn = readKey(seasonIn, 'addon');
+      season.addon = (typeof addonIn === 'string' && MEAT_IDS.includes(addonIn) && (!MEATS[addonIn].drumOnly || out.gear.drum)) ? addonIn : null;
+    }
+    out.season = season;
+    // W13.3 and W22.1: the save key player holds the creator data (state.profile).
+    const playerIn = v === 4 ? readKey(obj, 'player') : undefined;
+    out.player = isPlainObject(playerIn)
+      ? { name: cleanName(readKey(playerIn, 'name'), STRINGS.defaultName), look: cleanLook(readKey(playerIn, 'look')) }
+      : null;
+    out.pitName = v === 4 ? cleanName(readKey(obj, 'pitName'), STRINGS.defaultPit) : STRINGS.defaultPit;
+    const lenIn = v === 4 ? readKey(readKey(obj, 'settings'), 'length') : undefined;
+    out.settings = { length: C.LENGTH_ORDER.includes(lenIn) ? lenIn : 'normal' };
+    if (owed) {
+      out.player = null;
+      season.results = [];
+      season.week = 1;
+    }
     return out;
   } catch (e) {
     return null;
@@ -632,6 +1458,15 @@ function createSim(saved, seed) {
   let tutEndAt = null;      // clock at which the end step runs out (K1: internal, never saved)
   let tutLastId = null;     // last (id, target) pair emitted as tutorial_step
   let tutLastTarget = null;
+  // v3.0 (W5.1): the look generator, apart from rng so tapping Random never moves the game's
+  // stream. (W7.2): today's booked arrival times and tickets left per meat; internal, never saved.
+  const lookRng = mulberry32((seedUsed ^ 0x4C4F4F4B) >>> 0);
+  let schedule = [];
+  let schedIdx = 0;
+  let tickets = zeroByMeat();
+  // R-4: gear and decor bought since the morning opened, and the cash it opened with (never saved).
+  let morningBuys = [];
+  let morningCash = 0;
 
   function emit(type, payload) {
     const e = { type };
@@ -657,7 +1492,14 @@ function createSim(saved, seed) {
       seated: 0, togo: 0, togoQuick: 0, seatTips: 0,
       spoiled: zeroByMeat(), grateLeft: zeroByMeat(),
       repStart: state.rep || C.START_REP,
-      wageNames: []
+      wageNames: [],
+      // v3.0 (W4.2); loadUp() and openGate() set the kind and the three times
+      kind: 'tutorial', gateAt: C.GATE_OPENS, lastCallAt: C.LAST_CALL, endAt: C.DAY_SECONDS,
+      booking: null, addon: null, rail: zeroByMeat(), sold: zeroByMeat(),
+      booked: 0, pending: 0, fed: 0, missed: 0, waitSum: 0, offMenu: 0, addonServed: 0, addonBurnt: 0,
+      deposit: 0,
+      // playtest round 1: cold booked plates (P-2), raw meat thrown out (P-3), a sold out miss (P-6)
+      cold: 0, rawWaste: 0, soldOutMiss: false
     };
   }
 
@@ -725,6 +1567,24 @@ function createSim(saved, seed) {
     state.customers = [];
     state.today = newToday();
     state.till = null;
+    // v3.0 (W4.1, W22.1): the season, the creator's profile, the pit name, settings and wood.
+    // createSim() settles state.loop from the save (W13.3).
+    state.wood = s ? s.wood : 0;
+    state.loop = owed ? 'tutorial' : 'week';
+    const ss = s ? s.season : null;
+    state.season = {
+      year: ss ? ss.year : 1,
+      week: ss ? ss.week : 1,
+      seed: ss ? ss.seed : ((seedUsed ^ 0x5EA5011D) >>> 0),
+      weekCash: ss ? ss.weekCash : state.cash,
+      offers: [],
+      booking: null,
+      addon: null,
+      results: ss ? ss.results.map((x) => ({ type: x.type, stars: x.stars })) : []
+    };
+    state.profile = s && s.player ? { name: s.player.name, look: cleanLook(s.player.look) } : null;
+    state.pitName = s ? s.pitName : STRINGS.defaultPit;
+    state.settings = { length: s ? s.settings.length : 'normal' };
     acc = 0;
     tickCount = 0;
     pieceSeq = 0;
@@ -734,6 +1594,9 @@ function createSim(saved, seed) {
     tutEndAt = null;
     tutLastId = null;
     tutLastTarget = null;
+    schedule = [];
+    schedIdx = 0;
+    tickets = zeroByMeat();
   }
 
   // ---- grid and walkability ([V2.2.1]) ------------------------------------------------------
@@ -1038,6 +1901,17 @@ function createSim(saved, seed) {
 
   function totalStock() { return sumValues(state.stock); }
 
+  // Q-3: some owned cooker has a free slot for this meat (brisket only the drum).
+  function roomToCook(meat) {
+    const m = MEATS[meat];
+    for (const id of COOKER_IDS) {
+      if (!stationActive(STATION_BY_ID[id])) continue;
+      if (m.drumOnly && id !== 'drum') continue;
+      if (freeSlotFor(state.stations[id], m.slots) >= 0) return true;
+    }
+    return false;
+  }
+
   function freeSlotFor(cooker, size) {
     const taken = new Array(cooker.slots).fill(false);
     for (const p of cooker.pieces) {
@@ -1090,9 +1964,13 @@ function createSim(saved, seed) {
     return state.stations.board.stacks.find((s) => s.meat === meat) || null;
   }
 
+  // R-2: a stack of that meat with room for every plate, else a free stack.
+  function boardStackWithRoom(meat, plates) {
+    return state.stations.board.stacks.find((s) => s.meat === meat && s.times.length + plates <= C.BOARD_STACK) || null;
+  }
+
   function boardFits(meat, plates) {
-    const existing = boardStackOf(meat);
-    if (existing) return existing.times.length + plates <= C.BOARD_STACK;
+    if (boardStackWithRoom(meat, plates)) return true;
     return state.stations.board.stacks.length < C.BOARD_STACKS && plates <= C.BOARD_STACK;
   }
 
@@ -1130,7 +2008,7 @@ function createSim(saved, seed) {
   }
 
   function addToBoard(meat, times) {
-    const existing = boardStackOf(meat);
+    const existing = boardStackWithRoom(meat, times.length);
     if (existing) existing.times.push(...times);
     else state.stations.board.stacks.push({ meat, times: times.slice() });
   }
@@ -1207,21 +2085,33 @@ function createSim(saved, seed) {
     const sliced = sp.times.shift();
     if (sp.times.length === 0) spots[idx] = null;
     const m = MEATS[c.want];
+    const t = state.today;
+    const booked = c.booked === true;
+    const price = booked ? 0 : m.price;   // W7.2: a booked guest pays no plate price
     const frac = Math.min(1, c.wait / c.patienceMax);
     const plateAge = state.clock - sliced;
     const tip = Math.round(m.price * C.TIP_RATE * (1 - frac)) + (plateAge < C.HOT_PLATE_SECONDS ? C.HOT_PLATE_TIP : 0);
     const quick = c.wait < C.REP_QUICK_FRAC * c.patienceMax;
-    state.cash += m.price + tip;
-    state.today.revenue += m.price;
-    state.today.tips += tip;
-    state.today.served += 1;
+    state.cash += price + tip;
+    t.revenue += price;
+    t.tips += tip;
+    t.served += 1;
     state.stats.served += 1;
+    t.sold[c.want] += 1;
+    if (booked) {
+      t.fed += 1;
+      t.waitSum += c.wait;
+      if (plateAge >= C.HOT_PLATE_SECONDS) t.cold += 1;   // P-2
+      if (t.addon !== null && c.want === t.addon) t.addonServed += 1;
+      if (!(t.rail[c.want] > 0)) t.offMenu += 1;
+    }
     const spot = STATION_BY_ID.table.spotPx[idx];
     const pick = pickSeat(c);
     leaveLine(c);
     c.mood = 'happy';
     c.hop = SERVED_HOP;
-    emit('served', { id: c.id, meat: c.want, price: m.price, tip, quick, x: spot.x, y: spot.y });
+    emit('served', { id: c.id, meat: c.want, price, tip, quick, x: spot.x, y: spot.y, booked });
+    // W7.2: the per serve word of mouth counters skip booked guests (their stars carry it).
     if (pick !== null) {
       const id = pick.seat.id;
       state.seats[id] = c.id;
@@ -1232,11 +2122,11 @@ function createSim(saved, seed) {
       c.reason = null;
       c.pause = C.LEAVE_TURN_SECONDS;
       setRoute(c, pick.path);
-      if (quick) state.today.happy += 1; else state.today.ok += 1;
+      if (!booked) { if (quick) t.happy += 1; else t.ok += 1; }
       emit('seat_taken', { id: c.id, seat: id });
     } else {
-      state.today.togo += 1;
-      if (quick) state.today.togoQuick += 1; else state.today.ok += 1;
+      t.togo += 1;
+      if (!booked) { if (quick) t.togoQuick += 1; else t.ok += 1; }
       sendOut(c, 'togo', 'happy', true);
       emit('to_go', { id: c.id });
     }
@@ -1337,6 +2227,7 @@ function createSim(saved, seed) {
       state.today.wasteCost += m.unit;
     } else {
       state.today.wasteCost += m.unit;
+      state.today.rawWaste += m.unit;   // P-3: raw meat never reached the grate, so foodCost missed it
     }
     emit('trash', { meat: carry.meat, kind: carry.kind });
   }
@@ -1361,7 +2252,8 @@ function createSim(saved, seed) {
         });
       }
       if (c.kind === 'raw') {
-        return act('Put ' + MEATS[c.meat].label + ' back', false, stationId, () => {
+        // Q-3: a tap puts it back when no owned cooker has room for it (the tutorial's full grate).
+        return act('Put ' + MEATS[c.meat].label + ' back', !roomToCook(c.meat), stationId, () => {
           state.stock[c.meat] += 1;
           p.carrying = null;
         });
@@ -1426,7 +2318,7 @@ function createSim(saved, seed) {
       const board = state.stations.board;
       if (c !== null && c.kind === 'cooked') {
         const m = MEATS[c.meat];
-        if (!boardFits(c.meat, m.plates)) return noop('Board is full', stationId);
+        if (!boardFits(c.meat, m.plates)) return noop('Board is full. Use the trash', stationId);   // R-2
         return act('Slice ' + m.label, true, stationId, () => {
           p.busy = { what: 'slice', meat: m.id, t: 0, total: m.slice };
           board.slicing = { meat: m.id, t: 0, total: m.slice };
@@ -1552,45 +2444,47 @@ function createSim(saved, seed) {
     return null;
   }
 
-  // 6.2 order roll. `rBranch` and `rWeight` are the two rng draws for this spawn.
-  function rollOrder(rBranch, rWeight) {
+  // 6.2 order roll. `rBranch` and `rWeight` are the two rng draws for this spawn. `mask` (W7.2,
+  // W22.6) is a booked guest's tickets left per meat: a meat at 0 weighs 0, and a branch whose
+  // weights are all 0 counts as empty. A walk-in passes no mask (v2, unchanged: a branch with any
+  // entry always has a positive weight, so "any" and "sum above 0" agree).
+  function rollOrder(rBranch, rWeight, mask) {
+    const allow = (m) => mask === undefined || mask === null || mask[m] > 0;
     const tableW = zeroByMeat();
-    let tableAny = false;
     for (const sp of state.stations.table.spots) {
-      if (sp && sp.times.length > 0) { tableW[sp.meat] += sp.times.length; tableAny = true; }
+      if (sp && sp.times.length > 0 && allow(sp.meat)) tableW[sp.meat] += sp.times.length;
     }
+    const tableAny = sumValues(tableW) > 0;
     const cookW = zeroByMeat();
-    let cookAny = false;
     for (const id of COOKER_IDS) {
       for (const p of state.stations[id].pieces) {
-        if (p.state === 'burnt') continue;
+        if (p.state === 'burnt' || !allow(p.meat)) continue;
         cookW[p.meat] += 1;
-        cookAny = true;
       }
     }
     for (const st of state.stations.board.stacks) {
-      if (st.times.length > 0) { cookW[st.meat] += 1; cookAny = true; }
+      if (st.times.length > 0 && allow(st.meat)) cookW[st.meat] += 1;
     }
-    if (state.stations.board.slicing) { cookW[state.stations.board.slicing.meat] += 1; cookAny = true; }
+    const sl = state.stations.board.slicing;
+    if (sl && allow(sl.meat)) cookW[sl.meat] += 1;
+    const cookAny = sumValues(cookW) > 0;
     if (tableAny) {
       if (rBranch < C.ORDER_FROM_TABLE || !cookAny) return weightedPick(tableW, rWeight);
       return weightedPick(cookW, rWeight);
     }
     if (cookAny) return weightedPick(cookW, rWeight);
     const stockW = zeroByMeat();
-    let stockAny = false;
     for (const m of MEAT_IDS) {
-      if (state.stock[m] > 0) { stockW[m] = state.stock[m] * MEATS[m].plates; stockAny = true; }
+      if (state.stock[m] > 0 && allow(m)) stockW[m] = state.stock[m] * MEATS[m].plates;
     }
-    if (stockAny) return weightedPick(stockW, rWeight);
+    if (sumValues(stockW) > 0) return weightedPick(stockW, rWeight);
     // Hands: the last piece may be on its way to the board or the table.
     const handsW = zeroByMeat();
-    let handsAny = false;
     for (const who of [state.player, state.buddy]) {
       const c = who ? who.carrying : null;
-      if (c && (c.kind === 'raw' || c.kind === 'cooked' || c.kind === 'plates')) { handsW[c.meat] += 1; handsAny = true; }
+      if (c && (c.kind === 'raw' || c.kind === 'cooked' || c.kind === 'plates') && allow(c.meat)) handsW[c.meat] += 1;
     }
-    if (handsAny) return weightedPick(handsW, rWeight);
+    if (sumValues(handsW) > 0) return weightedPick(handsW, rWeight);
     return null;
   }
 
@@ -1603,7 +2497,7 @@ function createSim(saved, seed) {
     return Object.assign(newMover(MAP.custSpawn.x, MAP.custSpawn.y, 'up'), {
       id: custSeq, body, want, patienceMax, patience: patienceMax, wait: 0,
       queueIndex: -1, mode: 'arriving', mood: 'neutral', reason: null, pause: 0, hop: 0,
-      seat: null, eat: 0, eatMax: 0, bonusPaid: false
+      seat: null, eat: 0, eatMax: 0, bonusPaid: false, booked: false
     });
   }
 
@@ -1634,6 +2528,91 @@ function createSim(saved, seed) {
     routeToSpot(c);
     state.customers.push(c);
     emit('customer_arrived', { id: c.id, meat: c.want });
+  }
+
+  // ---- W7.2 booked guests ---------------------------------------------------------------------
+
+  // Built in loadUp() from rng: party sizes PARTY_MIN to PARTY_MAX until the headcount is
+  // covered; party k of P arrives at gateAt + ARRIVAL_SPAN * window * ((k + 0.5) / P) ^ CURVE and
+  // its members PARTY_GAP_S apart.
+  function buildSchedule(b, gateAt) {
+    schedule = [];
+    schedIdx = 0;
+    const sizes = [];
+    let left = b.headcount;
+    while (left > 0) {
+      const n = C.PARTY_MIN + Math.floor(rng() * (C.PARTY_MAX - C.PARTY_MIN + 1));
+      const size = Math.max(1, Math.min(n, left));
+      sizes.push(size);
+      left -= size;
+    }
+    const P = sizes.length;
+    for (let k = 0; k < P; k++) {
+      const at = gateAt + C.ARRIVAL_SPAN * b.window * Math.pow((k + 0.5) / P, C.ARRIVAL_CURVE);
+      for (let j = 0; j < sizes[k]; j++) schedule.push(at + j * C.PARTY_GAP_S);
+    }
+  }
+
+  // W22.6: when every branch is empty, the meat with the most tickets left (ties in MEAT_IDS order).
+  function mostTickets() {
+    let best = null;
+    for (const m of MEAT_IDS) if (tickets[m] > 0 && (best === null || tickets[m] > tickets[best])) best = m;
+    if (best !== null) return best;
+    for (const m of MEAT_IDS) if (state.today.rail[m] > 0) return m;
+    return 'sausage';
+  }
+
+  // One booked guest into the line. rng order: patience, order branch, order weight (no jitter).
+  function spawnBookedGuest() {
+    const t = state.today;
+    const rPatience = rng();
+    const rBranch = rng();
+    const rWeight = rng();
+    const patienceMax = t.booking.patience + (rPatience * 2 - 1) * C.PATIENCE_SPREAD;
+    const want = rollOrder(rBranch, rWeight, tickets) || mostTickets();
+    tickets[want] = Math.max(0, tickets[want] - 1);
+    const c = newCustomer(want, patienceMax);
+    c.booked = true;
+    c.queueIndex = state.customers.filter((o) => o.queueIndex >= 0).length;
+    routeToSpot(c);
+    state.customers.push(c);
+    t.pending -= 1;
+    emit('customer_arrived', { id: c.id, meat: c.want });
+  }
+
+  // Stage 6 on a booking: every guest whose time has come joins, in schedule order, while the
+  // line has a free spot. A guest who finds it full waits first in the schedule; nobody walks past.
+  // Q-1: they keep joining until the hard end less LAST_CALL_GUARD, not only until last call.
+  function tickBookedSpawns() {
+    const t = state.today;
+    if (t.pending <= 0 || state.clock + 1e-9 >= t.endAt - C.LAST_CALL_GUARD) return;
+    let free = queueSpotCount() - state.customers.filter((c) => c.queueIndex >= 0).length;
+    while (free > 0 && t.pending > 0 && schedIdx < schedule.length && state.clock + 1e-9 >= schedule[schedIdx]) {
+      schedIdx += 1;
+      spawnBookedGuest();
+      free -= 1;
+    }
+  }
+
+  // Q-6: booked guests whose arrival time has come who wait off canvas for a line spot.
+  function gateWaiting() {
+    const t = state.today;
+    if (state.phase !== 'service' || !t || t.kind !== 'booking' || !(t.pending > 0)) return 0;
+    let n = 0;
+    for (let i = schedIdx; i < schedule.length && n < t.pending && state.clock + 1e-9 >= schedule[i]; i++) n += 1;
+    return n;
+  }
+
+  // W7.3: guests still pending give up (the hard end, Q-1, or sold out: P-6 marks which for the report).
+  function missPending(soldOutNow) {
+    const t = state.today;
+    if (t.pending > 0) {
+      const n = t.pending;
+      t.missed += n;
+      t.pending = 0;
+      if (soldOutNow === true) t.soldOutMiss = true;
+      emit('guests_missed', { n });
+    }
   }
 
   // Stage 2: customers walk. Eaters only count down their hop; everything else about them runs
@@ -2048,23 +3027,27 @@ function createSim(saved, seed) {
           pc.burntAt = state.clock;
           state.today.burnt += 1;
           state.stats.burnt += 1;
+          if (state.today.addon !== null && pc.meat === state.today.addon) state.today.addonBurnt += 1;
           emit('piece_burnt', { cooker: id, meat: pc.meat });
         }
       }
     }
   }
 
+  // W7.1: the three times come from today (the tutorial day keeps the v2.1 values).
   function tickClockEvents() {
     const clock = state.clock;
-    if (!state.gateSoonFired && clock >= C.GATE_OPENS - 10) {
+    const t = state.today;
+    if (!state.gateSoonFired && clock >= t.gateAt - 10) {
       state.gateSoonFired = true;
       emit('gate_soon');
     }
-    if (!gateOpenFired && clock >= C.GATE_OPENS) {
+    if (!gateOpenFired && clock >= t.gateAt) {
       gateOpenFired = true;
       emit('gate_open');
+      if (state.loop === 'prep') state.loop = 'cook';
     }
-    if (!state.lastCallFired && clock >= C.LAST_CALL) {
+    if (!state.lastCallFired && clock >= t.lastCallAt) {
       state.lastCallFired = true;
       state.spawnAt = Infinity;
       emit('last_call');
@@ -2072,7 +3055,9 @@ function createSim(saved, seed) {
   }
 
   function tickSpawns() {
-    if (state.clock >= C.LAST_CALL) { state.spawnAt = Infinity; return; }
+    const t = state.today;
+    if (t.kind === 'booking') { tickBookedSpawns(); return; }
+    if (state.clock >= t.lastCallAt) { state.spawnAt = Infinity; return; }
     if (state.clock + 1e-9 >= state.spawnAt) spawnCustomer();
   }
 
@@ -2094,11 +3079,17 @@ function createSim(saved, seed) {
   }
 
   // The early end ([V2.5] step 9): sold out, or after last call with nobody in line, and in both
-  // cases nobody walking to a seat or eating.
+  // cases nobody walking to a seat or eating. A booking (W7.3) ends early once nobody is pending
+  // and no customer is arriving, waiting, walking to a seat or eating.
   function dayShouldEnd() {
-    if (state.clock + 1e-9 >= C.DAY_SECONDS) return true;
-    if (state.clock + 1e-9 >= C.GATE_OPENS && soldOut()) return !seatsBusy();
-    if (state.clock + 1e-9 >= C.LAST_CALL) {
+    const t = state.today;
+    if (state.clock + 1e-9 >= t.endAt) return true;
+    if (t.kind === 'booking') {
+      if (state.clock + 1e-9 < t.gateAt || t.pending > 0) return false;
+      return !state.customers.some((c) => c.mode === 'arriving' || c.mode === 'waiting' || c.mode === 'toSeat' || c.mode === 'eating');
+    }
+    if (state.clock + 1e-9 >= t.gateAt && soldOut()) return !seatsBusy();
+    if (state.clock + 1e-9 >= t.lastCallAt) {
       return !state.customers.some((c) => c.mode === 'arriving' || c.mode === 'waiting') && !seatsBusy();
     }
     return false;
@@ -2112,6 +3103,7 @@ function createSim(saved, seed) {
 
   function tickStages() {
     const dt = C.TICK_SECONDS;
+    const t = state.today;
     // [T 2.4] A: the yard clock holds at its value until the first plate lands.
     if (!tutClockHeld()) {
       tickCount += 1;
@@ -2125,16 +3117,18 @@ function createSim(saved, seed) {
     tickFire(dt);
     tickPieces(dt);
     customersStage(dt);
-    if (state.clock + 1e-9 >= C.DAY_SECONDS) {
+    if (state.clock + 1e-9 >= t.endAt) {
+      if (t.kind === 'booking') missPending();   // Q-1: the guests still waiting give up at the hard end
       closeOutLine();
       closeOutSeats();
       endDay();
       return;
     }
-    if (state.clock + 1e-9 >= C.GATE_OPENS && soldOut()) {
+    if (state.clock + 1e-9 >= t.gateAt && soldOut()) {
       // Sold out stays sold out: close the line and stop arrivals while the eaters finish.
       closeOutLine();
       state.spawnAt = Infinity;
+      if (t.kind === 'booking') missPending(true);
     }
     tickSpawns();
     if (dayShouldEnd()) {
@@ -2158,11 +3152,15 @@ function createSim(saved, seed) {
 
   // ---- 2.7.5 day end ------------------------------------------------------------------------
 
-  function endDay() {
+  // The end of any event (W7.3). `forced` (settle(), W8.4) is { score, stars, parts, avgWait } in
+  // place of scoreEvent() for a booking.
+  function endDay(forced) {
     // [T 2.4] H: the till never runs with the tutorial still running.
     if (tutRunning()) finishTutorial(false);
     const t = state.today;
+    const s = state.season;
     const played = state.day;
+    const isBooking = t.kind === 'booking' && t.booking !== null;
     for (const id of COOKER_IDS) {
       for (const pc of state.stations[id].pieces) {
         t.grateLeft[pc.meat] += 1;
@@ -2180,26 +3178,58 @@ function createSim(saved, seed) {
     }
     t.wages = (state.buddy ? C.BUDDY_WAGE : 0) + (state.tender ? C.TENDER_WAGE : 0);
     const maxToday = repMax();
-    const rawDelta = t.happy * C.REP_QUICK + t.togoQuick * C.REP_TOGO_QUICK + t.ok * C.REP_OK
-      + t.walkouts * C.REP_WALKOUT + t.close * C.CLOSE_PENALTY;
+    let rawDelta;
+    let net;
+    let sc = null;
+    let stars = 0;
+    let fee = 0;
+    let payRest = 0;
+    let menuBonus = 0;
+    if (isBooking) {
+      if (t.pending > 0) { t.missed += t.pending; t.pending = 0; }
+      // W8.1, W8.2, W9: client stars, the rest of the fee, the Menu bonus, word of mouth by stars.
+      sc = forced || scoreEvent({ booked: t.booked, fed: t.fed, waitSum: t.waitSum, burnt: t.burnt, offMenu: t.offMenu, cold: t.cold });
+      stars = sc.stars;
+      fee = t.booking.pay;
+      payRest = Math.max(0, Math.round(fee * (C.PAY_BASE + C.PAY_PER_STAR * stars)) - t.deposit);
+      menuBonus = (t.addon !== null && t.addonServed >= 1 && t.addonBurnt === 0) ? Math.round(fee * C.MENU_BONUS) : 0;
+      state.cash += payRest + menuBonus;
+      rawDelta = C.STAR_FANS[stars - 1];
+      net = t.deposit + payRest + menuBonus + t.tips + t.seatTips - t.wages - C.DAILY_COSTS;   // P-3 takes the meat, charcoal and spoilage off below
+    } else {
+      rawDelta = t.happy * C.REP_QUICK + t.togoQuick * C.REP_TOGO_QUICK + t.ok * C.REP_OK
+        + t.walkouts * C.REP_WALKOUT + t.close * C.CLOSE_PENALTY;
+      net = t.revenue + t.tips + t.seatTips - t.wages - C.DAILY_COSTS;
+    }
     const repDelta = clamp(rawDelta, C.REP_DAY_MIN, maxToday);
     const repCapped = repDelta !== rawDelta;
     const repEnd = clamp(state.rep + repDelta, 0, 100);
     state.rep = repEnd;
-    const net = t.revenue + t.tips + t.seatTips - t.wages - C.DAILY_COSTS;
     state.cash = Math.max(C.CASH_FLOOR, state.cash - t.wages - C.DAILY_COSTS);
-    if (!state.gear.cooler) {
-      for (const m of MEAT_IDS) {
-        if (state.stock[m] > 0) {
-          t.spoiled[m] = state.stock[m];
-          t.spoilCost += state.stock[m] * MEATS[m].unit;
-          state.stock[m] = 0;
+    // W10.4: the cooler keeps up to its capacity overnight, costliest units first; the rest spoils.
+    const cap = coolerCap();
+    let spoiledUnits = 0;
+    if (totalStock() > cap) {
+      let room = cap;
+      for (const m of KEEP_ORDER) {
+        const keep = Math.min(state.stock[m], room);
+        room -= keep;
+        const gone = state.stock[m] - keep;
+        if (gone > 0) {
+          t.spoiled[m] += gone;
+          t.spoilCost += gone * MEATS[m].unit;
+          state.stock[m] = keep;
+          spoiledUnits += gone;
         }
       }
     }
+    const spoilReason = spoiledUnits === 0 ? 'none' : (cap === 0 ? 'nocooler' : 'full');
+    // P-3: a booking's take is what the cook made after what it used, so the report's rows add up.
+    if (isBooking) net -= t.foodCost + t.rawWaste + t.bags * C.CHARCOAL_PRICE + t.spoilCost;
     state.day += 1;
     state.stats.days += 1;
     state.yesterday = { served: t.served, walkouts: t.walkouts, past: t.past };
+    if (t.kind !== 'tutorial') s.results.push({ type: isBooking ? t.booking.type : 'yard', stars: isBooking ? stars : 0 });
     const till = {};
     for (const k of Object.keys(t)) {
       const v = t[k];
@@ -2212,26 +3242,66 @@ function createSim(saved, seed) {
     till.repMax = maxToday;
     till.net = net;
     till.cashAfter = state.cash;
+    // W4.2 additions
+    till.kind = t.kind;
+    till.label = isBooking ? t.booking.label : STRINGS.booking.yard;
+    till.host = isBooking ? t.booking.host : null;
+    till.year = s.year;
+    till.week = s.week;
+    till.booked = t.booked;
+    till.fed = t.fed;
+    till.missed = t.missed;
+    till.avgWait = sc ? sc.avgWait : 0;
+    till.score = sc ? sc.score : 0;
+    till.parts = sc ? { fed: sc.parts.fed, wait: sc.parts.wait, quality: sc.parts.quality } : { fed: 0, wait: 0, quality: 0 };
+    till.stars = stars;
+    till.fee = fee;
+    till.deposit = t.deposit;
+    till.payRest = payRest;
+    till.menuBonus = menuBonus;
+    till.repReason = isBooking ? 'stars' : 'serves';
+    till.coolerCap = cap;
+    till.coolerAfter = Object.assign({}, state.stock);
+    till.charcoalAfter = state.charcoal;
+    till.spoilReason = spoilReason;
+    // R-4: what the shop took that morning besides the cart, and the cash the morning opened with.
+    till.gearSpent = morningBuys.reduce((a, b) => a + b.price, 0);
+    till.gearBought = morningBuys.map((b) => b.label);
+    till.cashStart = t.kind === 'tutorial' ? morningCash : s.weekCash;
     state.till = till;
     state.seats = emptySeats();
     state.phase = 'evening';
     state.player.busy = null;
     state.stations.board.slicing = null;
+    if (t.kind !== 'tutorial') state.loop = 'report';
+    if (isBooking) {
+      emit('client_stars', { stars, score: sc.score, fed: t.fed, booked: t.booked,
+        pay: Math.round(fee * (C.PAY_BASE + C.PAY_PER_STAR * stars)), bonus: menuBonus });
+    }
+    if (spoiledUnits > 0) emit('spoiled', { units: spoiledUnits, meat: Object.assign({}, t.spoiled) });
     emit('day_over');
     emit('save_wanted', { reason: 'till' });
   }
 
   // ---- morning ------------------------------------------------------------------------------
 
+  // The Broke test. In the week the largest deposit on offer counts as cash (W6, W22.4).
   function brokeTest() {
     const units = totalStock();
     const cheapest = cheapestUnit();
-    return (state.charcoal === 0 && state.cash < C.CHARCOAL_PRICE)
-      || (units === 0 && state.cash < cheapest + (state.charcoal === 0 ? C.CHARCOAL_PRICE : 0));
+    let cash = state.cash;
+    if (state.loop === 'week') {
+      let d = 0;
+      for (const o of state.season.offers) d = Math.max(d, o.deposit);
+      cash += d;
+    }
+    return (state.charcoal === 0 && cash < C.CHARCOAL_PRICE)
+      || (units === 0 && cash < cheapest + (state.charcoal === 0 ? C.CHARCOAL_PRICE : 0));
   }
 
   function updateComingNext(fromMorning) {
-    const show = state.gear.drum === true && state.cash >= C.DRIVEWAY_PRICE;
+    // Q-8: no Coming next card while the Driveway cannot be bought (v3.3 flips C.DRIVEWAY_BUYABLE).
+    const show = C.DRIVEWAY_BUYABLE === true && state.gear.drum === true && state.rep >= C.DRIVEWAY_REP && state.cash >= C.DRIVEWAY_PRICE;
     if (fromMorning) state.comingNext = show;
     else if (show) state.comingNext = true;
     if (show && !state.drivewayShown) {
@@ -2240,7 +3310,8 @@ function createSim(saved, seed) {
     }
   }
 
-  function beginMorning() {
+  // The morning's yard reset, without the rain roll.
+  function clearYard() {
     state.phase = 'morning';
     state.paused = false;
     state.buddy = null;
@@ -2254,12 +3325,25 @@ function createSim(saved, seed) {
     state.player.next = null;
     state.player.walking = false;
     state.stations.board.slicing = null;
+  }
+
+  // `nextLoop` is the loop this morning opens into: 'tutorial', 'creator' or 'week'. The rain roll
+  // always draws (rng order unchanged); the Broke test runs here only for the tutorial (W22.4,
+  // deviation 34), and startWeek() runs it with the deposit.
+  function beginMorning(nextLoop) {
+    clearYard();
+    morningBuys = [];
+    morningCash = state.cash;
     const roll = rng();
     const raining = state.day >= C.RAIN_FROM_DAY && roll < C.RAIN_CHANCE;
     state.rain = raining;
     if (state.day >= C.RAIN_FROM_DAY) emit('rain', { raining });
-    state.broke = brokeTest();
-    if (state.broke) emit('broke');
+    if (nextLoop === 'week' || nextLoop === 'creator') {
+      state.broke = false;
+    } else {
+      state.broke = brokeTest();
+      if (state.broke) emit('broke');
+    }
     state.cart = { meat: zeroByMeat(), charcoal: 0 };
     if (state.day === 1 && totalStock() === 0 && state.charcoal === 0) {
       // A first morning starts with a sensible cart (34 of the 80) instead of a row of zeros.
@@ -2269,9 +3353,11 @@ function createSim(saved, seed) {
     updateComingNext(true);
   }
 
-  // About how many people today's rep and weather bring between the gate and last call.
+  // About how many people today's rep and weather bring between the gate and last call: the
+  // event length setting's window (W5.2), the v2.1 window on the tutorial day.
   function expectedCrowd() {
-    return Math.round((C.LAST_CALL - C.GATE_OPENS) / spawnInterval());
+    const win = state.loop === 'tutorial' ? (C.LAST_CALL - C.GATE_OPENS) : lengthRow(state.settings.length).window;
+    return Math.round(win / spawnInterval());
   }
 
   // ---- shop ---------------------------------------------------------------------------------
@@ -2286,49 +3372,87 @@ function createSim(saved, seed) {
     return state.phase === 'morning' && state.broke === false;
   }
 
+  function coolerFullMessage() {
+    const cap = coolerCap();
+    return cap === 0 ? STRINGS.ui.coolerFullNone : STRINGS.ui.coolerFull.replace('{cap}', String(cap));   // R-8
+  }
+
+  // W5.2: the morning shop of the tutorial and the week. Meat and charcoal may spend the picked
+  // offer's deposit too; charcoal caps at CHARCOAL_MAX in the pile; meat also stops at meatRoom().
   function buy(id, qty) {
     const rowDef = CATALOG_BY_ID[id];
-    if (!rowDef) return { ok: false, message: '' };
+    if (!rowDef || typeof id !== 'string') return { ok: false, message: '' };
+    if (state.loop !== 'tutorial' && state.loop !== 'week') return { ok: false, message: '' };
     if (!morningOpen()) return { ok: false, message: '' };
     if (rowDef.kind === 'meat' || rowDef.kind === 'fuel') {
-      if (rowDef.kind === 'meat' && MEATS[id].drumOnly && !state.gear.drum) return { ok: false, message: rowDef.needsText };
+      const isMeat = rowDef.kind === 'meat';
+      if (isMeat && MEATS[id].drumOnly && !state.gear.drum) return { ok: false, message: rowDef.needsText };
       const q = Math.trunc(Number(qty));
       if (!Number.isFinite(q) || q === 0) return { ok: false, message: '' };
-      const cur = rowDef.kind === 'meat' ? state.cart.meat[id] : state.cart.charcoal;
-      const have = rowDef.kind === 'meat' ? state.stock[id] : state.charcoal;
-      let next = clamp(cur + q, 0, C.STEPPER_MAX);
-      next = Math.min(next, Math.max(0, C.STEPPER_MAX - have));
+      const cur = isMeat ? state.cart.meat[id] : state.cart.charcoal;
+      const lineMax = isMeat ? Math.max(0, C.STEPPER_MAX - state.stock[id]) : Math.max(0, C.CHARCOAL_MAX - state.charcoal);
+      let next = clamp(cur + q, 0, lineMax);
+      let roomCut = false;
+      if (isMeat && next > cur) {
+        const lim = cur + meatRoom();
+        if (next > lim) { next = Math.max(cur, lim); roomCut = true; }
+      }
+      const b = state.loop === 'week' ? state.season.booking : null;
+      const deposit = b !== null ? b.deposit : 0;
       const others = cartTotal() - cur * rowDef.price;
-      const affordable = Math.floor((state.cash - others) / rowDef.price);
+      const affordable = Math.floor((state.cash + deposit - others) / rowDef.price);
       if (next > cur) next = Math.min(next, Math.max(cur, affordable));
-      if (next === cur) return { ok: false, message: q > 0 && cur + q > affordable ? 'Not enough cash' : '' };
-      if (rowDef.kind === 'meat') state.cart.meat[id] = next; else state.cart.charcoal = next;
-      return { ok: true, message: '' };
+      if (next === cur) {
+        let message = '';
+        if (q > 0) {
+          if (roomCut) message = coolerFullMessage();
+          else if (cur + q > affordable) message = 'Not enough cash';
+        }
+        return { ok: false, message };
+      }
+      if (isMeat) state.cart.meat[id] = next; else state.cart.charcoal = next;
+      return { ok: true, message: roomCut && next > cur ? coolerFullMessage() : '' };
     }
-    if (rowDef.kind === 'gear') {
-      if (state.gear[id] === true) return { ok: false, message: 'Owned' };
-      if (rowDef.needs && rowDef.needs.gear && state.gear[rowDef.needs.gear] !== true) return { ok: false, message: rowDef.needsText };
-      if (state.cash - cartTotal() < rowDef.price) return { ok: false, message: 'Not enough cash' };
+    if (rowDef.kind === 'gear' || rowDef.kind === 'decor') {
+      const chk = canBuy(id);
+      if (!chk.ok) return { ok: false, message: chk.message };
       state.cash -= rowDef.price;
-      state.gear[id] = true;
-      reconfigureYard();
-      emit('purchase', { id, label: rowDef.label, price: rowDef.price, kind: 'gear' });
-      emit('save_wanted', { reason: 'gear' });
-      updateComingNext(false);
+      morningBuys.push({ id, label: rowDef.label, price: rowDef.price });
+      if (rowDef.kind === 'gear') {
+        state.gear[id] = true;
+        reconfigureYard();
+        emit('purchase', { id, label: rowDef.label, price: rowDef.price, kind: 'gear' });
+        emit('save_wanted', { reason: 'gear' });
+        updateComingNext(false);
+        if (state.loop === 'week') regenOffers(false);   // W22.11
+      } else {
+        state.decor[id] = true;
+        emit('purchase', { id, label: rowDef.label, price: rowDef.price, kind: 'decor' });
+        emit('save_wanted', { reason: 'decor' });
+      }
       return { ok: true, message: 'Bought ' + rowDef.label + '.' };
     }
-    if (rowDef.kind === 'decor') {
-      if (state.decor[id] === true) return { ok: false, message: 'Owned' };
-      if (rowDef.needs && rowDef.needs.decor && state.decor[rowDef.needs.decor] !== true) return { ok: false, message: rowDef.needsText };
-      if (state.cash - cartTotal() < rowDef.price) return { ok: false, message: 'Not enough cash' };
-      state.cash -= rowDef.price;
-      state.decor[id] = true;
-      emit('purchase', { id, label: rowDef.label, price: rowDef.price, kind: 'decor' });
-      emit('save_wanted', { reason: 'decor' });
-      return { ok: true, message: 'Bought ' + rowDef.label + '.' };
-    }
-    if (rowDef.kind === 'goal') return { ok: false, message: 'Not built in this prototype.' };
+    if (rowDef.kind === 'goal') return { ok: false, message: 'Not built yet.' };
     return { ok: false, message: '' };
+  }
+
+  // R-1 (the P-4 rule as a pure check): can a gear or decor row be bought now? In the week the
+  // picked offer's deposit counts toward the cart, never toward the price itself: price <= cash and
+  // cash + deposit - cart >= price. `left` is what that leaves for the cart's day, deposit counted.
+  function canBuy(id) {
+    const rowDef = typeof id === 'string' ? CATALOG_BY_ID[id] : undefined;
+    if (!rowDef || (rowDef.kind !== 'gear' && rowDef.kind !== 'decor')) return { ok: false, message: '', left: 0 };
+    const dep = state.loop === 'week' && state.season.booking !== null ? state.season.booking.deposit : 0;
+    const left = state.cash + dep - cartTotal() - rowDef.price;
+    const no = (message) => ({ ok: false, message, left });
+    if (state.loop !== 'tutorial' && state.loop !== 'week') return no('');
+    if (!morningOpen()) return no('');
+    const isGear = rowDef.kind === 'gear';
+    if ((isGear ? state.gear : state.decor)[id] === true) return no('Owned');
+    const need = rowDef.needs ? (isGear ? rowDef.needs.gear : rowDef.needs.decor) : undefined;
+    if (need && (isGear ? state.gear : state.decor)[need] !== true) return no(rowDef.needsText);
+    if (rowDef.price > state.cash || left < 0) return no('Not enough cash');
+    return { ok: true, message: '', left };
   }
 
   function reconfigureYard() {
@@ -2354,9 +3478,11 @@ function createSim(saved, seed) {
 
   function hire(id) {
     if (!HIRE_IDS.includes(id)) return { ok: false, hired: false, message: '' };
-    if (state.phase !== 'morning') return { ok: false, hired: state.hires[id], message: '' };
+    const inLoop = state.loop === 'tutorial' || state.loop === 'week';
+    if (!inLoop || state.phase !== 'morning') return { ok: false, hired: state.hires[id], message: '' };
     const rowDef = CATALOG_BY_ID[id];
-    if (id === 'buddy' && state.day < rowDef.needs.day) return { ok: false, hired: false, message: rowDef.needsText };
+    // W22.12 (deviation 30): the day 2 rule holds only on the tutorial day.
+    if (id === 'buddy' && state.loop === 'tutorial' && state.day < rowDef.needs.day) return { ok: false, hired: false, message: rowDef.needsText };
     if (id === 'tender' && state.gear.drum !== true) return { ok: false, hired: false, message: rowDef.needsText };
     state.hires[id] = !state.hires[id];
     const hired = state.hires[id];
@@ -2377,6 +3503,7 @@ function createSim(saved, seed) {
   }
 
   function sell(id) {
+    if (state.loop !== 'tutorial' && state.loop !== 'week') return { ok: false, message: '', price: 0 };
     if (!(state.phase === 'morning' && state.broke)) return { ok: false, message: '', price: 0 };
     const isGear = GEAR_IDS.includes(id);
     const isDecor = DECOR_IDS.includes(id);
@@ -2416,31 +3543,39 @@ function createSim(saved, seed) {
     return s;
   }
 
+  // The tutorial day's morning only (W5.2, W22.17); the week uses canLoadUp().
   function canOpen() {
+    if (state.loop !== 'tutorial') return { ok: false, reason: '' };
     if (!morningOpen()) return { ok: false, reason: '' };
     if (state.charcoal + state.cart.charcoal === 0) return { ok: false, reason: 'Buy at least one bag of charcoal.' };
     if (totalStock() + sumValues(state.cart.meat) === 0) return { ok: false, reason: 'Buy at least one unit of meat.' };
     return { ok: true, reason: '' };
   }
 
-  function openGate() {
-    const can = canOpen();
-    if (!can.ok) return { ok: false, message: can.reason };
+  // Charge the cart and move it into the cooler and the pile.
+  function commitCart() {
     state.cash -= cartTotal();
     for (const m of MEAT_IDS) { state.stock[m] += state.cart.meat[m]; state.cart.meat[m] = 0; }
-    state.charcoal += state.cart.charcoal;
+    state.charcoal = Math.min(C.CHARCOAL_MAX, state.charcoal + state.cart.charcoal);
     state.cart.charcoal = 0;
+  }
+
+  // The v2 service setup shared by openGate() and loadUp().
+  function startService(kind) {
     tickCount = 0;
     acc = 0;
     pieceSeq = 0;
     custSeq = 0;
     buddyPick = null;
     gateOpenFired = false;
+    schedule = [];
+    schedIdx = 0;
+    tickets = zeroByMeat();
     state.clock = 0;
     state.phase = 'service';
     state.paused = false;
     state.comingNext = false;
-    state.spawnAt = tutRunning() ? Infinity : C.GATE_OPENS;   // [T 2.4] C
+    state.spawnAt = Infinity;
     state.arrivals = 0;
     state.lastCallFired = false;
     state.gateSoonFired = false;
@@ -2451,6 +3586,7 @@ function createSim(saved, seed) {
     state.stations.table = { spots: new Array(tableSpotCount()).fill(null) };
     state.player = newPlayer();
     state.today = newToday();
+    state.today.kind = kind;
     state.today.repStart = state.rep;
     state.today.wageNames = [];
     if (state.hires.buddy) {
@@ -2461,16 +3597,448 @@ function createSim(saved, seed) {
       state.tender = Object.assign(newMover(MAP.tenderIdle.x, MAP.tenderIdle.y, MAP.tenderIdle.face), { carrying: null, task: 'idle', t: 0, cooker: null, cooldown: 0 });
       state.today.wageNames.push(STRINGS.hireLabel.tender);
     } else state.tender = null;
+  }
+
+  // The tutorial day only (W5.2): v2.1 timings whatever the setting (W7.1).
+  function openGate() {
+    if (state.loop !== 'tutorial') return { ok: false, message: '' };
+    const can = canOpen();
+    if (!can.ok) return { ok: false, message: can.reason };
+    commitCart();
+    startService('tutorial');
+    const t = state.today;
+    t.gateAt = C.GATE_OPENS;
+    t.lastCallAt = C.LAST_CALL;
+    t.endAt = C.DAY_SECONDS;
+    state.spawnAt = tutRunning() ? Infinity : C.GATE_OPENS;   // [T 2.4] C
     if (!(state.stock[state.selected] > 0)) autoSelect();
     emit('save_wanted', { reason: 'open' });
-    emit('yard_open');
+    emit('yard_open', { kind: 'tutorial' });
     checkTutorial();
     return { ok: true, message: '' };
   }
 
-  function continueFromTill() {
+  // ---- v3.0 the week (W5.1, W6) ---------------------------------------------------------------
+
+  function inWeek() {
+    return state.loop === 'week' && state.phase === 'morning';
+  }
+
+  function ownedCookers() {
+    let n = 0;
+    for (const id of COOKER_IDS) if (stationActive(STATION_BY_ID[id])) n += 1;
+    return n;
+  }
+
+  function offerInput() {
+    const s = state.season;
+    return { seed: s.seed, year: s.year, week: s.week, rep: state.rep, cash: s.weekCash,
+      gear: Object.assign({}, state.gear), length: state.settings.length };
+  }
+
+  function addonLegal(offer, meat) {
+    return offer !== null && offer !== undefined && offer.type !== 'yard' && typeof meat === 'string'
+      && MEAT_IDS.includes(meat) && !offer.menu.includes(meat) && (!MEATS[meat].drumOnly || state.gear.drum === true);
+  }
+
+  function emitOffersReady() {
+    const s = state.season;
+    emit('offers_ready', { year: s.year, week: s.week, ids: s.offers.map((o) => o.id) });
+  }
+
+  // W5.1 (internal) with W22.3 and W22.4: the week's offers, the first one picked, the cart
+  // prefilled, then the Broke test with the largest deposit on offer.
+  function startWeek(weekCash) {
+    const s = state.season;
+    s.weekCash = weekCash === undefined ? clamp(Math.trunc(state.cash), 0, C.MAX_CASH) : weekCash;
+    s.offers = genOffers(offerInput());
+    // Q-7: last week's booking type again when it is offered and safe, else the first card.
+    const last = s.results.length > 0 ? s.results[s.results.length - 1] : null;
+    const again = last !== null && last.type !== 'yard' ? (s.offers.find((o) => o.type === last.type && o.safe) || null) : null;
+    s.booking = again !== null ? again : (s.offers.length > 0 ? s.offers[0] : null);
+    s.addon = null;
+    state.loop = 'week';
+    state.phase = 'morning';
+    state.cart = prefill();
+    emitOffersReady();
+    state.broke = brokeTest();
+    if (state.broke) emit('broke');
+  }
+
+  // W22.11 and setLength(): this week's offers again from the stored inputs. Without `force` they
+  // are replaced only when the result differs. The pick keeps by id, the add-on when still legal.
+  function regenOffers(force) {
+    const s = state.season;
+    const next = genOffers(offerInput());
+    if (!force && JSON.stringify(next) === JSON.stringify(s.offers)) return false;
+    const pickId = s.booking !== null ? s.booking.id : null;
+    s.offers = next;
+    s.booking = next.find((o) => o.id === pickId) || next[0] || null;
+    if (s.addon !== null && !addonLegal(s.booking, s.addon)) s.addon = null;
+    state.cart = prefill();
+    emitOffersReady();
+    return true;
+  }
+
+  function railFor(offer, addon) {
+    if (!isPlainObject(offer) || offer.type === 'yard' || !Array.isArray(offer.menu)) return zeroByMeat();
+    const menu = MEAT_IDS.filter((m) => offer.menu.includes(m));
+    const a = (typeof addon === 'string' && MEAT_IDS.includes(addon) && !menu.includes(addon)) ? addon : null;
+    const hc = Number(offer.headcount);
+    return railSplit(Number.isFinite(hc) && hc > 0 ? Math.trunc(hc) : 0, menu, a);
+  }
+
+  function bookOffer(id) {
+    if (!inWeek()) return { ok: false, message: '' };
+    const s = state.season;
+    const o = s.offers.find((x) => x.id === id) || null;
+    if (o === null) return { ok: false, message: '' };
+    s.booking = o;
+    s.addon = null;
+    state.cart = prefill();
+    emit('booking_picked', { id: o.id, booking: o.type });   // integration I-1: 'type' is the event's own key
+    emit('save_wanted', { reason: 'book' });
+    return { ok: true, message: '' };
+  }
+
+  function setAddon(meat) {
+    if (!inWeek()) return { ok: false, message: '' };
+    const s = state.season;
+    if (s.booking === null) return { ok: false, message: '' };
+    if (meat !== null && !addonLegal(s.booking, meat)) return { ok: false, message: STRINGS.ui.addonNo };
+    s.addon = meat;
+    state.cart = prefill();
+    emit('save_wanted', { reason: 'addon' });
+    return { ok: true, message: '' };
+  }
+
+  function canLoadUp() {
+    if (!inWeek() || state.broke) return { ok: false, reason: '' };
+    const b = state.season.booking;
+    if (b === null) return { ok: false, reason: STRINGS.ui.goPick };
+    if (!b.safe) return { ok: false, reason: b.needs };
+    if (state.charcoal + state.cart.charcoal === 0) return { ok: false, reason: 'Buy at least one bag of charcoal.' };
+    let units = 0;
+    if (b.type === 'yard') units = totalStock() + sumValues(state.cart.meat);
+    else {
+      const rail = railFor(b, state.season.addon);
+      for (const m of MEAT_IDS) if (rail[m] > 0) units += state.stock[m] + state.cart.meat[m];
+    }
+    if (units === 0) return { ok: false, reason: 'Buy at least one unit of meat.' };
+    if (cartTotal() > state.cash + b.deposit) return { ok: false, reason: STRINGS.ui.goCash };
+    return { ok: true, reason: '' };
+  }
+
+  // W5.1 and W7.1: the deposit in, the cart charged, service set up for the booking or Yard day.
+  function loadUp() {
+    const can = canLoadUp();
+    if (!can.ok) return { ok: false, message: can.reason };
+    const s = state.season;
+    const b = s.booking;
+    const isBooking = b.type !== 'yard';
+    const L = lengthRow(state.settings.length);
+    const endAt = b.type === 'finale' ? C.FINALE_SECONDS : L.seconds;   // Q-2
+    const charcoalStart = state.charcoal, stockStart = Object.assign({}, state.stock);   // Q-9
+    state.cash += b.deposit;
+    commitCart();
+    startService(isBooking ? 'booking' : 'yard');
+    const t = state.today;
+    t.deposit = b.deposit;
+    t.charcoalStart = charcoalStart;
+    t.stockStart = stockStart;
+    t.gateAt = C.GATE_OPENS;
+    t.lastCallAt = Math.min(t.gateAt + (isBooking ? b.window : L.window), endAt - C.LAST_CALL_GUARD);
+    t.endAt = endAt;
+    if (isBooking) {
+      t.booking = Object.freeze(Object.assign({}, b));
+      t.addon = s.addon;
+      t.rail = railFor(b, s.addon);
+      t.booked = b.headcount;
+      t.pending = b.headcount;
+      tickets = Object.assign({}, t.rail);
+      buildSchedule(b, t.gateAt);
+      state.spawnAt = Infinity;
+      state.rain = false;   // W22.10: rain only touches the Yard day
+      let best = null;
+      for (const m of MEAT_IDS) {
+        if (t.rail[m] > 0 && state.stock[m] > 0 && (best === null || MEATS[m].cook < MEATS[best].cook)) best = m;
+      }
+      if (best !== null) state.selected = best;
+      else if (!(state.stock[state.selected] > 0)) autoSelect();
+    } else {
+      state.spawnAt = t.gateAt;
+      if (!(state.stock[state.selected] > 0)) autoSelect();
+    }
+    s.offers = [];
+    state.loop = 'prep';
+    if (b.deposit > 0) emit('deposit', { amount: b.deposit });
+    emit('save_wanted', { reason: 'open' });
+    emit('yard_open', { kind: t.kind });
+    return { ok: true, message: '' };
+  }
+
+  // W5.1: the till or report is done. Tutorial: the creator (or the week); report: the next week
+  // or, after week 9, the season end card.
+  function finishReport() {
     if (state.phase !== 'evening') return;
-    beginMorning();
+    const s = state.season;
+    if (state.loop === 'tutorial') {
+      if (state.profile === null) {
+        beginMorning('creator');
+        state.loop = 'creator';
+      } else {
+        beginMorning('week');
+        emit('week_start', { year: s.year, week: s.week });
+        startWeek();
+        emit('save_wanted', { reason: 'week' });
+      }
+      return;
+    }
+    if (state.loop !== 'report') return;
+    if (s.results.length < C.SEASON_WEEKS) {
+      s.week = s.results.length + 1;
+      beginMorning('week');
+      emit('week_start', { year: s.year, week: s.week });
+      startWeek();
+      emit('save_wanted', { reason: 'week' });
+      return;
+    }
+    clearYard();   // deviation 45: no rain roll
+    state.cart = { meat: zeroByMeat(), charcoal: 0 };
+    s.offers = [];
+    s.booking = null;
+    s.addon = null;
+    state.loop = 'seasonEnd';
+    emit('season_end', { year: s.year, stars: s.results.map((x) => x.stars) });
+  }
+
+  function continueFromTill() {
+    finishReport();
+  }
+
+  function seasonEndPreview() {
+    if (state.loop !== 'seasonEnd') return null;
+    const s = state.season;
+    return {
+      year: s.year,
+      stars: s.results.map((x) => x.stars),
+      cash: state.cash,
+      repFrom: state.rep,
+      repTo: Math.max(C.SEASON_REP_FLOOR, Math.floor(state.rep * C.SEASON_CARRY_REP)),
+      spoiled: Object.assign({}, state.stock),
+      charcoal: state.charcoal
+    };
+  }
+
+  // W11: cash, gear, decor, hires, the profile, settings and stats keep; word of mouth carries at
+  // the larger of the floor and 75 percent; the cooler empties; charcoal and wood keep.
+  function startSeason() {
+    if (state.loop !== 'seasonEnd') return false;
+    const pv = seasonEndPreview();
+    const s = state.season;
+    state.rep = pv.repTo;
+    for (const m of MEAT_IDS) state.stock[m] = 0;
+    s.year = Math.min(C.YEAR_MAX, s.year + 1);
+    s.week = 1;
+    s.results = [];
+    beginMorning('week');
+    emit('season_start', { year: s.year });
+    emit('week_start', { year: s.year, week: 1 });
+    startWeek();
+    emit('save_wanted', { reason: 'season' });
+    return true;
+  }
+
+  // W5.1 with W22.1: any loop and phase. From the creator it opens the week.
+  function setPlayer(look, name, pitName) {
+    const lk = cleanLook(look);
+    const nm = cleanName(name, STRINGS.defaultName);
+    const pit = cleanName(pitName, STRINGS.defaultPit);
+    state.profile = { name: nm, look: lk };
+    state.pitName = pit;
+    emit('player_set', { name: nm, pitName: pit });
+    if (state.loop === 'creator') {
+      emit('week_start', { year: state.season.year, week: state.season.week });
+      startWeek();
+    }
+    emit('save_wanted', { reason: 'player' });
+    return { ok: true, look: Object.assign({}, lk), name: nm, pitName: pit };
+  }
+
+  function randomLook() {
+    const o = {};
+    for (const k of LOOK_KEYS) o[k] = Math.floor(lookRng() * LOOK_COUNTS[k]);
+    return o;
+  }
+
+  function look() {
+    return Object.assign({}, state.profile !== null ? state.profile.look : DEFAULT_LOOK);
+  }
+
+  function setLength(len) {
+    if (typeof len !== 'string' || !C.LENGTH_ORDER.includes(len) || state.phase !== 'morning') return { ok: false, message: '' };
+    if (state.loop === 'tutorial') {
+      state.settings.length = len;
+      emit('save_wanted', { reason: 'settings' });
+      return { ok: true, message: '' };
+    }
+    if (!inWeek()) return { ok: false, message: '' };
+    state.settings.length = len;
+    regenOffers(true);
+    emit('save_wanted', { reason: 'settings' });
+    return { ok: true, message: '' };
+  }
+
+  function fanThird() {
+    return state.rep >= C.THIRD_EDGES[1] ? 2 : (state.rep >= C.THIRD_EDGES[0] ? 1 : 0);
+  }
+
+  function offerSlots() {
+    const third = fanThird();
+    return { slots: C.OFFER_SLOTS[third], invite: third === C.INVITE_THIRD };
+  }
+
+  // ---- W10 inventory ------------------------------------------------------------------------
+
+  function coolerCap() {
+    return C.COOLER_CAP[state.gear.cooler ? 1 : 0];
+  }
+
+  function inventory() {
+    const units = totalStock();
+    const cap = coolerCap();
+    return { charcoal: state.charcoal, wood: state.wood, meat: Object.assign({}, state.stock), units, cap, over: Math.max(0, units - cap) };
+  }
+
+  // W10.2: units this event can use beyond the cooler. A booking: half again the booked plates of
+  // each rail meat, in units; the Yard day and the tutorial: expectedCrowd().
+  function eventUnits() {
+    const b = state.loop === 'week' ? state.season.booking : null;
+    if (b !== null && b.type !== 'yard') {
+      const rail = railFor(b, state.season.addon);
+      let n = 0;
+      for (const m of MEAT_IDS) if (rail[m] > 0) n += Math.ceil(rail[m] * 1.5 / MEATS[m].plates);
+      return n;
+    }
+    return expectedCrowd();
+  }
+
+  function meatRoom() {
+    return Math.max(0, coolerCap() + eventUnits() - totalStock() - sumValues(state.cart.meat));
+  }
+
+  function ceilG(x) {
+    return Math.ceil(x - 1e-9);   // deviation 35
+  }
+
+  // W10.3 with W22.14: the cart that makes the two tap week work, computed without changing state.
+  function prefill() {
+    const b = state.loop === 'week' ? state.season.booking : null;
+    const isBooking = b !== null && b.type !== 'yard';
+    const budget = state.cash + (b !== null ? b.deposit : 0);
+    const rail = isBooking ? railFor(b, state.season.addon) : null;
+    const priceOf = (m) => CATALOG_BY_ID[m].price;
+    const room = Math.max(0, coolerCap() + eventUnits() - totalStock());
+    function costliest(meat) {
+      let pick = null;
+      for (const m of MEAT_IDS) if (meat[m] > 0 && (pick === null || priceOf(m) > priceOf(pick))) pick = m;
+      return pick;
+    }
+    function meatLines(spareIn) {
+      const spare = spareIn && coolerCap() > 0;   // P-5: no spare without a cooler, it would only spoil
+      const meat = zeroByMeat();
+      if (isBooking) {
+        for (const m of MEAT_IDS) {
+          if (!(rail[m] > 0)) continue;
+          const plates = spare ? ceilG(rail[m] * (1 + C.SPARE_FRAC)) : rail[m];
+          const need = plates - state.stock[m] * MEATS[m].plates;
+          meat[m] = need > 0 ? Math.ceil(need / MEATS[m].plates) : 0;
+        }
+      } else {
+        let inStock = 0;
+        for (const m of MEAT_IDS) inStock += state.stock[m] * MEATS[m].plates;
+        const crowd = expectedCrowd();
+        const plates = (spare ? ceilG(1.1 * crowd) + 1 : crowd) - inStock;
+        const units = plates > 0 ? Math.ceil(plates / 2) : 0;
+        meat.chicken = Math.floor(units / 2);
+        meat.sausage = units - meat.chicken;
+      }
+      for (const m of MEAT_IDS) {
+        if (MEATS[m].drumOnly && !state.gear.drum) meat[m] = 0;
+        meat[m] = clamp(meat[m], 0, Math.max(0, C.STEPPER_MAX - state.stock[m]));
+      }
+      while (sumValues(meat) > room) {   // deviation 36
+        const m = costliest(meat);
+        if (m === null) break;
+        meat[m] -= 1;
+      }
+      return meat;
+    }
+    function total(meat, bags) {
+      let tot = bags * CATALOG_BY_ID.charcoal.price;
+      for (const m of MEAT_IDS) tot += meat[m] * priceOf(m);
+      return tot;
+    }
+    // R-5: BAGS_PER_COOKER is a Normal cook's worth; a Short or Long cook scales it by its seconds.
+    const secs = b !== null && b.type === 'finale' ? C.FINALE_SECONDS : lengthRow(state.settings.length).seconds;   // Q-2
+    const perCooker = Math.ceil(C.BAGS_PER_COOKER * secs / C.LENGTHS.normal.seconds - 1e-9);
+    let bags = Math.max(0, perCooker * ownedCookers() - state.charcoal);
+    if (state.charcoal === 0) bags = Math.max(bags, 1);
+    bags = Math.min(bags, Math.max(0, C.CHARCOAL_MAX - state.charcoal));
+    let meat = meatLines(true);
+    if (total(meat, bags) > budget) meat = meatLines(false);
+    while (total(meat, bags) > budget && sumValues(meat) > 1) meat[costliest(meat)] -= 1;
+    const minBags = Math.max(0, 1 - state.charcoal);
+    while (total(meat, bags) > budget && bags > minBags) bags -= 1;
+    return { meat, charcoal: bags };
+  }
+
+  // W8.4 with W22.27, dev and harness only (game.js never calls it): ends the booking now with
+  // `stars` forced, through the normal end of event.
+  function settle(stars) {
+    if (state.phase !== 'service' || state.paused) return false;
+    const t = state.today;
+    if (t.kind !== 'booking' || t.booking === null) return false;
+    if (!(typeof stars === 'number' && Number.isInteger(stars) && stars >= 1 && stars <= 5)) return false;
+    const booked = t.booked;
+    const fed = stars >= 3 ? booked : Math.round(booked * (stars === 2 ? 0.6 : 0.3));
+    t.fed = fed;
+    t.pending = 0;
+    t.missed = booked - fed;
+    for (const m of MEAT_IDS) {
+      if (!(t.rail[m] > 0)) continue;
+      const plates = booked > 0 ? Math.round(fed * t.rail[m] / booked) : 0;
+      const units = Math.min(state.stock[m], Math.ceil(plates / MEATS[m].plates));
+      state.stock[m] -= units;
+      t.foodCost += units * MEATS[m].unit;
+      t.sold[m] = plates;
+    }
+    const bags = Math.min(state.charcoal, C.BAGS_PER_COOKER * ownedCookers());
+    state.charcoal -= bags;
+    t.bags += bags;
+    let plates = 0;
+    let worth = 0;
+    for (const m of MEAT_IDS) { plates += t.rail[m]; worth += t.rail[m] * MEATS[m].price; }
+    const avgPrice = plates > 0 ? worth / plates : 0;
+    const tip = Math.round(avgPrice * C.TIP_RATE * [0, 0.2, 0.4, 0.6, 0.8][stars - 1]);
+    t.tips = fed * tip;
+    state.cash += t.tips;
+    // Clear the yard with no waste rows.
+    state.customers = [];
+    state.seats = emptySeats();
+    for (const id of COOKER_IDS) state.stations[id].pieces = [];
+    state.stations.board = { stacks: [], slicing: null };
+    state.stations.table = { spots: new Array(tableSpotCount()).fill(null) };
+    const p = state.player;
+    p.busy = null; p.carrying = null; p.queued = null; p.target = null; p.path = []; p.next = null; p.walking = false;
+    if (state.buddy) { const bd = state.buddy; bd.carrying = null; bd.task = 'idle'; bd.t = 0; bd.path = []; bd.next = null; bd.walking = false; }
+    if (state.tender) { const td = state.tender; td.carrying = null; td.cooker = null; td.task = 'idle'; td.t = 0; td.path = []; td.next = null; td.walking = false; }
+    buddyPick = null;
+    state.spawnAt = Infinity;
+    const score = [20, 40, 60, 75, 90][stars - 1];
+    endDay({ score, stars, parts: { fed: booked > 0 ? Math.round(C.SCORE_FED * fed / booked) : 0, wait: 0,
+      quality: booked > 0 ? Math.round(C.SCORE_QUALITY * fed / booked) : 0 }, avgWait: 0 });   // P-2: quality by the share fed
+    return true;
   }
 
   // Returns true once a Broke morning can go on: the test is false now. sell() already updates
@@ -2488,6 +4056,7 @@ function createSim(saved, seed) {
 
   function goal() {
     for (const id of GOAL_ORDER) {
+      if (id === 'driveway' && C.DRIVEWAY_BUYABLE !== true) continue;   // Q-8
       const owned = id === 'buddy' ? state.hires.buddy === true : (id === 'driveway' ? false : state.gear[id] === true);
       if (!owned) {
         const rowDef = CATALOG_BY_ID[id];
@@ -2501,10 +4070,13 @@ function createSim(saved, seed) {
     state.paused = on === true;
   }
 
+  // A new game (W5.2): the tutorial morning, a fresh profile and season with a seed drawn from rng.
   function reset() {
     fillState(null);
+    state.season.seed = (Math.floor(rng() * 4294967296)) >>> 0;
+    state.loop = 'tutorial';
     emit('save_clear');
-    beginMorning();
+    beginMorning('tutorial');
     checkTutorial();
   }
 
@@ -2525,6 +4097,9 @@ function createSim(saved, seed) {
   function tutorialRow() {
     if (state.phase === 'morning') return 'open';
     if (state.stations.table.spots.some((sp) => sp !== null)) return 'customer';
+    // W12.1, W22.16 (a): raw meat over a full kettle 1, checked before the cold kettle rows.
+    const fg = tutFullGrate();
+    if (fg !== undefined) return fg === null ? 'full' : 'fullGrate';
     const ck = state.stations.kettle1;
     const h = state.player.carrying;
     const kind = h === null ? null : h.kind;
@@ -2555,7 +4130,46 @@ function createSim(saved, seed) {
         return h === null && state.stations.kettle1.pieces.some((pc) => pc.state === 'done') ? 'kettle1' : null;
       case 'slice': return 'board';
       case 'plate': return h !== null && h.kind === 'plates' ? 'table' : 'board';
+      case 'full': return 'cooler';   // P-6: put it back, nothing wasted (the #act verb there)
+      case 'fullGrate': { const fg = tutFullGrate(); return typeof fg === 'string' ? fg : null; }
       default: return null;
+    }
+  }
+
+  // W12.1: with a raw piece in hand and no free kettle 1 slot for it: the other active cooker with
+  // room ('kettle2', then 'drum'; brisket only the drum), or null for the cooler (P-6: put it back).
+  // undefined when the row does not apply.
+  function tutFullGrate() {
+    const h = state.player.carrying;
+    if (h === null || h.kind !== 'raw') return undefined;
+    const m = MEATS[h.meat];
+    if (freeSlotFor(state.stations.kettle1, m.slots) >= 0) return undefined;
+    for (const id of ['kettle2', 'drum']) {
+      if (!stationActive(STATION_BY_ID[id])) continue;
+      if (m.drumOnly && id !== 'drum') continue;
+      if (freeSlotFor(state.stations[id], m.slots) >= 0) return id;
+    }
+    return null;
+  }
+
+  // W12.2 with W22.16 (b) and deviation 33: one free unit instead of a strand, before the gate.
+  function tutorialRefill() {
+    if (state.phase !== 'service' || state.clock + 1e-9 >= C.GATE_OPENS) return;
+    const carriesOnly = (c) => c === null || c.kind === 'charcoal' || c.kind === 'burnt';
+    let out = totalStock() === 0;
+    for (const id of COOKER_IDS) if (out && state.stations[id].pieces.some((pc) => pc.state !== 'burnt')) out = false;
+    const board = state.stations.board;
+    if (board.stacks.length > 0 || board.slicing !== null) out = false;
+    if (state.stations.table.spots.some((sp) => sp !== null)) out = false;
+    if (!carriesOnly(state.player.carrying) || (state.buddy && !carriesOnly(state.buddy.carrying))) out = false;
+    if (out) {
+      state.stock.sausage += 1;
+      emit('tutorial_refill', { kind: 'meat', meat: 'sausage' });
+    }
+    const pc = state.player.carrying;
+    if (state.charcoal === 0 && state.stations.kettle1.fire < C.COLD_UNDER && !(pc !== null && pc.kind === 'charcoal')) {
+      state.charcoal += 1;
+      emit('tutorial_refill', { kind: 'charcoal' });
     }
   }
 
@@ -2618,6 +4232,7 @@ function createSim(saved, seed) {
   // [T 2.3]: checked at the end of tick, interact, openGate, skipTutorial, reset and createSim.
   function checkTutorial() {
     if (!tutRunning()) return;
+    tutorialRefill();
     for (let guard = 0; guard < 4; guard++) {
       const cur = state.tutorial.step;
       if (cur === 'end') {
@@ -2646,6 +4261,12 @@ function createSim(saved, seed) {
     const latched = TUT_LATCHED[state.tutorial.step] === true;
     finishTutorial(true);
     if (state.phase === 'morning') {
+      // W5.2, [S 19.2]: skipping goes straight to the creator (or the week, with a profile).
+      if (state.profile === null) state.loop = 'creator';
+      else {
+        emit('week_start', { year: state.season.year, week: state.season.week });
+        startWeek();
+      }
       emit('save_wanted', { reason: 'tutorial' });
     } else if (state.phase === 'service') {
       if (!latched) state.spawnAt = state.clock < C.GATE_OPENS ? C.GATE_OPENS : state.clock;
@@ -2668,15 +4289,20 @@ function createSim(saved, seed) {
     return out;
   }
 
-  // D9 and K6: always version 3. Service state, state.seats, charm and the tutorial step are never saved.
+  // D9, K6 and W13.2: always version 4. Service state, state.seats, charm, the offers and the
+  // tutorial step are never saved. The season written is the one the next load should open.
   function serialize() {
     const out = { v: C.SAVE_VERSION };
     out.day = clamp(Math.trunc(state.day), 1, C.MAX_DAY);
-    out.cash = clamp(Math.trunc(state.cash), 0, C.MAX_CASH);
+    // W22.5: mid event the deposit is not yet paid; a reload lands on the same week's hub.
+    const inEvent = state.loop === 'prep' || state.loop === 'cook';
+    const cashNow = inEvent ? Math.max(0, state.cash - state.today.deposit) : state.cash;
+    out.cash = clamp(Math.trunc(cashNow), 0, C.MAX_CASH);
     out.rep = clamp(Math.trunc(state.rep), 0, 100);
     out.stock = {};
     for (const m of MEAT_IDS) out.stock[m] = clamp(Math.trunc(state.stock[m]), 0, C.STEPPER_MAX);
-    out.charcoal = clamp(Math.trunc(state.charcoal), 0, C.STEPPER_MAX);
+    out.charcoal = clamp(Math.trunc(state.charcoal), 0, C.CHARCOAL_MAX);
+    out.wood = clamp(Math.trunc(state.wood), 0, C.WOOD_MAX);
     out.gear = {};
     for (const g of GEAR_IDS) out.gear[g] = state.gear[g] === true;
     if (!out.gear.kettle2) out.gear.drum = false;
@@ -2691,24 +4317,73 @@ function createSim(saved, seed) {
     for (const k of STAT_IDS) out.stats[k] = clamp(Math.trunc(state.stats[k]), 0, C.MAX_STAT);
     out.drivewayShown = state.drivewayShown === true;
     out.tutorial = { done: state.tutorial.done === true };
+    const s = state.season;
+    const results = s.results.slice(0, C.SEASON_WEEKS)
+      .map((x) => ({ type: x.type, stars: x.type === 'yard' ? 0 : clamp(Math.trunc(x.stars), 1, 5) }));
+    const week = results.length >= C.SEASON_WEEKS ? C.SEASON_WEEKS : results.length + 1;
+    const live = state.loop === 'week' && week === s.week;
+    out.season = {
+      year: clamp(Math.trunc(s.year), 1, C.YEAR_MAX),
+      week,
+      seed: s.seed >>> 0,
+      pick: live && s.booking !== null ? s.booking.id : null,
+      addon: live ? s.addon : null,
+      weekCash: clamp(Math.trunc(state.loop === 'report' ? state.cash : s.weekCash), 0, C.MAX_CASH),
+      results
+    };
+    out.player = state.profile !== null
+      ? { name: cleanName(state.profile.name, STRINGS.defaultName), look: cleanLook(state.profile.look) }
+      : null;
+    out.pitName = cleanName(state.pitName, STRINGS.defaultPit);
+    out.settings = { length: C.LENGTH_ORDER.includes(state.settings.length) ? state.settings.length : 'normal' };
     return out;
   }
 
   // ---- assemble -----------------------------------------------------------------------------
 
-  fillState(saved && typeof saved === 'object' ? saved : null);
-  beginMorning();
-  checkTutorial();
+  // W13.3: the loop comes from the validated save (deviation 37). The morning roll runs for the
+  // tutorial, the creator and the week; the season end card opens with no roll.
+  const save = saved !== null && typeof saved === 'object' ? validateSave(saved) : null;
+  fillState(save);
+  if (state.tutorial.done === false) {
+    state.loop = 'tutorial';
+    beginMorning('tutorial');
+    checkTutorial();
+  } else if (state.profile === null) {
+    state.loop = 'creator';
+    beginMorning('creator');
+  } else if (state.season.results.length >= C.SEASON_WEEKS) {
+    state.loop = 'seasonEnd';
+    state.phase = 'morning';
+  } else {
+    state.loop = 'week';
+    beginMorning('week');
+    startWeek(state.season.weekCash);
+    // W22.3: the saved pick and add-on come back silently when still legal.
+    const s = state.season;
+    const pick = save.season.pick;
+    const offer = pick !== null ? (s.offers.find((o) => o.id === pick) || null) : null;
+    if (offer !== null) {
+      s.booking = offer;
+      s.addon = save.season.addon !== null && addonLegal(offer, save.season.addon) ? save.season.addon : null;
+      state.cart = prefill();
+    }
+  }
 
   const sim = {
     state,
     seed: seedUsed,
     step, tick, walkTo, move, interact, verbAt, holding, walkable, reach,
-    selectMeat, cycleMeat, buy, hire, sell, cartTotal, canOpen, openGate,
+    selectMeat, cycleMeat, buy, canBuy, hire, sell, cartTotal, canOpen, openGate,
     continueFromTill, continueFromBroke, dismissComingNext, goal, setPaused, reset,
     drainEvents, serialize, rng, expectedCrowd,
     charm, seatBonus, seatCount, repMax, custWalkable,
-    skipTutorial, tutorialStep
+    skipTutorial, tutorialStep,
+    // v3.0 (W5.1)
+    bookOffer, setAddon, railFor, canLoadUp, loadUp, finishReport, startSeason, seasonEndPreview,
+    setPlayer, randomLook, look, setLength, fanThird, offerSlots, coolerCap, inventory, meatRoom,
+    prefill, settle,
+    gateWaiting   // Q-6
   };
   return sim;
 }
@@ -2729,5 +4404,15 @@ PitSim.fireBand = fireBand;
 PitSim.fireMult = fireMult;
 PitSim.tileOwned = tileOwned;
 PitSim.SAVE_KEY = SAVE_KEY;
+// v3.0 (W1): the nine new top level names
+PitSim.BOOKINGS = BOOKINGS;
+PitSim.BOOKING_IDS = BOOKING_IDS;
+PitSim.LOOK_KEYS = LOOK_KEYS;
+PitSim.LOOK_COUNTS = LOOK_COUNTS;
+PitSim.DEFAULT_LOOK = DEFAULT_LOOK;
+PitSim.genOffers = genOffers;
+PitSim.scoreEvent = scoreEvent;
+PitSim.cleanName = cleanName;
+PitSim.filterName = filterName;
 
 })();

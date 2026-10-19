@@ -1,6 +1,6 @@
 'use strict';
 /*
- * games/pit-sim/sprites.js  (Art builder, v2.1)
+ * games/pit-sim/sprites.js  (Art builder, v3.0)
  * Attaches PitSim.art as defined in docs/superpowers/specs/2026-10-18-pit-sim-contract.md,
  * section 3 as amended by the v2 delta D11, with the rules of [V2.10] (palette) and
  * [V2.11] (sprites) of docs/superpowers/specs/2026-10-18-pit-sim-design.md, and for v2.1 the
@@ -9,7 +9,8 @@
  * Deviations
  * - build() pre-renders a mirrored canvas for every frame, plus one tinted font strip per COLOR
  *   key, so draw(..., flip), drawScaled(..., flip) and textTinted() never create a canvas
- *   outside build() and canvasFor() (section 3.1 keeps DOM use to those two).
+ *   outside build() and canvasFor() (section 3.1 keeps DOM use to those two; v3.0 W16.3 adds
+ *   setLook() and uiText(), which make canvases too).
  * - textTinted() with a colorKey that is not in COLOR throws an Error naming it, the same way
  *   draw() treats an unknown sprite name. drawScaled() with w or h under 1 draws nothing.
  * - drawScaled() saves and restores ctx.imageSmoothingEnabled around its one drawImage call.
@@ -32,16 +33,49 @@
  *   frame's sack slumps four rows so the four frames read apart at a glance.
  *   Piece frame 4 also paints the inner shade cells outline brown and the light cells done red, so
  *   the char reads along the bottom right as well; bones and the brisket fat cap stay cream.
+ * - v3.0 (2026-10-18, night, contract docs/superpowers/specs/2026-10-18-pit-sim-v3-0-contract.md
+ *   W16): palette 36 (w x y z skin tones), legend 0-9 a-z; font gains ' and - (42 frames); sign is
+ *   62x12 with posts at x 7 and 53; new font_s (3x5, 42), ev_birthday, ev_picnic, ev_yard,
+ *   ev_finale, star, flame, check. 123 names, 334 frames. The pitmaster is composed from a Look
+ *   (W16.4): setLook(), lookKey(), LOOK, plus textWidthS(), textFit() and uiText().
+ *   v3.0 deviations, all inside the art's own freedom:
+ *   - Hair shade G is not in the W16.4 swap table (H and J only). The player's G is derived from the
+ *     hair color inside this file (HAIR_SHADE: 1 1 5 6 r t), so blond and gray hair get a brown and
+ *     a steel shade instead of v2's near black. art.LOOK still holds exactly the W16.4 tables.
+ *   - Hat templates use the authoring symbol K for "keep the head's pixel" on rows the hat does not
+ *     cover (the bandana keeps row 5, so the hair style shows under the band). Cap and cowboy hat
+ *     replace rows 0 to 5 outright, as W16.4 says.
+ *   - Every hair template ends its bangs with a stippled G fringe on row 5, so hair reads apart
+ *     from a skin tone of the same lightness (blond on skin tone 3). With a cap or cowboy hat on,
+ *     rows 0 to 5 are the hat's, so the default pitmaster's head is v2's pixel for pixel; only
+ *     the apron differs (red, W4.3). The buddy, tender and customers are unchanged.
+ *   - The mustache sits on row 10 with the mouth moved to row 11 as a toothy grin (G corners,
+ *     white teeth), so it reads as a mustache over a smile rather than a second mouth.
+ *   - Curly hair puffs out one column past the head outline (columns 1 and 14); a cap or cowboy
+ *     hat still sits on rows 0 to 5 and the puffs show below the brim.
+ *   - The side view glasses carry a one pixel arm back to the ear (columns 6 and 7, row 8) and the
+ *     side beard runs along the jaw to column 9; both sit outside the 4 by 5 side patch of W16.4,
+ *     which alone read as a monocle and a goatee at 2x.
+ * - Playtest round 3 (2026-10-19, contract W26, Overseer's calls):
+ *   - Q-1. The Blue apron (index 3, cloth f and clothD g) is the shirt's own two colors, so it
+ *     vanished. The palette is full (36 entries, lowercase legend only, W21 item 13), so lookMap
+ *     paints the shirt cream (T 3, V white h, U paverD a) when the Blue apron is on; every other
+ *     apron keeps the blue shirt (T g, V f, U t). art.LOOK's apron row is unchanged for Blue.
+ *   - Q-2. The Charcoal apron's body is smokeD v (was steelD t), so it can never merge with the
+ *     shirt's shade column U t; its shade stays U 2.
+ *   - uiText() rounds scale * dpr to a whole number of device pixels per font pixel (at least 1),
+ *     so a fractional dpr (Android 2.625) still lands every font pixel on the device grid.
  * Nothing else is added to the shared surface: PitSim.art only.
  *
- * LEGEND (D11): one character per pixel, the palette index in base 32.
+ * LEGEND (W16.1): one character per pixel, the palette index in base 36, lowercase only.
  *   0 transparent   1 K #1b1714       2 U #2a2015       3 C #E6D8B8       4 O #D06129
  *   5 outline       6 woodD           7 woodM           8 woodL           9 paver
  *   a paverD        b lawnA           c lawnB           d leafD           e leafL
  *   f cloth         g clothD          h white           i pink            j magenta
  *   k yellow        l skinL           m skinM           n skinD           o red
  *   p raw           q cooking         r done            s steelL          t steelD
- *   u smokeL        v smokeD
+ *   u smokeL        v smokeD          w skinPale        x skinTan         y skinTanD
+ *   z skinDeep
  *
  * Authoring: grids below are written in those characters plus '.' for transparent. Some
  * templates use uppercase symbols (people, meat, fire cells, font) that paint() swaps for
@@ -87,12 +121,17 @@ const PALETTE = Object.freeze([
   '#9aa4ae', //  s steelL
   '#4d5560', //  t steelD
   '#ddd8cf', //  u smokeL
-  '#6e6863'  //  v smokeD
+  '#6e6863', //  v smokeD
+  '#f7d9c4', //  w skinPale (v3.0)
+  '#b87a4b', //  x skinTan
+  '#714227', //  y skinTanD
+  '#5f3a25'  //  z skinDeep
 ]);
-const CHARS = '0123456789abcdefghijklmnopqrstuv';
+const CHARS = '0123456789abcdefghijklmnopqrstuvwxyz';
 const KEYS = ['', 'K', 'U', 'C', 'O', 'outline', 'woodD', 'woodM', 'woodL', 'paver', 'paverD',
   'lawnA', 'lawnB', 'leafD', 'leafL', 'cloth', 'clothD', 'white', 'pink', 'magenta', 'yellow',
-  'skinL', 'skinM', 'skinD', 'red', 'raw', 'cooking', 'done', 'steelL', 'steelD', 'smokeL', 'smokeD'];
+  'skinL', 'skinM', 'skinD', 'red', 'raw', 'cooking', 'done', 'steelL', 'steelD', 'smokeL', 'smokeD',
+  'skinPale', 'skinTan', 'skinTanD', 'skinDeep'];
 const COLOR = {};
 for (let i = 1; i < KEYS.length; i++) COLOR[KEYS[i]] = PALETTE[i];
 Object.freeze(COLOR);
@@ -355,6 +394,304 @@ const HAT = {
   }
 };
 
+/* ---------------------------------------------- the pitmaster's look (v3.0, contract W16.4) */
+/*
+ * Six hair templates per facing (16 wide, head rows 0 to 12), three hats per facing (rows 0 to 5),
+ * four face options. Only the player is built from these; HEAD and HAT above stay the buddy's,
+ * the tender's and the customers' (untouched in v3.0). Short and long are v2's, with a stippled G
+ * fringe on row 5 (see Deviations). Hat symbol K keeps the head's own pixel.
+ */
+const LOOK_HEAD = {
+  short: {
+    down: [
+      '................',
+      '....OOOOOOOO....',
+      '...OJJHHHHHHO...',
+      '..OJHHHHHHHHGO..',
+      '..OHHHHHHHHHGO..',
+      '..OHGHHGHHGHGO..',
+      '..OHSSSSSSSSGO..',
+      '..OSSSSSSSSSRO..',
+      '..OSWESSSSEWRO..',
+      '..OSSESSSSESRO..',
+      '..OSPSSMMSSPRO..',
+      '...ORSSSSSSRO...',
+      '....OOOOOOOO....'
+    ],
+    up: HEAD.short.up,
+    side: [
+      '................',
+      '....OOOOOOOO....',
+      '...OJJHHHHHHO...',
+      '..OJHHHHHHHHGO..',
+      '..OHHHHHHHHHGO..',
+      '..OHGHGHHHHHGO..',
+      '..OSSSSSHHHHGO..',
+      '..OSSSSSSHHHGO..',
+      '..OWESSSSSHHGO..',
+      '.OSSESSSRSHHGO..',
+      '..OMSSSSSSSGGO..',
+      '...OSSSSSSRRO...',
+      '....OOOOOOOO....'
+    ]
+  },
+  curly: {
+    down: [
+      '....OO.OO.OO....',
+      '...OJJOJHOHHO...',
+      '..OJHHJHHHJHHO..',
+      '.OJHHHHHJHHHHGO.',
+      '.OHHJHHHHHHJHGO.',
+      '.OHGHHGHHGHHGGO.',
+      '.OHHSSSSSSSSHGO.',
+      '.OHGSSSSSSSSGHO.',
+      '.OGHSSSSSSSSHGO.',
+      '..OHSSSSSSSSGO..',
+      '..OSSSSSSSSSRO..',
+      '...ORSSSSSSRO...',
+      '....OOOOOOOO....'
+    ],
+    up: [
+      '....OO.OO.OO....',
+      '...OJJOJHOHHO...',
+      '..OJHHJHHHJHHO..',
+      '.OJHHHHHJHHHHGO.',
+      '.OHHJHHHHHHJHGO.',
+      '.OHGHHGHHGHHGGO.',
+      '.OHHJHHHHJHHHGO.',
+      '.OHGHHGHHHGHGGO.',
+      '.OHHHHHHJHHHHGO.',
+      '..OGHHGHHHGHGO..',
+      '..OHHHHHHHHGGO..',
+      '...OGHHGHHGGO...',
+      '....OOSSSSOO....'
+    ],
+    side: [
+      '....OO.OO.OO....',
+      '...OJJOJHOHHO...',
+      '..OJHHJHHHJHHO..',
+      '.OJHHHHHJHHHHGO.',
+      '.OHHJHHHHHHJHGO.',
+      '.OHGHGHHHGHHGGO.',
+      '..OSSSSSHHJHHGO.',
+      '..OSSSSSSHHHGHO.',
+      '..OWESSSSSHJHGO.',
+      '.OSSESSSRSHHGGO.',
+      '..OMSSSSSSHGHO..',
+      '...OSSSSSSRGO...',
+      '....OOOOOOOO....'
+    ]
+  },
+  long: {
+    down: [
+      '................',
+      '....OOOOOOOO....',
+      '...OJJHHHHHHO...',
+      '..OJHHHHHHHHGO..',
+      '..OHHHHHHHHHGO..',
+      '..OHGHHGHHGHGO..',
+      '..OHSSSSSSSSGO..',
+      '..OHSSSSSSSSGO..',
+      '..OHWESSSSEWGO..',
+      '..OHSESSSSESGO..',
+      '..OHPSSMMSSPGO..',
+      '..OHRSSSSSSRGO..',
+      '..OHOOOOOOOOGO..'
+    ],
+    up: HEAD.long.up,
+    side: [
+      '................',
+      '....OOOOOOOO....',
+      '...OJJHHHHHHO...',
+      '..OJHHHHHHHHGO..',
+      '..OHHHHHHHHHGO..',
+      '..OHGHGHHHHHGO..',
+      '..OSSSSSHHHHGO..',
+      '..OSSSSSSHHHGO..',
+      '..OWESSSSSHHGO..',
+      '.OSSESSSRSHHGO..',
+      '..OMSSSSSHHHGO..',
+      '...OSSSSSHHGO...',
+      '....OOOOOHHGO...'
+    ]
+  },
+  buzz: {
+    down: [
+      '................',
+      '....OOOOOOOO....',
+      '...OHJHJHHHHO...',
+      '..OJHJHHHHHHGO..',
+      '..OHHHHHHHHGGO..',
+      '..OGSGSGSGSGRO..',
+      '..OJSSSSSSSSJO..',
+      '..OSSSSSSSSSRO..',
+      '..OSWESSSSEWRO..',
+      '..OSSESSSSESRO..',
+      '..OSPSSMMSSPRO..',
+      '...ORSSSSSSRO...',
+      '....OOOOOOOO....'
+    ],
+    up: [
+      '................',
+      '....OOOOOOOO....',
+      '...OHJHJHHHHO...',
+      '..OJHJHHHHHHGO..',
+      '..OHHHHHHHHHGO..',
+      '..OHHHHHHHHHGO..',
+      '..OHHHHHHHHGGO..',
+      '..OHJHHJHHHGGO..',
+      '..OSHHHHHHHGRO..',
+      '..OSGSGSGSGSRO..',
+      '..OSSSSSSSSRRO..',
+      '...ORSSSSSSRO...',
+      '....OOSSSSOO....'
+    ],
+    side: [
+      '................',
+      '....OOOOOOOO....',
+      '...OHJHJHHHHO...',
+      '..OJHJHHHHHHGO..',
+      '..OHHHHHHHHHGO..',
+      '..OGSGSGHHHHGO..',
+      '..OSSSSSSHHHGO..',
+      '..OSSSSSSSJHGO..',
+      '..OWESSSSSSJRO..',
+      '.OSSESSSRSSSRO..',
+      '..OMSSSSSSSSRO..',
+      '...OSSSSSSRRO...',
+      '....OOOOOOOO....'
+    ]
+  },
+  bun: {
+    down: [
+      '......OOOO......',
+      '....OOJHHGOO....',
+      '...OJJGGGGHHO...',
+      '..OJHHHHHHHHGO..',
+      '..OHHHHHHHHHGO..',
+      '..OHGHHGHHGHGO..',
+      '..OHSSSSSSSSGO..',
+      '..OHSSSSSSSSGO..',
+      '..OSWESSSSEWRO..',
+      '..OSSESSSSESRO..',
+      '..OSPSSMMSSPRO..',
+      '...ORSSSSSSRO...',
+      '....OOOOOOOO....'
+    ],
+    up: [
+      '................',
+      '....OOOOOOOO....',
+      '...OJJHHHHHHO...',
+      '..OJHHHHHHHHGO..',
+      '..OHHHHHHHHHGO..',
+      '..OHHHHOOHHHGO..',
+      '..OHHHOJHOHHGO..',
+      '..OHHOJHHGOHGO..',
+      '..OHHOHHGGOHGO..',
+      '..OSHHOOOOHGRO..',
+      '..OSHHHHHHGGRO..',
+      '...OGHHHHHGGO...',
+      '....OOSSSSOO....'
+    ],
+    side: [
+      '................',
+      '....OOOOOOOO....',
+      '...OJJHHHHHHO...',
+      '..OJHHHHHHHHGO..',
+      '..OHHHHHHHHHGO..',
+      '..OHGHGHHHHHGOO.',
+      '..OSSSSSHHHHGJHO',
+      '..OSSSSSSHHHGHGO',
+      '..OWESSSSSHHGOO.',
+      '.OSSESSSRSHHGO..',
+      '..OMSSSSSSSGGO..',
+      '...OSSSSSSRRO...',
+      '....OOOOOOOO....'
+    ]
+  },
+  bald: {
+    down: [
+      '................',
+      '....OOOOOOOO....',
+      '...OSWWSSSSSO...',
+      '..OSWSSSSSSSRO..',
+      '..OSSSSSSSSSRO..',
+      '..OSSSSSSSSSRO..',
+      '..OSSSSSSSSSRO..',
+      '..OSSSSSSSSSRO..',
+      '.OSSWESSSSEWRRO.',
+      '.ORSSESSSSESRRO.',
+      '..OSPSSMMSSPRO..',
+      '...ORSSSSSSRO...',
+      '....OOOOOOOO....'
+    ],
+    up: [
+      '................',
+      '....OOOOOOOO....',
+      '...OSWWSSSSSO...',
+      '..OSWSSSSSSSRO..',
+      '..OSSSSSSSSSRO..',
+      '..OSSSSSSSSSRO..',
+      '..OSSSSSSSSSRO..',
+      '..OSSSSSSSSRRO..',
+      '.OSSSSSSSSSSRRO.',
+      '.ORSSSSSSSSRRRO.',
+      '..OSSSSSSSSRRO..',
+      '...ORSSSSSRRO...',
+      '....OOSSSSOO....'
+    ],
+    side: [
+      '................',
+      '....OOOOOOOO....',
+      '...OSWWSSSSSO...',
+      '..OSWSSSSSSSRO..',
+      '..OSSSSSSSSSRO..',
+      '..OSSSSSSSSSRO..',
+      '..OSSSSSSSSSRO..',
+      '..OSSSSSSSSSRO..',
+      '..OWESSSSOOSRO..',
+      '.OSSESSSOSRSRO..',
+      '..OMSSSSSOOSRO..',
+      '...OSSSSSSRRO...',
+      '....OOOOOOOO....'
+    ]
+  }
+};
+
+// Hats, rows 0 to 5 by facing. cap and cowboy are v2's cap and wide hat; the bandana is a cloth
+// band over rows 1 to 4 with white dots, knotted at the back (tails out on the right when the
+// pitmaster faces down or left, centered when he faces away). K keeps the head's pixel.
+const LOOK_HAT = {
+  cap: HAT.cap,
+  cowboy: HAT.wide,
+  bandana: {
+    down: ['................', '....OOOOOOOO....', '...OFCCCCFCCO...', '..OCCFCCCCCFDOO.', '..ODDDDDDDDDDCDO', 'KKKKKKKKKKKKKODO'],
+    up:   ['................', '....OOOOOOOO....', '...OFCCCCFCCO...', '..OCCFCCCCCFDO..', '..ODDDDOODDDDO..', 'KKKKKKOCDOKKKKKK'],
+    side: ['................', '....OOOOOOOO....', '...OFCCCCFCCO...', '..OCCFCCCCCFDOO.', '..ODDDDDDDDDDCDO', 'KKKKKKKKKKKKKODO']
+  }
+};
+const HAT_IDS = [null, 'cap', 'cowboy', 'bandana'];
+
+// Face patches ('.' keeps): down head columns 4 to 11, side head from column 2, rows 7 to 11.
+const LOOK_FACE = {
+  none: null,
+  mustache: {
+    down: { 10: '.GHJJHG.', 11: '..GWWG..' },
+    side: { 10: 'OHHG', 11: '..M.' }
+  },
+  beard: {
+    down: { 9: 'H......G', 10: 'HJHHHHHG', 11: 'GHHMMHGG' },
+    side: { 9: '....', 10: 'OHHHHHHG', 11: '.OHMHHGG' }
+  },
+  glasses: {
+    down: { 7: '111..111', 8: 'sE1111Es', 9: 'sE1..1Es' },
+    side: { 7: '.111', 8: '1sE111', 9: '.sE1' }
+  }
+};
+
+// Hair shade G by hair color index (not in the W16.4 table; see Deviations).
+const HAIR_SHADE = ['1', '1', '5', '6', 'r', 't'];
+
 // Torso rows 13 to 18 by facing; arms swing a little on the walk frames.
 const TORSO = {
   down: [
@@ -427,9 +764,6 @@ function paintPerson(cfg, rows) {
 }
 
 const PEOPLE = {
-  player: { hair: 'short', hat: 'cap', map: { O: '5', H: '5', J: '6', G: '1', C: '4', F: '8', D: 'r',
-    S: 'l', R: 'm', P: 'i', M: 'n', E: '1', W: 'h', T: 'g', V: 'f', U: 't', A: '3', B: 'a',
-    L: '6', N: '5', Z: '1', X: 's', Y: 'h' } },
   buddy: { hair: 'short', hat: 'cap', map: { O: '5', H: '6', J: '7', G: '5', C: 'k', F: 'h', D: '8',
     S: 'm', R: 'n', P: 'q', M: 'n', E: '1', W: 'h', T: 'f', V: 'h', U: 'g', A: 'f', B: 'g',
     L: 't', N: '1', Z: '5' } },
@@ -491,10 +825,98 @@ function custSet(id) {
   return out;
 }
 
+/* ------------------------------------------------ the look compositor (v3.0, W16.3, W16.4) */
+
+const LOOK_KEYS = ['skin', 'hair', 'hairColor', 'face', 'hat', 'apron'];
+const DEFAULT_LOOK = Object.freeze({ skin: 1, hair: 0, hairColor: 1, face: 0, hat: 1, apron: 0 });
+function freezeAll(list) { return Object.freeze(list.map(function (o) { return o && typeof o === 'object' ? Object.freeze(o) : o; })); }
+// Exactly the W16.4 tables, in mock order.
+const LOOK = Object.freeze({
+  skin: freezeAll([{ S: 'w', R: 'l', M: 'm', P: 'i' }, { S: 'l', R: 'm', M: 'n', P: 'i' }, { S: 'm', R: '7', M: 'n', P: 'q' },
+    { S: 'x', R: 'n', M: '5', P: 'q' }, { S: 'n', R: 'y', M: '5', P: 'r' }, { S: 'z', R: '5', M: '1', P: 'r' }]),
+  hairColor: freezeAll([{ H: '2', J: '5' }, { H: '5', J: '6' }, { H: 'r', J: 'q' }, { H: '8', J: '9' }, { H: '4', J: '8' }, { H: 's', J: 'u' }]),
+  apron: freezeAll([{ A: 'o', B: 'r' }, { A: '4', B: 'r' }, { A: 'c', B: 'd' }, { A: 'f', B: 'g' }, { A: 'v', B: '2' }, { A: 'i', B: 'j' }]),
+  hat: freezeAll([null, { C: '4', F: '8', D: 'r' }, { C: '7', F: '8', D: '6' }, { C: 'o', F: 'h', D: 'r' }]),
+  hair: Object.freeze(['short', 'curly', 'long', 'buzz', 'bun', 'bald']),
+  face: Object.freeze(['none', 'mustache', 'beard', 'glasses'])
+});
+const LOOK_COUNT = { skin: 6, hair: 6, hairColor: 6, face: 4, hat: 4, apron: 6 };
+
+// Any input to a valid look: a bad or missing index falls back to the default for that key.
+function normLook(look) {
+  const out = {};
+  const src = look && typeof look === 'object' ? look : {};
+  LOOK_KEYS.forEach(function (k) {
+    let v;
+    try { v = src[k]; } catch (e) { v = undefined; }
+    out[k] = (typeof v === 'number' && Number.isInteger(v) && v >= 0 && v < LOOK_COUNT[k]) ? v : DEFAULT_LOOK[k];
+  });
+  return out;
+}
+
+// Overlay a patch row: '.' keeps the row's own pixel.
+function overlay(row, at, str) {
+  let out = row.slice(0, at);
+  for (let i = 0; i < str.length; i++) out += str[i] === '.' ? row[at + i] : str[i];
+  return out + row.slice(at + str.length);
+}
+
+// Q-1 (round 3): the shirt under each apron. The Blue apron is the blue shirt's own colors, so with
+// it the shirt goes cream; every other apron keeps v2's blue shirt.
+const SHIRT_BLUE = Object.freeze({ T: 'g', V: 'f', U: 't' });
+const SHIRT_CREAM = Object.freeze({ T: '3', V: 'h', U: 'a' });
+const APRON_BLUE = 3;
+
+// The player's symbol map for a look: the v2 map with the four swap tables applied.
+function lookMap(L) {
+  const sk = LOOK.skin[L.skin], hc = LOOK.hairColor[L.hairColor], ap = LOOK.apron[L.apron], ht = LOOK.hat[L.hat];
+  const sh = L.apron === APRON_BLUE ? SHIRT_CREAM : SHIRT_BLUE;
+  return {
+    O: '5', H: hc.H, J: hc.J, G: HAIR_SHADE[L.hairColor],
+    C: ht ? ht.C : '0', F: ht ? ht.F : '0', D: ht ? ht.D : '0',
+    S: sk.S, R: sk.R, P: sk.P, M: sk.M, E: '1', W: 'h',
+    T: sh.T, V: sh.V, U: sh.U, A: ap.A, B: ap.B, L: '6', N: '5', Z: '1', X: 's', Y: 'h'
+  };
+}
+
+// One 16x24 pitmaster in symbols. Order (W16.4): hair, hat rows, face expression (v2 happy),
+// face patch, then torso and legs.
+function lookRows(L, dir, frame) {
+  const head = LOOK_HEAD[LOOK.hair[L.hair]][dir].slice();
+  const hatId = HAT_IDS[L.hat];
+  if (hatId) {
+    const top = LOOK_HAT[hatId][dir];
+    for (let i = 0; i < top.length; i++) {
+      let r = '';
+      for (let x = 0; x < 16; x++) r += top[i][x] === 'K' ? head[i][x] : top[i][x];
+      head[i] = r;
+    }
+  }
+  if (dir === 'down') Object.keys(FACE.happy).forEach(function (k) { head[k] = splice(head[k], 4, FACE.happy[k]); });
+  const face = LOOK_FACE[LOOK.face[L.face]];
+  if (face && face[dir]) {
+    const at = dir === 'down' ? 4 : 2;
+    Object.keys(face[dir]).forEach(function (k) { head[k] = overlay(head[k], at, face[dir][k]); });
+  }
+  const torso = TORSO[dir][frame];
+  const legs = dir === 'side' ? LEGS.side[frame] : LEGS.front[frame];
+  return head.concat(torso, legs);
+}
+
+function lookPerson(L, dir, frame) { return paint(lookRows(L, dir, frame), lookMap(L)); }
+
+// The four player sprites for a look: { player_down, player_up, player_side, player_slice }.
+function playerFrames(L) {
+  const out = {};
+  ['down', 'up', 'side'].forEach(function (dir) {
+    out['player_' + dir] = [lookPerson(L, dir, 0), lookPerson(L, dir, 1), lookPerson(L, dir, 2)];
+  });
+  out.player_slice = sliceFrames(lookRows(L, 'down', 0), lookMap(L));
+  return out;
+}
+
 // The pitmaster slicing, any facing: knife raised, then knife down on the board.
-function playerSlice() {
-  const cfg = PEOPLE.player;
-  const base = personRows(cfg, 'down', 0, 'happy');
+function sliceFrames(base, map) {
   const up = stamp(patch(base, { 17: splice(base[17], 12, 'U') }), [
     '..............Y.',
     '..............X.',
@@ -512,7 +934,7 @@ function playerSlice() {
     '............SSO.',
     '............OXXY'
   ], 0, 16);
-  return [paintPerson(cfg, up), paintPerson(cfg, down)];
+  return [paint(up, map), paint(down, map)];
 }
 
 // Soft shadow under people: a checker ellipse in dark brown.
@@ -1220,16 +1642,17 @@ function shedRows() {
   return g.done();
 }
 
-// The yard sign: umber board, orange border; YOUR PIT is drawn on it by game.js.
+// The yard sign (v3.0, W16.2): umber board, orange border, 62 wide, posts at x 7 and 53. The pit
+// name is drawn on it by game.js through textFit (text area x 2 to 59, rows 3 to 8).
 function signRows() {
-  const g = new Grid(44, 12, '0');
-  g.rect(0, 0, 44, 10, '5');
-  g.rect(1, 1, 42, 8, '4');
-  g.rect(2, 2, 40, 7, '2');
-  g.rect(1, 9, 42, 1, '4');
-  g.rect(2, 2, 40, 1, '1');
-  g.rect(5, 10, 2, 2, '6'); g.rect(37, 10, 2, 2, '6');
-  g.set(5, 10, '5'); g.set(37, 10, '5');
+  const g = new Grid(62, 12, '0');
+  g.rect(0, 0, 62, 10, '5');
+  g.rect(1, 1, 60, 8, '4');
+  g.rect(2, 2, 58, 7, '2');
+  g.rect(1, 9, 60, 1, '4');
+  g.rect(2, 2, 58, 1, '1');
+  g.rect(7, 10, 2, 2, '6'); g.rect(53, 10, 2, 2, '6');
+  g.set(7, 10, '5'); g.set(53, 10, '5');
   return g.done();
 }
 
@@ -1586,7 +2009,7 @@ function zFrame(spots) {
 }
 const ZZZ = [zFrame([[2, 4]]), zFrame([[0, 4], [4, 1]]), zFrame([[0, 5], [3, 2], [5, -1]])];
 
-// 4x6 glyphs: 0 to 9, A to Z, +, :, and (v2.1) . and ,
+// 4x6 glyphs: 0 to 9, A to Z, +, :, (v2.1) . and , and (v3.0) ' and -
 const FONT_GLYPHS = [
   ['.##.', '#..#', '#.##', '##.#', '#..#', '.##.'],   // 0 (slashed, so it never reads as O)
   ['.#..', '##..', '.#..', '.#..', '.#..', '###.'],   // 1
@@ -1627,9 +2050,58 @@ const FONT_GLYPHS = [
   ['....', '.#..', '###.', '.#..', '....', '....'],   // +
   ['....', '.#..', '....', '....', '.#..', '....'],   // :
   ['....', '....', '....', '....', '....', '.#..'],   // . (v2.1)
-  ['....', '....', '....', '....', '.#..', '#...']    // , (v2.1)
+  ['....', '....', '....', '....', '.#..', '#...'],   // , (v2.1)
+  ['.#..', '.#..', '....', '....', '....', '....'],   // ' (v3.0)
+  ['....', '....', '###.', '....', '....', '....']    // - (v3.0)
 ];
 const FONT_MAP = { '#': '3' };
+
+// v3.0 font_s, 3x5, the same index mapping as font: 0 to 9, A to Z, + : . , ' -. The zero is a
+// narrow oval so it never reads as the square O.
+const FONT_S_GLYPHS = [
+  ['.#.', '#.#', '#.#', '#.#', '.#.'],   // 0
+  ['.#.', '##.', '.#.', '.#.', '###'],   // 1
+  ['##.', '..#', '.#.', '#..', '###'],   // 2
+  ['##.', '..#', '.#.', '..#', '##.'],   // 3
+  ['#.#', '#.#', '###', '..#', '..#'],   // 4
+  ['###', '#..', '##.', '..#', '##.'],   // 5
+  ['.##', '#..', '###', '#.#', '###'],   // 6
+  ['###', '..#', '.#.', '.#.', '.#.'],   // 7
+  ['###', '#.#', '###', '#.#', '###'],   // 8
+  ['###', '#.#', '###', '..#', '##.'],   // 9
+  ['.#.', '#.#', '###', '#.#', '#.#'],   // A
+  ['##.', '#.#', '##.', '#.#', '##.'],   // B
+  ['.##', '#..', '#..', '#..', '.##'],   // C
+  ['##.', '#.#', '#.#', '#.#', '##.'],   // D
+  ['###', '#..', '##.', '#..', '###'],   // E
+  ['###', '#..', '##.', '#..', '#..'],   // F
+  ['.##', '#..', '#.#', '#.#', '.##'],   // G
+  ['#.#', '#.#', '###', '#.#', '#.#'],   // H
+  ['###', '.#.', '.#.', '.#.', '###'],   // I
+  ['..#', '..#', '..#', '#.#', '.#.'],   // J
+  ['#.#', '#.#', '##.', '#.#', '#.#'],   // K
+  ['#..', '#..', '#..', '#..', '###'],   // L
+  ['#.#', '###', '###', '#.#', '#.#'],   // M
+  ['##.', '#.#', '#.#', '#.#', '#.#'],   // N
+  ['###', '#.#', '#.#', '#.#', '###'],   // O
+  ['##.', '#.#', '##.', '#..', '#..'],   // P
+  ['.#.', '#.#', '#.#', '##.', '.##'],   // Q
+  ['##.', '#.#', '##.', '#.#', '#.#'],   // R
+  ['.##', '#..', '.#.', '..#', '##.'],   // S
+  ['###', '.#.', '.#.', '.#.', '.#.'],   // T
+  ['#.#', '#.#', '#.#', '#.#', '###'],   // U
+  ['#.#', '#.#', '#.#', '#.#', '.#.'],   // V
+  ['#.#', '#.#', '###', '###', '#.#'],   // W
+  ['#.#', '#.#', '.#.', '#.#', '#.#'],   // X
+  ['#.#', '#.#', '.#.', '.#.', '.#.'],   // Y
+  ['###', '..#', '.#.', '#..', '###'],   // Z
+  ['...', '.#.', '###', '.#.', '...'],   // +
+  ['...', '.#.', '...', '.#.', '...'],   // :
+  ['...', '...', '...', '...', '.#.'],   // .
+  ['...', '...', '...', '.#.', '#..'],   // ,
+  ['.#.', '.#.', '...', '...', '...'],   // '
+  ['...', '...', '###', '...', '...']    // -
+];
 
 function glyphIndex(ch) {
   const c = ch.charCodeAt(0);
@@ -1639,18 +2111,110 @@ function glyphIndex(ch) {
   if (ch === ':') return 37;
   if (ch === '.') return 38;
   if (ch === ',') return 39;
+  if (ch === "'") return 40;
+  if (ch === '-') return 41;
   return -1;
 }
 
-/* ------------------------------------------------------------------ the set (K9, 115 names, 281 frames) */
+/* ------------------------------------------------------------------ v3.0 icons (W16.2) */
+
+// Event icons, 16x16, light from the top left, outline brown all round.
+function evBirthday() {
+  const g = new Grid(16, 16, '0');
+  [3, 7, 11].forEach(function (x, i) {                          // candles, striped, with flames
+    for (let y = 3; y <= 6; y++) g.set(x, y, (y + i) % 2 === 0 ? 'h' : (i === 1 ? 'i' : 'f'));
+    g.set(x, 1, '4'); g.set(x, 2, 'k');
+  });
+  g.rect(1, 7, 13, 2, 'h');                                     // frosting top
+  g.rect(1, 9, 13, 5, 'i');                                     // cake
+  g.rect(12, 9, 2, 5, 'j'); g.rect(1, 13, 13, 1, 'j');           // shade right and under
+  g.rect(1, 11, 13, 1, '3'); g.rect(12, 11, 2, 1, 'a');          // cream filling
+  [[2, 9], [2, 10], [5, 9], [8, 9], [8, 10], [11, 9]].forEach(function (p) { g.set(p[0], p[1], 'h'); });   // drips
+  g.set(5, 7, 'k'); g.set(9, 8, 'f'); g.set(2, 8, 'o'); g.set(12, 7, 'k');    // sprinkles
+  g.rect(0, 14, 15, 1, 's'); g.set(0, 14, 'h'); g.set(1, 14, 'h'); g.rect(12, 14, 3, 1, 't');   // plate
+  g.outline('5');
+  return g.done();
+}
+
+function evPicnic() {
+  const g = new Grid(16, 16, '0');
+  for (let y = 5; y <= 7; y++) {                               // gingham cloth over the rim
+    for (let x = 2; x <= 13; x++) {
+      const a = (x >> 1) % 2, b = y % 2;
+      g.set(x, y, a && b ? 'r' : (a || b ? 'o' : 'h'));
+    }
+  }
+  g.set(1, 7, 'o'); g.set(1, 8, 'h'); g.set(14, 6, 'h'); g.set(14, 7, 'o');   // cloth corners
+  g.rect(2, 8, 12, 1, '6');                                     // rim
+  for (let y = 9; y <= 12; y++) {                              // woven body
+    for (let x = 2; x <= 13; x++) g.set(x, y, ((x + (y % 2) * 2) % 4) < 2 ? '8' : '7');
+  }
+  g.rect(13, 9, 1, 4, '6');
+  g.rect(3, 13, 10, 1, '6');                                    // base
+  [[5, 8, 6], [6, 9, 4], [7, 10, 2]].forEach(function (f) {     // the cloth's flap over the front
+    for (let x = f[0]; x < f[0] + f[2]; x++) g.set(x, f[1], ((x >> 1) + f[1]) % 2 ? 'o' : 'h');
+  });
+  g.outline('5');
+  // The handle: a one pixel wood arch with a dark outer edge, the inside left clear.
+  [[6, 1], [7, 1], [8, 1], [9, 1], [5, 2], [10, 2], [4, 3], [11, 3], [4, 4], [11, 4]].forEach(function (p) { g.set(p[0], p[1], p[0] < 8 ? '8' : '7'); });
+  [[6, 0], [7, 0], [8, 0], [9, 0], [5, 1], [10, 1], [4, 2], [11, 2], [3, 3], [12, 3], [3, 4], [12, 4]].forEach(function (p) { g.set(p[0], p[1], '5'); });
+  return g.done();
+}
+
+function evYard() {
+  const g = new Grid(16, 16, '0');
+  g.rect(10, 1, 2, 3, '6'); g.set(10, 1, '7');                  // chimney
+  for (let y = 2; y <= 6; y++) {                               // roof
+    const half = y + 1;
+    for (let x = 8 - half; x < 8 + half; x++) g.set(x, y, x < 8 - half + 1 ? 'p' : (x >= 8 + half - 2 ? 'r' : 'o'));
+  }
+  g.rect(2, 7, 12, 1, 'r');                                     // eave shadow
+  g.rect(3, 8, 10, 5, '3'); g.rect(12, 8, 1, 5, 'a');           // walls
+  g.rect(7, 9, 2, 4, '6'); g.set(7, 9, '7'); g.set(8, 11, 'k');  // door
+  g.rect(4, 9, 2, 2, 'f'); g.set(4, 9, 'h');                    // windows
+  g.rect(10, 9, 2, 2, 'f'); g.set(10, 9, 'h');
+  g.rect(1, 13, 14, 2, 'b'); g.rect(1, 14, 14, 1, 'c');         // lawn
+  g.set(2, 13, 'e'); g.set(13, 13, 'e');
+  g.outline('5');
+  return g.done();
+}
+
+function evFinale() {
+  const g = new Grid(16, 16, '0');
+  g.rect(3, 1, 10, 2, 'k');                                     // cup
+  g.rect(4, 3, 8, 3, 'k');
+  g.rect(5, 6, 6, 1, 'k');
+  g.rect(6, 7, 4, 1, 'k');
+  g.rect(4, 1, 1, 4, 'h'); g.set(5, 1, 'h');                    // glint
+  g.rect(11, 1, 2, 2, '8'); g.rect(10, 3, 2, 3, '8'); g.set(9, 6, '8'); g.set(9, 7, '8');   // shade
+  g.rect(1, 2, 1, 3, 'k'); g.set(2, 2, 'k'); g.set(2, 5, 'k');  // handles
+  g.rect(14, 2, 1, 3, '8'); g.set(13, 2, '8'); g.set(13, 5, '8');
+  g.rect(7, 8, 2, 3, 'k'); g.set(8, 8, '8'); g.set(8, 9, '8'); g.set(8, 10, '8');   // stem
+  g.rect(5, 11, 6, 1, 'k'); g.rect(9, 11, 2, 1, '8');            // collar
+  g.rect(4, 12, 8, 2, '7'); g.rect(4, 12, 8, 1, '8'); g.rect(10, 13, 2, 1, '6');   // base
+  g.outline('5');
+  return g.done();
+}
+
+const STAR_ROWS = ['....5....', '...5k5...', '5555kk555', '5hkkkkkk5', '.5kkkkk5.', '..5kkk5..', '.5kk5kk5.', '.5k5.5k5.', '.55...55.'];
+const STAR = [paint(STAR_ROWS), recolor(paint(STAR_ROWS), { k: 'v', h: 'v' })];
+
+const FLAME_ROWS = ['....5...', '...545..', '..5445..', '..54445.', '.544k45.', '.54kk45.', '54kkhk45', '54khhk45', '.54kk45.', '..5555..'];
+const FLAME = [paint(FLAME_ROWS), recolor(paint(FLAME_ROWS), { 4: 'v', k: '2', h: '2' })];
+
+const CHECK_BOX = paint(['.555555.', '5bcccch5', '5bccchh5', '5hcchhc5', '5hhhhcc5', '5chhccd5', '5dddddd5', '.555555.']);
+
+/* ------------------------------------------------------------------ the set (W16.2, 123 names, 334 frames) */
 
 const SPRITES = {};
 function add(name, w, h, frames) { SPRITES[name] = sprite(w, h, frames); }
 function merge(set) { Object.keys(set).forEach(function (k) { SPRITES[k] = set[k]; }); }
 
 // People and animals: 28 names, 94 frames
-merge(staffSet('player'));
-add('player_slice', 16, 24, playerSlice());
+(function () {
+  const pf = playerFrames(DEFAULT_LOOK);
+  ['player_down', 'player_up', 'player_side', 'player_slice'].forEach(function (n) { add(n, 16, 24, pf[n]); });
+})();
 merge(staffSet('buddy'));
 merge(staffSet('tender'));
 merge(custSet('cust0'));
@@ -1700,7 +2264,7 @@ add('bed', 16, 20, [bedFrame(0), bedFrame(1), bedFrame(2), soilFrame()]);
 
 // Fixed props: 12 names
 add('shed', 48, 32, [shedRows()]);
-add('sign', 44, 12, [signRows()]);
+add('sign', 62, 12, [signRows()]);
 add('tree', 32, 48, [treeRows()]);
 add('woodpile', 16, 16, [woodpileRows()]);
 add('hose', 16, 16, [hoseRows()]);
@@ -1719,7 +2283,7 @@ add('lights_string', 66, 10, [lightsStringFrame(0), lightsStringFrame(1)]);
 add('birdbath', 16, 24, [birdbathFrame(false), birdbathFrame(true)]);
 add('canopy', 40, 32, [canopyRows()]);
 
-// Effects and text: 12 names, 68 frames
+// Effects and text: 12 names, 70 frames
 add('bubble', 16, 12, [BUBBLE]);
 add('heart', 8, 8, HEART);
 add('sparkle', 7, 7, SPARKLE);
@@ -1733,12 +2297,23 @@ add('font', 4, 6, FONT_GLYPHS.map(function (g) { return paint(g, FONT_MAP); }));
 add('arrow', 8, 12, ARROW);
 add('bubble_warn', 8, 10, BUBBLE_WARN);
 
+// v3.0 (W16.2): 8 names, 53 frames
+add('font_s', 3, 5, FONT_S_GLYPHS.map(function (g) { return paint(g, FONT_MAP); }));
+add('ev_birthday', 16, 16, [evBirthday()]);
+add('ev_picnic', 16, 16, [evPicnic()]);
+add('ev_yard', 16, 16, [evYard()]);
+add('ev_finale', 16, 16, [evFinale()]);
+add('star', 9, 9, STAR);
+add('flame', 8, 10, FLAME);
+add('check', 8, 8, [CHECK_BOX]);
+
 /* ------------------------------------------------------------------ build and draw */
 
 let built = false;
 const cache = {};      // name -> canvas per frame
 const flipCache = {};  // name -> mirrored canvas per frame
-const tintCache = {};  // COLOR key -> one strip canvas holding all 40 glyphs in that color
+const tintCache = {};  // COLOR key -> one strip canvas holding all 42 glyphs in that color
+let lookNow = normLook(DEFAULT_LOOK);   // the look the player sprites show (W16.3)
 
 function validate() {
   Object.keys(SPRITES).forEach(function (name) {
@@ -1810,6 +2385,29 @@ function build() {
   });
   Object.keys(COLOR).forEach(function (k) { tintCache[k] = fontStrip(COLOR[k]); });
   built = true;
+  setLook(DEFAULT_LOOK);
+}
+
+const PLAYER_NAMES = ['player_down', 'player_up', 'player_side', 'player_slice'];
+
+// Rebuild the four player sprites in place for a look (grids, then canvases and flips once built).
+function setLook(look) {
+  const L = normLook(look);
+  const pf = playerFrames(L);
+  PLAYER_NAMES.forEach(function (name) {
+    const s = SPRITES[name];
+    for (let i = 0; i < s.frames.length; i++) s.frames[i] = pf[name][i];
+    if (built) {
+      cache[name] = s.frames.map(function (fr) { return render(fr, s.w, s.h); });
+      flipCache[name] = s.frames.map(function (fr) { return render(hflip(fr), s.w, s.h); });
+    }
+  });
+  lookNow = L;
+  return lookKey();
+}
+
+function lookKey() {
+  return LOOK_KEYS.map(function (k) { return lookNow[k]; }).join('-');
 }
 
 function has(name) {
@@ -1886,6 +2484,167 @@ function textTinted(ctx, str, x, y, colorKey) {
   }
 }
 
+function textS(ctx, s, x, y) {
+  let cx = x;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (ch === ' ') { cx += 4; continue; }
+    const idx = glyphIndex(ch);
+    if (idx < 0) continue;
+    draw(ctx, 'font_s', cx, y, idx, false);
+    cx += 4;
+  }
+}
+
+// font_s width: glyph count (space counts) times 4 minus 1.
+function textWidthS(str) {
+  const s = String(str).toUpperCase();
+  let n = 0;
+  for (let i = 0; i < s.length; i++) {
+    if (s[i] === ' ' || glyphIndex(s[i]) >= 0) n++;
+  }
+  return n === 0 ? 0 : n * 4 - 1;
+}
+
+// The yard sign's text (W16.3, W16.5): font when it fits w, else font_s one row lower; centered.
+function textFit(ctx, str, x, y, w) {
+  const s = String(str == null ? '' : str).toUpperCase();
+  const big = textWidth(s);
+  if (big <= w) {
+    const x0 = x + Math.floor((w - big) / 2);
+    text(ctx, s, x0, y);
+    return { font: 'font', x: x0, width: big };
+  }
+  const small = textWidthS(s);
+  const x0 = x + Math.floor((w - small) / 2);
+  textS(ctx, s, x0, y + 1);
+  return { font: 'font_s', x: x0, width: small };
+}
+
+// The screen mocks' 5x7 UI font: the glyph table of screen-1-season.html, plus '-'. Rows 7 and 8
+// are descenders. Unknown characters advance 3 font pixels and draw nothing, as in the mocks.
+const UI_GLYPHS = {
+  A: ['.###.', '#...#', '#...#', '#####', '#...#', '#...#', '#...#'],
+  B: ['####.', '#...#', '#...#', '####.', '#...#', '#...#', '####.'],
+  C: ['.###.', '#...#', '#....', '#....', '#....', '#...#', '.###.'],
+  D: ['####.', '#...#', '#...#', '#...#', '#...#', '#...#', '####.'],
+  E: ['#####', '#....', '#....', '####.', '#....', '#....', '#####'],
+  F: ['#####', '#....', '#....', '####.', '#....', '#....', '#....'],
+  G: ['.###.', '#...#', '#....', '#.###', '#...#', '#...#', '.####'],
+  H: ['#...#', '#...#', '#...#', '#####', '#...#', '#...#', '#...#'],
+  I: ['###', '.#.', '.#.', '.#.', '.#.', '.#.', '###'],
+  J: ['..###', '...#.', '...#.', '...#.', '...#.', '#..#.', '.##..'],
+  K: ['#...#', '#..#.', '#.#..', '##...', '#.#..', '#..#.', '#...#'],
+  L: ['#....', '#....', '#....', '#....', '#....', '#....', '#####'],
+  M: ['#...#', '##.##', '#.#.#', '#.#.#', '#...#', '#...#', '#...#'],
+  N: ['#...#', '#...#', '##..#', '#.#.#', '#..##', '#...#', '#...#'],
+  O: ['.###.', '#...#', '#...#', '#...#', '#...#', '#...#', '.###.'],
+  P: ['####.', '#...#', '#...#', '####.', '#....', '#....', '#....'],
+  Q: ['.###.', '#...#', '#...#', '#...#', '#.#.#', '#..#.', '.##.#'],
+  R: ['####.', '#...#', '#...#', '####.', '#.#..', '#..#.', '#...#'],
+  S: ['.####', '#....', '#....', '.###.', '....#', '....#', '####.'],
+  T: ['#####', '..#..', '..#..', '..#..', '..#..', '..#..', '..#..'],
+  U: ['#...#', '#...#', '#...#', '#...#', '#...#', '#...#', '.###.'],
+  V: ['#...#', '#...#', '#...#', '#...#', '#...#', '.#.#.', '..#..'],
+  W: ['#...#', '#...#', '#...#', '#.#.#', '#.#.#', '#.#.#', '.#.#.'],
+  X: ['#...#', '#...#', '.#.#.', '..#..', '.#.#.', '#...#', '#...#'],
+  Y: ['#...#', '#...#', '.#.#.', '..#..', '..#..', '..#..', '..#..'],
+  Z: ['#####', '....#', '...#.', '..#..', '.#...', '#....', '#####'],
+  a: ['.....', '.....', '.###.', '....#', '.####', '#...#', '.####'],
+  b: ['#....', '#....', '####.', '#...#', '#...#', '#...#', '####.'],
+  c: ['.....', '.....', '.###.', '#....', '#....', '#....', '.###.'],
+  d: ['....#', '....#', '.####', '#...#', '#...#', '#...#', '.####'],
+  e: ['.....', '.....', '.###.', '#...#', '#####', '#....', '.###.'],
+  f: ['..##', '.#..', '####', '.#..', '.#..', '.#..', '.#..'],
+  g: ['.....', '.....', '.####', '#...#', '#...#', '#...#', '.####', '....#', '.###.'],
+  h: ['#....', '#....', '####.', '#...#', '#...#', '#...#', '#...#'],
+  i: ['.#.', '...', '##.', '.#.', '.#.', '.#.', '###'],
+  j: ['...#', '....', '..##', '...#', '...#', '...#', '...#', '#..#', '.##.'],
+  k: ['#...', '#...', '#..#', '#.#.', '##..', '#.#.', '#..#'],
+  l: ['##.', '.#.', '.#.', '.#.', '.#.', '.#.', '###'],
+  m: ['.....', '.....', '##.#.', '#.#.#', '#.#.#', '#.#.#', '#.#.#'],
+  n: ['.....', '.....', '####.', '#...#', '#...#', '#...#', '#...#'],
+  o: ['.....', '.....', '.###.', '#...#', '#...#', '#...#', '.###.'],
+  p: ['.....', '.....', '####.', '#...#', '#...#', '#...#', '####.', '#....', '#....'],
+  q: ['.....', '.....', '.####', '#...#', '#...#', '#...#', '.####', '....#', '....#'],
+  r: ['.....', '.....', '#.##.', '##..#', '#....', '#....', '#....'],
+  s: ['.....', '.....', '.####', '#....', '.###.', '....#', '####.'],
+  t: ['.#..', '.#..', '####', '.#..', '.#..', '.#.#', '..#.'],
+  u: ['.....', '.....', '#...#', '#...#', '#...#', '#..##', '.##.#'],
+  v: ['.....', '.....', '#...#', '#...#', '#...#', '.#.#.', '..#..'],
+  w: ['.....', '.....', '#...#', '#...#', '#.#.#', '#.#.#', '.#.#.'],
+  x: ['.....', '.....', '#...#', '.#.#.', '..#..', '.#.#.', '#...#'],
+  y: ['.....', '.....', '#...#', '#...#', '#...#', '#...#', '.####', '....#', '.###.'],
+  z: ['.....', '.....', '#####', '...#.', '..#..', '.#...', '#####'],
+  0: ['.###.', '#...#', '#..##', '#.#.#', '##..#', '#...#', '.###.'],
+  1: ['.#.', '##.', '.#.', '.#.', '.#.', '.#.', '###'],
+  2: ['.###.', '#...#', '....#', '...#.', '..#..', '.#...', '#####'],
+  3: ['####.', '....#', '....#', '.###.', '....#', '....#', '####.'],
+  4: ['...#.', '..##.', '.#.#.', '#..#.', '#####', '...#.', '...#.'],
+  5: ['#####', '#....', '####.', '....#', '....#', '#...#', '.###.'],
+  6: ['.###.', '#....', '#....', '####.', '#...#', '#...#', '.###.'],
+  7: ['#####', '....#', '...#.', '..#..', '.#...', '.#...', '.#...'],
+  8: ['.###.', '#...#', '#...#', '.###.', '#...#', '#...#', '.###.'],
+  9: ['.###.', '#...#', '#...#', '.####', '....#', '....#', '.###.'],
+  '.': ['.', '.', '.', '.', '.', '.', '#'],
+  ',': ['..', '..', '..', '..', '..', '.#', '.#', '#.'],
+  ':': ['.', '.', '#', '.', '.', '#', '.'],
+  '/': ['....#', '....#', '...#.', '..#..', '.#...', '#....', '#....'],
+  '!': ['#', '#', '#', '#', '#', '.', '#'],
+  '?': ['.###.', '#...#', '....#', '..##.', '..#..', '.....', '..#..'],
+  '+': ['.....', '..#..', '..#..', '#####', '..#..', '..#..', '.....'],
+  "'": ['#', '#', '.', '.', '.', '.', '.'],
+  '-': ['...', '...', '...', '###', '...', '...', '...'],
+  ' ': ['..', '..', '..', '..', '..', '..', '..']
+};
+function uiGlyph(ch) { return Object.prototype.hasOwnProperty.call(UI_GLYPHS, ch) ? UI_GLYPHS[ch] : null; }
+
+// Draws str in the UI font into a fresh canvas (W16.3): scale CSS px per font pixel, a whole number
+// of device px per font pixel (round(scale * dpr), at least 1), smoothing off, aria-hidden.
+function uiText(str, opts) {
+  const o = opts && typeof opts === 'object' ? opts : {};
+  const chars = Array.from(String(str == null ? '' : str));
+  const scale = Math.max(1, Math.trunc(Number(o.scale) || 1));
+  const dpr = Number(o.dpr) > 0 ? Number(o.dpr) : 1;
+  const k = Math.max(1, Math.round(scale * dpr));
+  const bold = o.bold === true;
+  const color = typeof o.color === 'string' && o.color ? o.color : COLOR.C;
+  const shadow = typeof o.shadow === 'string' && o.shadow ? o.shadow : '';
+  let w = 0, rows = 7;
+  chars.forEach(function (ch) {
+    const g = uiGlyph(ch);
+    w += (g ? g[0].length : 3) + (bold ? 1 : 0) + 1;
+    if (g && g.length > rows) rows = g.length;
+  });
+  w = Math.max(0, w - 1);
+  const h = rows + (shadow ? 1 : 0);
+  const c = document.createElement('canvas');
+  c.width = Math.max(1, w * k);
+  c.height = h * k;
+  if (c.style) { c.style.width = (w * scale) + 'px'; c.style.height = (h * scale) + 'px'; }
+  if (typeof c.setAttribute === 'function') c.setAttribute('aria-hidden', 'true');
+  const g2 = c.getContext('2d');
+  g2.imageSmoothingEnabled = false;
+  function pass(dy, fill) {
+    g2.fillStyle = fill;
+    let cx = 0;
+    chars.forEach(function (ch) {
+      const g = uiGlyph(ch);
+      if (g) {
+        for (let r = 0; r < g.length; r++) {
+          for (let i = 0; i < g[r].length; i++) {
+            if (g[r][i] === '#') g2.fillRect((cx + i) * k, (r + dy) * k, k * (bold ? 2 : 1), k);
+          }
+        }
+      }
+      cx += (g ? g[0].length : 3) + (bold ? 1 : 0) + 1;
+    });
+  }
+  if (shadow) pass(1, shadow);
+  pass(0, color);
+  return c;
+}
+
 function textWidth(str) {
   const s = String(str).toUpperCase();
   let n = 0;
@@ -1908,7 +2667,13 @@ const art = {
   canvasFor: canvasFor,
   text: text,
   textTinted: textTinted,
-  textWidth: textWidth
+  textWidth: textWidth,
+  textWidthS: textWidthS,
+  textFit: textFit,
+  uiText: uiText,
+  setLook: setLook,
+  lookKey: lookKey,
+  LOOK: LOOK
 };
 Object.defineProperty(art, 'built', { enumerable: true, get: function () { return built; } });
 

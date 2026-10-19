@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Pit sim sprite sheet</title>
+  <title>Pit Sim Sprite Sheet</title>
   <style>
     :root { --k: #1b1714; --u: #2a2015; --c: #E6D8B8; --o: #D06129; --m: #bfb39a; --h: #3a332c; --y: #F3CF6D;
             --lawn: #6cc24a; --paver: #e8c890; }
@@ -27,6 +27,9 @@
     #err { color: var(--o); white-space: pre-wrap; margin-bottom: 8px; }
     #ok { color: var(--lawn); margin-bottom: 8px; }
     #yard { border: 1px solid var(--h); }
+    .uirow { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; padding: 6px; background: #3a6df0; }
+    .uirow figure { border-color: #2550c9; }
+    .uirow figcaption { color: #fff6c9; }
   </style>
   <script src="../sprites.js" defer></script>
   <script>
@@ -37,7 +40,7 @@
       if (!art) { err.textContent = 'PitSim.art is missing.'; return; }
       try { art.build(); } catch (e) { err.textContent = String(e && e.message || e); return; }
 
-      // Contract K9 (v2.1), verbatim: [name, w, h, frames].
+      // Contract W16.2 (v3.0), verbatim: [name, w, h, frames].
       var REQUIRED_SPRITES = [
         ['player_down', 16, 24, 3], ['player_up', 16, 24, 3], ['player_side', 16, 24, 3], ['player_slice', 16, 24, 2],
         ['buddy_down', 16, 24, 3], ['buddy_up', 16, 24, 3], ['buddy_side', 16, 24, 3], ['tender_down', 16, 24, 3],
@@ -60,16 +63,18 @@
         ['counter', 32, 24, 2], ['counter_ext', 16, 24, 1], ['pile', 16, 16, 4], ['trash', 16, 16, 1],
         ['paver', 16, 16, 2], ['lawn_a', 16, 16, 2], ['lawn_b', 16, 16, 2], ['fence_h', 16, 24, 1],
         ['fence_v', 16, 24, 1], ['fence_corner', 16, 24, 1], ['fence_back', 16, 16, 2], ['gate', 16, 24, 2], ['hedge', 16, 24, 2],
-        ['bed', 16, 20, 4], ['shed', 48, 32, 1], ['sign', 44, 12, 1], ['tree', 32, 48, 1],
+        ['bed', 16, 20, 4], ['shed', 48, 32, 1], ['sign', 62, 12, 1], ['tree', 32, 48, 1],
         ['woodpile', 16, 16, 1], ['hose', 16, 16, 1], ['tools', 16, 24, 1], ['pot', 16, 16, 1],
         ['planter', 16, 24, 1], ['shelf', 16, 24, 1], ['mailbox', 16, 24, 1], ['picnic', 32, 24, 1], ['picnic_bench', 32, 8, 1],
         ['chair', 16, 24, 1], ['lights_post', 16, 32, 1], ['lights_string', 66, 10, 2], ['birdbath', 16, 24, 2],
         ['canopy', 40, 32, 1], ['bubble', 16, 12, 1], ['heart', 8, 8, 2], ['sparkle', 7, 7, 3],
         ['smoke', 8, 8, 3], ['smoke_dark', 8, 8, 3], ['fire', 8, 8, 3], ['coin', 8, 8, 2],
-        ['sweat', 4, 6, 2], ['zzz', 8, 8, 3], ['font', 4, 6, 40],
-        ['arrow', 8, 12, 4], ['bubble_warn', 8, 10, 2]
+        ['sweat', 4, 6, 2], ['zzz', 8, 8, 3], ['font', 4, 6, 42],
+        ['arrow', 8, 12, 4], ['bubble_warn', 8, 10, 2],
+        ['font_s', 3, 5, 42], ['ev_birthday', 16, 16, 1], ['ev_picnic', 16, 16, 1], ['ev_yard', 16, 16, 1],
+        ['ev_finale', 16, 16, 1], ['star', 9, 9, 2], ['flame', 8, 10, 2], ['check', 8, 8, 1]
       ];
-      // Frame meanings from contract D11 and K9, shown in the captions.
+      // Frame meanings from contract D11, K9 and W16, shown in the captions.
       var MEANING = {
         person: ['stand', 'walk a', 'walk b', 'unhappy a', 'unhappy b'],
         side: ['stand', 'walk a', 'walk b', 'unhappy'],
@@ -83,7 +88,8 @@
         sparkle: ['small', 'large', 'fading'], smoke: ['small', 'medium', 'large'], smoke_dark: ['small', 'medium', 'large'],
         coin: ['face', 'edge'], sweat: ['drop', 'splash'], zzz: ['z', 'zz', 'zzz'],
         arrow: ['down', 'down bob', 'up', 'up bob'], bubble_warn: ['red', 'yellow'],
-        hedge: ['plain', 'blossom'], fence_back: ['rail', 'corner']
+        hedge: ['plain', 'blossom'], fence_back: ['rail', 'corner'],
+        star: ['full', 'empty'], flame: ['lit', 'unlit']
       };
       function meaning(name, f) {
         var key = name;
@@ -104,7 +110,8 @@
         ['Ground, fence and hedge', /^(paver|lawn_a|lawn_b|fence_h|fence_v|fence_corner|fence_back|gate|hedge|bed)$/],
         ['Fixed props', /^(shed|sign|tree|woodpile|hose|tools|pot|planter|shelf|mailbox|picnic|picnic_bench)$/],
         ['Decor and gear props', /^(chair|lights_post|lights_string|birdbath|canopy)$/],
-        ['Effects and text', /^(bubble|heart|sparkle|smoke|smoke_dark|fire|coin|sweat|zzz|font|arrow|bubble_warn)$/]
+        ['Effects and text', /^(bubble|heart|sparkle|smoke|smoke_dark|fire|coin|sweat|zzz|font|arrow|bubble_warn)$/],
+        ['v3.0: small font, event icons, stars, flames, check', /^(font_s|ev_birthday|ev_picnic|ev_yard|ev_finale|star|flame|check)$/]
       ];
       var root = document.getElementById('sheet');
       var bg = 'paver';
@@ -122,8 +129,15 @@
           if (art.frames(r[0]) !== r[3]) bad.push(r[0] + ' has ' + art.frames(r[0]) + ' frames, want ' + r[3]);
         });
         Object.keys(art.SPRITES).forEach(function (n) { if (!want[n]) bad.push('extra ' + n); });
-        if (art.PALETTE.length !== 32) bad.push('palette has ' + art.PALETTE.length + ' entries, want 32');
+        if (art.PALETTE.length !== 36) bad.push('palette has ' + art.PALETTE.length + ' entries, want 36');
+        if (Object.keys(art.COLOR).length !== 35) bad.push('COLOR has ' + Object.keys(art.COLOR).length + ' keys, want 35');
         if (art.textWidth('.,') !== 9) bad.push('textWidth of ., is ' + art.textWidth('.,') + ', want 9');
+        if (art.textWidth("'-") !== 9) bad.push("textWidth of '- is " + art.textWidth("'-") + ', want 9');
+        if (art.textWidthS('MARTY') !== 19) bad.push('textWidthS of MARTY is ' + art.textWidthS('MARTY') + ', want 19');
+        if (art.lookKey() !== '1-0-1-0-1-0') bad.push('lookKey after build is ' + art.lookKey());
+        var frameTotal = 0;
+        REQUIRED_SPRITES.forEach(function (r) { frameTotal += art.frames(r[0]); });
+        if (frameTotal !== 334) bad.push(frameTotal + ' frames, want 334');
         // K11 step 14 charcoal rules, from the grids.
         function count(rows, ch) { return rows.join('').split(ch).length - 1; }
         art.SPRITES.pile.frames.forEach(function (fr, i) {
@@ -136,7 +150,7 @@
         var hc = art.SPRITES.hand_charcoal.frames[0];
         if (count(hc, '1') < 6 || count(hc, '1') + count(hc, 't') < 2 * (count(hc, 'v') + count(hc, 's') + count(hc, 'u'))) bad.push('hand_charcoal reads too grey');
         if (bad.length) err.textContent = bad.join('\n');
-        else document.getElementById('ok').textContent = 'Contract K9 check: all ' + REQUIRED_SPRITES.length + ' names, sizes and frame counts match, nothing extra, palette 32, charcoal rules of K11 step 14 hold.';
+        else document.getElementById('ok').textContent = 'Contract W16 check: all ' + REQUIRED_SPRITES.length + ' names, sizes and frame counts match (334 frames), nothing extra, palette 36, COLOR 35, text widths and the default look key hold, charcoal rules of K11 step 14 hold.';
       })();
 
       function figure(name, f) {
@@ -196,16 +210,19 @@
         art.draw(sctx, 'player_down', 38, 2, 0);
         set3.appendChild(wrap(sq, 'drawScaled 18x22, 14x26, 16x24'));
         var tc = document.createElement('canvas');
-        tc.width = 116 * SCALE; tc.height = 22 * SCALE;
+        tc.width = 150 * SCALE; tc.height = 31 * SCALE;
         var tctx = tc.getContext('2d');
         tctx.imageSmoothingEnabled = false;
         tctx.scale(SCALE, SCALE);
-        tctx.fillStyle = art.COLOR.U; tctx.fillRect(0, 0, 116, 22);
-        art.text(tctx, 'GATE OPENS IN 10 +5:30', 2, 2);
+        tctx.fillStyle = art.COLOR.U; tctx.fillRect(0, 0, 150, 31);
+        art.text(tctx, "GATE OPENS IN 10 +5:30 - IT'S", 2, 2);
         art.textTinted(tctx, '+8', 2, 10, 'yellow');
         art.textTinted(tctx, '+2 TIP', 16, 10, 'C');
         art.textTinted(tctx, '+1 TIP', 50, 10, 'magenta');
-        set3.appendChild(wrap(tc, 'text and textTinted, width ' + art.textWidth('GATE OPENS IN 10 +5:30')));
+        ['ABCDEFGHIJKLMNOPQRSTUVWXYZ', "0123456789 +:.,'- MARTY'S"].forEach(function (str, i) {
+          art.textFit(tctx, str, 2, 17 + i * 6, art.textWidthS(str));   // width forces font_s
+        });
+        set3.appendChild(wrap(tc, 'text, textTinted and font_s, width ' + art.textWidth("GATE OPENS IN 10 +5:30 - IT'S")));
         // The v2.1 tutorial banner: near black box, cream border, two lines at most.
         var bc = document.createElement('canvas');
         bc.width = 176 * SCALE; bc.height = 25 * SCALE;
@@ -248,6 +265,128 @@
         set4.appendChild(wrap(hc2, 'hand_charcoal on the pitmaster'));
         root.appendChild(set4);
         document.getElementById('count').textContent = names.length + ' sprites, ' + total + ' frames, drawn at ' + SCALE + 'x.';
+      }
+
+      // v3.0 looks (contract W4.3, W15 labels, W16.4). Every option on the player, judged at 2x.
+      var LOOK_LABELS = {
+        skin: ['Skin tone 1', 'Skin tone 2', 'Skin tone 3', 'Skin tone 4', 'Skin tone 5', 'Skin tone 6'],
+        hair: ['Short', 'Curly', 'Long', 'Buzz', 'Bun', 'Bald'],
+        hairColor: ['Black', 'Dark brown', 'Auburn', 'Blond', 'Ginger', 'Gray'],
+        face: ['None', 'Mustache', 'Beard', 'Glasses'],
+        hat: ['None', 'Cap', 'Cowboy hat', 'Bandana'],
+        apron: ['Red', 'Orange', 'Green', 'Blue', 'Charcoal', 'Pink']
+      };
+      var LOOK_ORDER = ['skin', 'hair', 'hairColor', 'face', 'hat', 'apron'];
+      var DEFAULT_LOOK = { skin: 1, hair: 0, hairColor: 1, face: 0, hat: 1, apron: 0 };
+      var LK = 2;   // looks are drawn at 2x, the yard's scale on a phone
+      function withLook(over) {
+        var L = {};
+        LOOK_ORDER.forEach(function (k) { L[k] = Object.prototype.hasOwnProperty.call(over, k) ? over[k] : DEFAULT_LOOK[k]; });
+        return L;
+      }
+      // One cell: the look on a paver patch in the given poses: [sprite, frame, flip].
+      function lookCell(L, poses, label) {
+        art.setLook(L);
+        var w = poses.length * 18 + 2;
+        var c = document.createElement('canvas');
+        c.width = w * LK; c.height = 28 * LK;
+        var ctx = c.getContext('2d');
+        ctx.imageSmoothingEnabled = false;
+        ctx.scale(LK, LK);
+        for (var tx = 0; tx < w; tx += 16) { art.draw(ctx, 'paver', tx, 0, 0); art.draw(ctx, 'paver', tx, 16, 1); }
+        poses.forEach(function (p, i) {
+          art.draw(ctx, 'shadow', 2 + i * 18 + 2, 24, 0);
+          art.draw(ctx, p[0], 2 + i * 18, 2, p[1], !!p[2]);
+        });
+        return wrap(c, label);
+      }
+      var ALL_POSES = [['player_down', 0], ['player_down', 1], ['player_up', 0], ['player_up', 2], ['player_side', 0],
+        ['player_side', 1], ['player_side', 0, true], ['player_slice', 0], ['player_slice', 1]];
+      var TURN = [['player_down', 0], ['player_up', 0], ['player_side', 0], ['player_side', 0, true]];
+
+      function renderLooks() {
+        var root2 = document.getElementById('looks');
+        root2.textContent = '';
+        function section(title) {
+          var h = document.createElement('h2'); h.textContent = title; root2.appendChild(h);
+          var set = document.createElement('div'); set.className = 'set'; root2.appendChild(set);
+          return set;
+        }
+        // 1. Every option, one key at a time, in every pose (down, up, side, flipped side, slice).
+        LOOK_ORDER.forEach(function (k) {
+          var set = section('Look: ' + k + ' (every index, all poses; the rest default)');
+          LOOK_LABELS[k].forEach(function (lab, i) {
+            var over = {}; over[k] = i;
+            set.appendChild(lookCell(withLook(over), ALL_POSES, k + ' ' + i + ' ' + lab));
+          });
+        });
+        // 2. Hair by hat, turned all four ways: the hat must sit on every head.
+        var set2 = section('Hair by hat, all four facings');
+        LOOK_LABELS.hair.forEach(function (hl, h) {
+          LOOK_LABELS.hat.forEach(function (tl, t) {
+            set2.appendChild(lookCell(withLook({ hair: h, hat: t }), TURN, hl + ' / ' + tl));
+          });
+        });
+        // 3. Hair by face, down and side, with no hat so the hairline shows.
+        var set3 = section('Hair by face (no hat), down, side, slice');
+        LOOK_LABELS.hair.forEach(function (hl, h) {
+          LOOK_LABELS.face.forEach(function (fl, f) {
+            set3.appendChild(lookCell(withLook({ hair: h, face: f, hat: 0 }), [['player_down', 0], ['player_side', 0], ['player_slice', 1]], hl + ' / ' + fl));
+          });
+        });
+        // 4. Skin by hair color, with a beard and no hat (the hardest contrast pairs).
+        var set4 = section('Skin by hair color (curly, beard, no hat)');
+        LOOK_LABELS.skin.forEach(function (sl, s) {
+          LOOK_LABELS.hairColor.forEach(function (cl, c) {
+            set4.appendChild(lookCell(withLook({ skin: s, hairColor: c, hair: 1, face: 2, hat: 0 }), [['player_down', 0], ['player_side', 0]], 'skin ' + (s + 1) + ' / ' + cl));
+          });
+        });
+        // 5. Skin by apron, glasses and bandana.
+        var set5 = section('Skin by apron (glasses, bandana)');
+        LOOK_LABELS.skin.forEach(function (sl, s) {
+          LOOK_LABELS.apron.forEach(function (al, a) {
+            set5.appendChild(lookCell(withLook({ skin: s, apron: a, face: 3, hat: 3 }), [['player_down', 0], ['player_up', 0]], 'skin ' + (s + 1) + ' / ' + al));
+          });
+        });
+        // 6. Thirty six full combinations from a fixed stride through all 20736.
+        var set6 = section('36 full looks (fixed stride through every combination)');
+        for (var n = 0; n < 36; n++) {
+          var idx = (n * 4159 + 13) % 20736, L = {}, rest = idx;   // 4159 steps every digit of the mixed radix
+          [['apron', 6], ['hat', 4], ['face', 4], ['hairColor', 6], ['hair', 6], ['skin', 6]].forEach(function (kc) { L[kc[0]] = rest % kc[1]; rest = Math.floor(rest / kc[1]); });
+          set6.appendChild(lookCell(L, TURN.concat([['player_slice', 0]]), LOOK_ORDER.map(function (k) { return L[k]; }).join('-')));
+        }
+        // 7. The creator preview: sign over a backyard patch, the pitmaster beside a lit kettle.
+        var set7 = section('Creator preview and yard sign (textFit, uiText)');
+        [[{ skin: 3, hair: 1, hairColor: 1, face: 1, hat: 2, apron: 0 }, "Marty's Pit"],
+         [{ skin: 0, hair: 4, hairColor: 3, face: 3, hat: 0, apron: 5 }, 'Your Pit'],
+         [{ skin: 5, hair: 5, hairColor: 5, face: 2, hat: 3, apron: 4 }, 'ABCDEFGHIJKLMN']].forEach(function (row) {
+          art.setLook(row[0]);
+          var c = document.createElement('canvas');
+          c.width = 80 * LK; c.height = 64 * LK;
+          var ctx = c.getContext('2d');
+          ctx.imageSmoothingEnabled = false;
+          ctx.scale(LK, LK);
+          for (var x = 0; x < 80; x += 16) { art.draw(ctx, 'lawn_a', x, 16, 0); art.draw(ctx, 'paver', x, 32, 0); art.draw(ctx, 'paver', x, 48, 1); art.draw(ctx, 'fence_back', x, 0, 0); }
+          art.draw(ctx, 'sign', 9, 2, 0);
+          var fit = art.textFit(ctx, row[1], 11, 5, 58);
+          art.draw(ctx, 'shadow', 18, 59, 0);
+          art.draw(ctx, 'player_down', 16, 36, 0);
+          art.draw(ctx, 'kettle', 46, 36, 2);
+          art.draw(ctx, 'smoke', 50, 26, 1); art.draw(ctx, 'smoke', 53, 18, 2);
+          set7.appendChild(wrap(c, row[1] + ': ' + fit.font + ', width ' + fit.width));
+        });
+        var ui = document.createElement('div');
+        ui.className = 'uirow';
+        [['YOUR PITMASTER', { scale: 3, dpr: window.devicePixelRatio || 1, color: '#fff6c9', shadow: '#13235c', bold: true }],
+         ["MARTY'S PIT", { scale: 3, dpr: window.devicePixelRatio || 1, color: '#fff3d6', shadow: '#1b1714' }],
+         ['Week 1 of 9 - Spring', { scale: 2, dpr: window.devicePixelRatio || 1, color: '#E6D8B8' }],
+         ['Tutorial done. Make it yours.', { scale: 2, dpr: window.devicePixelRatio || 1, color: '#a6e05a' }]].forEach(function (u) {
+          var cv = art.uiText(u[0], u[1]);
+          ui.appendChild(wrap(cv, 'uiText "' + u[0] + '"'));
+        });
+        set7.appendChild(ui);
+        // Leave the yard on the default look.
+        art.setLook(DEFAULT_LOOK);
       }
 
       function wrap(canvas, label) {
@@ -294,7 +433,7 @@
             else if (c === 'B') put('bed', (x + y) % 3, x * 16, y * 16 - 4, row(y), 0);
           }
         }
-        [['shed', 16, 0, 1], ['sign', 68, 2, 0], ['tree', 128, 0, 2], ['woodpile', 144, 16, 1], ['tools', 16, 24, 2],
+        [['shed', 16, 0, 1], ['sign', 65, 2, 0], ['tree', 128, 0, 2], ['woodpile', 144, 16, 1], ['tools', 16, 24, 2],
          ['pot', 16, 48, 3], ['pot', 144, 48, 3], ['hose', 16, 80, 5], ['planter', 144, 72, 5], ['mailbox', 128, 168, 11],
          ['picnic', 80, 136, 9], ['picnic_bench', 80, 136, 8], ['woodpile', 64, 16, 1], ['woodpile', 80, 16, 1],
          ['planter', 16, 56, 4], ['shelf', 32, 40, 3]].forEach(function (p) { put(p[0], 0, p[1], p[2], row(p[3]), 1); });
@@ -308,6 +447,7 @@
           put('shadow', 0, tx * 16 + 2, ty * 16 + 13, ty * 16 + 15, 3);
           put(name, frame, tx * 16, ty * 16 - 8, ty * 16 + 15, 3, flip);
         }
+        art.setLook({ skin: 3, hair: 1, hairColor: 1, face: 1, hat: 2, apron: 0 });
         person('player_down', 0, 6, 3);
         put('hand_plate_ribs', 0, 6 * 16 + 4, 3 * 16 + 4, 3 * 16 + 15, 3);
         person('buddy_up', 0, 4, 5);
@@ -325,7 +465,11 @@
         put('dog', 3, 64, 112, row(7), 4);
         items.forEach(function (it, i) { it.i = i; });
         items.sort(function (a, b) { return a.k - b.k || a.l - b.l || a.x - b.x || a.i - b.i; });
-        items.forEach(function (it) { art.draw(ctx, it.n, it.x, it.y, it.f, it.flip); });
+        items.forEach(function (it) {
+          art.draw(ctx, it.n, it.x, it.y, it.f, it.flip);
+          if (it.n === 'sign') art.textFit(ctx, "Marty's Pit", 67, 5, 58);
+        });
+        art.setLook({ skin: 1, hair: 0, hairColor: 1, face: 0, hat: 1, apron: 0 });
         // overhead, smoke and bubbles
         art.draw(ctx, 'lights_string', 71, 80, 0);
         art.draw(ctx, 'piece_brisket', 78, 25, 1); art.draw(ctx, 'piece_ribs', 88, 25, 2);
@@ -354,7 +498,6 @@
         ctx.fillStyle = art.COLOR.outline;
         art.textTinted(ctx, '+8', 99, 81, 'outline'); art.textTinted(ctx, '+8', 98, 80, 'yellow');
         art.textTinted(ctx, '+2 TIP', 99, 88, 'outline'); art.textTinted(ctx, '+2 TIP', 98, 87, 'C');
-        art.text(ctx, 'YOUR PIT', 70, 5);
         ctx.fillStyle = art.COLOR.U; ctx.fillRect(1, 1, art.textWidth('12:30') + 3, 8);
         art.text(ctx, '12:30', 2, 2);
       }
@@ -372,6 +515,7 @@
         renderSheet();
         renderYard();
       });
+      renderLooks();
       renderSheet();
       renderYard();
     });
@@ -379,7 +523,7 @@
 </head>
 <body>
   <h1>Pit sim sprite sheet</h1>
-  <p>Dev only. Loads ../sprites.js and draws every sprite and frame with its name and frame meaning under it, checked against the v2.1 list of contract K9. <span id="count"></span></p>
+  <p>Dev only. Loads ../sprites.js and draws every sprite and frame with its name and frame meaning under it, checked against the v3.0 list of contract W16.2, then every look option on the pitmaster at 2x (W16.4). <span id="count"></span></p>
   <div id="bar">
     <span>Background:</span>
     <button type="button" data-bg="paver" aria-pressed="true">Paver</button>
@@ -393,7 +537,8 @@
   </div>
   <pre id="err"></pre>
   <div id="ok"></div>
-  <h2>Yard mock (contract D4 positions, all decor owned, static; v2.1 arrow under the pile, warning on kettle 2)</h2>
+  <div id="looks"></div>
+  <h2>Yard mock (contract D4 positions, the W16.5 sign with a pit name, all decor owned, static; v2.1 arrow under the pile, warning on kettle 2)</h2>
   <canvas id="yard" width="528" height="576"></canvas>
   <div id="sheet"></div>
 </body>

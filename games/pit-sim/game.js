@@ -1,8 +1,149 @@
 // game.js: input, canvas rendering, DOM panels, aria-live, save hooks, pause, feedback, the dog.
-// Contract: docs/superpowers/specs/2026-10-18-pit-sim-contract.md, v2.1 section K7 sentences, K8, K9 (calls
+// Contract: docs/superpowers/specs/2026-10-18-pit-sim-v3-0-contract.md (v3.0: W1, W4 to W7 reads, W14
+//           sentences, W15, W16 calls only, W17, W18, with the W22 Overseer's calls), on top of
+//           docs/superpowers/specs/2026-10-18-pit-sim-contract.md, v2.1 section K7 sentences, K8, K9 (calls
 //           only), K10; v2 delta D11 (calls only), D12, D13, D14.
-// Design:   docs/superpowers/specs/2026-10-18-pit-sim-v2-1-tutorial.md [T 2.6], [T 3.4];
+// Design:   docs/superpowers/specs/2026-10-18-pit-sim-v3-season-design.md [S 2.3], [S 3], [S 4], [S 5.2],
+//           [S 8], [S 9], [S 14], [S 19.2], [S 19.3]; mocks docs/superpowers/mocks/pit-sim-v3/screen-1-season,
+//           screen-3-week, screen-4-report, screen-6-creator (.png and .html);
+//           docs/superpowers/specs/2026-10-18-pit-sim-v2-1-tutorial.md [T 2.6], [T 3.4];
 //           docs/superpowers/specs/2026-10-18-pit-sim-design.md, v2 section [V2.9], [V2.12], [V2.13], [V2.16].
+//
+// v3.0 deviations (PitSim.game is W17.7: every D14 and K10 member, version '0.5.0', rail, sign, panel):
+// 25. W22.1: the creator data is state.profile ({ name, look }); state.player stays the v2 mover. Every
+//     W17 "player" that means the profile reads state.profile (hostSays {name}, the creator prefill).
+// 26. SHELL_IDS gains all fourteen ids of the W18 skeleton (W18 says twelve; the four sections, their
+//     four headings, week-top, week-body, week-foot, sheet-body, creator-body and season-end-body).
+// 27. Headings and numbers use art.uiText (W16.3) with a .sr twin holding the words. When uiText is not
+//     on art (or throws) the same words show as one bold monospace span at the mock size, so an
+//     element's textContent is the W15 string either way. Small pictograms with no sprite (the guests
+//     and venue pins of the offer cards) are drawn from the mock's maps onto small canvases; the star,
+//     check and flame frames fall back to those maps too while sprites.js has no such sprite.
+// 28. Every DOM line carries exactly its W15 string as textContent; icons are aria-hidden canvases set
+//     before or inside the words (the coin sits between "Pay" and the number, as in the mock).
+// 29. A served booked guest pays no plate price, so no "+0" cash number floats up: the tip (when there
+//     is one) rises from the cash spot over the customer, with the usual sparkles.
+// 30. The tutorial clipboard's DOM is emptied when any other loop screen opens, and the sheet body when
+//     the sheet closes, so ids shared by the v2 rows (cart, goal, seats, dec-*, buy-*) are never doubled.
+// 31. Offer cards switch to one column, and creator rows put their label above the controls, through
+//     CSS container queries on the panel (W17.2 "under 340 px panel width", W17.5 "narrower than 420 px").
+// 32. W17.4 and W22.24: the report's title band is #till-h itself on booking and Yard day reports (the
+//     sky over lawn band with ev_{type} at 4x behind the UI font title); rep-top is inserted above it.
+//     The parts box has no title (W15 pins none). The Yard day report keeps the v2.1 People paragraph
+//     below the boxes. rep-top shows on booking and Yard day reports, not on the tutorial till.
+// 33. Rain on the news card reads as a Yard day matter (W22.10): "Rain today. A Yard day draws fewer
+//     people unless the canopy is up." or "Rain today. The canopy is up for a Yard day."
+// 34. The hub tiles carry an aria-label joining their lines with commas; their small windows are sprite
+//     canvases (crew: buddy and tender, gear: the next gear piece, menu: the plates, shop: cooler and pile).
+// 35. The Shop card's "items" count is the number of cart lines above zero. The Gear card's next item is
+//     the first unowned gear row in CATALOG order.
+// 36. hire() in loop 'week' has no day gate (W22.12), so the crew sheet ignores needs.day there.
+// 37. Fire it up from the pause panel saves the look and names and returns to #pause (the game stays
+//     paused); from the loop creator it opens the week hub.
+// 38. The creator preview is 4 by 3.5 tiles (64 by 56, playtest round 1 P-15; was 96 by 64 at up to
+//     3x): back fence, a lawn row, a paver row and a half, the pitmaster at (8, 28), kettle frame 2 at
+//     (40, 28) and three puffs over its vent, drawn at up to 5x (320 by 280 on a 375 phone). The puffs
+//     rise every 0.2 s while the creator is open and stand still under reduced motion.
+// 39. PitSim.game.panel reads 'howto' while the Controls card covers a panel.
+// 40. W22.25 runs as fit levels on #week (fitWeek): after every build with the hub showing, the hub
+//     is rebuilt at level 0, then 1 to 4 while #week's scrollHeight is over 2 x innerHeight. Level 1
+//     drops the booking cards' art band to 48 px (event icon at 2x), level 2 puts the Yard day on one
+//     row (icon, label, its W15 lines as wrapping items, a smaller Book), level 3 puts the event
+//     length row and Controls and New game side by side (five 44 px buttons over two columns), and
+//     level 4 is the two column meat list, which the Inventory card already uses at every level.
+//     Spacing is tight enough that a fresh week 1 at 375 by 812 fits by level 3. The fit reruns only
+//     when what sets the hub's height changes (offers, rail meat count, inventory lines, the goal,
+//     the next gear, the Load up reason, the viewport), so an ordinary tap rebuilds the hub once.
+// 41. The W13.3 save notice on #status stops when the yard opens, so the cook's own status (the gate
+//     countdown) is never hidden behind it; it still shows on the screen the save opened on.
+// 42. booking_picked arrives as { type: 'booking_picked', id, booking } (integration I-1, contract W23);
+//     the sentence reads the picked offer from sim.state.season.booking.
+// Playtest round 1 (2026-10-19, contract W24; each an Overseer's call):
+// P-10. The booking report: the hero band is about 150 px with the event label in cream over a large
+//     gold DONE (the last word of ui.reportH) and a row of v2 guests, the event icon and the buddy on
+//     the grass; #till-h's words stay the W15 title. The parts box is titled ui.howWent. Money rows
+//     that would read zero or none (wages, seat tips, spoiled, thrown out, left on the grate, burnt)
+//     are left out; the detail sits on the label line with a dotted leader. Food cost is foodCost plus
+//     raw meat thrown out (sim.js P-3), so the rows add up to Take today; thrown out and left on the
+//     grate show as information ("counted in food cost"). Cash names the cash at week start. The
+//     result line gives the reason guests missed (ui.missedLine or ui.missedOutLine) and the cold
+//     plates (ui.coldLine). The word of mouth box shows the change, the new number and "was N"; the
+//     W15 fansLine stays as .sr text.
+// P-11. The offer buttons read Pick and Picked (ui.book, ui.booked); the picked one is gold with dark
+//     words and the green check badge, and the picked card's frame is gold.
+// P-12. Inventory: with no cooler the meter is hidden and ui.invNoCooler always shows (muted while the
+//     cooler is empty); the charcoal pile icon draws at 2x.
+// P-13. The pit name on the hub and season end signs is bold UI text at 3x, 2x when 3x would not fit.
+// P-14. Hub tiles: a chevron after each title; the Gear window shows the cooker owned (the drum, or
+//     one or two kettles). The windows stay 38 px tall: at 72 px the fresh week 1 hub ran past two
+//     screens at every fit level (1687 of 1624 px), which [S 2.3] and W19 step 45 forbid.
+// P-15. The creator preview of deviation 38 at the new size.
+// P-16. Shop sheet: a coin before each price, a dark box around each count, and on the charcoal row
+//     inc5-charcoal (ui.inc5, aria-label ui.inc5Aria) that adds five bags.
+// P-17. #hud-rep reads a heart and the number in every season loop (class fans); the tutorial day keeps
+//     the v2.1 stars.
+// Playtest round 2 (2026-10-19, contract W25; each an Overseer's call):
+// R-1. Gear and decor rows grey Buy and word "Leaves N" from sim.canBuy(id), the sim's own rule (the
+//     picked deposit counts toward the cart). The "Leaves N" reserve note is left out while a booking
+//     is picked: its cart is already counted and its fee comes after the cook.
+// R-2. The board draws up to BOARD_DRAW_MAX (8) plates a stack, so the 14 plate stacks of sim.js R-2
+//     never draw into each other; a fifth stack sits in the middle of the board.
+// R-3. The Season finale card says what the drum smoker would make of it (ui.finaleDrum) while it is
+//     not owned, and Pit news says it from week 5 (ui.finaleNews). Both numbers come from
+//     PitSim.genOffers with the drum added, so they are always the generator's own.
+// R-4. The booking report puts Gear bought (gearSpent, the items named) and the stock the cook kept or
+//     drew on (rowKept or rowDrawn, the rest of cashAfter - cashStart - Take) between Take today and
+//     Cash, so week start + Take - gear + stock = Cash on every report. The tutorial and Yard day tills
+//     show their food, charcoal, spoiled, thrown out and grate rows as information (no minus: the shop
+//     already took them) and add Gear bought and Paid at the shop above Cash.
+// R-5. The Yard day and booking reports drop the New game button under Next week (the hub and the pause
+//     panel have it); the tutorial till keeps it.
+// R-6. From season 2 the hub heading reads ui.weekOfYear and #week-when ui.seasonWhen.
+// R-7. The Next event card adds ui.mixHint when the picked rail has a two slot meat and a one slot meat.
+// R-8. "Pick one" shows only over two or more cards; the shop line with no cooler is ui.coolerNone.
+// R-9. At 1 or 2 stars the hero reads ui.reportHLow in cream with only the event icon on the grass.
+// R-10. The Menu tile names the plates (plateLabel); Pit news drops the goal line when the Gear tile
+//     already names the same item, and hides when nothing is left in it; tile windows are 54 px.
+// R-11. The host quote sits beside a framed guest head with a stepped tail; the report's cooler box
+//     takes the ui.inventory legend.
+// R-12. Cash in the pills, the report header, the Cash row and the season end card has a thousands
+//     comma (fmt).
+// R-13. The rail draws a clock before the seconds and each booking count on a cream ticket, so the
+//     plates left read differently from the chips' stock.
+// R-14. The creator's name fields start empty with the default as the placeholder; Random sits in the
+//     scene's corner; under 900 px the preview is sticky at the top of the creator at up to 26 percent
+//     of the screen height; the arrow rows keep their label beside the control.
+// R-15. A shop section with one item of the same name (Charcoal) drops its heading.
+// Playtest round 3 (2026-10-19, contract W26; each an Overseer's call):
+// Q-1. #title reads the pit name in upper case once a profile exists ('YOUR PIT' before the creator,
+//     and the document title stays Your Pit).
+// Q-2. The shop at a booking lists only the rail meats, each with ui.covers ("Covers 6 of 6 plates");
+//     the other meats fold under an Other meats button (aria-expanded) that opens them with
+//     ui.offMenu, and opens on its own when the cart already holds one. ui.noSpare shows when every
+//     rail meat is covered and one of them has no whole spare unit. The charcoal row carries the
+//     pile sprite; Back is a 44 px chevron button at the top right of the sheet, beside the title.
+// Q-3. The report: the stock row reads ui.rowKept or ui.rowDrawn as an information row (muted, its
+//     signed amount kept so the column adds up) with the bags and units in the detail; a missed
+//     line without the bigger table adds ui.missedTable; Take today's amount is the UI font at 3x.
+// Q-4. Pit news: no Coming next card while the Driveway cannot be bought (sim.js Q-8); the weather
+//     line only while the Yard day is picked; from week 5, ui.finaleTable while the bigger table is
+//     not owned. The pre-gate status line adds ui.mixShort after the countdown on a booking whose
+//     rail mixes a two slot and a one slot meat. The rail draws a +N box under it for booked guests
+//     waiting off canvas (sim.gateWaiting()).
+// Q-5. The hub: the pip bar is gone (the season strip carries the weeks), the season label never
+//     wraps, the pill values are the UI font at 2x and their labels at 2x a word group a line, the
+//     cooler meter is a row of cells (one a unit), and offer cards open with a small scene drawn
+//     from v2 sprites (fence, guests behind a table with the event icon, a kettle) with a SAT or
+//     SUN tag (on the 48 px band of fit level 1 and up, its middle 22 rows); the card lines are 15 px bold.
+// Q-6. The creator: on a phone the scene is cropped to the panel width at 4x (3x under 700 px of
+//     screen height), 44 px tall, the pitmaster near the middle and the kettle to the right; Random
+//     sits at the scene's bottom right with a dice glyph; Fire it up is a sticky footer on phones;
+//     the field labels are the UI font (white, gold while the field has focus).
+// Q-7. The tutorial morning wears the hub's look (blue stripes, a DAY 1 header in the UI font, the
+//     shop rows in an umber card, chunky buttons, Open the yard in the UI font), adds ui.practice,
+//     and leaves out the goal line and the Gear, Decor and Hires sections while the tutorial runs
+//     (the hub has them from week 1). Its copy and its #open target are unchanged.
+// Q-8. #rep-top's week and cash are the UI font at 2x.
 //
 // v2.1 deviations (PitSim.game is exactly D14 plus the K10 members version '0.4.0' and banner):
 // 19. Banner placement. The banner sits at the top left (2, 2) as [T 2.6] says, except that while the
@@ -117,7 +258,7 @@
 'use strict';
 const PitSim = globalThis.PitSim || (globalThis.PitSim = {});
 
-const VERSION = '0.4.0';
+const VERSION = '0.5.0';
 
 const FALLBACK_COLOR = {
   K: '#1b1714', U: '#2a2015', C: '#E6D8B8', O: '#D06129', outline: '#3b2417', woodD: '#7a4a26', woodM: '#a8693a',
@@ -131,9 +272,45 @@ const SHELL_IDS = [
   'root', 'hdr', 'title', 'hud-day', 'hud-cash', 'hud-rep', 'stage', 'wrap', 'cv', 'status',
   'act', 'chips', 'panels', 'clipboard', 'clipboard-h', 'clip-top', 'shop', 'hire', 'clip-foot',
   'till', 'till-h', 'till-body', 'pause', 'pause-h', 'pause-body', 'howto', 'howto-h', 'howto-body',
-  'newgame', 'newgame-h', 'newgame-body', 'broke', 'broke-h', 'broke-body', 'foot', 'live'
+  'newgame', 'newgame-h', 'newgame-body', 'broke', 'broke-h', 'broke-body', 'foot', 'live',
+  'week', 'week-h', 'week-top', 'week-body', 'week-foot', 'sheet', 'sheet-h', 'sheet-body',
+  'creator', 'creator-h', 'creator-body', 'season-end', 'season-end-h', 'season-end-body'
 ];
-const PANEL_IDS = ['clipboard', 'till', 'pause', 'newgame', 'broke'];
+const PANEL_IDS = ['clipboard', 'till', 'pause', 'newgame', 'broke', 'week', 'sheet', 'creator', 'season-end'];
+// v3.0: the mock palette (screen-1-season, screen-3-week, screen-4-report, screen-6-creator).
+const UI = {
+  K: '#1b1714', cream: '#E6D8B8', creamL: '#fff4dc', creamDim: '#b9a888', gold: '#F3CF6D', white: '#ffffff',
+  ink: '#13235c', navyD: '#0f2266', blueL: '#a9c2ff', paleBlue: '#dbe6ff', woodX: '#5a3412', signText: '#fff3d6',
+  green: '#7ed957', red: '#ff7262', orangeLo: '#5a230a'
+};
+// W16.4 swatch symbols and the four W16.1 colors, used only when sprites.js has no LOOK or 36 colors yet.
+const LOOK_FALLBACK = {
+  skin: ['w', 'l', 'm', 'x', 'n', 'z'], hairColor: ['2', '5', 'r', '8', '4', 's'], apron: ['o', '4', 'c', 'f', 'v', 'i']
+};
+const LEGEND36 = '0123456789abcdefghijklmnopqrstuvwxyz';
+const PALETTE_EXT = ['#f7d9c4', '#b87a4b', '#714227', '#5f3a25'];
+// Pictograms with no sprite, from the screen mocks (offer card lines), and fallbacks for v3.0 frames.
+const PIX = {
+  people: { map: ['.ww...ww.', 'wwww.wwww', '.ww...ww.', '.........', 'wwww.wwww', 'wwww.wwww', 'wwww.wwww'], pal: { w: '#9fd0ff' } },
+  pin: { map: ['.rrrrr.', 'rrrrrrr', 'rrwwwrr', 'rrwwwrr', 'rrrrrrr', '.rrrrr.', '..rrr..', '..rrr..', '...r...'], pal: { r: '#ef4b3f', w: '#fff4dc' } },
+  starOn: { map: ['....k....', '...kyk...', 'kkkyyykkk', 'kyoyyyyyk', '.kyyyyyk.', '..kyyyk..', '.kyykyyk.', '.kyk.kyk.', '.kk...kk.'], pal: { k: '#1b1714', y: '#F3CF6D', o: '#fff6c9' } },
+  starOff: { map: ['....k....', '...kyk...', 'kkkyyykkk', 'kyyyyyyyk', '.kyyyyyk.', '..kyyyk..', '.kyykyyk.', '.kyk.kyk.', '.kk...kk.'], pal: { k: '#1b1714', y: '#6e6863' } },
+  check: { map: ['kkkkkkkk', 'kgggggwk', 'kggggwwk', 'kwgggwgk', 'kwwgwwgk', 'kgwwwggk', 'kggwgggk', 'kkkkkkkk'], pal: { k: '#1b1714', g: '#3fae4a', w: '#ffffff' } },
+  flameOn: { map: ['...k....', '..kok...', '..kook..', '.kooyok.', '.koyyok.', 'kooyyok.', 'koyyyyok', 'koyyyyok', '.koyyok.', '..kkkk..'], pal: { k: '#1b1714', o: '#D06129', y: '#ffd84a' } },
+  flameOff: { map: ['...k....', '..kvk...', '..kvvk..', '.kvvvvk.', '.kvvvvk.', 'kvvvvvk.', 'kvvuuvvk', 'kvvuuvvk', '.kvvvvk.', '..kkkk..'], pal: { k: '#2a2015', v: '#6e6863', u: '#7a4a26' } },
+  arrowL: { map: ['...##', '..###', '.####', '#####', '.####', '..###', '...##'], pal: { '#': '#ffffff' } },
+  arrowR: { map: ['##...', '###..', '####.', '#####', '####.', '###..', '##...'], pal: { '#': '#ffffff' } },
+  // Q-6: the die on Random (screen-6-creator); Q-4: the waiting guest on the rail.
+  arrowD: { map: ['#######', '.#####.', '..###..', '...#...'], pal: { '#': '#ffffff' } },   // Q-2: an open fold
+  dice: { map: ['kkkkkkk', 'kwwwwwk', 'kwkwwwk', 'kwwkwwk', 'kwwwkwk', 'kwwwwwk', 'kkkkkkk'], pal: { k: '#1b1714', w: '#ffffff' } }
+};
+const DAY_TAGS = ['SAT', 'SUN'];   // Q-5: the offer scenes' day tags, by card order
+const CR_ROWS = [   // creator option rows in W17.5 order: [look key, id part, kind, label key]
+  ['skin', 'skin', 'swatch', 'crSkin'], ['hair', 'hair', 'chooser', 'crHair'],
+  ['hairColor', 'haircolor', 'swatch', 'crHairColor'], ['face', 'face', 'chooser', 'crFace'],
+  ['hat', 'hat', 'chooser', 'crHat'], ['apron', 'apron', 'swatch', 'crApron']
+];
+const CR_SCENE_W = 64, CR_SCENE_H = 56;   // P-15: a smaller patch at a bigger scale (5x on a 375 phone)
 const BAND_FRAME = { out: 0, low: 1, good: 2, hot: 3 };
 const DIRS = {
   ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right',
@@ -147,7 +324,8 @@ const KEY_HELP = [
   ['Escape, P', 'Pause and resume.'],
   ['Tap the yard', 'Walk there. Tap a station to walk over and use it.']
 ];
-const BOARD_OFFS = [[1, 3], [8, 3], [1, 9], [8, 9]];      // board stacks, from the board's draw px
+const BOARD_OFFS = [[1, 3], [8, 3], [1, 9], [8, 9], [4, 6]];   // board stacks, from the board's draw px (R-2: a fifth)
+const BOARD_DRAW_MAX = 8;                                  // R-2: plates drawn a stack, whatever C.BOARD_STACK holds
 const SPARKLE_OFFS = [[-3, -4], [6, -7], [2, 2]];          // from the served plate spot
 const BURST_OFFS = [[-3, 0], [0, -2], [3, 0]];             // from the burnt piece
 const FX_LOG_MAX = 500;
@@ -230,7 +408,7 @@ let liveLastAt = -Infinity;
 // DOM caches.
 const chipEls = {};
 const chipSig = {};
-const lastHud = { day: '', cash: '', rep: '' };
+const lastHud = { day: '', cash: '', rep: '', pit: '' };
 let lastAct = null, lastActDis = null, lastStatus = null, lastPhase = '', lastPaused = null, lastHow = null;
 let clip = null;
 
@@ -240,6 +418,19 @@ let bannerBottom = false;       // deviation 19: the banner's placement, kept wh
 let pulsed = [];                // elements carrying tut-pulse right now
 let howtoOpener = null;         // id of the button that opened the Controls card
 const warnOn = Object.create(null);   // cooker id -> its warning bubble showed at the last observe
+
+// Season screens (v3.0).
+let rowSink = [];               // where cartRow, ownRow, goalRow and hireRow put their refreshers
+let sheetKind = null;           // 'shop' | 'gear' | 'menu' | 'crew' while #sheet is open
+let sheetOpener = null;         // the hub card that opened the sheet (focus returns there)
+let sheetRows = [];
+let sheetMsg = '';              // the last refused buy's message, shown in #shop-room
+let shopOther = false;          // Q-2: the shop's Other meats rows are open
+let crFromPause = false;        // the creator was opened from the pause panel
+let crDraft = null;             // the look being edited
+let crAnim = 0, crAnimAt = -1;  // creator smoke phase (seconds) and the last redraw
+let crOff = null;               // the creator preview's 96 x 64 offscreen canvas
+const lastChips = { charcoal: '' };
 
 // ---------------------------------------------------------------- helpers
 
@@ -270,6 +461,13 @@ function stars(rep) {
   return '★'.repeat(n) + '☆'.repeat(5 - n);
 }
 function signed(n) { return n >= 0 ? '+' + n : String(n); }
+// R-12: cash with a thousands comma, for the DOM only (sim strings and canvas text stay plain).
+function fmt(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
+// "a", "a and b", "a, b and c" (a generated data list, W22.26 (a)).
+function andList(words) {
+  if (words.length <= 1) return words.join('');
+  return words.slice(0, -1).join(', ') + ' and ' + words[words.length - 1];
+}
 function plural(n, one, many) { return n + ' ' + (n === 1 ? one : many); }
 function meatList(counts) {
   const parts = [];
@@ -309,6 +507,148 @@ function custById(id) {
 function byId(a, b) { return a.id - b.id; }
 function isChairSeat(seat) { return seat.decor === 'chair1' || seat.decor === 'chair2'; }
 function easeOut(t) { const u = 1 - Math.max(0, Math.min(1, t)); return 1 - u * u; }
+
+// ---------------------------------------------------------------- v3.0 helpers
+
+// W15 strings: {token} filled by plain replacement.
+function fill(str, map) {
+  let s = String(str === undefined || str === null ? '' : str);
+  if (map) for (const k in map) s = s.split('{' + k + '}').join(String(map[k]));
+  return s;
+}
+function U(key, map) { return fill(STRINGS.ui && STRINGS.ui[key] !== undefined ? STRINGS.ui[key] : '', map); }
+function SAY(key, map) { return fill(STRINGS.say && STRINGS.say[key] !== undefined ? STRINGS.say[key] : '', map); }
+function U1(n, oneKey, manyKey, map) { return U(n === 1 ? oneKey : manyKey, Object.assign({ n: n }, map || {})); }
+function weekWhen(w) { const l = STRINGS.weekLabel || []; return l[w - 1] || ''; }
+function bookingLabel(type) { return STRINGS.booking && STRINGS.booking[type] ? STRINGS.booking[type] : String(type); }
+function starsWord(n) { return n <= 0 ? U('noStars') : U1(n, 'starsOne', 'starsMany'); }
+function loopOf(s) { return s.loop || 'tutorial'; }
+function inSeason(s) { const l = loopOf(s); return l !== 'tutorial'; }
+function profileName(s) { return s.profile && s.profile.name ? s.profile.name : (STRINGS.defaultName || 'Pitmaster'); }
+function pitName(s) { return s.pitName ? String(s.pitName) : (STRINGS.defaultPit || 'Your Pit'); }
+function stockUnits(s) {
+  let n = 0;
+  for (let i = 0; i < MEAT_IDS.length; i++) n += s.stock[MEAT_IDS[i]] | 0;
+  return n;
+}
+function railList(counts, labelKey) {
+  const parts = [];
+  for (let i = 0; i < MEAT_IDS.length; i++) {
+    const m = MEAT_IDS[i];
+    const n = counts && counts[m] ? counts[m] | 0 : 0;
+    if (n > 0) parts.push(n + ' ' + MEATS[m][labelKey || 'label']);
+  }
+  return parts.join(', ');
+}
+function sumCounts(counts) {
+  let n = 0;
+  if (counts) for (let i = 0; i < MEAT_IDS.length; i++) n += counts[MEAT_IDS[i]] | 0;
+  return n;
+}
+// The W7.1 times of the event in progress (v2 constants on a today without them).
+function tGate(s) { return s.today && typeof s.today.gateAt === 'number' ? s.today.gateAt : C.GATE_OPENS; }
+function tLast(s) { return s.today && typeof s.today.lastCallAt === 'number' ? s.today.lastCallAt : C.LAST_CALL; }
+function tEnd(s) { return s.today && typeof s.today.endAt === 'number' ? s.today.endAt : C.DAY_SECONDS; }
+function todayKind(s) { return s.today && s.today.kind ? s.today.kind : 'tutorial'; }
+function dpr() { return window.devicePixelRatio || 1; }
+
+// A canvas painted from a character map (the mock pictograms), aria-hidden.
+function pixCanvas(map, pal, scale) {
+  const k = Math.max(1, scale | 0);
+  const w = map.reduce(function (m, r) { return Math.max(m, r.length); }, 0), h = map.length;
+  const c = document.createElement('canvas');
+  c.width = w * k; c.height = h * k;
+  const g = c.getContext('2d');
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < map[y].length; x++) {
+      const col = pal[map[y][x]];
+      if (!col) continue;
+      g.fillStyle = col;
+      g.fillRect(x * k, y * k, k, k);
+    }
+  }
+  c.setAttribute('aria-hidden', 'true');
+  c.className = 'px';
+  return c;
+}
+// A sprite frame as an aria-hidden canvas at an integer scale, or the fallback map, or null.
+function sprEl(name, frame, scale, fb) {
+  let c = null;
+  if (art.has(name)) {
+    try { c = art.canvasFor(name, Math.max(0, Math.min(art.frames(name) - 1, frame | 0)), scale); } catch (e) { c = null; }
+  }
+  if (!c && fb) return pixCanvas(fb.map, fb.pal, scale);
+  if (!c) return null;
+  c.setAttribute('aria-hidden', 'true');
+  c.className = 'px';
+  return c;
+}
+function starEl(on, scale) { return sprEl('star', on ? 0 : 1, scale || 1, on ? PIX.starOn : PIX.starOff); }
+function flameEl(on, scale) { return sprEl('flame', on ? 0 : 1, scale || 1, on ? PIX.flameOn : PIX.flameOff); }
+function checkEl(scale) { return sprEl('check', 0, scale || 1, PIX.check); }
+function coinEl(scale) { return sprEl('coin', 0, scale || 1, null); }
+
+// The mock UI font (art.uiText) as an aria-hidden canvas, or null when sprites.js has none.
+function uiCanvas(str, scale, color, opts) {
+  if (!art || typeof art.uiText !== 'function') return null;
+  try {
+    const o = { scale: scale, dpr: dpr(), color: color };
+    if (opts && opts.shadow) o.shadow = opts.shadow;
+    if (opts && opts.bold) o.bold = true;
+    const c = art.uiText(String(str), o);
+    if (!c) return null;
+    c.setAttribute('aria-hidden', 'true');
+    c.classList.add('ut');
+    return c;
+  } catch (e) { return null; }
+}
+// Puts words in the UI font into parent: the canvas plus a .sr span holding srText (default str),
+// or, without uiText, one bold span whose text is srText (deviation 27). Returns parent.
+function uiPut(parent, str, scale, color, opts, srText) {
+  const words = srText === undefined ? String(str) : String(srText);
+  const c = uiCanvas(str, scale, color, opts);
+  if (c) {
+    parent.appendChild(c);
+    parent.appendChild(mk('span', { cls: 'sr', text: words }));
+  } else {
+    const sp = mk('span', { cls: 'utf', text: words });
+    sp.style.fontSize = Math.max(11, Math.round(scale * 7)) + 'px';
+    sp.style.color = color;
+    if (String(str) !== words && String(str) === String(str).toUpperCase()) sp.style.textTransform = 'uppercase';
+    if (opts && opts.shadow) sp.style.textShadow = '0 ' + Math.max(1, scale) + 'px 0 ' + opts.shadow;
+    parent.appendChild(sp);
+  }
+  return parent;
+}
+// A palette character's color (W16.1 legend, 36 entries; the four new ones from W16.1 when absent).
+function paletteColor(ch) {
+  const i = LEGEND36.indexOf(ch);
+  if (i <= 0) return 'transparent';
+  const pal = art.PALETTE || [];
+  if (pal[i]) return pal[i];
+  if (i >= 32 && i < 36) return PALETTE_EXT[i - 32];
+  return 'transparent';
+}
+// The swatch color of look option idx for skin, hairColor or apron.
+function swatchColor(key, idx) {
+  const sym = key === 'skin' ? 'S' : key === 'hairColor' ? 'H' : 'A';
+  const L = art.LOOK && art.LOOK[key] && art.LOOK[key][idx];
+  const ch = L && typeof L[sym] === 'string' ? L[sym] : LOOK_FALLBACK[key][idx];
+  return paletteColor(ch);
+}
+function lookCounts() { return PitSim.LOOK_COUNTS || { skin: 6, hair: 6, hairColor: 6, face: 4, hat: 4, apron: 6 }; }
+function copyLook(l) {
+  const out = {};
+  const keys = PitSim.LOOK_KEYS || ['skin', 'hair', 'hairColor', 'face', 'hat', 'apron'];
+  const d = PitSim.DEFAULT_LOOK || { skin: 1, hair: 0, hairColor: 1, face: 0, hat: 1, apron: 0 };
+  for (let i = 0; i < keys.length; i++) out[keys[i]] = l && Number.isInteger(l[keys[i]]) ? l[keys[i]] : d[keys[i]];
+  return out;
+}
+function applyLook(look) {
+  if (art && typeof art.setLook === 'function') { try { art.setLook(look); } catch (e) { console.error(e); } }
+}
+function lookLabel(key, idx) { const l = STRINGS.look && STRINGS.look[key]; return l && l[idx] !== undefined ? l[idx] : String(idx); }
+function rowWord(labelKey) { return U(labelKey).toLowerCase(); }
 
 // ---------------------------------------------------------------- tutorial helpers (v2.1)
 
@@ -421,17 +761,18 @@ function boot() {
   crng = mulberry32((sim.seed >>> 0) ^ 0x9E3779B9);
   birdNext = birdGap();
   dogReset(2);
+  applyLook(lookNow());
 
   setupMedia();
   buildStatic();
   setupCanvas();
   setupInput();
-  showMorning();
+  showLoop();
   pump();
   if (saveOff) noteSaveOff();
   if (migrated) {
     noticeUntil = nowMs + FX.NOTICE_S * 1000;
-    announce('Your save was updated for the new yard.');
+    announce(U('notice'));
     writeSave();
   }
   exposeGame();
@@ -446,11 +787,16 @@ function readSave() {
   if (!raw) return null;
   let parsed = null;
   try { parsed = JSON.parse(raw); } catch (e) { return null; }
-  const wasV1 = !!(parsed && typeof parsed === 'object' && !Array.isArray(parsed) && parsed.v === 1);
+  // W13.3: any valid save with raw v 1, 2 or 3 shows the notice once; v 4 loads silently.
+  const old = !!(parsed && typeof parsed === 'object' && !Array.isArray(parsed) && (parsed.v === 1 || parsed.v === 2 || parsed.v === 3));
   let valid = null;
   try { valid = PitSim.validateSave(parsed); } catch (e) { valid = null; }
-  migrated = wasV1 && valid !== null;
+  migrated = old && valid !== null;
   return valid;
+}
+
+function lookNow() {
+  try { return typeof sim.look === 'function' ? sim.look() : copyLook(null); } catch (e) { return copyLook(null); }
 }
 
 function readSeed() {
@@ -473,7 +819,10 @@ function exposeGame() {
     dog: dog,
     fxLog: fxLog,
     captureFrame: captureFrame,
-    get banner() { return bannerNow(); }
+    get banner() { return bannerNow(); },
+    get rail() { return railNow(); },
+    get sign() { return signInfo(); },
+    get panel() { return howtoOpen ? 'howto' : currentPanel; }
   };
 }
 
@@ -550,6 +899,8 @@ function resize() {
   vctx.imageSmoothingEnabled = false;
   octx.imageSmoothingEnabled = false;
   if (sim) { try { render(); } catch (e) { fail(e); } }
+  if (currentPanel === 'creator') { drawCrSign(); drawCreatorScene(); }
+  if (currentPanel === 'week') fitWeek();
 }
 
 // Nudge the canvas so its top left corner lands on a whole device pixel.
@@ -592,6 +943,11 @@ function frame(now) {
     tAnim += dt;
     updateFx(dt);
   }
+  // The creator preview's puffs rise (deviation 38); still under reduced motion.
+  if (currentPanel === 'creator' && !reduced) {
+    crAnim += dt;
+    if (crAnimAt < 0 || crAnim - crAnimAt >= 0.2) { crAnimAt = crAnim; drawCreatorScene(); }
+  }
   try {
     render();
   } catch (e) {
@@ -619,13 +975,24 @@ function onEvent(ev) {
   const L = ev.meat && MEATS[ev.meat] ? MEATS[ev.meat].label : '';
   const K = ev.cooker && STRINGS.cooker[ev.cooker] ? STRINGS.cooker[ev.cooker] : '';
   switch (ev.type) {
-    case 'yard_open':
-      if (!tutRunning()) announce('Yard open. Gate opens in ' + C.GATE_OPENS + ' seconds.');
+    case 'yard_open': {
+      const s = sim.state;
+      const kind = ev.kind || todayKind(s);
+      const secs = Math.max(0, Math.ceil(tGate(s) - s.clock));
+      if (kind === 'booking' && s.today && s.today.booking) {
+        const b = s.today.booking;
+        announce(SAY('open', { label: b.label || bookingLabel(b.type), n: s.today.booked | 0, list: railList(s.today.rail, 'plateLabel'), s: secs }));
+      } else if (kind !== 'tutorial' || !tutRunning()) {
+        announce('Yard open. Gate opens in ' + secs + ' seconds.');
+      }
       pastSoldOut = 0;
+      noticeUntil = 0;   // deviation 41: the save notice belongs to the screen it opened on
       clearFx();
       dogReset(3);
+      dropSheet();
       closePanel();
       break;
+    }
     case 'gate_soon': announce('Gate opens in 10.'); break;
     case 'gate_open': announce('Gate open.'); break;
     case 'customer_arrived': announce('New customer wants ' + L + '.'); break;
@@ -659,7 +1026,7 @@ function onEvent(ev) {
       lastCallUntil = nowMs + 3000;
       break;
     case 'day_over':
-      announce('Day over. Opening the till.');
+      announce(todayKind(sim.state) === 'booking' ? SAY('reportOpen') : 'Day over. Opening the till.');
       openTill();
       break;
     case 'purchase':
@@ -669,6 +1036,34 @@ function onEvent(ev) {
     case 'hire':
       announce(ev.hired ? 'Hired ' + ev.label + '.' : 'Let ' + ev.label + ' go.');
       refreshClipboard();
+      break;
+    // v3.0 (W14).
+    case 'offers_ready': break;
+    case 'booking_picked': {
+      const se = sim.state.season;
+      const o = se && se.booking;
+      if (o && o.type !== 'yard') {
+        announce(SAY('picked', { label: o.label || bookingLabel(o.type), n: o.headcount | 0, fee: o.pay | 0 }));
+      } else {
+        announce(SAY('pickedYard'));
+      }
+      break;
+    }
+    case 'deposit': announce(SAY('deposit', { d: ev.amount | 0 })); break;
+    case 'guests_missed':
+      announce((ev.n | 0) === 1 ? SAY('missedOne') : SAY('missed', { n: ev.n | 0 }));
+      break;
+    case 'client_stars':
+      announce((ev.stars | 0) === 1 ? SAY('starsOne') : SAY('stars', { n: ev.stars | 0 }));
+      break;
+    case 'spoiled': break;
+    case 'week_start': announce(SAY('week', { w: ev.week | 0, when: weekWhen(ev.week | 0) })); break;
+    case 'season_end': announce(SAY('seasonEnd', { y: ev.year | 0 })); break;
+    case 'season_start': break;
+    case 'player_set': applyLook(lookNow()); break;
+    case 'tutorial_refill':
+      if (ev.kind === 'meat') announce(SAY('refillMeat', { label: ev.meat && MEATS[ev.meat] ? MEATS[ev.meat].label : '' }));
+      else announce(SAY('refillCharcoal'));
       break;
     case 'sell':
       announce('Sold ' + ev.label + ' for ' + ev.price + '.');
@@ -702,9 +1097,13 @@ function onEvent(ev) {
 }
 
 function onServed(ev, L) {
-  announce(ev.tip > 0
-    ? 'Served ' + L + ', ' + ev.price + ' plus ' + ev.tip + ' tip.'
-    : 'Served ' + L + ', ' + ev.price + ', no tip.');
+  if (ev.booked === true) {
+    announce(ev.tip > 0 ? SAY('servedBooked', { L: L, tip: ev.tip }) : SAY('servedBookedNoTip', { L: L }));
+  } else {
+    announce(ev.tip > 0
+      ? 'Served ' + L + ', ' + ev.price + ' plus ' + ev.tip + ' tip.'
+      : 'Served ' + L + ', ' + ev.price + ', no tip.');
+  }
   const x = Math.round(Number(ev.x) || 0), y = Math.round(Number(ev.y) || 0);
   // Over the served customer (round 2), falling back to the plate spot.
   const cu = custById(ev.id);
@@ -714,8 +1113,16 @@ function onServed(ev, L) {
     nx = Math.round(cu.px) + 9;     // the coin on the customer's left edge, the text after it
     ny = Math.round(cu.py) - CASH_ABOVE_PX;
   }
-  addNum('cash', cashStr, numX(nx, cashStr, true), Math.max(1, ny), 'yellow', true);
-  if (ev.tip > 0) {
+  if (ev.booked === true) {
+    // Deviation 29: a booked plate has no price, so only the tip rises, from the cash spot.
+    if (ev.tip > 0) {
+      const tipStr = '+' + ev.tip + ' TIP';
+      addNum('tip', tipStr, numX(cu ? Math.round(cu.px) : nx, tipStr, false), Math.max(1, ny), 'white', false);
+    }
+  } else {
+    addNum('cash', cashStr, numX(nx, cashStr, true), Math.max(1, ny), 'yellow', true);
+  }
+  if (ev.tip > 0 && ev.booked !== true) {
     const tipStr = '+' + ev.tip + ' TIP';
     const tx = cu ? Math.round(cu.px) : nx;
     addNum('tip', tipStr, numX(tx, tipStr, false), Math.max(1, ny + FX.TIP_GAP_PX), 'white', false);
@@ -819,6 +1226,7 @@ function noteSaveOff() {
 function openPanel(name, focusId) {
   howtoOpen = false; howtoFrom = null;
   if (name === 'pause') buildPauseBody();
+  if (name === 'week' || name === 'sheet' || name === 'creator' || name === 'season-end' || name === 'till') dropClipboard();
   for (let i = 0; i < PANEL_IDS.length; i++) el[PANEL_IDS[i]].hidden = PANEL_IDS[i] !== name;
   currentPanel = name;
   syncPanels();
@@ -889,9 +1297,42 @@ function closeHowto() {
   howtoOpener = null;
 }
 
-function showMorning() {
-  if (sim.state.broke) openBroke();
-  else openClipboard();
+// W17.1: the panel for the loop the sim is on.
+function showLoop() {
+  const s = sim.state;
+  const loop = loopOf(s);
+  if (loop === 'creator') { openCreator(false); return; }
+  if (loop === 'seasonEnd') { openSeasonEnd(); return; }
+  if (loop === 'week') { if (s.broke) openBroke(); else openWeek(); return; }
+  if (loop === 'report' || (loop === 'tutorial' && s.phase === 'evening')) { openTill(); return; }
+  if (s.phase === 'morning') { if (s.broke) openBroke(); else openClipboard(); return; }
+  closePanel();
+}
+
+// Empties the tutorial clipboard so its v2 row ids never sit beside the hub's (deviation 30).
+function dropClipboard() {
+  if (!clip) return;
+  clear(el['clip-top']); clear(el.shop); clear(el.hire); clear(el['clip-foot']);
+  clip = null;
+}
+
+// Rebuilds a panel's content and puts focus back on the same control when it is still usable.
+function rebuildKeepFocus(build, panel) {
+  const a = document.activeElement;
+  const id = a && a.id ? a.id : null;
+  build();
+  let f = id ? document.getElementById(id) : null;
+  if (!f || f.disabled || f.hidden || !el[panel].contains(f) || (f.tagName !== 'BUTTON' && f.tagName !== 'INPUT')) f = el[panel + '-h'];
+  if (f && typeof f.focus === 'function' && currentPanel === panel) f.focus();
+}
+
+// After any control on a season screen: pump, then refresh the screen that is open.
+function afterAct() {
+  pump();
+  if (currentPanel === 'week') rebuildKeepFocus(buildWeek, 'week');
+  else if (currentPanel === 'sheet') refreshSheet();
+  else if (currentPanel === 'clipboard') refreshClipboard();
+  updateDom();
 }
 
 function togglePause() {
@@ -929,11 +1370,15 @@ function confirmYes() {
   fxLog.length = 0;
   returnPanel = null;
   lastSpokenStep = null;
+  crFromPause = false;
+  migrated = false;
+  dropSheet();
   sim.reset();
   sim.setPaused(false);
+  applyLook(lookNow());
   dogReset(2);
   pump();
-  showMorning();
+  showLoop();
   pump();
 }
 
@@ -941,6 +1386,15 @@ function confirmYes() {
 
 function buildStatic() {
   clear(el.chips);
+  // W17.6: the charcoal chip first, an inventory readout (not a button).
+  const cc = mk('span', { id: 'chip-charcoal', cls: 'chip inv', attrs: { role: 'img', 'aria-label': 'Charcoal, 0 bags' } });
+  const pileIc = sprEl('pile', 0, 1, null);
+  if (pileIc) cc.appendChild(pileIc);
+  const ccn = mk('span', { text: '0', attrs: { 'aria-hidden': 'true' } });
+  cc.appendChild(ccn);
+  el.chips.appendChild(cc);
+  chipEls.charcoal = { b: cc, cnt: ccn };
+  lastChips.charcoal = '';
   for (let i = 0; i < MEAT_IDS.length; i++) {
     const id = MEAT_IDS[i];
     const b = mk('button', { id: 'chip-' + id, cls: 'chip', type: 'button' });
@@ -984,6 +1438,8 @@ function buildPauseBody() {
   clear(b);
   b.appendChild(btn('resume', 'Keep playing', 'primary', resumeFromPause));
   b.appendChild(btn('pause-controls', 'Controls', 'alt', function () { openHowto('pause-controls'); }));
+  // W17.6: the creator, reopened from the pause panel ([S 19.2] change later).
+  b.appendChild(btn('pause-look', U('pauseLook'), 'alt', function () { openCreator(true); }));
   if (tutRunning()) b.appendChild(btn('pause-skip', 'Skip tutorial', 'alt', onPauseSkip));
   b.appendChild(btn('pause-new', 'New game', 'alt', function () { openConfirm('pause'); }));
 }
@@ -1000,7 +1456,9 @@ function onPauseSkip() {
 function onClipSkip() {
   if (typeof sim.skipTutorial === 'function') sim.skipTutorial();
   pump();
-  rebuildClipboardKeepFocus();
+  // W6: skipping on the morning goes straight to the creator ([S 19.2]).
+  if (loopOf(sim.state) === 'tutorial' && sim.state.phase === 'morning') rebuildClipboardKeepFocus();
+  else showLoop();
   updateDom();
 }
 
@@ -1026,14 +1484,25 @@ function seatsLine() {
 
 function buildClipboard() {
   const s = sim.state;
-  el['clipboard-h'].textContent = 'Morning';
+  // Q-7: the tutorial morning wears the hub's look (screen-3-week) and keeps to what the practice
+  // day uses: the meat and charcoal rows. The goal line, gear, decor and hires wait for week 1.
+  const tut = tutRunning();
+  el.clipboard.classList.toggle('hub', tut);
+  el.clipboard.classList.toggle('clip-hub', tut);
+  const ch = el['clipboard-h'];
+  clear(ch);
+  if (tut) uiPut(ch, ('Day ' + s.day).toUpperCase(), 3, UI.white, { bold: true, shadow: UI.ink }, 'Morning, day ' + s.day);
+  else ch.textContent = 'Morning';
   clear(el['clip-top']); clear(el.shop); clear(el.hire); clear(el['clip-foot']);
+  el.shop.className = tut ? 'card3 sheet-card clip-shop' : '';
   clip = { rows: [], headText: null, seats: null, cart: null, open: null, why: null };
+  rowSink = clip.rows;
 
   // Header lines.
   clip.headText = document.createTextNode(headLine(s));
   const head = mk('p', null, [clip.headText, ' ', mk('span', { cls: 'stars', text: stars(s.rep), attrs: { 'aria-hidden': 'true' } })]);
   el['clip-top'].appendChild(head);
+  if (tut) el['clip-top'].appendChild(mk('p', { id: 'clip-practice', text: U('practice') }));
   const ts = tutStep();
   if (ts && ts.id === 'open') {
     el['clip-top'].appendChild(mk('p', { id: 'tut-clip', cls: 'card', text: ts.text }));
@@ -1048,7 +1517,9 @@ function buildClipboard() {
       : 'Clear today.';
     el['clip-top'].appendChild(mk('p', { text: w }));
   }
-  if (s.comingNext) {
+  if (tut) {
+    // Q-7: no goal line on the practice day.
+  } else if (s.comingNext) {
     const card = mk('div', { id: 'goal', cls: 'card' }, [
       mk('p', { text: 'Coming next: the driveway pop-up' }),
       mk('p', { text: 'Price ' + C.DRIVEWAY_PRICE + '. The backyard stays open as long as you like.' }),
@@ -1082,23 +1553,31 @@ function buildClipboard() {
   el.shop.appendChild(mk('p', { cls: 'muted', text: 'Game numbers. Not real prices and not a cooking guide.' }));
   el.shop.appendChild(h3('Charcoal'));
   for (let i = 0; i < CATALOG.length; i++) if (CATALOG[i].kind === 'fuel') el.shop.appendChild(cartRow(CATALOG[i]));
-  el.shop.appendChild(h3('Gear'));
-  for (let i = 0; i < CATALOG.length; i++) if (CATALOG[i].kind === 'gear') el.shop.appendChild(ownRow(CATALOG[i]));
-  for (let i = 0; i < CATALOG.length; i++) if (CATALOG[i].kind === 'goal') el.shop.appendChild(goalRow(CATALOG[i]));
-  el.shop.appendChild(h3('Decor'));
-  el.shop.appendChild(mk('p', { cls: 'muted', text: 'Charm adds to the tip each seated customer leaves, up to 3 more, and lets word of mouth climb a little faster.' }));
-  for (let i = 0; i < CATALOG.length; i++) if (CATALOG[i].kind === 'decor') el.shop.appendChild(ownRow(CATALOG[i]));
+  if (!tut) {
+    el.shop.appendChild(h3('Gear'));
+    for (let i = 0; i < CATALOG.length; i++) if (CATALOG[i].kind === 'gear') el.shop.appendChild(ownRow(CATALOG[i]));
+    for (let i = 0; i < CATALOG.length; i++) if (CATALOG[i].kind === 'goal') el.shop.appendChild(goalRow(CATALOG[i]));
+    el.shop.appendChild(h3('Decor'));
+    el.shop.appendChild(mk('p', { cls: 'muted', text: 'Charm adds to the tip each seated customer leaves, up to 3 more, and lets word of mouth climb a little faster.' }));
+    for (let i = 0; i < CATALOG.length; i++) if (CATALOG[i].kind === 'decor') el.shop.appendChild(ownRow(CATALOG[i]));
 
-  // Hires.
-  el.hire.appendChild(h3('Hires'));
-  for (let i = 0; i < CATALOG.length; i++) if (CATALOG[i].kind === 'hire') el.hire.appendChild(hireRow(CATALOG[i]));
-  el.hire.appendChild(mk('div', { cls: 'row' }, [
-    mk('span', { cls: 'name', text: 'Daily costs: ice and trash bags, ' + C.DAILY_COSTS + '.' })
-  ]));
+    // Hires.
+    el.hire.appendChild(h3('Hires'));
+    for (let i = 0; i < CATALOG.length; i++) if (CATALOG[i].kind === 'hire') el.hire.appendChild(hireRow(CATALOG[i]));
+    el.hire.appendChild(mk('div', { cls: 'row' }, [
+      mk('span', { cls: 'name', text: 'Daily costs: ice and trash bags, ' + C.DAILY_COSTS + '.' })
+    ]));
+  }
 
   // Foot.
   clip.cart = mk('p', { id: 'cart' });
-  clip.open = btn('open', 'Open the yard', 'primary', onOpen);
+  if (tut) {
+    // Q-7: Open the yard as the hub's chunky primary, its words in the UI font.
+    clip.open = mk('button', { id: 'open', cls: 'primary big', type: 'button', on: onOpen });
+    uiPut(clip.open, 'OPEN THE YARD', 2, UI.white, { bold: true, shadow: '#8a3a14' }, 'Open the yard');
+  } else {
+    clip.open = btn('open', 'Open the yard', 'primary', onOpen);
+  }
   clip.why = mk('p', { id: 'open-why', cls: 'muted' });
   el['clip-foot'].appendChild(clip.cart);
   el['clip-foot'].appendChild(clip.open);
@@ -1131,41 +1610,106 @@ function refreshClipboard() {
 }
 
 function nameCell(item, withIcon) {
-  const icon = withIcon ? iconCanvas('icon_' + item.id) : null;
+  // Q-2: the charcoal row carries the pile sprite (there is no charcoal icon), as the HUD chip does.
+  const icon = !withIcon ? null : (item.kind === 'fuel' ? pileIcon() : iconCanvas('icon_' + item.id));
   return mk('span', { cls: 'name' }, [icon, item.label, mk('span', { cls: 'effect', text: item.effect })]);
+}
+function pileIcon() {
+  const c = sprEl('pile', 0, 1, null);
+  if (c) { c.style.marginRight = '6px'; c.style.verticalAlign = 'middle'; }
+  return c;
 }
 
 function lockedBy(item, s) {
   const n = item.needs;
   if (!n) return false;
-  if (n.gear) return s.gear[n.gear] !== true;
-  if (n.decor) return s.decor[n.decor] !== true;
-  if (n.day) return s.day < n.day;
+  if (n.gear && s.gear[n.gear] !== true) return true;
+  if (n.decor && s.decor[n.decor] !== true) return true;
+  if (typeof n.rep === 'number' && s.rep < n.rep) return true;
+  // W22.12: in loop 'week' the buddy has no day gate (deviation 36).
+  if (n.day && loopOf(s) !== 'week' && s.day < n.day) return true;
   return false;
 }
 
-function cartRow(item) {
+// Cash a cart line may still spend: the deposit of the picked booking counts in the week (W5.2).
+function cartRoom(s) {
+  const se = s.season;
+  const dep = loopOf(s) === 'week' && se && se.booking ? se.booking.deposit | 0 : 0;
+  return s.cash + dep - sim.cartTotal();
+}
+function meatRoomNow() { return typeof sim.meatRoom === 'function' ? sim.meatRoom() : Infinity; }
+
+// A meat or charcoal stepper. With extras (the week's shop sheet) it also shows have-{id} and after-{id},
+// a coin before the price and a dark box around the count (P-16), and on the charcoal row a +5 button.
+// Q-2: with a booking's rail, a meat row also says how many of its plates the pile covers.
+function cartRow(item, extras, rail) {
   const isMeat = item.kind === 'meat';
   const price = mk('span', { cls: 'price' });
-  const dec = btn('dec-' + item.id, '-', 'alt', function () { sim.buy(item.id, -1); pump(); refreshClipboard(); });
+  let priceNum = null, priceCoin = null;
+  if (extras) {
+    priceCoin = coinEl(2);
+    priceNum = mk('span', { cls: 'pn' });
+    if (priceCoin) price.appendChild(priceCoin);
+    price.appendChild(priceNum);
+  }
+  const press = function (d) {
+    return function () {
+      const r = sim.buy(item.id, d);
+      sheetMsg = r && r.ok === false && r.message ? String(r.message) : '';
+      afterAct();
+    };
+  };
+  const dec = btn('dec-' + item.id, '-', 'alt', press(-1));
   dec.setAttribute('aria-label', 'Fewer ' + item.label);
   const qty = mk('span', { id: 'qty-' + item.id, text: '0' });
-  const inc = btn('inc-' + item.id, '+', 'alt', function () { sim.buy(item.id, 1); pump(); refreshClipboard(); });
+  const inc = btn('inc-' + item.id, '+', 'alt', press(1));
   inc.setAttribute('aria-label', 'More ' + item.label);
-  const step = mk('span', { cls: 'step' }, [dec, qty, inc]);
-  const row = mk('div', { cls: 'row' }, [nameCell(item, isMeat), price, step]);
-  clip.rows.push(function () {
+  // P-16: twenty bags in four taps instead of sixteen (the sim clamps by cash and the pile's cap).
+  const inc5 = extras && !isMeat ? btn('inc5-' + item.id, U('inc5'), 'alt', press(5)) : null;
+  if (inc5) inc5.setAttribute('aria-label', U('inc5Aria'));
+  const step = mk('span', { cls: 'step' + (inc5 ? ' step5' : '') }, [dec, qty, inc, inc5]);
+  const name = nameCell(item, isMeat || item.kind === 'fuel');
+  let have = null, after = null, covers = null;
+  const want = isMeat && rail ? rail[item.id] | 0 : 0;
+  if (extras) {
+    have = mk('span', { id: 'have-' + item.id, cls: 'have' });
+    after = mk('span', { id: 'after-' + item.id, cls: 'have' });
+    if (want > 0) covers = mk('span', { id: 'covers-' + item.id, cls: 'have covers' });
+    name.appendChild(mk('span', { cls: 'haves' }, [have, after, covers]));
+  }
+  const row = mk('div', { cls: 'row' }, [name, price, step]);
+  rowSink.push(function () {
     const s = sim.state;
     const q = isMeat ? (s.cart.meat[item.id] | 0) : (s.cart.charcoal | 0);
+    const owned = isMeat ? (s.stock[item.id] | 0) : (s.charcoal | 0);
     const locked = lockedBy(item, s);
-    const remaining = s.cash - sim.cartTotal();
-    price.textContent = locked ? item.needsText : String(item.price);
+    const remaining = cartRoom(s);
+    const cap = isMeat ? q + owned >= C.STEPPER_MAX || meatRoomNow() <= 0
+      : q + owned >= (typeof C.CHARCOAL_MAX === 'number' ? C.CHARCOAL_MAX : C.STEPPER_MAX);
+    if (priceNum) {
+      priceNum.textContent = locked ? item.needsText : String(item.price);
+      if (priceCoin) priceCoin.hidden = locked;
+    } else {
+      price.textContent = locked ? item.needsText : String(item.price);
+    }
     price.classList.toggle('muted', locked || remaining < item.price);
     price.style.whiteSpace = locked ? 'normal' : '';
     qty.textContent = String(q);
     dec.disabled = locked || q <= 0;
-    inc.disabled = locked || q >= C.STEPPER_MAX || remaining < item.price;
+    inc.disabled = locked || cap || remaining < item.price;
+    if (inc5) inc5.disabled = inc.disabled;
     step.hidden = locked;
+    if (have) {
+      have.textContent = U('youHave', { n: owned });
+      after.textContent = isMeat ? U('afterUnits', { n: owned + q }) : U('afterBags', { n: owned + q });
+      have.hidden = locked;
+      after.hidden = locked;
+    }
+    if (covers) {
+      const p = (owned + q) * MEATS[item.id].plates;
+      covers.textContent = U('covers', { p: Math.min(p, want), r: want });
+      covers.classList.toggle('short', p < want);
+    }
   });
   return row;
 }
@@ -1178,14 +1722,18 @@ function ownRow(item) {
   const eff = name.querySelector('.effect');
   const row = mk('div', { cls: 'row' }, [name, price]);
   let ctl = null, ctlOwned = null;
-  clip.rows.push(function () {
+  rowSink.push(function () {
     const s = sim.state;
     const isOwned = (isDecor ? s.decor : s.gear)[item.id] === true;
     const locked = lockedBy(item, s);
-    const canPay = s.cash - sim.cartTotal() >= item.price;
-    const after = s.cash - sim.cartTotal() - item.price;
+    // R-1: the sim's own rule (sim.js R-1), so a buy the sim allows is never a dead button.
+    const chk = typeof sim.canBuy === 'function' ? sim.canBuy(item.id) : null;
+    const canPay = chk ? chk.ok : s.cash - sim.cartTotal() >= item.price;
+    const after = chk ? chk.left : s.cash - sim.cartTotal() - item.price;
     const reserve = typeof C.GEAR_RESERVE === 'number' ? C.GEAR_RESERVE : 0;
-    const effText = (!isOwned && !locked && canPay && after < reserve)
+    const bk = s.loop === 'week' && s.season ? s.season.booking : null;
+    const booked = !!(bk && bk.type !== 'yard');
+    const effText = (!isOwned && !locked && canPay && !booked && after < reserve)
       ? item.effect + ' Leaves ' + after + '. A day of meat and charcoal is about ' + reserve + '.'
       : item.effect;
     if (eff && eff.textContent !== effText) eff.textContent = effText;
@@ -1197,7 +1745,7 @@ function ownRow(item) {
       if (isOwned) {
         ctl = mk('span', { id: 'buy-' + item.id, cls: 'muted', text: 'Owned' });
       } else {
-        ctl = btn('buy-' + item.id, 'Buy', 'primary', function () { sim.buy(item.id, 1); pump(); refreshClipboard(); });
+        ctl = btn('buy-' + item.id, 'Buy', 'primary', function () { sim.buy(item.id, 1); afterAct(); });
         ctl.setAttribute('aria-label', 'Buy ' + item.label);
       }
       ctlOwned = isOwned;
@@ -1212,20 +1760,21 @@ function goalRow(item) {
   const price = mk('span', { cls: 'price muted', text: String(item.price) });
   const name = nameCell(item, false);
   const row = mk('div', { cls: 'row' }, [name, price]);
-  clip.rows.push(function () {
+  rowSink.push(function () {
     const s = sim.state;
     const locked = lockedBy(item, s);
     const eff = name.querySelector('.effect');
     if (eff) eff.textContent = item.effect + (locked && item.needsText ? ' ' + item.needsText : '');
+    price.textContent = String(item.price);
   });
   return row;
 }
 
 function hireRow(item) {
   const price = mk('span', { cls: 'price' });
-  const b = btn('hire-' + item.id, 'Hire', 'primary', function () { sim.hire(item.id); pump(); refreshClipboard(); });
+  const b = btn('hire-' + item.id, 'Hire', 'primary', function () { sim.hire(item.id); afterAct(); });
   const row = mk('div', { cls: 'row' }, [nameCell(item, false), price, b]);
-  clip.rows.push(function () {
+  rowSink.push(function () {
     const s = sim.state;
     const locked = lockedBy(item, s);
     const on = s.hires[item.id] === true;
@@ -1247,7 +1796,7 @@ function onOpen() {
   if (!r.ok && clip) clip.why.textContent = r.message || sim.canOpen().reason;
 }
 
-// ---------------------------------------------------------------- till
+// ---------------------------------------------------------------- till and the report (W17.4)
 
 function openTill() {
   buildTill();
@@ -1264,45 +1813,402 @@ function tillRow(label, detail, amount, cls) {
   return mk('div', { cls: 'row' + (cls ? ' ' + cls : '') }, [name, price]);
 }
 
+// A report row: the amount green when it adds, red when it takes.
+function repRow(label, detail, amount, cls) {
+  const r = tillRow(label, detail, amount, cls);
+  const a = String(amount);
+  const p = r.querySelector('.price');
+  if (/^\+/.test(a)) p.classList.add('up');
+  else if (/^-/.test(a)) p.classList.add('down');
+  return r;
+}
+
+// A cream framed box with its title set into the top border (screen-4-report).
+function repBox(id, title, cls, titleIcon) {
+  const box = mk('section', { id: id, cls: 'rbox' + (cls ? ' ' + cls : '') });
+  if (title) {
+    const t = mk('h3', { id: id + '-t', cls: 'rt' });
+    if (titleIcon) t.appendChild(titleIcon);
+    uiPut(t, title, 2, UI.gold);
+    box.appendChild(t);
+    box.setAttribute('aria-labelledby', id + '-t');
+  }
+  return box;
+}
+
+function nextLabel() {
+  const s = sim.state;
+  if (loopOf(s) === 'tutorial') return U('cont');
+  const done = s.season && s.season.results ? s.season.results.length : 0;
+  return done >= (C.SEASON_WEEKS || 9) ? U('seeSeason') : U('nextWeek');
+}
+function nextButton() {
+  const label = nextLabel();
+  const b = mk('button', { id: 'next', cls: 'primary big', type: 'button', on: onNext });
+  uiPut(b, label.toUpperCase(), 3, UI.creamL, { bold: true, shadow: UI.orangeLo }, label);
+  return b;
+}
+function tillNewButton() { return btn('till-new', 'New game', 'alt', function () { openConfirm('till'); }); }
+
 function buildTill() {
   const s = sim.state;
   const t = s.till;
   const body = el['till-body'];
+  const head = el['till-h'];
   clear(body);
+  clear(head);
+  head.className = '';
+  el.till.classList.remove('booking', 'yardday');
+  const oldTop = document.getElementById('rep-top');
+  if (oldTop && oldTop.parentNode) oldTop.parentNode.removeChild(oldTop);
   if (!t) {
-    el['till-h'].textContent = 'Till';
-    body.appendChild(btn('next', 'Next day', 'primary', onNextDay));
-    body.appendChild(btn('till-new', 'New game', 'alt', function () { openConfirm('till'); }));
+    head.textContent = 'Till';
+    body.appendChild(nextButton());
+    body.appendChild(tillNewButton());
     return;
   }
-  el['till-h'].textContent = 'Day ' + t.day + ' till';
+  const kind = t.kind || 'tutorial';
+  if (kind === 'booking') buildBookingReport(t, head, body);
+  else if (kind === 'yard') buildYardReport(t, head, body);
+  else buildTutorialTill(t, head, body);
+}
+
+// W22.24: the header row above the title: week, pit name and cash.
+function repTop(t) {
+  const s = sim.state;
+  const top = mk('div', { id: 'rep-top' });
+  // Q-8: the week and the cash in the UI font, as the pit name beside them.
+  top.appendChild(uiPut(mk('span', { cls: 'rw' }), U('hudWeek', { w: t.week || (s.season ? s.season.week : 1) }), 2, UI.cream));
+  const pit = mk('span', { cls: 'rp' });
+  uiPut(pit, pitName(s).toUpperCase(), 2, UI.creamDim, null, pitName(s));
+  top.appendChild(pit);
+  const cash = mk('span', { cls: 'rc' });
+  const coin = coinEl(2);
+  if (coin) cash.appendChild(coin);
+  cash.appendChild(uiPut(mk('span', { cls: 'rcv' }), fmt(typeof t.cashAfter === 'number' ? t.cashAfter : s.cash), 2, UI.gold, { bold: true }));
+  top.appendChild(cash);
+  return top;
+}
+
+// Deviation 32 with playtest round 1 (P-10): the title band is #till-h itself, a dusk sky over a lawn
+// about 150 px tall like screen-4-report: the event label in cream over a large gold DONE, and a row
+// of v2 guests, the buddy and the event icon standing on the grass. The words stay one .sr span with
+// the W15 title, so #till-h reads "{label}: done". R-9: at 1 or 2 stars (low) the word is cream and
+// only the event icon stands on the grass.
+function heroHead(head, t, title, low) {
+  head.className = 'hero' + (low ? ' low' : '');
+  const type = t.kind === 'yard' ? 'yard' : (t.booking && t.booking.type) || (t.type) || bookingType(t);
+  const tt = mk('span', { cls: 'ht' });
+  const room = Math.min(480, (document.documentElement.clientWidth || 375) - 16) - 32;
+  const cut = title.lastIndexOf(': ');
+  const lead = cut > 0 ? title.slice(0, cut + 1) : '';
+  const word = cut > 0 ? title.slice(cut + 2) : title;
+  const top = lead ? uiCanvas(lead.toUpperCase(), 2, UI.creamL, { shadow: UI.K }) : null;
+  let big = null;
+  for (let sc = 6; sc >= 3 && !big; sc--) {
+    const c = uiCanvas(word.toUpperCase(), sc, low ? UI.creamL : UI.gold, { bold: true, shadow: UI.K });
+    if (c && parseFloat(c.style.width) <= room) big = c;
+  }
+  if ((lead ? top : true) && big && (!top || parseFloat(top.style.width) <= room)) {
+    if (top) { top.classList.add('ht-lead'); tt.appendChild(top); }
+    big.classList.add('ht-word');
+    tt.appendChild(big);
+    tt.appendChild(mk('span', { cls: 'sr', text: title }));
+  } else {
+    uiPut(tt, title, 2, low ? UI.creamL : UI.gold, { bold: true, shadow: UI.K });
+  }
+  head.appendChild(tt);
+  const crowd = mk('span', { cls: 'hero-row', attrs: { 'aria-hidden': 'true' } });
+  const cast = low ? [['ev_' + type, 0]] : [['cust0_down', 0], ['cust1_down', 0], ['ev_' + type, 0], ['cust2_down', 0], ['buddy_down', 0]];
+  for (let i = 0; i < cast.length; i++) {
+    const c = sprEl(cast[i][0], cast[i][1], 3, null);
+    if (c) { if (cast[i][0] === 'ev_' + type) c.classList.add('hero-ic'); crowd.appendChild(c); }
+  }
+  head.appendChild(crowd);
+}
+// The booking type of a till (its label maps back to a BookingId).
+function bookingType(t) {
+  const b = STRINGS.booking || {};
+  for (const k in b) if (b[k] === t.label) return k;
+  return 'yard';
+}
+
+function coolerLines(parent, t) {
+  const s = sim.state;
+  const after = t.coolerAfter || s.stock;
+  const list = railList(after, 'label');
+  parent.appendChild(mk('p', { id: 'rep-cooler', text: list ? U('cooler', { list: list }) : U('coolerNothing') }));
+  const bags = typeof t.charcoalAfter === 'number' ? t.charcoalAfter : s.charcoal;
+  parent.appendChild(mk('p', { id: 'rep-charcoal', text: U1(bags, 'charcoalLeftOne', 'charcoalLeft') }));
+  const n = sumCounts(t.spoiled);
+  const cap = typeof t.coolerCap === 'number' ? t.coolerCap : (typeof sim.coolerCap === 'function' ? sim.coolerCap() : 0);
+  const none = t.spoilReason === 'nocooler' || (t.spoilReason !== 'full' && cap === 0);
+  const sp = mk('p', { id: 'rep-spoil', cls: 'bad', text: n > 0 ? (none ? U('spoilNone', { n: n }) : U('spoilFull', { cap: cap, n: n })) : '' });
+  sp.hidden = n === 0;
+  parent.appendChild(sp);
+}
+
+// P-10: the word of mouth box shows the change, the new number and what it was, so the narrow column
+// no longer wraps a sentence; the W15 line rides along as the box's .sr text.
+function fansBox(t, booking) {
+  // The narrow box takes its title inside, a few words a line (the mock's one word "Fans" fit the border).
+  const box = mk('section', { id: 'rep-fans', cls: 'rbox fans', attrs: { 'aria-labelledby': 'rep-fans-t' } });
+  const title = U('fansH');
+  const th = mk('h3', { id: 'rep-fans-t', cls: 'rt-in' });
+  const words = title.split(' ');
+  let line = '';
+  const lines = [];
+  for (let i = 0; i < words.length; i++) {
+    const next = line ? line + ' ' + words[i] : words[i];
+    if (line && next.length > 7) { lines.push(line); line = words[i]; } else line = next;
+  }
+  if (line) lines.push(line);
+  let drawn = true;
+  for (let i = 0; i < lines.length; i++) {
+    const c = uiCanvas(lines[i], 2, UI.gold);
+    if (!c) { drawn = false; break; }
+    th.appendChild(c);
+  }
+  if (drawn) th.appendChild(mk('span', { cls: 'sr', text: title }));
+  else { clear(th); uiPut(th, title, 2, UI.gold); }
+  box.appendChild(th);
+  const d = t.repDelta | 0;
+  const heart = sprEl('heart', 0, 4, null);
+  if (heart) { heart.classList.add('fan-heart'); box.appendChild(heart); }
+  const big = mk('p', { cls: 'fan-d ' + (d >= 0 ? 'up' : 'down') });
+  uiPut(big, signed(d), 4, d >= 0 ? UI.green : UI.red, { shadow: '#0d0a08' });
+  box.appendChild(big);
+  const now = mk('p', { cls: 'fan-now', attrs: { 'aria-hidden': 'true' } });
+  uiPut(now, String(t.repEnd | 0), 3, UI.creamL, { shadow: '#0d0a08' });
+  box.appendChild(now);
+  box.appendChild(mk('p', { cls: 'fan-was', attrs: { 'aria-hidden': 'true' }, text: U('fansWas', { a: t.repStart | 0 }) }));
+  box.appendChild(mk('p', { cls: 'fan-line sr', text: U('fansLine', { a: t.repStart, b: t.repEnd }) }));
+  const why = booking ? U1(t.stars | 0, 'fansReasonOne', 'fansReason', { d: signed(d) }) : U('fansServes');
+  box.appendChild(mk('p', { cls: 'fan-why', text: why }));
+  return box;
+}
+
+function buildBookingReport(t, head, body) {
+  const s = sim.state;
+  const stars = Math.max(1, Math.min(5, t.stars | 0));
+  el.till.classList.add('booking');
+  el.till.insertBefore(repTop(t), head);
+  heroHead(head, t, U(stars <= 2 ? 'reportHLow' : 'reportH', { label: t.label }), stars <= 2);
+  body.appendChild(mk('p', { id: 'rep-meta' }, [
+    mk('span', { text: U('host', { name: t.host || '' }) }),
+    mk('span', { text: STRINGS.venue && STRINGS.venue.backyard ? STRINGS.venue.backyard : 'Backyard' })
+  ]));
+
+  // Score and stars (no letter grade, W21 item 22).
+  const score = repBox('rep-score', null, 'gold');
+  score.setAttribute('data-stars', String(stars));
+  const num = mk('div', { cls: 'score-num' });
+  num.appendChild(mk('span', { cls: 'score-l', text: U('score') }));
+  const sn = mk('span', { cls: 'score-v' });
+  uiPut(sn, String(t.score | 0), 4, UI.creamL, { shadow: UI.K });
+  num.appendChild(sn);
+  score.appendChild(num);
+  const right = mk('div', { cls: 'score-r' });
+  const row = mk('p', { cls: 'stars-row', attrs: { 'aria-hidden': 'true' } });
+  for (let i = 0; i < 5; i++) {
+    const st = starEl(i < stars, 2);
+    if (st) { st.setAttribute('data-on', i < stars ? '1' : '0'); row.appendChild(st); }
+  }
+  right.appendChild(row);
+  right.appendChild(mk('p', { cls: 'of5', text: U('of5', { n: stars }) }));
+  score.appendChild(right);
+  body.appendChild(score);
+
+  // The three parts of [S 5.4], titled like the mock (P-10).
+  const parts = repBox('rep-parts', U('howWent'), 'parts');
+  const P = t.parts || { fed: 0, wait: 0, quality: 0 };
+  const defs = [['fed', 'partFed', C.SCORE_FED || 60, 'fed'], ['wait', 'partWait', C.SCORE_WAIT || 20, 'wait'], ['quality', 'partQuality', C.SCORE_QUALITY || 20, 'qual']];
+  for (let i = 0; i < defs.length; i++) {
+    const p = Math.max(0, P[defs[i][0]] | 0), max = defs[i][2];
+    const r = mk('div', { id: 'rep-' + defs[i][0], cls: 'part' });
+    r.appendChild(mk('span', { cls: 'pl', text: U(defs[i][1]) }));
+    const bar = mk('span', { cls: 'segs ' + defs[i][3], attrs: { 'aria-hidden': 'true' } });
+    const on = Math.round(10 * Math.min(1, p / max));
+    for (let k = 0; k < 10; k++) bar.appendChild(mk('span', { cls: 'seg' + (k < on ? ' on' : '') }));
+    r.appendChild(bar);
+    r.appendChild(mk('span', { cls: 'pv', text: U('partOf', { p: p, max: max }) }));
+    parts.appendChild(r);
+  }
+  body.appendChild(parts);
+
+  // W22.8: fed + walked out + missed is the headcount. P-1 and P-2: why guests missed, and cold plates.
+  const w = (t.walkouts | 0) + (t.close | 0);
+  let res = U('result', { f: t.fed | 0, b: t.booked | 0, w: w, s: t.avgWait | 0 });
+  if ((t.missed | 0) > 0) res += ' ' + U(t.soldOutMiss ? 'missedOutLine' : 'missedLine', { n: t.missed | 0 });
+  // Q-3: the fix already for sale, when the line held three.
+  if ((t.missed | 0) > 0 && !t.soldOutMiss && s.gear.bigtable !== true) res += ' ' + U('missedTable');
+  if ((t.cold | 0) > 0) res += ' ' + U1(t.cold | 0, 'coldLineOne', 'coldLine');
+  body.appendChild(mk('p', { id: 'rep-result', text: res }));
+
+  // Money, with word of mouth beside it. P-3: the rows add up to Take today (sim.js P-3), so the meat
+  // left on the grate or thrown out shows as information inside Food cost. P-10: rows that would read
+  // zero or none are left out, and the detail sits on the label line.
+  const mf = mk('div', { cls: 'money-fans' });
+  const money = repBox('rep-money', U('money'), 'money', coinEl(2));
+  const feeAt = Math.round((t.fee | 0) * (C.PAY_BASE + C.PAY_PER_STAR * stars));
+  const seated = t.seated | 0;
+  const food = (t.foodCost | 0) + (t.rawWaste | 0);
+  money.appendChild(repRow(U1(stars, 'rowFeeOne', 'rowFee'), '', plus(feeAt)));
+  money.appendChild(repRow(U('rowDeposit'), '', String(t.deposit | 0), 'info'));
+  money.appendChild(repRow(U('rowTips'), '', plus(t.tips | 0)));
+  if (t.addon) money.appendChild(repRow(U('rowMenuBonus'), MEATS[t.addon] ? MEATS[t.addon].label : '', plus(t.menuBonus | 0)));
+  if ((t.seatTips | 0) > 0 || seated > 0) money.appendChild(repRow(U('rowSeatTips'), seated + ' sat down', plus(t.seatTips | 0)));
+  money.appendChild(repRow(U('rowFood'), '', minus(food)));
+  money.appendChild(repRow(U('rowCharcoal'), plural(t.bags | 0, 'bag', 'bags'), minus((t.bags | 0) * C.CHARCOAL_PRICE)));
+  if ((t.wages | 0) > 0) money.appendChild(repRow(U('rowWages'), t.wageNames && t.wageNames.length ? t.wageNames.join(', ') : '', minus(t.wages | 0)));
+  money.appendChild(repRow(U('rowDaily'), 'ice and trash bags', minus(C.DAILY_COSTS)));
+  if ((t.spoilCost | 0) > 0) money.appendChild(repRow(U('rowSpoiled'), meatList(t.spoiled), minus(t.spoilCost | 0)));
+  if ((t.wasteCost | 0) > 0) {
+    const thrown = [];
+    if ((t.wastePlates | 0) > 0) thrown.push(plural(t.wastePlates | 0, 'plate', 'plates'));
+    if ((t.wasteBurnt | 0) > 0) thrown.push((t.wasteBurnt | 0) + ' burnt');
+    money.appendChild(repRow(U('rowThrown'), (thrown.length ? thrown.join(' and ') + ', ' : '') + U('counted'), String(t.wasteCost | 0), 'info'));
+  }
+  if ((t.grateCost | 0) > 0) money.appendChild(repRow(U('rowGrate'), meatList(t.grateLeft) + ', ' + U('counted'), String(t.grateCost | 0), 'info'));
+  if ((t.burnt | 0) > 0) money.appendChild(repRow(U('rowBurnt'), plural(t.burnt | 0, 'piece', 'pieces'), ''));
+  const take = repRow(U('rowTake'), U('takeDetail'), signed(t.net | 0), 'net');
+  // Q-3: Take today in the UI font at 3x, gold on its band (the words stay as the .sr text).
+  const tp = take.querySelector('.price');
+  if (tp) { clear(tp); uiPut(tp, signed(t.net | 0), 3, UI.gold, { shadow: '#0d0a08' }); }
+  money.appendChild(take);
+  // R-4: week start + Take - gear + what the cook kept or drew on = Cash.
+  const se = s.season || {};
+  const start = typeof t.cashStart === 'number' ? t.cashStart : (typeof se.weekCash === 'number' ? se.weekCash : null);
+  const gear = t.gearSpent | 0;
+  if (gear > 0) money.appendChild(repRow(U('rowGear'), (t.gearBought || []).join(', '), minus(gear)));
+  if (start !== null) {
+    // Q-3: an information row (the money is in the pile and cooler, or was paid in an earlier week),
+    // its amount signed so the column still adds up, the bags and units in the detail.
+    const stock = (t.cashAfter | 0) - start - (t.net | 0) + gear;
+    if (stock < 0) money.appendChild(tillRow(U('rowKept'), stockMoved(t, 1), minus(-stock), 'info'));
+    else if (stock > 0) money.appendChild(tillRow(U('rowDrawn'), stockMoved(t, -1), plus(stock), 'info'));
+  }
+  money.appendChild(repRow(U('rowCash'), start !== null ? U('cashFrom', { a: fmt(start) }) : '', fmt(t.cashAfter)));
+  mf.appendChild(money);
+  mf.appendChild(fansBox(t, true));
+  body.appendChild(mf);
+
+  // What the host said (R-11: beside a framed guest head).
+  const host = repBox('rep-host', U('hostH'), 'host');
+  const says = STRINGS.hostSays && STRINGS.hostSays[stars - 1] ? STRINGS.hostSays[stars - 1] : '';
+  host.appendChild(hostQuote(t, fill(says, { name: profileName(s) })));
+  body.appendChild(host);
+
+  const inv = repBox('rep-inv', U('inventory'), 'plain');
+  coolerLines(inv, t);
+  body.appendChild(inv);
+  body.appendChild(nextButton());
+}
+
+// Q-3: what the pile and cooler gained (dir 1) or gave up (dir -1) over the cook, as "15 bags, 2 Sausage".
+function stockMoved(t, dir) {
+  const parts = [];
+  if (typeof t.charcoalStart === 'number' && typeof t.charcoalAfter === 'number') {
+    const d = (t.charcoalAfter - t.charcoalStart) * dir;
+    if (d > 0) parts.push(plural(d, 'bag', 'bags'));
+  }
+  const a = t.coolerAfter || {}, b = t.stockStart || null;
+  if (b) {
+    const moved = {};
+    for (let i = 0; i < MEAT_IDS.length; i++) {
+      const m = MEAT_IDS[i];
+      const d = ((a[m] | 0) - (b[m] | 0)) * dir;
+      if (d > 0) moved[m] = d;
+    }
+    const ml = meatList(moved);
+    if (ml) parts.push(ml);
+  }
+  return parts.join(', ');
+}
+
+// R-11: the host's words in a bubble beside a framed v2 guest head (screen-4-report's portrait).
+function hostQuote(t, words) {
+  const row = mk('div', { cls: 'host-row' });
+  const av = mk('span', { cls: 'host-av', attrs: { 'aria-hidden': 'true' } });
+  const names = STRINGS.names || [];
+  const i = Math.max(0, names.indexOf(t.host || ''));
+  const head = sprEl('cust' + (i % 4) + '_down', 0, 2, null);
+  if (head) av.appendChild(head);
+  row.appendChild(av);
+  row.appendChild(mk('p', { cls: 'bubble', text: words }));
+  return row;
+}
+
+function buildYardReport(t, head, body) {
+  const s = sim.state;
+  el.till.classList.add('yardday');
+  el.till.insertBefore(repTop(t), head);
+  heroHead(head, t, U('reportH', { label: bookingLabel('yard') }));
+  const mf = mk('div', { cls: 'money-fans' });
+  const money = repBox('rep-money', U('money'), 'money', coinEl(2));
+  const se = s.season || {};
+  const start = typeof t.cashStart === 'number' ? t.cashStart : (typeof se.weekCash === 'number' ? se.weekCash : null);
+  tutorialRows(money, t, start !== null ? U('cashFrom', { a: fmt(start) }) : '');
+  mf.appendChild(money);
+  mf.appendChild(fansBox(t, false));
+  body.appendChild(mf);
+  const inv = repBox('rep-inv', U('inventory'), 'plain');
+  coolerLines(inv, t);
+  body.appendChild(inv);
+  body.appendChild(nextButton());
+  const people = repBox('rep-people', 'People', 'plain');
+  people.appendChild(mk('p', { text: peopleLine(t) }));
+  body.appendChild(people);
+}
+
+// The v2.1 till rows (the tutorial day and the Yard day). R-4: the food, charcoal, spoiled, thrown
+// out and grate rows are information (the shop took that money before the gate), and Gear bought and
+// Paid at the shop sit above Cash, so cash at the start + Take - gear - shop = Cash.
+function tutorialRows(box, t, cashDetail) {
   const wages = t.wageNames && t.wageNames.length ? t.wageNames.join(', ') : 'none';
   const spoiled = meatList(t.spoiled) || 'nothing';
   const grate = meatList(t.grateLeft) || 'nothing';
+  const seated = t.seated | 0;
+  box.appendChild(repRow('Served', plural(t.served, 'plate', 'plates'), plus(t.revenue)));
+  box.appendChild(repRow('Tips', '', plus(t.tips)));
+  box.appendChild(repRow('Seat tips', seated + ' sat down', plus(t.seatTips | 0)));
+  box.appendChild(repRow('Food cost (what you cooked)', '', String(t.foodCost | 0), 'info'));
+  box.appendChild(repRow('Charcoal used', plural(t.bags, 'bag', 'bags'), String((t.bags | 0) * C.CHARCOAL_PRICE), 'info'));
+  box.appendChild(repRow('Wages', wages, minus(t.wages)));
+  box.appendChild(repRow('Daily costs', 'ice and trash bags', minus(C.DAILY_COSTS)));
+  box.appendChild(repRow('Spoiled overnight', spoiled, String(t.spoilCost | 0), 'info'));
+  box.appendChild(repRow('Thrown out', plural(t.wastePlates, 'plate', 'plates') + ', ' + t.wasteBurnt + ' burnt', String(t.wasteCost | 0), 'info'));
+  box.appendChild(repRow('Left on the grate', grate, String(t.grateCost | 0), 'info'));
+  box.appendChild(repRow('Burnt today', plural(t.burnt || 0, 'piece', 'pieces') + ', costed in the two rows above', ''));
+  box.appendChild(repRow('Take today', 'sales and tips after wages and daily costs', signed(t.net), 'net'));
+  const gear = t.gearSpent | 0;
+  if (gear > 0) box.appendChild(repRow(U('rowGear'), (t.gearBought || []).join(', '), minus(gear)));
+  if (typeof t.cashStart === 'number') box.appendChild(repRow(U('rowShop'), '', minus(t.cashStart + (t.net | 0) - gear - (t.cashAfter | 0))));
+  box.appendChild(repRow('Cash', cashDetail || '', fmt(t.cashAfter)));
+}
+
+function peopleLine(t) {
   const soldOut = Math.max(0, Math.min(t.past, pastSoldOut));
   const seated = t.seated | 0;
-  body.appendChild(tillRow('Served', plural(t.served, 'plate', 'plates'), plus(t.revenue)));
-  body.appendChild(tillRow('Tips', '', plus(t.tips)));
-  body.appendChild(tillRow('Seat tips', seated + ' sat down', plus(t.seatTips | 0)));
-  body.appendChild(tillRow('Food cost (what you cooked)', '', minus(t.foodCost)));
-  body.appendChild(tillRow('Charcoal used', plural(t.bags, 'bag', 'bags'), minus(t.bags * C.CHARCOAL_PRICE)));
-  body.appendChild(tillRow('Wages', wages, minus(t.wages)));
-  body.appendChild(tillRow('Daily costs', 'ice and trash bags', minus(C.DAILY_COSTS)));
-  body.appendChild(tillRow('Spoiled overnight', spoiled, minus(t.spoilCost)));
-  body.appendChild(tillRow('Thrown out', plural(t.wastePlates, 'plate', 'plates') + ', ' + t.wasteBurnt + ' burnt', minus(t.wasteCost)));
-  body.appendChild(tillRow('Left on the grate', grate, minus(t.grateCost)));
-  body.appendChild(tillRow('Burnt today', plural(t.burnt || 0, 'piece', 'pieces') + ', costed in the two rows above', ''));
-  body.appendChild(tillRow('Take today', 'sales and tips after wages and daily costs', signed(t.net), 'net'));
-  body.appendChild(tillRow('Cash', '', String(t.cashAfter)));
+  return 'Came to the gate ' + t.customers + '. Served ' + t.served + '. Sat down ' + seated +
+    '. Took it to go ' + (t.togo | 0) + '. Walked out ' + t.walkouts +
+    '. Walked past (line full) ' + (t.past - soldOut) + '.' + (soldOut > 0 ? ' Looked in, sold out ' + soldOut + '.' : '') +
+    ' Left at close ' + t.close + '.';
+}
+
+// The tutorial day keeps every v2.1 row and paragraph and gains the cooler lines (W17.4).
+function buildTutorialTill(t, head, body) {
+  head.textContent = 'Day ' + t.day + ' till';
+  const rows = mk('div', { cls: 'rbox plain tut-rows' });
+  tutorialRows(rows, t);
+  body.appendChild(rows);
   body.appendChild(mk('p', { cls: 'muted', text: 'Food, charcoal and spoilage were paid at the shop. They are listed so you can see where the money went.' }));
-  body.appendChild(btn('next', 'Next day', 'primary', onNextDay));
+  const inv = mk('div', { cls: 'rbox plain' });
+  coolerLines(inv, t);
+  body.appendChild(inv);
+  body.appendChild(nextButton());
   body.appendChild(h3('People'));
-  body.appendChild(mk('p', {
-    text: 'Came to the gate ' + t.customers + '. Served ' + t.served + '. Sat down ' + seated +
-      '. Took it to go ' + (t.togo | 0) + '. Walked out ' + t.walkouts +
-      '. Walked past (line full) ' + (t.past - soldOut) + '.' + (soldOut > 0 ? ' Looked in, sold out ' + soldOut + '.' : '') +
-      ' Left at close ' + t.close + '.'
-  }));
+  body.appendChild(mk('p', { text: peopleLine(t) }));
   body.appendChild(h3('Word of mouth'));
   body.appendChild(mk('p', { text: 'Word of mouth ' + t.repStart + ' to ' + t.repEnd }));
   const happy = t.happy | 0, togoQuick = t.togoQuick | 0, ok = t.ok | 0, walkouts = t.walkouts | 0;
@@ -1313,17 +2219,19 @@ function buildTill() {
       (ok * C.REP_OK) + ' from ' + plural(ok, 'other serve', 'other serves') + ', -' +
       (walkouts * Math.abs(C.REP_WALKOUT)) + ' from ' + plural(walkouts, 'walk-out', 'walk-outs') + capped
   }));
-  body.appendChild(btn('till-new', 'New game', 'alt', function () { openConfirm('till'); }));
+  body.appendChild(tillNewButton());
 }
 
-function onNextDay() {
+// W5.1 finishReport(): the tutorial till leads to the creator; a report to the next week or the season end.
+function onNext() {
   if (sim.state.phase !== 'evening') return;
-  sim.continueFromTill();
+  sim.finishReport();
   clearFx();
   dogReset(2);
   pump();
-  showMorning();
+  showLoop();
   pump();
+  updateDom();
 }
 
 // ---------------------------------------------------------------- broke card
@@ -1380,10 +2288,1197 @@ function buildBroke() {
     body.appendChild(btn('broke-keep', 'Keep going', 'primary', function () {
       sim.continueFromBroke();
       pump();
-      if (!sim.state.broke) openClipboard();
+      if (!sim.state.broke) showLoop();
     }));
   }
   body.appendChild(btn('broke-over', 'Start over', 'alt', function () { openConfirm('broke'); }));
+}
+
+// ---------------------------------------------------------------- the week hub (W17.2)
+
+function openWeek() {
+  dropSheet();
+  buildWeekAt(weekFit);
+  if (currentPanel !== 'week') openPanel('week');
+  fitWeek();
+}
+
+// W22.25: the hub fits two screens; while it is taller, the shrink steps apply in order (deviation 40).
+let weekFit = 0, weekFitSig = '';
+function buildWeek() {
+  buildWeekAt(weekFit);
+  fitWeek();
+}
+// What changes the hub's height; the fit runs again only when this changes (one build a tap otherwise).
+function weekSig(s) {
+  const se = s.season || {};
+  const inv = typeof sim.inventory === 'function' ? sim.inventory() : null;
+  let meats = 0;
+  if (inv && inv.meat) for (let i = 0; i < MEAT_IDS.length; i++) if ((inv.meat[MEAT_IDS[i]] | 0) > 0) meats++;
+  const o = se.booking;
+  const rail = o && o.type !== 'yard' && typeof sim.railFor === 'function' ? sim.railFor(o, se.addon || null) : null;
+  const rl = rail ? MEAT_IDS.filter(function (m) { return (rail[m] | 0) > 0; }).length : 0;
+  let nextGear = '';
+  for (let i = 0; i < CATALOG.length; i++) if (CATALOG[i].kind === 'gear' && s.gear[CATALOG[i].id] !== true) { nextGear = CATALOG[i].id; break; }
+  const g = sim.goal();
+  const cl = typeof sim.canLoadUp === 'function' ? sim.canLoadUp() : { ok: false, reason: '' };
+  return [(se.offers || []).map(function (x) { return x.id + (x.needs ? '!' : ''); }).join(','), o ? (o.type === 'yard' ? 'y' : 'b') : '', rl, meats,
+    inv ? (inv.over > 0 || (inv.cap === 0 && inv.units > 0)) : '', inv ? inv.wood > 0 : '', nextGear, g ? g.id : '',
+    !!s.comingNext, s.day >= C.RAIN_FROM_DAY, cl.ok ? '' : cl.reason, window.innerHeight, document.documentElement.clientWidth,
+    rail ? !!mixHint(rail) : '', se.week | 0, !!s.gear.bigtable].join('|');   // R-7, R-3, Q-4: the hint line and the finale news lines
+}
+function fitWeek() {
+  const w = el.week;
+  if (!w || w.hidden || el.panels.hidden) return;
+  const sig = weekSig(sim.state);
+  if (sig === weekFitSig) return;
+  const a = document.activeElement;
+  const id = a && a.id && w.contains(a) ? a.id : null;
+  const lim = 2 * (window.innerHeight || 812);
+  let lvl = 0;
+  if (weekFit !== 0) buildWeekAt(0);
+  while (w.scrollHeight > lim && lvl < 4) { lvl++; buildWeekAt(lvl); }
+  if (id) { const f = document.getElementById(id); if (f && f !== document.activeElement) f.focus(); }
+  weekFit = lvl;
+  weekFitSig = sig;
+}
+
+// One line of an offer or the next event card: an aria-hidden icon and its words.
+function iconLine(icon, text, cls) {
+  const p = mk('p', { cls: 'oline' + (cls ? ' ' + cls : '') });
+  if (icon) p.appendChild(icon);
+  p.appendChild(document.createTextNode(text));
+  return p;
+}
+function peopleIcon() { return pixCanvas(PIX.people.map, PIX.people.pal, 2); }
+function pinIcon() { return pixCanvas(PIX.pin.map, PIX.pin.pal, 2); }
+// ui.pay as "Pay", the coin, then the number large: textContent stays "Pay {fee}" (deviation 28).
+function payInto(parent, fee) {
+  const parts = (STRINGS.ui.pay || 'Pay {fee}').split('{fee}');
+  parent.appendChild(document.createTextNode(parts[0]));
+  const coin = coinEl(2);
+  if (coin) parent.appendChild(coin);
+  parent.appendChild(mk('b', { cls: 'fee', text: String(fee) }));
+  if (parts[1]) parent.appendChild(document.createTextNode(parts[1]));
+  return parent;
+}
+// The largest integer scale (at most 4) at which a sprite fits the box.
+function fitScale(name, maxW, maxH) {
+  const sz = size(name);
+  return Math.max(1, Math.min(4, Math.floor(maxW / sz[0]), Math.floor(maxH / sz[1])));
+}
+
+function buildWeekAt(level) {
+  const s = sim.state;
+  for (let k = 1; k <= 4; k++) el.week.classList.toggle('fit' + k, level >= k);
+  const se = s.season || { year: 1, week: 1, offers: [], booking: null, addon: null, results: [] };
+  const w = se.week || 1;
+  const yr = se.year || 1;
+  const pit = pitName(s);
+  const top = el['week-top'], body = el['week-body'], foot = el['week-foot'];
+  clear(top); clear(body); clear(foot);
+  // R-6: from season 2 the heading and the season label carry the season number.
+  el['week-h'].textContent = pit + ', ' + (yr > 1 ? U('weekOfYear', { y: yr, w: w }) : U('weekOf', { w: w }));
+
+  // Header: the pit sign, then Week N of 9 with the season label and the pips (screen-3-week).
+  const head = mk('div', { cls: 'wk-row' });
+  const sign = mk('div', { id: 'week-sign', cls: 'sign' });
+  signWords(sign, pit, 0.55, el.week);
+  head.appendChild(sign);
+  const lab = mk('div', { cls: 'wk-lab' });
+  lab.appendChild(uiPut(mk('p', { id: 'week-label' }), U('weekOf', { w: w }).toUpperCase(), 2, UI.white, { bold: true, shadow: UI.navyD }, U('weekOf', { w: w })));
+  lab.appendChild(mk('p', { id: 'week-when', text: yr > 1 ? U('seasonWhen', { y: yr, when: weekWhen(w) }) : weekWhen(w) }));
+  // Q-5: no pip bar; the season strip below carries the weeks (screen-1-season has no pips).
+  head.appendChild(lab);
+  top.appendChild(head);
+
+  // Pills: cash and word of mouth with the thirds bar (Q-5: the UI font, as screen-3-week).
+  const pills = mk('div', { cls: 'pills' });
+  pills.appendChild(mk('div', { id: 'week-cash', cls: 'pill' }, [coinEl(2), pillLabel(U('cash')), pillValue(fmt(s.cash))]));
+  const third = typeof sim.fanThird === 'function' ? sim.fanThird() : 0;
+  const thirdName = STRINGS.thirdName ? STRINGS.thirdName[third] : '';
+  const thirds = mk('div', { id: 'week-thirds', attrs: { role: 'img', 'aria-label': U('fansAria', { n: s.rep, third: thirdName }) } });
+  for (let i = 0; i < 3; i++) thirds.appendChild(mk('span', { cls: 'seg' + (i === third ? ' on' : '') }));
+  pills.appendChild(mk('div', { id: 'week-fans', cls: 'pill' }, [sprEl('heart', 0, 2, null), pillLabel(U('fans')), pillValue(String(s.rep)), thirds]));
+  top.appendChild(pills);
+
+  // The season strip.
+  const strip = mk('ol', { id: 'season-strip', attrs: { 'aria-label': U('stripAria', { y: se.year || 1 }) } });
+  const n = C.SEASON_WEEKS || 9;
+  for (let i = 1; i <= n; i++) strip.appendChild(stripTile(se, i, n));
+  body.appendChild(strip);
+
+  // The phone rings: this week's offers.
+  const offers = mk('section', { id: 'offers', attrs: { 'aria-labelledby': 'offers-h' } });
+  const oh = mk('div', { cls: 'offers-head' });
+  oh.appendChild(uiPut(mk('h3', { id: 'offers-h' }), U('thisWeek').toUpperCase(), 3, UI.white, { bold: true, shadow: UI.ink }, U('thisWeek')));
+  const list = se.offers || [];
+  if (list.length > 1) oh.appendChild(mk('span', { cls: 'pick-one', text: U('pickOne') }));   // R-8
+  offers.appendChild(oh);
+  const grid = mk('div', { cls: 'offer-grid' });
+  const pickedId = se.booking ? se.booking.id : null;
+  for (let i = 0; i < list.length; i++) grid.appendChild(offerCard(list[i], pickedId, level, i));
+  offers.appendChild(grid);
+  body.appendChild(offers);
+
+  // Next event and Load up and go.
+  body.appendChild(nextCard(s, se));
+
+  // The 2 by 2 grid of sheets.
+  body.appendChild(hubGrid(s, se));
+
+  // Inventory and Pit news.
+  body.appendChild(invCard(s));
+  body.appendChild(newsCard(s));
+
+  // Event length, Controls, New game.
+  foot.appendChild(lengthSection(s));
+  const how = btn('week-controls', U('controls'), 'alt', function () { openHowto('week-controls'); });
+  const fresh = btn('week-new', U('newGame'), 'alt', function () { openConfirm('week'); });
+  foot.appendChild(mk('div', { cls: 'foot-row' }, [how, fresh]));
+}
+
+// P-13: the pit name on a board sign in bold UI letters at 3x, or 2x when 3x would not fit the share
+// of the panel the sign gets (the hub row gives it a little over half, the season end card all of it).
+function signWords(sign, pit, share, host) {
+  // The panel's content width: the section when it is laid out, else the 320 px desktop column or the phone width.
+  const vw = document.documentElement.clientWidth || 375;
+  const panel = host && host.clientWidth > 0 ? host.clientWidth - 24 : (vw >= 900 ? 296 : Math.min(480, vw) - 24);
+  const room = Math.floor(panel * share) - 32;
+  const big = uiCanvas(pit.toUpperCase(), 3, UI.signText, { bold: true, shadow: UI.woodX });
+  if (big && parseFloat(big.style.width) <= room) {
+    sign.appendChild(big);
+    sign.appendChild(mk('span', { cls: 'sr', text: pit }));
+  } else {
+    uiPut(sign, pit.toUpperCase(), 2, UI.signText, { bold: true, shadow: UI.woodX }, pit);
+  }
+  return sign;
+}
+
+// Q-5: words in groups of at most `max` characters, a group a line (the pill labels, the fans box).
+function wordLines(words, max) {
+  const parts = String(words).split(' ');
+  const lines = [];
+  let line = '';
+  for (let i = 0; i < parts.length; i++) {
+    const next = line ? line + ' ' + parts[i] : parts[i];
+    if (line && next.length > max) { lines.push(line); line = parts[i]; } else line = next;
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+// Q-5: a pill's label in the UI font at 2x, a short group of words a line; plain words without uiText.
+function pillLabel(words) {
+  const sp = mk('span', { cls: 'pl' });
+  const lines = wordLines(words, 7);
+  const cs = [];
+  for (let i = 0; i < lines.length; i++) { const c = uiCanvas(lines[i], 2, '#a9c6ff'); if (!c) { cs.length = 0; break; } cs.push(c); }
+  if (!cs.length) { sp.textContent = words; return sp; }
+  sp.classList.add('ui');
+  for (let i = 0; i < cs.length; i++) sp.appendChild(cs[i]);
+  sp.appendChild(mk('span', { cls: 'sr', text: words }));
+  return sp;
+}
+// Q-5: a pill's value in the UI font at 2x, bold with an ink shadow.
+function pillValue(str) {
+  return uiPut(mk('span', { cls: 'pv' }), str, 2, UI.white, { bold: true, shadow: UI.ink });
+}
+
+function stripTile(se, i, n) {
+  const res = se.results || [];
+  const li = mk('li', { id: 'wk-' + i });
+  const inner = mk('div', { cls: 'tin', attrs: { 'aria-hidden': 'true' } });
+  const numEl = function (color) { return uiPut(mk('span', { cls: 'tn' }), String(i), 2, color, { shadow: UI.ink }); };
+  if (i <= res.length) {
+    const r = res[i - 1] || { type: 'yard', stars: 0 };
+    li.className = 'wk done' + (i === n ? ' fin' : '');
+    li.setAttribute('aria-label', U('wkDone', { w: i, label: bookingLabel(r.type), stars: starsWord(r.type === 'yard' ? 0 : r.stars | 0) }));
+    inner.appendChild(numEl(UI.white));
+    const badge = mk('span', { cls: 'badge' });
+    const ck = checkEl(2);
+    if (ck) badge.appendChild(ck);
+    inner.appendChild(badge);
+    if (r.type !== 'yard') {
+      const st = mk('span', { cls: 'tstars' });
+      for (let k = 0; k < 5; k++) { const e = starEl(k < (r.stars | 0), 1); if (e) st.appendChild(e); }
+      inner.appendChild(st);
+    } else {
+      const yi = sprEl('ev_yard', 0, 1, null);
+      if (yi) { yi.classList.add('tyard'); inner.appendChild(yi); }
+    }
+  } else if (i === se.week) {
+    li.className = 'wk now' + (i === n ? ' fin' : '');
+    li.setAttribute('aria-label', U('wkNow', { w: i }));
+    inner.appendChild(numEl(UI.K));
+    if (i === n) { const cup = sprEl('ev_finale', 0, 2, null); if (cup) inner.appendChild(cup); }
+    inner.appendChild(uiPut(mk('span', { cls: 'tnow' }), U('nowTag'), 2, UI.K));
+  } else if (i === n) {
+    li.className = 'wk fin';
+    li.setAttribute('aria-label', U('wkFinale'));
+    const cup = sprEl('ev_finale', 0, 2, null);
+    if (cup) inner.appendChild(cup);
+    // The label one word a line, so it fits the two column tile at the mock's size.
+    const lab = mk('span', { cls: 'tfin' });
+    const words = weekWhen(n).split(' ');
+    for (let k = 0; k < words.length; k++) lab.appendChild(uiPut(mk('span', { cls: 'tfw' }), words[k], 2, UI.gold, { shadow: UI.K }));
+    inner.appendChild(lab);
+  } else {
+    li.className = 'wk later';
+    li.setAttribute('aria-label', U('wkLater', { w: i, when: weekWhen(i) }));
+    inner.appendChild(numEl(UI.blueL));
+    inner.appendChild(uiPut(mk('span', { cls: 'tq' }), '?', 3, UI.blueL, { shadow: UI.ink }));
+  }
+  li.appendChild(inner);
+  return li;
+}
+
+function offerCard(o, pickedId, level, idx) {
+  const isYard = o.type === 'yard';
+  const picked = o.id === pickedId;
+  const row1 = isYard && level >= 2;   // W22.25 step 2: the Yard day card on one row
+  const cls = 'offer card3' + (isYard ? ' yard' : '') + (row1 ? ' row1' : '') + (o.type === 'finale' ? ' wide' : '') + (picked ? ' picked' : '');
+  const card = mk('article', { id: 'offer-' + o.id, cls: cls, attrs: { 'aria-labelledby': 'offer-' + o.id + '-t' } });
+  const band = mk('div', { cls: 'band', attrs: { 'aria-hidden': 'true' } });
+  if (!isYard && art.has('picnic') && art.has('cust0_down')) {
+    band.classList.add('oscene');
+    offerScene(band, o, idx | 0, o.type === 'finale', level >= 1);
+  } else {
+    const ev = sprEl('ev_' + o.type, 0, row1 || (level >= 1 && !isYard) ? 2 : isYard ? 3 : 4, null);
+    if (ev) band.appendChild(ev);
+  }
+  card.appendChild(band);
+  const info = mk('div', { cls: 'oinfo' });
+  info.appendChild(uiPut(mk('h4', { id: 'offer-' + o.id + '-t', cls: 'olabel' }), o.label, 2, UI.creamL, { shadow: UI.K }));
+  if (!isYard && o.host) {
+    const parts = (STRINGS.ui.host || 'Host {name}').split('{name}');
+    info.appendChild(mk('p', { cls: 'ohost' }, [parts[0], mk('b', { text: o.host }), parts[1] || '']));
+  }
+  const lines = mk('div', { cls: 'olines' });
+  // On one row (W22.25 step 2) the Yard day keeps every W15 line, set as wrapping inline items.
+  const pad = row1 ? '' : 'pad';
+  lines.appendChild(iconLine(peopleIcon(), isYard ? U('walkIns') : U('guests', { n: o.headcount | 0 })));
+  if (isYard) lines.appendChild(iconLine(null, U('yourPick'), pad));
+  else for (let i = 0; i < o.menu.length; i++) lines.appendChild(iconLine(sprEl('icon_' + o.menu[i], 0, 2, null), MEATS[o.menu[i]].plateLabel));
+  lines.appendChild(iconLine(pinIcon(), (STRINGS.venue && STRINGS.venue[o.venue]) || 'Backyard'));
+  const fl = mk('p', { cls: 'oline flames' });
+  const fx = mk('span', { cls: 'ficons', attrs: { 'aria-hidden': 'true' } });
+  for (let i = 0; i < 3; i++) { const f = flameEl(i < (o.difficulty | 0), row1 ? 1 : 2); if (f) fx.appendChild(f); }
+  fl.appendChild(fx);
+  fl.appendChild(mk('span', { cls: 'fw d' + (o.difficulty | 0), text: STRINGS.flames ? STRINGS.flames[(o.difficulty | 0) - 1] || '' : '' }));
+  lines.appendChild(fl);
+  if (isYard) {
+    lines.appendChild(iconLine(null, U('perPlate'), pad + ' gold'));
+    lines.appendChild(iconLine(null, U('noFee'), pad));
+  } else {
+    lines.appendChild(payInto(mk('p', { cls: 'oline opay' }), o.pay | 0));
+    lines.appendChild(iconLine(null, U('deposit', { d: o.deposit | 0 }), 'dep'));
+  }
+  info.appendChild(lines);
+  const needs = mk('p', { id: 'offer-' + o.id + '-needs', cls: 'needs', text: o.needs || '' });
+  needs.hidden = !o.needs;
+  info.appendChild(needs);
+  // R-3: the finale sized to the grate says what the drum smoker would make of it.
+  if (o.type === 'finale' && sim.state.gear.drum !== true) {
+    const big = drumFinale(sim.state);
+    if (big && big.headcount > (o.headcount | 0)) info.appendChild(mk('p', { id: 'offer-finale-drum', cls: 'ohint', text: U('finaleDrum', { n: big.headcount, fee: big.pay }) }));
+  }
+  card.appendChild(info);
+  card.appendChild(bookButton(o, picked, row1));
+  return card;
+}
+
+// Q-5: an offer card's scene after screen-1-season's bands, from v2 sprites: the back fence over a
+// lawn, two guests behind a picnic table with the event icon on it (more tables on the wide finale
+// card), a kettle with a puff at the right, and a day tag. Drawn at 2x to the band's width; on the
+// 48 px band of fit level 1 and up (short) the same scene is cropped to its middle 22 rows.
+function offerScene(band, o, idx, wide, short) {
+  const vw = document.documentElement.clientWidth || 375;
+  const panel = el.week && el.week.clientWidth > 0 ? el.week.clientWidth - 24 : (vw >= 900 ? 296 : Math.min(480, vw) - 24);
+  const cardW = wide || panel < 312 ? panel : Math.floor((panel - 10) / 2);
+  const W = Math.max(48, Math.floor((cardW - 16) / 2)), H = short ? 22 : 34, dy = short ? -4 : 0;
+  const off = document.createElement('canvas');
+  off.width = W; off.height = H;
+  const g = off.getContext('2d');
+  g.imageSmoothingEnabled = false;
+  const draw = function (name, x, y, f) { if (art.has(name)) art.draw(g, name, x, y, Math.max(0, Math.min(art.frames(name) - 1, f | 0)), false); };
+  g.fillStyle = '#9ad6ff';
+  g.fillRect(0, 0, W, H);
+  for (let x = 0; x < W; x += TILE) { draw('fence_back', x, 2 + dy, 0); draw('lawn_a', x, 18 + dy, (x / TILE) % 3 === 1 ? 1 : 0); }
+  // The tables start 18 px in, clear of the day tag; the kettle stands at the right edge.
+  const tables = wide ? Math.max(1, Math.min(3, Math.floor((W - 42) / 40))) : 1;
+  for (let t = 0; t < tables; t++) {
+    const x0 = 18 + t * 40;
+    draw('cust' + ((idx + t * 2) % 4) + '_down', x0 - 1, 7 + dy, 0);
+    draw('cust' + ((idx + t * 2 + 1) % 4) + '_down', x0 + 17, 7 + dy, 0);
+    draw('picnic', x0, 12 + dy, 0);
+  }
+  draw('ev_' + o.type, 26, 8 + dy, 0);
+  if (W >= 70) {   // a narrower band leaves the kettle out rather than stand it on the guests
+    draw('kettle', W - 20, 8 + dy, 2);
+    draw('smoke', W - 14, 1 + dy, 1);
+  }
+  const d = dpr();
+  const k = Math.max(1, Math.floor(2 * d + 1e-6));
+  const cv = document.createElement('canvas');
+  cv.width = W * k; cv.height = H * k;
+  cv.style.width = (W * k / d) + 'px';
+  cv.style.height = (H * k / d) + 'px';
+  const vg = cv.getContext('2d');
+  vg.imageSmoothingEnabled = false;
+  vg.drawImage(off, 0, 0, W, H, 0, 0, W * k, H * k);
+  cv.setAttribute('aria-hidden', 'true');
+  cv.className = 'px';
+  band.appendChild(cv);
+  const tag = uiCanvas(DAY_TAGS[idx % DAY_TAGS.length], 2, UI.gold, { bold: true });
+  if (tag) band.appendChild(mk('span', { cls: 'daytag' }, [tag]));
+}
+
+// R-3: the Season finale this save would get with the second kettle and the drum, from the generator.
+function drumFinale(s) { return finaleWith(s, { kettle2: true, drum: true }); }
+// The Season finale this save would get with its gear plus `extra` (Q-4), from the generator.
+function finaleWith(s, extra) {
+  const se = s.season;
+  if (!se || typeof PitSim.genOffers !== 'function') return null;
+  const gear = Object.assign({}, s.gear, extra || {});
+  let list = null;
+  try {
+    list = PitSim.genOffers({ seed: se.seed, year: se.year, week: C.SEASON_WEEKS || 9, rep: s.rep, cash: se.weekCash, gear: gear,
+      length: s.settings && s.settings.length ? s.settings.length : 'normal' });
+  } catch (e) { list = null; }
+  return list && list[0] && list[0].type === 'finale' ? list[0] : null;
+}
+
+// Q-4: the two slot meat of a rail that also has a one slot meat, lower case, or ''.
+function mixBig(rail) {
+  let big = '', small = false;
+  for (let i = 0; i < MEAT_IDS.length; i++) {
+    const m = MEAT_IDS[i];
+    if (!rail || !((rail[m] | 0) > 0)) continue;
+    if (MEATS[m].slots >= 2) { if (!big) big = MEATS[m].label.toLowerCase(); } else small = true;
+  }
+  return big && small ? big : '';
+}
+
+// R-7: one two slot meat beside the one slot meats, so the first plates are ready at the gate.
+function mixHint(rail) {
+  const big = [], small = [];
+  for (let i = 0; i < MEAT_IDS.length; i++) {
+    const m = MEAT_IDS[i];
+    if (!rail || !((rail[m] | 0) > 0)) continue;
+    (MEATS[m].slots >= 2 ? big : small).push(MEATS[m].label.toLowerCase());
+  }
+  if (!big.length || !small.length) return '';
+  return U('mixHint', { big: big[0], small: andList(small) });
+}
+
+// P-11: Pick and Picked (the commitment is Load up and go); the picked button turns gold with dark
+// words and the green check badge, so it reads as a state and not as a second action.
+function bookButton(o, picked, small) {
+  const word = picked ? U('booked') : U('book');
+  const b = mk('button', { id: 'book-' + o.id, cls: 'primary book', type: 'button', attrs: { 'aria-label': U('bookAria', { label: o.label }), 'aria-pressed': picked ? 'true' : 'false' } });
+  uiPut(b, word.toUpperCase(), small ? 2 : 3, picked ? UI.K : UI.creamL, picked ? { bold: true } : { bold: true, shadow: UI.orangeLo }, word);
+  if (picked) {
+    const ck = checkEl(2);
+    if (ck) { ck.classList.add('badge'); b.appendChild(ck); }
+  }
+  b.addEventListener('click', function () { sim.bookOffer(o.id); afterAct(); });
+  return b;
+}
+
+function nextCard(s, se) {
+  const o = se.booking;
+  const sec = mk('section', { id: 'next-event', cls: 'next-card', attrs: { 'aria-labelledby': 'next-h' } });
+  const head = mk('div', { cls: 'next-head' });
+  head.appendChild(uiPut(mk('h3', { id: 'next-h' }), U('nextEvent').toUpperCase(), 2, UI.gold, { bold: true, shadow: '#000000' }, U('nextEvent')));
+  if (o) {
+    const right = mk('span', { cls: 'next-pay' });
+    if (o.type === 'yard') right.textContent = U('perPlate');
+    else payInto(right, o.pay | 0);
+    head.appendChild(right);
+  }
+  sec.appendChild(head);
+  const inner = mk('div', { cls: 'next-body' });
+  if (o) {
+    const pic = mk('div', { cls: 'next-pic band', attrs: { 'aria-hidden': 'true' } });
+    const ev = sprEl('ev_' + o.type, 0, 3, null);
+    if (ev) pic.appendChild(ev);
+    inner.appendChild(pic);
+    const txt = mk('div', { cls: 'next-txt' });
+    txt.appendChild(mk('p', { cls: 'nl', text: o.label }));
+    if (o.type === 'yard') {
+      txt.appendChild(iconLine(peopleIcon(), U('walkIns')));
+      txt.appendChild(iconLine(null, U('yourPick'), 'pad'));
+    } else {
+      txt.appendChild(iconLine(peopleIcon(), U('guests', { n: o.headcount | 0 })));
+      const rail = typeof sim.railFor === 'function' ? sim.railFor(o, se.addon || null) : o.rail;
+      for (let i = 0; i < MEAT_IDS.length; i++) {
+        const m = MEAT_IDS[i];
+        if (rail && (rail[m] | 0) > 0) txt.appendChild(iconLine(sprEl('icon_' + m, 0, 2, null), MEATS[m].plateLabel));
+      }
+    }
+    inner.appendChild(txt);
+  }
+  sec.appendChild(inner);
+  const hint = o && o.type !== 'yard' ? mixHint(typeof sim.railFor === 'function' ? sim.railFor(o, se.addon || null) : o.rail) : '';
+  if (hint) sec.appendChild(mk('p', { id: 'next-hint', text: hint }));
+  const dep = o && o.type !== 'yard' ? U('depositLine', { d: o.deposit | 0 }) : U('yardLine');
+  sec.appendChild(mk('p', { id: 'go-deposit', text: dep }));
+  const cl = typeof sim.canLoadUp === 'function' ? sim.canLoadUp() : { ok: false, reason: '' };
+  const go = mk('button', { id: 'go', cls: 'primary big go', type: 'button' });
+  const fl = flameEl(true, 2);
+  if (fl) go.appendChild(fl);
+  uiPut(go, U('loadUp').toUpperCase(), 2, UI.white, { bold: true, shadow: '#8a3a14' }, U('loadUp'));
+  go.disabled = !cl.ok;
+  go.addEventListener('click', onGo);
+  sec.appendChild(go);
+  sec.appendChild(mk('p', { id: 'go-why', cls: 'muted', text: cl.ok ? '' : String(cl.reason || '') }));
+  return sec;
+}
+
+function onGo() {
+  const r = sim.loadUp();
+  pump();
+  if (!r || !r.ok) {
+    if (currentPanel === 'week') rebuildKeepFocus(buildWeek, 'week');
+    const why = document.getElementById('go-why');
+    if (why && r && r.message) why.textContent = String(r.message);
+  }
+  updateDom();
+}
+
+function hubTile(id, cls, title, win, l1, l2) {
+  const b = mk('button', { id: id, cls: 'tile ' + cls, type: 'button', attrs: { 'aria-label': title + ', ' + l1 + (l2 ? ', ' + l2 : '') } });
+  const tt = mk('span', { cls: 'tt' });
+  uiPut(tt, title.toUpperCase(), 2, UI.white, { bold: true, shadow: 'rgba(0, 0, 0, 0.45)' }, title);
+  // P-14: a chevron after the title, as on screen-3-week's tiles (it opens a sheet).
+  const chev = pixCanvas(PIX.arrowR.map, PIX.arrowR.pal, 2);
+  if (chev) { chev.classList.add('chev'); tt.appendChild(chev); }
+  b.appendChild(tt);
+  b.appendChild(win);
+  b.appendChild(mk('span', { cls: 'l1', text: l1 }));
+  b.appendChild(mk('span', { cls: 'l2', text: l2 || '' }));
+  b.addEventListener('click', function () { openSheet(cls.replace('t-', ''), id); });
+  return b;
+}
+function tileWin(names, frames) {
+  const w = mk('span', { cls: 'win', attrs: { 'aria-hidden': 'true' } });
+  const each = Math.max(16, Math.floor(132 / Math.max(1, names.length)));
+  for (let i = 0; i < names.length; i++) {
+    if (!art.has(names[i])) continue;
+    const c = sprEl(names[i], frames ? frames[i] : 0, fitScale(names[i], each, 50), null);   // R-10: 54 px windows
+    if (c) w.appendChild(c);
+  }
+  return w;
+}
+
+function hubGrid(s, se) {
+  const g = mk('div', { id: 'hub-grid' });
+  // Crew.
+  let hired = 0;
+  for (const k in s.hires) if (s.hires[k] === true) hired++;
+  g.appendChild(hubTile('card-crew', 't-crew', U('crew'), tileWin(['buddy_down', 'tender_down']), U('crewLine', { n: hired }), U('crewSub')));
+  // Gear.
+  let ownedN = 0, next = null;
+  for (let i = 0; i < CATALOG.length; i++) {
+    const it = CATALOG[i];
+    if (it.kind !== 'gear') continue;
+    if (s.gear[it.id] === true) ownedN++;
+    else if (!next) next = it;
+  }
+  // P-14: the window shows the cooker you own (the drum once bought, else the kettles), as the mock
+  // does; the next item to buy stays in the second line.
+  const gearPics = s.gear.drum ? ['drum'] : (s.gear.kettle2 ? ['kettle', 'kettle'] : ['kettle']);
+  g.appendChild(hubTile('card-gear', 't-gear', U('gear'), tileWin(gearPics, gearPics.map(function () { return 2; })),
+    U('gearLine', { n: ownedN }), next ? U('gearNext', { label: next.label, price: next.price }) : U('gearAll')));
+  // Menu.
+  const o = se.booking;
+  let l1, l2 = '', plates = [];
+  if (!o || o.type === 'yard') {
+    l1 = U('menuYard');
+    for (let i = 0; i < MEAT_IDS.length; i++) if (MEAT_IDS[i] !== 'brisket' || s.gear.drum) plates.push('plate_' + MEAT_IDS[i]);
+  } else {
+    const rail = typeof sim.railFor === 'function' ? sim.railFor(o, se.addon || null) : o.rail;
+    const ms = MEAT_IDS.filter(function (m) { return rail && (rail[m] | 0) > 0; });
+    l1 = U1(ms.length, 'menuOne', 'menuMany');
+    l2 = ms.map(function (m) { return MEATS[m].plateLabel; }).join(', ');   // R-10: the plates, as the cards name them
+    plates = ms.map(function (m) { return 'plate_' + m; });
+  }
+  g.appendChild(hubTile('card-menu', 't-menu', U('menu'), tileWin(plates), l1, l2));
+  // Shop.
+  let lines = 0;
+  for (let i = 0; i < MEAT_IDS.length; i++) if ((s.cart.meat[MEAT_IDS[i]] | 0) > 0) lines++;
+  if ((s.cart.charcoal | 0) > 0) lines++;
+  g.appendChild(hubTile('card-shop', 't-shop', U('shop'), tileWin(['cooler', 'pile'], [1, 0]), U('shopLine', { t: sim.cartTotal() }), U1(lines, 'shopOne', 'shopMany')));
+  return g;
+}
+
+function invCard(s) {
+  const inv = typeof sim.inventory === 'function' ? sim.inventory() : { charcoal: s.charcoal, wood: 0, meat: s.stock, units: stockUnits(s), cap: 0, over: 0 };
+  const sec = mk('section', { id: 'inv-card', cls: 'card3 inv', attrs: { 'aria-labelledby': 'inv-h' } });
+  sec.appendChild(uiPut(mk('h3', { id: 'inv-h' }), U('inventory').toUpperCase(), 2, UI.gold, { bold: true, shadow: UI.K }, U('inventory')));
+  const bags = inv.charcoal | 0;
+  sec.appendChild(mk('p', { id: 'inv-charcoal', cls: 'iline' }, [sprEl('pile', bags >= 5 ? 0 : bags >= 3 ? 1 : bags >= 1 ? 2 : 3, 2, null), U1(bags, 'invCharcoalOne', 'invCharcoal')]));
+  const wood = mk('p', { id: 'inv-wood', cls: 'iline', text: U('invWood', { n: inv.wood | 0 }) });
+  wood.hidden = !((inv.wood | 0) > 0);
+  sec.appendChild(wood);
+  const units = inv.units | 0, cap = inv.cap | 0, over = inv.over | 0;
+  const meats = mk('div', { cls: 'inv-meats' });
+  for (let i = 0; i < MEAT_IDS.length; i++) {
+    const m = MEAT_IDS[i];
+    const n = inv.meat ? inv.meat[m] | 0 : 0;
+    if (n > 0) meats.appendChild(mk('p', { id: 'inv-' + m, cls: 'iline' }, [sprEl('icon_' + m, 0, 2, null), U('invMeat', { n: n, label: MEATS[m].label })]));
+  }
+  if (units === 0) meats.appendChild(mk('p', { id: 'inv-empty', cls: 'iline', text: U('invEmpty') }));
+  sec.appendChild(meats);
+  const label = U('invCooler', { u: units, cap: cap });
+  const meter = mk('div', { id: 'inv-cooler', cls: 'meter', attrs: { role: 'meter', 'aria-valuenow': String(units), 'aria-valuemin': '0', 'aria-valuemax': String(cap), 'aria-label': label } });
+  meter.appendChild(mk('span', { cls: 'ml', text: label }));
+  // Q-5: a cell a unit of the cooler, lit as it fills (gold, orange past 80 percent, red over), like
+  // the report's segmented bars, so it never reads as an empty field.
+  const frac = cap > 0 ? Math.min(1, units / cap) : (units > 0 ? 1 : 0);
+  const bar = mk('span', { cls: 'msegs' + (over > 0 || (cap === 0 && units > 0) ? ' over' : frac > 0.8 ? ' hi' : ''), attrs: { 'aria-hidden': 'true' } });
+  bar.style.setProperty('--n', String(Math.max(1, cap)));
+  const lit = Math.min(units, cap);
+  for (let i = 0; i < cap; i++) bar.appendChild(mk('span', { cls: 'ms' + (i < lit ? ' on' : '') }));
+  meter.appendChild(bar);
+  // P-12: with no cooler there is no gauge to fill; the no-cooler line says what that means instead.
+  meter.hidden = cap === 0;
+  sec.appendChild(meter);
+  let spoil = '';
+  if (cap === 0) spoil = U('invNoCooler');
+  else if (over > 0) spoil = U('invOver', { n: over });
+  const sp = mk('p', { id: 'inv-spoil', cls: cap === 0 && units === 0 ? 'muted' : 'bad', text: spoil });
+  sp.hidden = !spoil;
+  sec.appendChild(sp);
+  return sec;
+}
+
+function newsCard(s) {
+  const sec = mk('section', { id: 'news', cls: 'news', attrs: { 'aria-labelledby': 'news-h' } });
+  sec.appendChild(uiPut(mk('h3', { id: 'news-h', cls: 'tab' }), U('news').toUpperCase(), 2, UI.white, { bold: true, shadow: '#8f1f1a' }, U('news')));
+  const nb = mk('div', { cls: 'news-body' });
+  let shown = 0;
+  // Q-4: sim.js Q-8 keeps comingNext off while C.DRIVEWAY_BUYABLE is false (v3.3 builds the Driveway).
+  if (s.comingNext) {
+    shown++;
+    nb.appendChild(mk('div', { id: 'goal', cls: 'card' }, [
+      mk('p', { text: 'Coming next: the driveway pop-up' }),
+      mk('p', { text: 'Price ' + C.DRIVEWAY_PRICE + '. The backyard stays open as long as you like.' }),
+      btn('goal-keep', 'Keep running the backyard', 'alt', function () {
+        sim.dismissComingNext();
+        afterAct();
+        if (el['week-h']) el['week-h'].focus();
+      })
+    ]));
+  } else {
+    const g = sim.goal();
+    // R-10: the Gear tile already says "Next: {label}, {price}" for the first unowned gear row.
+    let nextGear = null;
+    for (let i = 0; i < CATALOG.length; i++) if (CATALOG[i].kind === 'gear' && s.gear[CATALOG[i].id] !== true) { nextGear = CATALOG[i].id; break; }
+    const gp = mk('p', { id: 'goal', text: g ? 'Next goal: ' + g.label + ', ' + g.price + '.' : '' });
+    gp.hidden = !g || g.id === nextGear;
+    if (!gp.hidden) shown++;
+    nb.appendChild(gp);
+  }
+  // R-3: from week 5, what the drum smoker makes of the finale while it is not owned.
+  const se = s.season;
+  if (se && se.week >= 5 && se.week < (C.SEASON_WEEKS || 9) && s.gear.drum !== true) {
+    const big = drumFinale(s);
+    if (big) { nb.appendChild(mk('p', { id: 'news-finale', text: U('finaleNews', { n: big.headcount }) })); shown++; }
+  }
+  // Q-4: from week 5, the finale's line and the bigger table while it is not owned.
+  if (se && se.week >= 5 && se.week < (C.SEASON_WEEKS || 9) && s.gear.bigtable !== true) {
+    const fin = finaleWith(s, null);
+    if (fin) { nb.appendChild(mk('p', { id: 'news-table', text: U('finaleTable', { n: fin.headcount }) })); shown++; }
+  }
+  // Q-4: the weather only touches a Yard day, so it shows only while the Yard day is picked.
+  const yardPick = !!(se && se.booking && se.booking.type === 'yard');
+  if (s.day >= C.RAIN_FROM_DAY && yardPick) {
+    shown++;
+    // Deviation 33: rain only touches a Yard day (W22.10).
+    const r = s.rain
+      ? (s.gear.canopy ? 'Rain today. The canopy is up for a Yard day.' : 'Rain today. A Yard day draws fewer people unless the canopy is up.')
+      : 'Clear today.';
+    nb.appendChild(mk('p', { id: 'weather', cls: 'muted', text: r }));
+  }
+  sec.appendChild(nb);
+  sec.hidden = shown === 0;
+  return sec;
+}
+
+function lengthSection(s) {
+  const cur = s.settings && s.settings.length ? s.settings.length : 'normal';
+  const sec = mk('section', { id: 'len', cls: 'len', attrs: { 'aria-labelledby': 'len-h' } });
+  const lh = mk('div', { cls: 'len-head' });
+  lh.appendChild(mk('h3', { id: 'len-h', text: U('lengthH') }));
+  sec.appendChild(lh);
+  const row = mk('div', { cls: 'lenrow', attrs: { role: 'group', 'aria-labelledby': 'len-h' } });
+  const order = C.LENGTH_ORDER || ['short', 'normal', 'long'];
+  for (let i = 0; i < order.length; i++) {
+    const id = order[i];
+    const b = btn('len-' + id, STRINGS.lengthLabel ? STRINGS.lengthLabel[id] : id, 'alt', function () { sim.setLength(id); afterAct(); });
+    b.setAttribute('aria-pressed', id === cur ? 'true' : 'false');
+    row.appendChild(b);
+  }
+  sec.appendChild(row);
+  const L = C.LENGTHS && C.LENGTHS[cur] ? C.LENGTHS[cur].seconds : C.DAY_SECONDS;
+  lh.appendChild(mk('p', { id: 'len-help', cls: 'muted', text: U('lengthHelp', { s: L }) }));
+  return sec;
+}
+
+// ---------------------------------------------------------------- sheets (W17.3)
+
+function openSheet(kind, openerId) {
+  sheetKind = kind;
+  sheetOpener = openerId || null;
+  sheetMsg = '';
+  shopOther = false;
+  buildSheet();
+  openPanel('sheet');
+}
+
+function closeSheet() {
+  const opener = sheetOpener;
+  dropSheet();
+  openWeek();
+  const f = opener ? document.getElementById(opener) : null;
+  if (f && typeof f.focus === 'function') f.focus();
+}
+
+function dropSheet() {
+  sheetKind = null;
+  sheetOpener = null;
+  sheetRows = [];
+  sheetMsg = '';
+  if (el['sheet-body']) clear(el['sheet-body']);
+  if (el['sheet-h']) clear(el['sheet-h']);
+}
+
+function buildSheet() {
+  const s = sim.state;
+  const se = s.season || {};
+  const titles = { shop: U('shop'), gear: U('gear'), menu: U('menu'), crew: U('crew') };
+  const title = titles[sheetKind] || '';
+  const h = el['sheet-h'];
+  clear(h);
+  uiPut(h, title.toUpperCase(), 3, UI.white, { bold: true, shadow: UI.ink }, title);
+  const body = el['sheet-body'];
+  clear(body);
+  sheetRows = [];
+  rowSink = sheetRows;
+  // Q-2: Back is a 44 px chevron button at the top right, beside the title (no sheet mock has a full
+  // width bar between the header and the list).
+  const back = mk('button', { id: 'sheet-back', cls: 'alt back', type: 'button', attrs: { 'aria-label': U('back') } });
+  back.appendChild(pixCanvas(PIX.arrowL.map, PIX.arrowL.pal, 2));
+  back.addEventListener('click', closeSheet);
+  body.appendChild(back);
+  const card = mk('div', { cls: 'card3 sheet-card' });
+  if (sheetKind === 'shop') {
+    // Q-2: at a booking only the rail meats show; guests order nothing else, so the rest fold away.
+    const ob = se.booking;
+    const rail = ob && ob.type !== 'yard' && typeof sim.railFor === 'function' ? sim.railFor(ob, se.addon || null) : null;
+    const meats = CATALOG.filter(function (r) { return r.kind === 'meat'; });
+    const onRail = rail ? meats.filter(function (r) { return (rail[r.id] | 0) > 0; }) : meats;
+    const offRail = rail ? meats.filter(function (r) { return !((rail[r.id] | 0) > 0); }) : [];
+    if (offRail.some(function (r) { return (s.cart.meat[r.id] | 0) > 0; })) shopOther = true;
+    card.appendChild(h3('Meat'));
+    for (let i = 0; i < onRail.length; i++) card.appendChild(cartRow(onRail[i], true, rail));
+    if (offRail.length) {
+      const tog = btn('shop-other', U('otherMeats'), 'alt', function () { shopOther = !shopOther; rebuildKeepFocus(buildSheet, 'sheet'); });
+      tog.setAttribute('aria-expanded', shopOther ? 'true' : 'false');
+      tog.setAttribute('aria-controls', 'shop-other-rows');
+      const chev = pixCanvas((shopOther ? PIX.arrowD : PIX.arrowR).map, PIX.arrowR.pal, 2);
+      tog.appendChild(chev);
+      card.appendChild(tog);
+      const box = mk('div', { id: 'shop-other-rows' });
+      box.hidden = !shopOther;
+      if (shopOther) {
+        box.appendChild(mk('p', { cls: 'muted', text: U('offMenu') }));
+        for (let i = 0; i < offRail.length; i++) box.appendChild(cartRow(offRail[i], true, null));
+      }
+      card.appendChild(box);
+    }
+    // R-15: the fuel section's one row is named Charcoal already, so it takes no heading of its own.
+    const fuel = CATALOG.filter(function (r) { return r.kind === 'fuel'; });
+    if (!(fuel.length === 1 && fuel[0].label === 'Charcoal')) card.appendChild(h3('Charcoal'));
+    for (let i = 0; i < fuel.length; i++) card.appendChild(cartRow(fuel[i], true));
+    card.appendChild(mk('p', { id: 'shop-room', cls: 'muted' }));
+    card.appendChild(mk('p', { id: 'shop-spare', cls: 'muted' }));
+    card.appendChild(mk('p', { id: 'cart' }));
+    card.appendChild(mk('p', { cls: 'muted', text: 'Game numbers. Not real prices and not a cooking guide.' }));
+  } else if (sheetKind === 'gear') {
+    card.appendChild(h3('Gear'));
+    for (let i = 0; i < CATALOG.length; i++) if (CATALOG[i].kind === 'gear') card.appendChild(ownRow(CATALOG[i]));
+    for (let i = 0; i < CATALOG.length; i++) if (CATALOG[i].kind === 'goal') card.appendChild(goalRow(CATALOG[i]));
+    card.appendChild(h3('Decor'));
+    card.appendChild(mk('p', { cls: 'muted', text: 'Charm adds to the tip each seated customer leaves, up to 3 more, and lets word of mouth climb a little faster.' }));
+    for (let i = 0; i < CATALOG.length; i++) if (CATALOG[i].kind === 'decor') card.appendChild(ownRow(CATALOG[i]));
+    card.appendChild(mk('p', { id: 'seats', text: seatsLine() }));
+  } else if (sheetKind === 'menu') {
+    const o = se.booking;
+    if (!o || o.type === 'yard') {
+      card.appendChild(mk('p', { id: 'menu-yard', text: U('yardMenu') }));
+    } else {
+      const rail = typeof sim.railFor === 'function' ? sim.railFor(o, se.addon || null) : o.rail;
+      for (let i = 0; i < MEAT_IDS.length; i++) {
+        const m = MEAT_IDS[i];
+        if (rail && (rail[m] | 0) > 0) card.appendChild(iconLine(sprEl('icon_' + m, 0, 2, null), U('menuAsk', { label: MEATS[m].plateLabel, n: rail[m] | 0 }), 'menu-ask')).id = 'menu-' + m;
+      }
+      card.appendChild(h3(U('addonH')));
+      const row = mk('div', { cls: 'addons', attrs: { role: 'group' } });
+      const none = btn('addon-none', U('addonNone'), 'alt', function () { sim.setAddon(null); afterAct(); });
+      none.setAttribute('aria-pressed', se.addon ? 'false' : 'true');
+      row.appendChild(none);
+      for (let i = 0; i < MEAT_IDS.length; i++) {
+        const m = MEAT_IDS[i];
+        if (o.menu.indexOf(m) !== -1 || (m === 'brisket' && s.gear.drum !== true)) continue;
+        const b = btn('addon-' + m, MEATS[m].label, 'alt', function () { sim.setAddon(m); afterAct(); });
+        b.setAttribute('aria-pressed', se.addon === m ? 'true' : 'false');
+        row.appendChild(b);
+      }
+      card.appendChild(row);
+      card.appendChild(mk('p', { id: 'addon-note', cls: 'muted', text: U('addonNote', { b: Math.round((o.pay | 0) * (C.MENU_BONUS || 0.1)) }) }));
+    }
+  } else if (sheetKind === 'crew') {
+    card.appendChild(h3('Hires'));
+    for (let i = 0; i < CATALOG.length; i++) if (CATALOG[i].kind === 'hire') card.appendChild(hireRow(CATALOG[i]));
+    card.appendChild(mk('div', { cls: 'row' }, [
+      mk('span', { cls: 'name', text: 'Daily costs: ice and trash bags, ' + C.DAILY_COSTS + '.' })
+    ]));
+  }
+  body.appendChild(card);
+  runSheetRows();
+}
+
+function runSheetRows() {
+  const s = sim.state;
+  for (let i = 0; i < sheetRows.length; i++) sheetRows[i]();
+  if (sheetKind === 'shop') {
+    const room = meatRoomNow();
+    const cap = typeof sim.coolerCap === 'function' ? sim.coolerCap() : 0;
+    // R-8: with no cooler the line says so instead of "The cooler holds 0 overnight".
+    const e = room === Infinity ? 0 : Math.max(0, room);
+    let t = cap === 0 ? (room <= 0 ? U('coolerFullNone') : U('coolerNone', { e: e }))
+      : (room <= 0 ? U('coolerFull', { cap: cap }) : U('coolerRoom', { cap: cap, e: e }));
+    if ((s.charcoal | 0) + (s.cart.charcoal | 0) >= (C.CHARCOAL_MAX || 200)) t += ' ' + U('pileFull');
+    if (sheetMsg && t.indexOf(sheetMsg) === -1) t = sheetMsg + ' ' + t;
+    const sr = document.getElementById('shop-room');
+    if (sr && sr.textContent !== t) sr.textContent = t;
+    const total = sim.cartTotal();
+    const o = s.season ? s.season.booking : null;
+    // Q-2: the cart covers the rail with no whole spare unit of some meat (no cooler, no spare).
+    const sp = document.getElementById('shop-spare');
+    if (sp) {
+      const rail = o && o.type !== 'yard' && typeof sim.railFor === 'function' ? sim.railFor(o, s.season.addon || null) : null;
+      let covered = !!rail, tight = false;
+      if (rail) {
+        for (let i = 0; i < MEAT_IDS.length; i++) {
+          const m = MEAT_IDS[i], want = rail[m] | 0;
+          if (want <= 0) continue;
+          const p = ((s.stock[m] | 0) + (s.cart.meat[m] | 0)) * MEATS[m].plates;
+          if (p < want) covered = false;
+          else if (p - want < MEATS[m].plates) tight = true;
+        }
+      }
+      const line = covered && tight ? U('noSpare') : '';
+      if (sp.textContent !== line) sp.textContent = line;
+      sp.hidden = !line;
+    }
+    const line = o && o.type !== 'yard'
+      ? U('cartLine', { t: total, d: o.deposit | 0, c: s.cash + (o.deposit | 0) - total })
+      : U('cartLineYard', { t: total, c: s.cash - total });
+    const ct = document.getElementById('cart');
+    if (ct && ct.textContent !== line) ct.textContent = line;
+  } else if (sheetKind === 'gear') {
+    const se = document.getElementById('seats');
+    const line = seatsLine();
+    if (se && se.textContent !== line) se.textContent = line;
+  }
+}
+
+function refreshSheet() {
+  if (sheetKind === 'menu') { rebuildKeepFocus(buildSheet, 'sheet'); return; }
+  runSheetRows();
+  const a = document.activeElement;
+  if (!a || a === document.body || !el.sheet.contains(a)) {
+    const b = document.getElementById('sheet-back');
+    if (b) b.focus();
+  }
+}
+
+// ---------------------------------------------------------------- the creator (W17.5)
+
+function filterName(v) {
+  if (typeof PitSim.filterName === 'function') return PitSim.filterName(v);
+  return String(v === undefined || v === null ? '' : v).slice(0, C.NAME_MAX || 14);
+}
+function cleanName(v, fb) {
+  if (typeof PitSim.cleanName === 'function') return PitSim.cleanName(v, fb);
+  const t = filterName(v).trim();
+  return t || fb;
+}
+
+function openCreator(fromPause) {
+  crFromPause = !!fromPause;
+  crDraft = copyLook(lookNow());
+  applyLook(crDraft);
+  buildCreator();
+  openPanel('creator');
+  drawCrSign();
+  drawCreatorScene();
+}
+
+function buildCreator() {
+  const s = sim.state;
+  const h = el['creator-h'];
+  clear(h);
+  const st1 = starEl(true, 2), st2 = starEl(true, 2);
+  if (st1) h.appendChild(st1);
+  uiPut(h, U('creatorH').toUpperCase(), 3, UI.white, { bold: true, shadow: UI.ink }, U('creatorH'));
+  if (st2) h.appendChild(st2);
+  const body = el['creator-body'];
+  clear(body);
+
+  if (!crFromPause) {
+    const sub = mk('p', { id: 'cr-sub' });
+    if (migrated) {
+      sub.appendChild(document.createTextNode(U('crSub')));
+    } else {
+      const ck = checkEl(2);
+      if (ck) sub.appendChild(ck);
+      const words = U('crSubDone');
+      const cut = words.indexOf('. ');
+      if (cut > 0) {
+        sub.appendChild(mk('span', { cls: 'crdone', text: words.slice(0, cut + 1) }));
+        sub.appendChild(mk('span', { text: words.slice(cut + 1) }));
+      } else {
+        sub.appendChild(mk('span', { cls: 'crdone', text: words }));
+      }
+    }
+    body.appendChild(sub);
+  }
+
+  // The preview: the pit sign on posts, the backyard patch, Random.
+  const pv = mk('div', { id: 'cr-preview' });
+  pv.appendChild(mk('div', { id: 'cr-sign', cls: 'sign posts' }));
+  const scene = mk('div', { cls: 'scene' });
+  scene.appendChild(mk('canvas', { id: 'cr-scene', attrs: { 'aria-hidden': 'true', width: String(CR_SCENE_W), height: String(CR_SCENE_H) } }));
+  const rnd = mk('button', { id: 'cr-random', cls: 'alt', type: 'button' });
+  rnd.appendChild(pixCanvas(PIX.dice.map, PIX.dice.pal, 2));   // Q-6: the die, as screen-6-creator has it
+  uiPut(rnd, U('crRandom').toUpperCase(), 2, UI.white, { shadow: UI.ink }, U('crRandom'));
+  rnd.addEventListener('click', onRandom);
+  scene.appendChild(rnd);   // Q-6: the scene's bottom right corner, as screen-6-creator places it
+  pv.appendChild(scene);
+  body.appendChild(pv);
+
+  // The two names (R-14: the defaults are placeholders, so the first tap types a name).
+  const fields = mk('div', { cls: 'cr-fields' });
+  const defName = STRINGS.defaultName || 'Pitmaster', defPit = STRINGS.defaultPit || 'Your Pit';
+  fields.appendChild(nameField('cr-name', U('crName'), s.profile && s.profile.name ? s.profile.name : defName, defName));
+  fields.appendChild(nameField('cr-pit', U('crPit'), pitName(s), defPit));
+  body.appendChild(fields);
+
+  // The option rows.
+  const opts = mk('div', { id: 'cr-opts', cls: 'card3 cr-opts' });
+  for (let i = 0; i < CR_ROWS.length; i++) opts.appendChild(crRow(CR_ROWS[i]));
+  body.appendChild(opts);
+
+  const go = mk('button', { id: 'cr-go', cls: 'primary big', type: 'button' });
+  const f1 = flameEl(true, 3), f2 = flameEl(true, 3);
+  if (f1) go.appendChild(f1);
+  uiPut(go, U('crGo').toUpperCase(), 3, UI.creamL, { bold: true, shadow: UI.orangeLo }, U('crGo'));
+  if (f2) go.appendChild(f2);
+  go.addEventListener('click', onCreatorGo);
+  // Q-6: on a phone Fire it up rides a sticky footer, so it is always one tap away.
+  body.appendChild(mk('div', { id: 'cr-foot', cls: 'cr-foot' }, [go]));
+  if (crFromPause) body.appendChild(btn('cr-back', U('crBack'), 'alt', creatorBack));
+  body.appendChild(mk('p', { id: 'cr-note', text: U('crNote') }));
+  refreshCreatorRows();
+}
+
+function nameField(id, label, value, fallback) {
+  const wrap = mk('div', { cls: 'field' });
+  // Q-6: the label in the UI font, white, and gold while its field has focus (two canvases, CSS picks).
+  const lab = mk('label', { id: id + '-l', attrs: { for: id } });
+  const lw = uiCanvas(label.toUpperCase(), 2, UI.white), lg = uiCanvas(label.toUpperCase(), 2, UI.gold);
+  if (lw && lg) {
+    lw.classList.add('lw');
+    lg.classList.add('lg');
+    lab.appendChild(lw);
+    lab.appendChild(lg);
+    lab.appendChild(mk('span', { cls: 'sr', text: label }));
+    lab.classList.add('ui');
+  } else {
+    lab.textContent = label;
+  }
+  wrap.appendChild(lab);
+  const inp = mk('input', { id: id, type: 'text', attrs: {
+    maxlength: String(C.NAME_MAX || 14), autocomplete: 'off', autocapitalize: 'words', spellcheck: 'false',
+    enterkeyhint: 'done', 'aria-describedby': id + '-count'
+  } });
+  // R-14: the default name shows as the placeholder and the field starts empty (cleanName falls back).
+  inp.placeholder = fallback || '';
+  inp.value = value === fallback ? '' : filterName(value);
+  const cnt = mk('span', { id: id + '-count', cls: 'count', text: U('crCount', { n: inp.value.length }) });
+  inp.addEventListener('input', function () {
+    const v = filterName(inp.value);
+    if (v !== inp.value) {
+      inp.value = v;
+      try { inp.setSelectionRange(v.length, v.length); } catch (e) { /* not a text field */ }
+    }
+    cnt.textContent = U('crCount', { n: v.length });
+    if (id === 'cr-pit') drawCrSign();
+  });
+  inp.addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const nx = document.getElementById(id === 'cr-name' ? 'cr-pit' : 'cr-go');
+    if (nx) nx.focus();
+  });
+  wrap.appendChild(inp);
+  wrap.appendChild(cnt);
+  return wrap;
+}
+
+function crRow(def) {
+  const key = def[0], part = def[1], kind = def[2], labelKey = def[3];
+  const r = mk('div', { id: 'cr-row-' + part, cls: 'crrow ' + (kind === 'swatch' ? 'crsw' : 'crch'), attrs: { role: 'group', 'aria-labelledby': 'cr-row-' + part + '-l' } });
+  r.appendChild(mk('span', { id: 'cr-row-' + part + '-l', cls: 'crl', text: U(labelKey) }));
+  const n = lookCounts()[key] || 1;
+  const row = rowWord(labelKey);
+  if (kind === 'swatch') {
+    const sw = mk('div', { cls: 'swatches' });
+    for (let j = 0; j < n; j++) {
+      const b = mk('button', { id: 'cr-' + part + '-' + j, cls: 'swatch', type: 'button', attrs: {
+        'aria-label': U('crSwatch', { row: row, label: lookLabel(key, j) }), 'aria-pressed': 'false'
+      } });
+      b.style.setProperty('--sw', swatchColor(key, j));
+      const badge = mk('span', { cls: 'badge', attrs: { 'aria-hidden': 'true' } });
+      const ck = checkEl(2);
+      if (ck) badge.appendChild(ck);
+      b.appendChild(badge);
+      b.addEventListener('click', function () { setDraft(key, j); });
+      sw.appendChild(b);
+    }
+    r.appendChild(sw);
+  } else {
+    const ch = mk('div', { cls: 'chooser' });
+    const prev = mk('button', { id: 'cr-' + part + '-prev', cls: 'arrow', type: 'button', attrs: { 'aria-label': U('crPrev', { row: row }) } });
+    prev.appendChild(pixCanvas(PIX.arrowL.map, PIX.arrowL.pal, 2));
+    prev.addEventListener('click', function () { stepDraft(key, -1); });
+    const next = mk('button', { id: 'cr-' + part + '-next', cls: 'arrow', type: 'button', attrs: { 'aria-label': U('crNext', { row: row }) } });
+    next.appendChild(pixCanvas(PIX.arrowR.map, PIX.arrowR.pal, 2));
+    next.addEventListener('click', function () { stepDraft(key, 1); });
+    const out = mk('output', { id: 'cr-' + part + '-val', cls: 'val', attrs: { 'aria-live': 'polite' } });
+    ch.appendChild(prev);
+    ch.appendChild(out);
+    ch.appendChild(next);
+    r.appendChild(ch);
+  }
+  return r;
+}
+
+function setDraft(key, idx) {
+  crDraft[key] = idx;
+  applyLook(crDraft);
+  refreshCreatorRows();
+  drawCreatorScene();
+}
+function stepDraft(key, d) {
+  const n = lookCounts()[key] || 1;
+  setDraft(key, ((crDraft[key] + d) % n + n) % n);
+}
+
+function refreshCreatorRows() {
+  for (let i = 0; i < CR_ROWS.length; i++) {
+    const key = CR_ROWS[i][0], part = CR_ROWS[i][1], kind = CR_ROWS[i][2];
+    const n = lookCounts()[key] || 1;
+    const v = crDraft[key];
+    if (kind === 'swatch') {
+      for (let j = 0; j < n; j++) {
+        const b = document.getElementById('cr-' + part + '-' + j);
+        if (b) b.setAttribute('aria-pressed', j === v ? 'true' : 'false');
+      }
+    } else {
+      const out = document.getElementById('cr-' + part + '-val');
+      if (!out) continue;
+      const word = lookLabel(key, v).toUpperCase();
+      clear(out);
+      uiPut(out, word, 2, UI.gold, null, word);
+      const pips = mk('span', { cls: 'pips', attrs: { 'aria-hidden': 'true' } });
+      for (let k = 0; k < n; k++) pips.appendChild(mk('span', { cls: 'pp' + (k === v ? ' on' : '') }));
+      out.appendChild(pips);
+    }
+  }
+}
+
+function onRandom() {
+  if (typeof sim.randomLook !== 'function') return;
+  crDraft = copyLook(sim.randomLook());
+  applyLook(crDraft);
+  refreshCreatorRows();
+  drawCreatorScene();
+}
+
+function drawCrSign() {
+  const sign = document.getElementById('cr-sign');
+  if (!sign) return;
+  const inp = document.getElementById('cr-pit');
+  const name = cleanName(inp ? inp.value : pitName(sim.state), STRINGS.defaultPit || 'Your Pit');
+  clear(sign);
+  const room = Math.max(120, ((sign.parentNode && sign.parentNode.clientWidth) || 330) - 56);
+  // R-14: the sticky phone preview keeps the sign at 2x so the scene stays the larger part.
+  const big = (document.documentElement.clientWidth || 375) >= 900;
+  let c = big ? uiCanvas(name.toUpperCase(), 3, '#fff0c8', { bold: true, shadow: '#120c08' }) : null;
+  if (!c || parseFloat(c.style.width) > room) c = uiCanvas(name.toUpperCase(), 2, '#fff0c8', { bold: true, shadow: '#120c08' });
+  if (c) {
+    sign.appendChild(c);
+    sign.appendChild(mk('span', { cls: 'sr', text: name }));
+  } else {
+    uiPut(sign, name.toUpperCase(), 3, '#fff0c8', { shadow: '#120c08' }, name);
+  }
+}
+
+// The backyard patch with the draft look (deviation 38), at an integer device pixel scale. Q-6: on a
+// phone (the sticky preview) the patch is cropped to the panel's width at 4x (3x under 700 px of
+// screen height) and 44 px tall, the pitmaster near the middle and the kettle at his right; the
+// desktop column keeps the 64 by 56 patch at up to 5x.
+function drawCreatorScene() {
+  const cv = document.getElementById('cr-scene');
+  if (!cv) return;
+  const pvw = document.getElementById('cr-preview');
+  const vw = document.documentElement.clientWidth || 375;
+  const phone = vw < 900;
+  // The preview's content width (its sticky phone padding is 12 a side), less the scene's frame.
+  const avail = (pvw && pvw.clientWidth ? pvw.clientWidth : 300) - (phone ? 24 : 0) - 8;
+  const css = phone ? ((window.innerHeight || 812) >= 700 ? 4 : 3) : Math.max(1, Math.min(5, Math.floor(avail / CR_SCENE_W)));
+  const W = phone ? Math.max(48, Math.min(128, Math.floor(avail / css))) : CR_SCENE_W;
+  const H = phone ? 44 : CR_SCENE_H;
+  const dy = phone ? -10 : 0;                                 // the crop starts 10 px down the patch
+  const px0 = phone ? Math.round(W * 0.42) - 8 : 8;           // the pitmaster's left
+  const kx = phone ? Math.min(W - 12, px0 + 30) : 40;         // the kettle's left
+  if (!crOff) crOff = document.createElement('canvas');
+  if (crOff.width !== W || crOff.height !== H) { crOff.width = W; crOff.height = H; }
+  const g = crOff.getContext('2d');
+  g.imageSmoothingEnabled = false;
+  g.globalAlpha = 1;
+  g.fillStyle = COLOR.K;
+  g.fillRect(0, 0, W, H);
+  const draw = function (name, x, y, f) { if (art.has(name)) art.draw(g, name, x, y, Math.max(0, Math.min(art.frames(name) - 1, f | 0)), false); };
+  for (let x = 0; x < Math.ceil(W / TILE); x++) {
+    draw('fence_back', x * TILE, dy, 0);
+    draw('lawn_a', x * TILE, TILE + dy, (x * 5 + 3) % 3 === 0 ? 1 : 0);
+    draw('paver', x * TILE, 2 * TILE + dy, (x * 7 + 6) % 2);
+    draw('paver', x * TILE, 3 * TILE + dy, (x * 7 + 9) % 2);
+  }
+  // P-15: the pitmaster and the kettle with three puffs over its vent.
+  draw('kettle', kx, 28 + dy, 2);
+  const ph = reduced ? 0.15 : (crAnim % 1.2) / 1.2;
+  for (let k = 0; k < 3; k++) {
+    const age = (k + ph) / 3;
+    draw('smoke', kx + 7 + Math.round(age * 4), Math.round(20 - age * 18) + dy, Math.min(2, Math.floor(age * 3)));
+  }
+  draw('shadow', px0 + 2, 49 + dy, 0);
+  draw('player_down', px0, 28 + dy, 0);
+  const d = dpr();
+  const k = Math.max(1, Math.floor(css * d + 1e-6));
+  if (cv.width !== W * k || cv.height !== H * k) { cv.width = W * k; cv.height = H * k; }
+  cv.style.width = (W * k / d) + 'px';
+  cv.style.height = (H * k / d) + 'px';
+  const vg = cv.getContext('2d');
+  vg.imageSmoothingEnabled = false;
+  vg.drawImage(crOff, 0, 0, W, H, 0, 0, W * k, H * k);
+  // R-14 and Q-6: focused rows scroll clear of the sticky preview and the sticky Fire it up.
+  const foot = document.getElementById('cr-foot');
+  if (el.creator) {
+    el.creator.style.scrollPaddingTop = phone && pvw ? (pvw.offsetHeight + 8) + 'px' : '';
+    el.creator.style.scrollPaddingBottom = phone && foot ? (foot.offsetHeight + 8) + 'px' : '';
+  }
+}
+
+function onCreatorGo() {
+  const n = document.getElementById('cr-name'), p = document.getElementById('cr-pit');
+  const fromPause = crFromPause;
+  sim.setPlayer(copyLook(crDraft), n ? n.value : '', p ? p.value : '');
+  applyLook(lookNow());
+  crFromPause = false;
+  migrated = false;
+  pump();
+  if (fromPause) {
+    openPanel('pause', 'pause-look');
+    updateDom();
+    return;
+  }
+  showLoop();
+  pump();
+  updateDom();
+}
+
+// Back from a creator opened on the pause panel: the saved look returns (W17.1).
+function creatorBack() {
+  crFromPause = false;
+  applyLook(lookNow());
+  openPanel('pause', 'pause-look');
+  updateDom();
+}
+
+// ---------------------------------------------------------------- the season end card (W17.5)
+
+function openSeasonEnd() {
+  buildSeasonEnd();
+  if (currentPanel !== 'season-end') openPanel('season-end');
+}
+
+function buildSeasonEnd() {
+  const s = sim.state;
+  const pv = typeof sim.seasonEndPreview === 'function' ? sim.seasonEndPreview() : null;
+  const year = pv ? pv.year : (s.season ? s.season.year : 1);
+  const h = el['season-end-h'];
+  clear(h);
+  uiPut(h, U('seasonH', { y: year }).toUpperCase(), 3, UI.white, { bold: true, shadow: UI.ink }, U('seasonH', { y: year }));
+  const body = el['season-end-body'];
+  clear(body);
+  const sign = mk('div', { id: 'se-pit', cls: 'sign' });
+  signWords(sign, pitName(s), 1, el['season-end']);
+  body.appendChild(sign);
+  const box = mk('div', { cls: 'se-box' });
+  box.appendChild(uiPut(mk('h3', { id: 'se-record-h' }), U('record').toUpperCase(), 2, '#2a2015', null, U('record')));
+  const ol = mk('ol', { id: 'se-record', attrs: { 'aria-labelledby': 'se-record-h' } });
+  const res = s.season && s.season.results ? s.season.results : [];
+  const n = C.SEASON_WEEKS || 9;
+  for (let i = 0; i < n; i++) {
+    const r = res[i] || { type: 'yard', stars: 0 };
+    const st = r.type === 'yard' ? 0 : r.stars | 0;
+    const li = mk('li', { id: 'se-wk-' + (i + 1), cls: 'se-wk', attrs: { 'aria-label': U('wkDone', { w: i + 1, label: bookingLabel(r.type), stars: starsWord(st) }) } });
+    const inner = mk('div', { cls: 'tin', attrs: { 'aria-hidden': 'true' } });
+    inner.appendChild(uiPut(mk('span', { cls: 'tn' }), String(i + 1), 2, UI.K));
+    const ic = sprEl('ev_' + r.type, 0, 2, null);
+    if (ic) inner.appendChild(ic);
+    const row = mk('span', { cls: 'tstars' });
+    if (r.type !== 'yard') for (let k = 0; k < 5; k++) { const e = starEl(k < st, 1); if (e) row.appendChild(e); }
+    inner.appendChild(row);
+    li.appendChild(inner);
+    ol.appendChild(li);
+  }
+  box.appendChild(ol);
+  const P = pv || { cash: s.cash, repFrom: s.rep, repTo: s.rep, spoiled: {}, charcoal: s.charcoal };
+  const meat = railList(P.spoiled, 'label');
+  box.appendChild(mk('p', { id: 'se-cash', text: U('seCash', { c: fmt(P.cash) }) }));
+  box.appendChild(mk('p', { id: 'se-rep', text: U('seRep', { b: P.repTo, a: P.repFrom }) }));
+  box.appendChild(mk('p', { id: 'se-meat', text: meat ? U('seMeat', { list: meat }) : U('seMeatNone') }));
+  box.appendChild(mk('p', { id: 'se-charcoal', text: U('seCharcoal', { n: P.charcoal }) }));
+  body.appendChild(box);
+  const go = mk('button', { id: 'season-next', cls: 'primary big', type: 'button' });
+  const label = U('seNext', { n: year + 1 });
+  uiPut(go, label.toUpperCase(), 3, UI.creamL, { bold: true, shadow: UI.orangeLo }, label);
+  go.addEventListener('click', function () {
+    sim.startSeason();
+    pump();
+    showLoop();
+    pump();
+    updateDom();
+  });
+  body.appendChild(go);
 }
 
 // ---------------------------------------------------------------- input
@@ -1493,6 +3588,12 @@ function onKeyDown(e) {
     } else if (currentPanel === 'newgame' && key === 'Escape') {
       e.preventDefault();
       confirmNo();
+    } else if (currentPanel === 'sheet' && key === 'Escape') {
+      e.preventDefault();
+      closeSheet();
+    } else if (currentPanel === 'creator' && crFromPause && key === 'Escape') {
+      e.preventDefault();
+      creatorBack();
     }
     return;
   }
@@ -1905,7 +4006,124 @@ function glyphFrame(ch) {
   if (ch === '+') return 36;
   if (ch === ':') return 37;
   if ((ch === '.' || ch === ',') && size('font')[2] >= 40) return ch === '.' ? 38 : 39;
+  if ((ch === "'" || ch === '-') && size('font')[2] >= 42) return ch === "'" ? 40 : 41;   // W16.2
   return -1;
+}
+
+// captureFrame records for text drawn by sprites.js itself (textFit): font advances 5, font_s 4.
+function recordGlyphs(fontName, str, x, y) {
+  if (!capturing) return;
+  const fs = size(fontName);
+  const s = String(str).toUpperCase();
+  let cx = x;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (ch === ' ') { cx += fs[0] + 1; continue; }
+    const g = glyphFrame(ch);
+    if (g < 0) continue;
+    recs.push({ name: fontName, frame: g, x: cx, y: y, w: fs[0], h: fs[1] });
+    cx += fs[0] + 1;
+  }
+}
+
+// W16.5: the pit name on the yard sign as textFit draws it (upper case, font or font_s, centered).
+function signInfo() {
+  const st = MAP.signText;
+  if (!st || !sim) return null;
+  const text = pitName(sim.state).toUpperCase();
+  const wf = art.textWidth(text);
+  if (wf <= (st.w | 0)) return { text: text, font: 'font', x: st.x + Math.floor((st.w - wf) / 2), width: wf };
+  let ws = 0;
+  if (typeof art.textWidthS === 'function') ws = art.textWidthS(text);
+  else { let n = 0; for (let i = 0; i < text.length; i++) if (text[i] === ' ' || glyphFrame(text[i]) >= 0) n++; ws = n ? n * 4 - 1 : 0; }
+  return { text: text, font: 'font_s', x: st.x + Math.floor((st.w - ws) / 2), width: ws };
+}
+
+function drawSign(s) {
+  const st = MAP.signText;
+  const info = signInfo();
+  if (!info) return;
+  if (typeof art.textFit === 'function') {
+    art.textFit(octx, pitName(s), st.x, st.y, st.w);
+    recordGlyphs(info.font, info.text, info.x, info.font === 'font_s' ? st.y + 1 : st.y);
+  } else {
+    // sprites.js before v3.0: the name only when it fits the font, else the v2 words.
+    const t = info.font === 'font' ? info.text : 'YOUR PIT';
+    T(t, st.x + Math.max(0, Math.floor((st.w - art.textWidth(t)) / 2)), st.y);
+  }
+}
+
+// W7.4: what the rail shows now (the getter and pass 8 share it); null when no rail is drawn.
+function railNow() {
+  if (!sim) return null;
+  const s = sim.state;
+  if (s.phase !== 'service' || !s.today) return null;
+  const kind = s.today.kind;
+  if (kind !== 'booking' && kind !== 'yard') return null;
+  const rail = s.today.rail || {}, sold = s.today.sold || {};
+  const items = [];
+  for (let i = 0; i < MEAT_IDS.length; i++) {
+    const m = MEAT_IDS[i];
+    const want = rail[m] | 0, so = sold[m] | 0;
+    if (kind === 'booking' ? want > 0 : so > 0) items.push({ meat: m, want: want, sold: so, left: Math.max(0, want - so) });
+  }
+  return { kind: kind, items: items };
+}
+
+// The rail across the top in place of the clock box: an umber box from (1, 1), 11 tall. R-13: a
+// clock glyph before the seconds, and on a booking each count of plates left sits on a cream ticket
+// (dark digits, green once that meat's tickets are done), so it never reads as the chips' stock.
+const CLOCK_GLYPH = ['.ccc.', 'c.c.c', 'c.cc.', 'c...c', '.ccc.'];   // 5 by 5, cream
+function drawRail(r, s) {
+  const clock = String(Math.max(0, Math.ceil(tEnd(s) - s.clock)));
+  const booking = r.kind === 'booking';
+  const strs = [];
+  let w = 6 + art.textWidth(clock);
+  for (let i = 0; i < r.items.length; i++) {
+    const it = r.items[i];
+    const str = String(booking ? it.left : it.sold);
+    strs.push(str);
+    w += 2 + 8 + 1 + art.textWidth(str) + (booking ? 2 : 0);
+  }
+  const bw = Math.min(174, w + 4);
+  octx.fillStyle = COLOR.U;
+  octx.fillRect(1, 1, bw, 11);
+  octx.fillStyle = COLOR.C;
+  for (let gy = 0; gy < CLOCK_GLYPH.length; gy++) {
+    for (let gx = 0; gx < CLOCK_GLYPH[gy].length; gx++) if (CLOCK_GLYPH[gy][gx] === 'c') octx.fillRect(3 + gx, 3 + gy, 1, 1);
+  }
+  T(clock, 9, 3, null);
+  let x = 9 + art.textWidth(clock);
+  for (let i = 0; i < r.items.length; i++) {
+    const it = r.items[i];
+    const tw = art.textWidth(strs[i]);
+    if (x + 2 + 8 + 1 + tw + (booking ? 2 : 0) > 1 + bw) break;
+    x += 2;
+    D('icon_' + it.meat, x, 2);
+    x += 9;
+    if (booking) {
+      octx.fillStyle = it.left > 0 ? COLOR.C : COLOR.lawnA;
+      octx.fillRect(x, 2, tw + 2, 9);
+      T(strs[i], x + 1, 3, 'K');
+      x += tw + 2;
+    } else {
+      T(strs[i], x, 3, 'white');
+      x += tw;
+    }
+  }
+  // Q-4: booked guests waiting off canvas for a line spot, in a small box under the rail.
+  const wait = booking && typeof sim.gateWaiting === 'function' ? sim.gateWaiting() | 0 : 0;
+  if (wait > 0) {
+    const ws = '+' + wait;
+    const pm = PIX.people.map;
+    octx.fillStyle = COLOR.U;
+    octx.fillRect(1, 13, 2 + pm[0].length + 2 + art.textWidth(ws) + 2, 11);
+    octx.fillStyle = COLOR.C;
+    for (let gy = 0; gy < pm.length; gy++) {
+      for (let gx = 0; gx < pm[gy].length; gx++) if (pm[gy][gx] !== '.') octx.fillRect(3 + gx, 15 + gy, 1, 1);
+    }
+    T(ws, 3 + pm[0].length + 2, 15, null);
+  }
 }
 
 // Canvas text: cream through art.text, any other color through art.textTinted.
@@ -2008,7 +4226,7 @@ function fenceName(x, y) {
 
 function gateOpen(s) {
   if (s.phase !== 'service') return false;
-  return (s.clock >= C.GATE_OPENS && s.clock < C.LAST_CALL) || s.customers.length > 0;
+  return (s.clock >= tGate(s) && s.clock < tLast(s)) || s.customers.length > 0;
 }
 
 function pieceFrame(p) {
@@ -2060,7 +4278,7 @@ function drawStation(st, s) {
       for (let j = 0; j < b.stacks.length && j < BOARD_OFFS.length; j++) {
         const stack = b.stacks[j];
         if (stack && stack.times && stack.times.length) {
-          drawStack(stack.meat, stack.times.length, st.draw.x + BOARD_OFFS[j][0], st.draw.y + BOARD_OFFS[j][1], C.BOARD_STACK);
+          drawStack(stack.meat, stack.times.length, st.draw.x + BOARD_OFFS[j][0], st.draw.y + BOARD_OFFS[j][1], BOARD_DRAW_MAX);
         }
       }
     }
@@ -2220,7 +4438,7 @@ function drawSorted(s) {
     const p = MAP.props[i];
     push(p.sortRow * TILE + 15, 1, p.draw.x, function () {
       D(p.sprite, p.draw.x, p.draw.y, p.frame);
-      if (p.id === 'sign' && MAP.signText) T('YOUR PIT', MAP.signText.x, MAP.signText.y);
+      if (p.id === 'sign' && MAP.signText) drawSign(s);
     });
   }
 
@@ -2628,9 +4846,11 @@ function render() {
     if (banner) {
       drawBanner(banner);
     } else {
-      const rem = Math.max(0, Math.ceil(C.DAY_SECONDS - s.clock));
-      boxText(String(rem), 2, 2, null);
-      if (s.clock < C.GATE_OPENS) boxText('GATE OPENS IN ' + Math.ceil(C.GATE_OPENS - s.clock), 2, 183, 'yellow');
+      // W7.4: the rail on a booking or a Yard day, else the v2 clock box; W7.1 times throughout.
+      const rail = railNow();
+      if (rail) drawRail(rail, s);
+      else boxText(String(Math.max(0, Math.ceil(tEnd(s) - s.clock))), 2, 2, null);
+      if (s.clock < tGate(s)) boxText('GATE OPENS IN ' + Math.ceil(tGate(s) - s.clock), 2, 183, 'yellow');
       else if (lastCallUntil > nowMs) boxText('LAST CALL', 2, 183, 'yellow');
     }
   } else {
@@ -2650,9 +4870,13 @@ function render() {
 
 function statusText(s) {
   if (saveOffUntil > nowMs) return 'Saving is off in this browser.';
-  if (noticeUntil > nowMs) return 'Your save was updated for the new yard.';
+  if (noticeUntil > nowMs) return U('notice');
   if (blockedUntil > nowMs) return STRINGS.cantGetThere;
-  if (s.phase === 'service' && s.clock < C.GATE_OPENS && !tutRunning()) return STRINGS.gateOpensIn + Math.ceil(C.GATE_OPENS - s.clock);
+  if (s.phase === 'service' && s.clock < tGate(s) && !tutRunning()) {
+    // Q-4: before the gate on a booking that mixes a two slot and a one slot meat, the cook order tip.
+    const big = todayKind(s) === 'booking' && s.today ? mixBig(s.today.rail) : '';
+    return STRINGS.gateOpensIn + Math.ceil(tGate(s) - s.clock) + (big ? '. ' + U('mixShort', { big: big }) : '');
+  }
   if (lastCallUntil > nowMs) return STRINGS.lastCall;
   return sim.holding();
 }
@@ -2672,14 +4896,22 @@ function updateDom() {
   }
   if (wantHowto() !== lastHow) syncPanels();
 
-  const dayT = 'Day ' + s.day;
+  // W17.1: Week {w} in every season loop, Day {n} on the tutorial day.
+  const dayT = inSeason(s) && s.season ? U('hudWeek', { w: s.season.week }) : 'Day ' + s.day;
   if (dayT !== lastHud.day) { lastHud.day = dayT; el['hud-day'].textContent = dayT; }
+  // Q-1: the header names the pit once the creator has run; YOUR PIT (the game's name) before that.
+  const pitT = s.profile ? pitName(s).toUpperCase() : 'YOUR PIT';
+  if (pitT !== lastHud.pit) { lastHud.pit = pitT; el.title.textContent = pitT; }
   const cashT = 'Cash ' + s.cash;
   if (cashT !== lastHud.cash) { lastHud.cash = cashT; el['hud-cash'].textContent = cashT; }
-  const repT = stars(s.rep) + ' ' + s.rep;
+  // P-17: in the season the header shows word of mouth as a heart and its number, since stars now mean
+  // the hosts' client stars; the tutorial day keeps the v2.1 stars.
+  const fansHud = inSeason(s);
+  const repT = (fansHud ? '♥ ' : stars(s.rep) + ' ') + s.rep;
   if (repT !== lastHud.rep) {
     lastHud.rep = repT;
     el['hud-rep'].textContent = repT;
+    el['hud-rep'].classList.toggle('fans', fansHud);
     el['hud-rep'].setAttribute('aria-label', 'Word of mouth ' + s.rep);
   }
 
@@ -2692,11 +4924,21 @@ function updateDom() {
   if (dis !== lastActDis) { lastActDis = dis; el.act.disabled = dis; }
   syncPulse(v);
 
+  // W17.6: charcoal first, then the meat chips; during a booking only its rail meats show.
+  const bags = s.charcoal | 0;
+  if (String(bags) !== lastChips.charcoal && chipEls.charcoal) {
+    lastChips.charcoal = String(bags);
+    chipEls.charcoal.cnt.textContent = String(bags);
+    chipEls.charcoal.b.setAttribute('aria-label', 'Charcoal, ' + bags + ' bags');
+  }
+  const l = loopOf(s);
+  const rail = (l === 'prep' || l === 'cook' || l === 'report') && s.today && s.today.kind === 'booking' ? s.today.rail : null;
   for (let i = 0; i < MEAT_IDS.length; i++) {
     const id = MEAT_IDS[i];
     const n = s.stock[id] | 0;
     const sel = s.selected === id;
-    const sig = n + (sel ? 's' : '');
+    const hide = !!rail && (rail[id] | 0) === 0;
+    const sig = n + (sel ? 's' : '') + (hide ? 'h' : '');
     if (sig === chipSig[id]) continue;
     chipSig[id] = sig;
     const ch = chipEls[id];
@@ -2704,6 +4946,7 @@ function updateDom() {
     ch.b.setAttribute('aria-pressed', sel ? 'true' : 'false');
     ch.b.setAttribute('aria-label', MEATS[id].label + ', ' + n + ' in stock');
     ch.b.disabled = n <= 0;
+    ch.b.hidden = hide;
   }
 
   flushLive();
