@@ -32,6 +32,7 @@
     .uirow figcaption { color: #fff6c9; }
   </style>
   <script src="../sprites.js" defer></script>
+  <script src="../sim.js" defer></script>
   <script>
     // Dev only, never shipped: inline script is fine here (the game shell has none).
     document.addEventListener('DOMContentLoaded', function () {
@@ -39,8 +40,29 @@
       var err = document.getElementById('err');
       if (!art) { err.textContent = 'PitSim.art is missing.'; return; }
       try { art.build(); } catch (e) { err.textContent = String(e && e.message || e); return; }
+      var LOOK_ORDER = ['skin', 'hair', 'hairColor', 'face', 'hat', 'apron'];
+      var DEFAULT_LOOK = { skin: 1, hair: 0, hairColor: 1, face: 0, hat: 1, apron: 0 };
+      // build() leaves the buddy and tender on their v2 grids; keep a copy so the sprite listing shows
+      // them as built even after the crew section below calls setCrewLook.
+      var BUILT_GRIDS = {};
+      ['buddy_down', 'buddy_up', 'buddy_side', 'tender_down', 'tender_up', 'tender_side'].forEach(function (n) {
+        BUILT_GRIDS[n] = art.SPRITES[n].frames.slice();
+      });
+      function gridCanvas(rows, k) {
+        var c = document.createElement('canvas');
+        c.width = rows[0].length * k; c.height = rows.length * k;
+        var g = c.getContext('2d');
+        rows.forEach(function (row, y) {
+          for (var x = 0; x < row.length; x++) {
+            if (row[x] === '0') continue;
+            g.fillStyle = art.PALETTE['0123456789abcdefghijklmnopqrstuvwxyz'.indexOf(row[x])];
+            g.fillRect(x * k, y * k, k, k);
+          }
+        });
+        return c;
+      }
 
-      // Contract W16.2 (v3.0), verbatim: [name, w, h, frames].
+      // Contract X12.1 (v3.1), verbatim: [name, w, h, frames].
       var REQUIRED_SPRITES = [
         ['player_down', 16, 24, 3], ['player_up', 16, 24, 3], ['player_side', 16, 24, 3], ['player_slice', 16, 24, 2],
         ['buddy_down', 16, 24, 3], ['buddy_up', 16, 24, 3], ['buddy_side', 16, 24, 3], ['tender_down', 16, 24, 3],
@@ -72,7 +94,9 @@
         ['sweat', 4, 6, 2], ['zzz', 8, 8, 3], ['font', 4, 6, 42],
         ['arrow', 8, 12, 4], ['bubble_warn', 8, 10, 2],
         ['font_s', 3, 5, 42], ['ev_birthday', 16, 16, 1], ['ev_picnic', 16, 16, 1], ['ev_yard', 16, 16, 1],
-        ['ev_finale', 16, 16, 1], ['star', 9, 9, 2], ['flame', 8, 10, 2], ['check', 8, 8, 1]
+        ['ev_finale', 16, 16, 1], ['star', 9, 9, 4], ['flame', 8, 10, 2], ['check', 8, 8, 1],
+        ['prep_down', 16, 24, 3], ['prep_up', 16, 24, 3], ['prep_side', 16, 24, 3], ['prep_slice', 16, 24, 2],
+        ['mood', 10, 10, 5]
       ];
       // Frame meanings from contract D11, K9 and W16, shown in the captions.
       var MEANING = {
@@ -89,21 +113,22 @@
         coin: ['face', 'edge'], sweat: ['drop', 'splash'], zzz: ['z', 'zz', 'zzz'],
         arrow: ['down', 'down bob', 'up', 'up bob'], bubble_warn: ['red', 'yellow'],
         hedge: ['plain', 'blossom'], fence_back: ['rail', 'corner'],
-        star: ['full', 'empty'], flame: ['lit', 'unlit']
+        star: ['full', 'empty', 'half', 'hollow'], flame: ['lit', 'unlit'],
+        mood: ['fired up', 'happy', 'ok', 'grumpy', 'done']
       };
       function meaning(name, f) {
         var key = name;
         if (/_sit$/.test(name)) key = 'sit';
         else if (/_side$/.test(name)) key = 'side';
-        else if (/^(player|buddy|tender|cust\d)_(down|up)$/.test(name)) key = 'person';
-        else if (name === 'player_slice') key = 'slice';
+        else if (/^(player|buddy|tender|prep|cust\d)_(down|up)$/.test(name)) key = 'person';
+        else if (name === 'player_slice' || name === 'prep_slice') key = 'slice';
         else if (/^piece_/.test(name)) key = 'piece';
         var list = MEANING[key];
         return list && list[f] ? list[f] : '';
       }
 
       var groups = [
-        ['People and animals', /^(player|buddy|tender|cust\d)_|^shadow$|^dog$/],
+        ['People and animals (buddy and tender as build() made them, v2; prep on its default look)', /^(player|buddy|tender|prep|cust\d)_|^shadow$|^dog$/],
         ['Hand overlays', /^hand_/],
         ['Food, icons and marks', /^(icon|plate|piece)_|^mark_x$/],
         ['Stations', /^(kettle|drum|cooler|board|counter|counter_ext|pile|trash)$/],
@@ -111,7 +136,8 @@
         ['Fixed props', /^(shed|sign|tree|woodpile|hose|tools|pot|planter|shelf|mailbox|picnic|picnic_bench)$/],
         ['Decor and gear props', /^(chair|lights_post|lights_string|birdbath|canopy)$/],
         ['Effects and text', /^(bubble|heart|sparkle|smoke|smoke_dark|fire|coin|sweat|zzz|font|arrow|bubble_warn)$/],
-        ['v3.0: small font, event icons, stars, flames, check', /^(font_s|ev_birthday|ev_picnic|ev_yard|ev_finale|star|flame|check)$/]
+        ['v3.0: small font, event icons, stars, flames, check', /^(font_s|ev_birthday|ev_picnic|ev_yard|ev_finale|star|flame|check)$/],
+        ['v3.1: mood faces', /^mood$/]
       ];
       var root = document.getElementById('sheet');
       var bg = 'paver';
@@ -137,7 +163,37 @@
         if (art.lookKey() !== '1-0-1-0-1-0') bad.push('lookKey after build is ' + art.lookKey());
         var frameTotal = 0;
         REQUIRED_SPRITES.forEach(function (r) { frameTotal += art.frames(r[0]); });
-        if (frameTotal !== 334) bad.push(frameTotal + ' frames, want 334');
+        if (frameTotal !== 352) bad.push(frameTotal + ' frames, want 352');
+        if (Object.keys(art.SPRITES).length !== 128) bad.push(Object.keys(art.SPRITES).length + ' names, want 128');
+        // X12.1 and X15 step 21: star frames, mood frames, busts, crew keys, the portrait canvas.
+        var st = art.SPRITES.star.frames;
+        for (var sy = 0; sy < 9; sy++) if (st[2][sy] !== st[0][sy].slice(0, 5) + st[1][sy].slice(5)) bad.push('star frame 2 row ' + sy + ' is not the half star');
+        if (/[^0k]/.test(st[3].join('')) || st[3].join('').replace(/k/g, '5') !== st[0].map(function (r) { return r.replace(/[^5]/g, '0'); }).join('')) bad.push('star frame 3 is not the yellow outline');
+        var moods = art.SPRITES.mood.frames.map(function (f) { return f.join(''); });
+        moods.forEach(function (m, i) { if (moods.indexOf(m) !== i) bad.push('mood frame ' + i + ' repeats an earlier frame'); });
+        var COUNTS = { skin: 6, hair: 6, hairColor: 6, face: 4, hat: 4, apron: 6 };
+        var bases = {};
+        ['run', 'fire', 'prep'].forEach(function (r) {
+          var b = art.bustRows(DEFAULT_LOOK, r);
+          bases[r] = b.join('');
+          if (b.length !== 22 || b.some(function (row) { return !/^[0-9a-z]{26}$/.test(row); })) bad.push('bustRows ' + r + ' is not 22 rows of 26 legend characters');
+          Object.keys(COUNTS).forEach(function (k) {
+            for (var i = 0; i < COUNTS[k]; i++) {
+              if (i === DEFAULT_LOOK[k]) continue;
+              var L = withLook({}); L[k] = i;
+              if (art.bustRows(L, r).join('') === bases[r]) bad.push('bust ' + r + ': ' + k + ' ' + i + ' draws the same as the default');
+            }
+          });
+        });
+        if (bases.run === bases.fire || bases.run === bases.prep || bases.fire === bases.prep) bad.push('two roles draw the same bust');
+        if (art.crewKey('run') !== '' || art.crewKey('fire') !== '') bad.push('crewKey before setCrewLook should be empty');
+        if (art.crewKey('prep') !== 'prep:2-4-0-0-0-2') bad.push('crewKey prep after build is ' + art.crewKey('prep'));
+        var b0 = art.SPRITES.buddy_down.frames[0].join('');
+        var sk = art.setCrewLook('run', DEFAULT_LOOK);
+        if (sk !== 'run:1-0-1-0-1-0' || art.crewKey('run') !== sk) bad.push('setCrewLook run returned ' + sk);
+        if (art.SPRITES.buddy_down.frames[0].join('') === b0) bad.push('setCrewLook run left buddy_down frame 0 as it was');
+        var pc = art.portrait(DEFAULT_LOOK, 'fire', { scale: 2, dpr: 1 });
+        if (pc.width !== 52 || pc.height !== 44) bad.push('portrait at scale 2 dpr 1 is ' + pc.width + 'x' + pc.height + ', want 52x44');
         // K11 step 14 charcoal rules, from the grids.
         function count(rows, ch) { return rows.join('').split(ch).length - 1; }
         art.SPRITES.pile.frames.forEach(function (fr, i) {
@@ -150,13 +206,13 @@
         var hc = art.SPRITES.hand_charcoal.frames[0];
         if (count(hc, '1') < 6 || count(hc, '1') + count(hc, 't') < 2 * (count(hc, 'v') + count(hc, 's') + count(hc, 'u'))) bad.push('hand_charcoal reads too grey');
         if (bad.length) err.textContent = bad.join('\n');
-        else document.getElementById('ok').textContent = 'Contract W16 check: all ' + REQUIRED_SPRITES.length + ' names, sizes and frame counts match (334 frames), nothing extra, palette 36, COLOR 35, text widths and the default look key hold, charcoal rules of K11 step 14 hold.';
+        else document.getElementById('ok').textContent = 'Contract X12 check: all ' + REQUIRED_SPRITES.length + ' names, sizes and frame counts match (352 frames), nothing extra, palette 36, COLOR 35, text widths and the default look key hold, charcoal rules of K11 step 14 hold, star frames 2 and 3, five distinct mood frames, every bust 22x26 with each look index visible on every role, crew keys and the 52x44 portrait hold.';
       })();
 
       function figure(name, f) {
         var fig = document.createElement('figure');
         fig.className = bg;
-        fig.appendChild(art.canvasFor(name, f, SCALE));
+        fig.appendChild(BUILT_GRIDS[name] ? gridCanvas(BUILT_GRIDS[name][f], SCALE) : art.canvasFor(name, f, SCALE));
         var cap = document.createElement('figcaption');
         var s = art.SPRITES[name];
         var m = meaning(name, f);
@@ -276,8 +332,6 @@
         hat: ['None', 'Cap', 'Cowboy hat', 'Bandana'],
         apron: ['Red', 'Orange', 'Green', 'Blue', 'Charcoal', 'Pink']
       };
-      var LOOK_ORDER = ['skin', 'hair', 'hairColor', 'face', 'hat', 'apron'];
-      var DEFAULT_LOOK = { skin: 1, hair: 0, hairColor: 1, face: 0, hat: 1, apron: 0 };
       var LK = 2;   // looks are drawn at 2x, the yard's scale on a phone
       function withLook(over) {
         var L = {};
@@ -389,6 +443,158 @@
         art.setLook(DEFAULT_LOOK);
       }
 
+      // v3.1 crew (contract X12.3): the 18 applicants of genPool({ seed: 7, year: 1 }) as busts at 3x
+      // with their in-yard down frames beside them, the mood and star frames, every look option on
+      // every role's bust, and three cards in the X13.4 colors.
+      var ROLE_BAND = { fire: ['#F0603C', '#F7835F'], prep: ['#5CC653', '#7DD875'], run: ['#4EC2F5', '#79D3FA'] };
+      var ROLE_SPRITE = { run: 'buddy', fire: 'tender', prep: 'prep' };
+      var ROLE_LABEL = { run: 'RUN', fire: 'FIRE', prep: 'PREP' };
+      var MOOD_LABEL = ['Fired up', 'Happy', 'OK', 'Grumpy', 'Done'];
+      var POOL = null;
+      function pool() {
+        if (POOL) return POOL;
+        var P = window.PitSim;
+        if (P && typeof P.genPool === 'function') {
+          try { POOL = { list: P.genPool({ seed: 7, year: 1 }), note: 'PitSim.genPool({ seed: 7, year: 1 })' }; return POOL; } catch (e) { /* the fallback below */ }
+        }
+        // While sim.js has no genPool: a fixed stride through roles and looks, names from the fixed list.
+        var names = P && P.STRINGS && Array.isArray(P.STRINGS.names) ? P.STRINGS.names : null;
+        var list = [];
+        for (var i = 0; i < 18; i++) {
+          var n = (i * 7919 + 101) % 20736, L = {};
+          [['apron', 6], ['hat', 4], ['face', 4], ['hairColor', 6], ['hair', 6], ['skin', 6]].forEach(function (kc) { L[kc[0]] = n % kc[1]; n = Math.floor(n / kc[1]); });
+          list.push({ idx: i, name: names ? names[(i * 7) % names.length] : 'Crew ' + (i + 1), role: ['run', 'fire', 'prep'][i % 3], look: L, stars: 1 + (i % 5) / 2, wage: 10 + i * 2, mood: i % 2 });
+        }
+        POOL = { list: list, note: 'fallback looks: PitSim.genPool is not on the page yet' };
+        return POOL;
+      }
+      function lookStr(L) { return LOOK_ORDER.map(function (k) { return L[k]; }).join('-'); }
+      // One window: the bust (through art.portrait) on the role band, standing on the floor line, the
+      // in-yard down frame beside it, and the mood face top right when mood is given.
+      function crewWindow(look, role, k, mood) {
+        var W = 52, H = 30;
+        var c = document.createElement('canvas');
+        c.width = W * k; c.height = H * k;
+        var ctx = c.getContext('2d');
+        ctx.imageSmoothingEnabled = false;
+        ctx.scale(k, k);
+        ctx.fillStyle = ROLE_BAND[role][0]; ctx.fillRect(0, 0, W, H);
+        ctx.fillStyle = ROLE_BAND[role][1]; ctx.fillRect(0, 0, W, 1);
+        ctx.drawImage(art.portrait(look, role, { scale: 1, dpr: 1 }), 2, H - 22, 26, 22);
+        art.setCrewLook(role, look);
+        art.draw(ctx, 'shadow', 32, H - 4, 0);
+        art.draw(ctx, ROLE_SPRITE[role] + '_down', 30, H - 25, 0);
+        if (typeof mood === 'number') art.draw(ctx, 'mood', W - 11, 1, 2 - mood);
+        return c;
+      }
+      function starsAt(ctx, stars, x, y) {
+        for (var i = 0; i < 5; i++) art.draw(ctx, 'star', x + i * 10, y, stars >= i + 1 ? 0 : (stars >= i + 0.5 ? 2 : 1));
+      }
+      function cssW(cv) { return parseFloat(cv.style.width); }
+      function cssH(cv) { return parseFloat(cv.style.height); }
+      // A card to the X13.4 spec, drawn on one canvas so the art can be judged in place.
+      function crewCard(a) {
+        var dpr = window.devicePixelRatio || 1, W = 172, H = 120, B = ROLE_BAND[a.role];
+        var c = document.createElement('canvas');
+        c.width = Math.round((W + 3) * dpr); c.height = Math.round((H + 3) * dpr);
+        c.style.width = (W + 3) + 'px'; c.style.height = (H + 3) + 'px';
+        var ctx = c.getContext('2d');
+        ctx.imageSmoothingEnabled = false;
+        ctx.scale(dpr, dpr);
+        ctx.fillStyle = '#1E4CC4'; ctx.fillRect(3, 3, W, H);
+        ctx.fillStyle = '#0B1640'; ctx.fillRect(0, 0, W, H);
+        ctx.fillStyle = '#E6EAF2'; ctx.fillRect(1, 1, W - 2, H - 2);
+        ctx.fillStyle = '#9AA6C4'; ctx.fillRect(1, H - 4, W - 2, 3);
+        ctx.fillStyle = B[0]; ctx.fillRect(4, 4, W - 8, 70);
+        ctx.fillStyle = B[1]; ctx.fillRect(4, 4, W - 8, 2);
+        ctx.drawImage(art.portrait(a.look, a.role, { scale: 3, dpr: dpr }), Math.floor((W - 78) / 2), 74 - 66, 78, 66);
+        var bw = art.uiText(ROLE_LABEL[a.role], { scale: 2, dpr: dpr, color: '#ffffff' });
+        ctx.fillStyle = '#0B1640'; ctx.fillRect(4, 4, cssW(bw) + 8, 20);
+        ctx.drawImage(bw, 8, 7, cssW(bw), cssH(bw));
+        if (a.rookie) {
+          var nw = art.uiText('NEW', { scale: 1, dpr: dpr, color: '#FFD23F' });
+          ctx.fillStyle = '#FFD23F'; ctx.fillRect(4, 26, cssW(nw) + 8, 13);
+          ctx.fillStyle = '#0B1640'; ctx.fillRect(5, 27, cssW(nw) + 6, 11);
+          ctx.drawImage(nw, 8, 29, cssW(nw), cssH(nw));
+        }
+        art.drawScaled(ctx, 'mood', W - 4 - 22, 7, 20, 20, 2 - a.mood);
+        ctx.fillStyle = '#585C6C'; ctx.fillRect(4, 74, W - 8, H - 82);
+        ctx.fillStyle = '#6E7284'; ctx.fillRect(4, 74, W - 8, 2);
+        var nm = art.uiText(String(a.name).toUpperCase(), { scale: 2, dpr: dpr, color: '#ffffff' });
+        ctx.drawImage(nm, Math.floor((W - cssW(nm)) / 2), 79, cssW(nm), cssH(nm));
+        starsAt(ctx, a.stars, 8, 99);
+        var wv = art.uiText(String(a.wage), { scale: 2, dpr: dpr, color: '#FFF1B0' });
+        ctx.drawImage(wv, W - 8 - cssW(wv), 97, cssW(wv), cssH(wv));
+        art.draw(ctx, 'coin', W - 8 - cssW(wv) - 11, 100, 0);
+        var lab = art.uiText('WAGE', { scale: 1, dpr: dpr, color: '#CFDEFF' });
+        ctx.drawImage(lab, W - 8 - cssW(wv) - 15 - cssW(lab), 100, cssW(lab), cssH(lab));
+        return c;
+      }
+      function renderCrew() {
+        var root3 = document.getElementById('crew');
+        root3.textContent = '';
+        function section(title, cls) {
+          var h = document.createElement('h2'); h.textContent = title; root3.appendChild(h);
+          var set = document.createElement('div'); set.className = cls || 'set'; root3.appendChild(set);
+          return set;
+        }
+        var P = pool();
+        // 1. Hiring Day's pool: bust at 3x beside the in-yard down frame, on the role band.
+        var set1 = section('Hiring Day pool, ' + P.note + ': bust 3x, in-yard down frame, mood');
+        P.list.forEach(function (a, i) {
+          set1.appendChild(wrap(crewWindow(a.look, a.role, 3, a.mood), (a.idx != null ? a.idx : i) + ' ' + a.name + ' ' + ROLE_LABEL[a.role] + ' ' + a.stars + ' stars, wage ' + a.wage + ', ' + MOOD_LABEL[2 - a.mood] + ', look ' + lookStr(a.look)));
+        });
+        // 2. Mood and stars.
+        var set2 = section('Mood frames (frame 2 - mood) and star frames, 3x');
+        art.SPRITES.mood.frames.forEach(function (fr, f) {
+          var c = document.createElement('canvas');
+          c.width = 14 * 3; c.height = 14 * 3;
+          var ctx = c.getContext('2d'); ctx.imageSmoothingEnabled = false; ctx.scale(3, 3);
+          ctx.fillStyle = f % 2 ? '#4EC2F5' : '#F0603C'; ctx.fillRect(0, 0, 14, 14);
+          art.draw(ctx, 'mood', 2, 2, f);
+          set2.appendChild(wrap(c, 'mood [' + f + '] ' + MOOD_LABEL[f] + ' (mood ' + (2 - f) + ')'));
+        });
+        [0, 1, 2, 3].forEach(function (f) {
+          var c = document.createElement('canvas');
+          c.width = 13 * 3; c.height = 13 * 3;
+          var ctx = c.getContext('2d'); ctx.imageSmoothingEnabled = false; ctx.scale(3, 3);
+          ctx.fillStyle = '#585C6C'; ctx.fillRect(0, 0, 13, 13);
+          art.draw(ctx, 'star', 2, 2, f);
+          set2.appendChild(wrap(c, 'star [' + f + '] ' + meaning('star', f)));
+        });
+        var rc = document.createElement('canvas');
+        rc.width = 72 * 3; rc.height = 46 * 3;
+        var rctx = rc.getContext('2d'); rctx.imageSmoothingEnabled = false; rctx.scale(3, 3);
+        rctx.fillStyle = '#585C6C'; rctx.fillRect(0, 0, 72, 46);
+        [1, 2.5, 3.5, 5].forEach(function (v, i) { starsAt(rctx, v, 2, 2 + i * 11); });
+        art.draw(rctx, 'star', 32, 13, 3); art.draw(rctx, 'star', 42, 13, 3);
+        set2.appendChild(wrap(rc, 'ratings 1, 2.5 with potential 4.5 hollow, 3.5, 5'));
+        // 3. Every look option on every role (one key at a time, the rest default), 2x.
+        LOOK_ORDER.forEach(function (k) {
+          var set3 = section('Crew look: ' + k + ' (every index on RUN, FIRE, PREP; the rest default)');
+          LOOK_LABELS[k].forEach(function (lab, i) {
+            var L = withLook({}); L[k] = i;
+            ['run', 'fire', 'prep'].forEach(function (r) {
+              set3.appendChild(wrap(crewWindow(L, r, 2), k + ' ' + i + ' ' + lab + ' / ' + ROLE_LABEL[r]));
+            });
+          });
+        });
+        // 4. Hair by hat on the bust: every hat must leave the hair style readable.
+        var set4 = section('Bust hair by hat (FIRE, hair colors vary), 2x');
+        LOOK_LABELS.hair.forEach(function (hl, h) {
+          LOOK_LABELS.hat.forEach(function (tl, t) {
+            set4.appendChild(wrap(crewWindow(withLook({ hair: h, hat: t, hairColor: 2 + (h % 3) }), 'fire', 2), hl + ' / ' + tl));
+          });
+        });
+        // 5. Three cards to X13.4, from the pool, one per role.
+        var set5 = section('Cards (X13.4 colors) at 1x CSS', 'uirow');
+        ['fire', 'prep', 'run'].forEach(function (r, i) {
+          var a = P.list.filter(function (x) { return x.role === r; })[0];
+          if (!a) return;
+          set5.appendChild(wrap(crewCard({ name: a.name, role: r, look: a.look, stars: a.stars, wage: a.wage, mood: i === 2 ? -2 : a.mood, rookie: i !== 0 }), a.name + ' ' + ROLE_LABEL[r]));
+        });
+      }
+
       function wrap(canvas, label) {
         var fig = document.createElement('figure');
         fig.className = bg;
@@ -450,8 +656,14 @@
         art.setLook({ skin: 3, hair: 1, hairColor: 1, face: 1, hat: 2, apron: 0 });
         person('player_down', 0, 6, 3);
         put('hand_plate_ribs', 0, 6 * 16 + 4, 3 * 16 + 4, 3 * 16 + 15, 3);
+        // v3.1: the crew wear their cards' looks (the pool's first card of each role), PREP at the board.
+        ['run', 'fire', 'prep'].forEach(function (r) {
+          var a = pool().list.filter(function (x) { return x.role === r; })[0];
+          if (a) art.setCrewLook(r, a.look);
+        });
         person('buddy_up', 0, 4, 5);
         person('tender_side', 1, 3, 2, true);
+        person('prep_slice', 0, 5, 3);
         person('cust0_up', 0, 7, 7);
         person('cust1_side', 0, 8, 7);
         person('cust2_side', 3, 9, 7);
@@ -516,6 +728,7 @@
         renderYard();
       });
       renderLooks();
+      renderCrew();
       renderSheet();
       renderYard();
     });
@@ -523,7 +736,7 @@
 </head>
 <body>
   <h1>Pit sim sprite sheet</h1>
-  <p>Dev only. Loads ../sprites.js and draws every sprite and frame with its name and frame meaning under it, checked against the v3.0 list of contract W16.2, then every look option on the pitmaster at 2x (W16.4). <span id="count"></span></p>
+  <p>Dev only. Loads ../sprites.js and draws every sprite and frame with its name and frame meaning under it, checked against the v3.1 list of contract X12.1, then every look option on the pitmaster at 2x (W16.4), then the crew (X12.3): the Hiring Day pool as busts beside their in-yard frames, the mood and star frames, every look option on every role's bust and three cards. <span id="count"></span></p>
   <div id="bar">
     <span>Background:</span>
     <button type="button" data-bg="paver" aria-pressed="true">Paver</button>
@@ -538,6 +751,7 @@
   <pre id="err"></pre>
   <div id="ok"></div>
   <div id="looks"></div>
+  <div id="crew"></div>
   <h2>Yard mock (contract D4 positions, the W16.5 sign with a pit name, all decor owned, static; v2.1 arrow under the pile, warning on kettle 2)</h2>
   <canvas id="yard" width="528" height="576"></canvas>
   <div id="sheet"></div>

@@ -1,6 +1,6 @@
 'use strict';
 /*
- * games/pit-sim/sprites.js  (Art builder, v3.0)
+ * games/pit-sim/sprites.js  (Art builder, v3.1)
  * Attaches PitSim.art as defined in docs/superpowers/specs/2026-10-18-pit-sim-contract.md,
  * section 3 as amended by the v2 delta D11, with the rules of [V2.10] (palette) and
  * [V2.11] (sprites) of docs/superpowers/specs/2026-10-18-pit-sim-design.md, and for v2.1 the
@@ -65,6 +65,33 @@
  *     shirt's shade column U t; its shade stays U 2.
  *   - uiText() rounds scale * dpr to a whole number of device pixels per font pixel (at least 1),
  *     so a fractional dpr (Android 2.625) still lands every font pixel on the device grid.
+ * - v3.1 (2026-10-19, contract docs/superpowers/specs/2026-10-19-pit-sim-v3-1-contract.md X12): star
+ *   grows to 4 frames (2 half, 3 hollow); new mood (10x10, 5 frames), prep_down/up/side and
+ *   prep_slice on PREP_DEFAULT_LOOK. 128 names, 352 frames, palette still 36. New art members
+ *   setCrewLook(), crewKey(), bustRows(), portrait() and CREW_OUTFIT. build() keeps v2's buddy and
+ *   tender grids until the first setCrewLook. v3.1 deviations, all inside the art's own freedom:
+ *   - The RUN bust's name tag has a top band in the look's apron color, so the apron swatch shows on
+ *     every role's card (the in-yard RUN sprite has no apron, as X12.3 says). FIRE shows it as the
+ *     apron, PREP as the neckerchief.
+ *   - CREW_OUTFIT also carries the legs (L N Z) per role, and FIRE's cream shirt for the Red apron as
+ *     T2 V2 U2; values are palette characters only.
+ *   - The bust's face is one fixed calm expression for every mood (mood is the badge). Eye whites are
+ *     drawn for skin tones 5 and 6 only, as in the mock, so the pupils read on the deep tones.
+ *   - Every hair style leaves pixels below the hat line (sideburns, side puffs, strands or a ring), and
+ *     the bun's knot is drawn after the hat on empty cells, so each style reads under a cap or bandana.
+ *   - Bust glasses are round rims with smokeL lenses and a white glint (rims alone read as sunglasses).
+ *   - The shirt's light tone is a rim along the left shoulder, not the mock's two columns (which read
+ *     as stripes with a white light tone).
+ *   - setCrewLook keeps up to 24 built looks per role (grids and canvases), so a drawing site can call
+ *     it every frame: the same key returns at once, a known key swaps canvases with no render. An
+ *     unknown role throws, the way draw() treats an unknown sprite; crewKey of one returns ''.
+ *   - mood frames: a light pixel top left and a shade arc bottom right in the face's own ramp (yellow
+ *     k h 8, orange 4 8 r, red o p r); the fired up grin has white teeth over a red tongue.
+ * - Review round 1 (2026-10-19, contract X20.8, Overseer's call): a crew card's cap takes one of four
+ *   ramps by look.apron % 4 (CAP_RAMPS: rust, navy, forest, grey; palette characters only) on the
+ *   bust and in the yard, so a grid of capped cards no longer reads as one uniform; the player's
+ *   own cap stays rust. Under a cap, long hair shows only from bust row 7 down, so the strands never
+ *   run up beside the cap like a hood. How often a crew look wears a hat is sim.js's (C.HAT_SHARE).
  * Nothing else is added to the shared surface: PitSim.art only.
  *
  * LEGEND (W16.1): one character per pixel, the palette index in base 36, lowercase only.
@@ -935,6 +962,266 @@ function sliceFrames(base, map) {
     '............OXXY'
   ], 0, 16);
   return [paint(up, map), paint(down, map)];
+}
+
+/* ---------------------------------------------- crew looks (v3.1, contract X12.2, X12.3) */
+/*
+ * One body system: the in-yard crew sprite is lookRows() with the role outfit in place of the
+ * player's shirt and apron, and the card portrait is a 26 by 22 bust built from parts authored once
+ * at bust size, one per look option, painted with the same swap tables. Bust symbols:
+ *   O outline   S skin   R skin shade   Y skin light   P cheek   M mouth   E eye   W eye white
+ *   H hair   J hair light   G hair shade (also brows)   C hat crown   F hat light   D hat shade
+ *   T shirt   V shirt light   U shirt shade   A apron   B apron shade   K accent (the look's apron)
+ */
+const ROLES = Object.freeze(['run', 'fire', 'prep']);
+// Per role: shirt T V U (fire's T2 V2 U2 are the cream shirt worn with the Red apron), the run
+// role's A and B (no apron: the shirt's own colors), and the legs L N Z. Palette characters only.
+const CREW_OUTFIT = Object.freeze({
+  run:  Object.freeze({ T: 'f', V: 'h', U: 'g', A: 'f', B: 'g', L: 't', N: '1', Z: '5' }),
+  fire: Object.freeze({ T: 'o', V: 'p', U: 'r', T2: '3', V2: 'h', U2: 'a', L: 't', N: '1', Z: '1' }),
+  prep: Object.freeze({ T: 'h', V: 'h', U: 'u', L: 'v', N: 't', Z: '1' })
+});
+const CREW_SPRITE = Object.freeze({ run: 'buddy', fire: 'tender', prep: 'prep' });
+const PREP_DEFAULT_LOOK = Object.freeze({ skin: 2, hair: 4, hairColor: 0, face: 0, hat: 0, apron: 2 });
+const APRON_RED = 0;
+
+function isRole(role) { return typeof role === 'string' && ROLES.indexOf(role) >= 0; }
+function lookKeyOf(L) { return LOOK_KEYS.map(function (k) { return L[k]; }).join('-'); }
+
+// Review 1: a crew cap takes one of four ramps by the look's apron index (rust, navy, forest, grey;
+// the rust ramp is v2's cap), so a grid of capped cards does not read as one uniform. Palette
+// characters only. The player's own cap (lookMap) stays rust.
+const CAP_RAMPS = Object.freeze([
+  Object.freeze({ C: '4', F: '8', D: 'r' }),
+  Object.freeze({ C: 'g', F: 'f', D: 't' }),
+  Object.freeze({ C: 'd', F: 'c', D: '2' }),
+  Object.freeze({ C: 't', F: 's', D: '1' })
+]);
+const HAT_CAP = 1;
+function crewHat(L) {
+  return L.hat === HAT_CAP ? CAP_RAMPS[L.apron % CAP_RAMPS.length] : LOOK.hat[L.hat];
+}
+
+// The crew member's symbol map: the look's map with the role outfit over the shirt, apron and legs.
+function crewMap(L, role) {
+  const m = lookMap(L);
+  const ch = crewHat(L);
+  if (ch) { m.C = ch.C; m.F = ch.F; m.D = ch.D; }
+  const o = CREW_OUTFIT[role];
+  const cream = role === 'fire' && L.apron === APRON_RED;
+  m.T = cream ? o.T2 : o.T; m.V = cream ? o.V2 : o.V; m.U = cream ? o.U2 : o.U;
+  if (role === 'run') { m.A = o.A; m.B = o.B; }
+  m.L = o.L; m.N = o.N; m.Z = o.Z;
+  return m;
+}
+
+// The in-yard frames for a role and look: { <base>_down, <base>_up, <base>_side[, prep_slice] }.
+function crewFrames(L, role) {
+  const map = crewMap(L, role);
+  const base = CREW_SPRITE[role];
+  const out = {};
+  ['down', 'up', 'side'].forEach(function (dir) {
+    out[base + '_' + dir] = [0, 1, 2].map(function (f) { return paint(lookRows(L, dir, f), map); });
+  });
+  if (role === 'prep') out.prep_slice = sliceFrames(lookRows(L, 'down', 0), map);
+  return out;
+}
+
+// Bust swap extras: skin light Y by skin index, the mouth stays the skin table's M.
+const BUST_SKIN_HI = ['h', 'w', 'l', 'm', 'x', 'y'];
+const BUST_W = 26, BUST_H = 22, BUST_T = 14;   // the shoulders start on row 14
+
+// Hair, at bust size: each style keeps something below the hat line (row 7 and down, or outside
+// columns 7 to 18), so every style still reads under a cap.
+const BUST_HAIR = {
+  short: function (g, span) {
+    span(2, 9, 16, 'H'); span(3, 8, 17, 'H'); span(4, 8, 17, 'G');
+    for (let y = 5; y <= 7; y++) { g.set(8, y, 'H'); g.set(17, y, 'G'); }
+    g.set(10, 2, 'J'); g.set(11, 2, 'J'); g.set(9, 3, 'J');
+  },
+  curly: function (g, span) {
+    span(1, 9, 16, 'H');
+    for (let y = 2; y <= 4; y++) span(y, 7, 18, 'H');
+    [7, 10, 13, 16].forEach(function (x) { g.set(x, 1, 'H'); });
+    for (let y = 5; y <= 9; y++) { g.set(7, y, 'H'); g.set(18, y, 'G'); if (y < 8) { g.set(8, y, 'H'); g.set(17, y, 'G'); } }
+    span(5, 9, 11, 'H'); span(5, 14, 16, 'H');
+    [[9, 2], [12, 3], [15, 2], [10, 4], [14, 4], [8, 6], [17, 7], [13, 1]].forEach(function (p) { g.set(p[0], p[1], 'G'); });
+    [[9, 1], [8, 3], [11, 2]].forEach(function (p) { g.set(p[0], p[1], 'J'); });
+    g.set(6, 5, 'H'); g.set(6, 7, 'H'); g.set(19, 5, 'G'); g.set(19, 7, 'G');
+  },
+  long: function (g, span) {
+    span(2, 9, 16, 'H');
+    for (let y = 3; y <= 4; y++) span(y, 8, 17, 'H');
+    span(5, 8, 12, 'H'); span(5, 15, 17, 'G');
+    g.set(8, 6, 'H'); g.set(17, 6, 'G'); g.set(8, 7, 'H'); g.set(17, 7, 'G');
+    for (let y = 4; y <= 18; y++) { span(y, 6, 7, 'H'); span(y, 18, 19, 'G'); }
+    g.set(5, 17, 'H'); g.set(5, 18, 'H'); g.set(20, 17, 'G'); g.set(20, 18, 'G');
+    g.set(10, 2, 'J'); g.set(11, 2, 'J'); g.set(9, 3, 'J'); g.set(6, 8, 'J'); g.set(6, 9, 'J');
+  },
+  buzz: function (g, span) {
+    span(2, 10, 15, 'H'); span(3, 9, 16, 'H');
+    for (let x = 8; x <= 17; x++) g.set(x, 4, x % 2 === 0 ? 'H' : 'G');   // stubble hairline
+    for (let y = 5; y <= 8; y++) { g.set(8, y, 'G'); g.set(17, y, 'G'); }
+    g.set(10, 3, 'J'); g.set(12, 3, 'J'); g.set(11, 2, 'J');
+  },
+  bun: function (g, span) {
+    span(2, 9, 16, 'H'); span(3, 8, 17, 'H'); span(4, 8, 17, 'H'); span(4, 11, 14, 'G');
+    for (let y = 5; y <= 10; y++) { g.set(8, y, 'H'); g.set(17, y, 'G'); }
+    g.set(7, 6, 'H'); g.set(18, 6, 'G'); g.set(10, 3, 'J'); g.set(9, 4, 'J');
+  },
+  bald: function (g) {
+    for (let y = 6; y <= 9; y++) { g.set(8, y, 'H'); g.set(17, y, 'G'); }
+    g.set(10, 4, 'Y'); g.set(11, 4, 'Y'); g.set(10, 3, 'Y');
+  }
+};
+// The bun's knot, drawn after any hat on empty cells only, so it shows above a cap or a bandana.
+const BUST_KNOT = [[12, 0, 'J'], [13, 0, 'H'], [11, 1, 'J'], [12, 1, 'H'], [13, 1, 'H'], [14, 1, 'G']];
+
+// Hats: clear the box the hat covers, then paint it; row 6 under a brim takes the skin's shade.
+const BUST_HAT = {
+  cap: function (g, span) {
+    clearBox(g, 7, 0, 18, 5);
+    span(1, 10, 15, 'C');
+    for (let y = 2; y <= 4; y++) span(y, 8, 17, 'C');
+    g.set(12, 1, 'F'); g.set(10, 2, 'F'); g.set(11, 2, 'F'); g.set(9, 3, 'F');
+    for (let y = 2; y <= 4; y++) { g.set(16, y, 'D'); g.set(17, y, 'D'); }
+    span(5, 7, 18, 'D');
+    span(6, 8, 17, 'R');
+  },
+  cowboy: function (g, span) {
+    clearBox(g, 3, 0, 22, 5);
+    span(0, 10, 15, 'C'); span(1, 9, 16, 'C'); span(2, 9, 16, 'C'); span(3, 9, 16, 'D');
+    g.set(10, 0, 'F'); g.set(9, 1, 'F'); g.set(10, 1, 'F'); g.set(9, 2, 'F');
+    g.set(16, 1, 'D'); g.set(16, 2, 'D'); g.set(12, 0, 'D'); g.set(13, 0, 'D');   // the crease
+    g.set(4, 3, 'C'); g.set(21, 3, 'D');                                            // brim tips turned up
+    span(4, 4, 21, 'C'); g.set(4, 4, 'F'); g.set(5, 4, 'F'); g.set(6, 4, 'F'); g.set(20, 4, 'D'); g.set(21, 4, 'D');
+    span(5, 5, 20, 'D');
+    span(6, 8, 17, 'R');
+  },
+  bandana: function (g, span) {
+    clearBox(g, 7, 0, 18, 4);
+    span(2, 9, 16, 'C'); span(3, 8, 17, 'C'); span(4, 8, 17, 'D');
+    [[10, 2], [14, 2], [9, 3], [12, 3], [16, 3]].forEach(function (p) { g.set(p[0], p[1], 'F'); });
+    g.set(18, 3, 'C'); g.set(18, 4, 'D'); g.set(19, 4, 'C'); g.set(19, 5, 'D'); g.set(20, 5, 'C'); g.set(20, 6, 'D');   // the knot's tails
+  }
+};
+function clearBox(g, x0, y0, x1, y1) {
+  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) g.set(x, y, '0');
+}
+
+// Face options at bust size (none paints nothing).
+const BUST_FACE = {
+  mustache: function (g, span) { span(11, 10, 15, 'H'); g.set(10, 12, 'H'); g.set(15, 12, 'G'); g.set(11, 11, 'J'); },
+  beard: function (g, span) {
+    span(11, 11, 14, 'H'); g.set(8, 11, 'H'); g.set(9, 11, 'H'); g.set(16, 11, 'G'); g.set(17, 11, 'G');
+    span(12, 8, 10, 'H'); span(12, 15, 17, 'G');
+    span(13, 9, 16, 'H'); span(14, 10, 15, 'G'); g.set(16, 13, 'G');
+    for (let y = 8; y <= 10; y++) { g.set(8, y, 'H'); g.set(17, y, 'G'); }
+    g.set(12, 13, 'J');
+  },
+  // Two round lenses (rims near black, clear lenses in smokeL around the eyes) and a bridge.
+  glasses: function (g, span) {
+    span(7, 9, 11, '1'); span(7, 14, 16, '1'); span(10, 9, 11, '1'); span(10, 14, 16, '1');
+    [8, 12, 13, 17].forEach(function (x) { g.set(x, 8, '1'); g.set(x, 9, '1'); });
+    g.set(9, 8, 'u'); g.set(9, 9, 'u'); g.set(11, 8, 'u'); g.set(11, 9, 'u');
+    g.set(14, 8, 'u'); g.set(14, 9, 'u'); g.set(16, 8, 'u'); g.set(16, 9, 'u');
+    g.set(11, 8, 'h'); g.set(16, 8, 'h');   // glint, top right of each lens
+  }
+};
+
+// Role outfits at bust size, over the shirt (T is the shoulder row, BUST_T).
+const BUST_OUTFIT = {
+  // RUN: a polo with a white collar and a white name tag; the tag's top band wears the look's apron color.
+  run: function (g, span, T) {
+    span(T, 7, 9, 'h'); span(T, 16, 18, 'h'); span(T + 1, 9, 10, 'h'); span(T + 1, 15, 16, 'h');
+    span(T + 1, 11, 14, 'R');
+    for (let y = T + 2; y < BUST_H; y++) g.set(12, y, 'U');
+    g.set(13, T + 2, 'U'); g.set(12, T + 2, 'h');
+    span(T + 2, 16, 19, 'K'); span(T + 3, 16, 19, 'h'); g.set(17, T + 3, 't'); g.set(18, T + 3, 't');
+  },
+  // FIRE: the work apron with a neck strap and a chest pocket holding a thermometer.
+  fire: function (g, span, T) {
+    for (let y = T + 1; y < BUST_H; y++) span(y, 8, 17, 'A');
+    for (let y = T + 2; y < BUST_H; y++) span(y, 7, 18, 'A');
+    g.set(9, T, 'A'); g.set(10, T, 'A'); g.set(15, T, 'A'); g.set(16, T, 'A');
+    for (let y = T + 1; y < BUST_H; y++) { g.set(17, y, 'B'); g.set(18, y, 'B'); }
+    span(T + 3, 10, 15, 'B'); g.set(10, T + 2, 'B'); g.set(15, T + 2, 'B');
+    g.set(13, T + 2, 's'); g.set(13, T + 1, 'h');
+  },
+  // PREP: a white chef coat, a neckerchief in the look's apron color, two rows of buttons.
+  prep: function (g, span, T) {
+    span(T, 7, 9, 'V'); span(T, 16, 18, 'V');
+    span(T + 1, 10, 15, 'K'); g.set(12, T + 2, 'K'); g.set(13, T + 2, 'B');
+    for (let y = T + 2; y < BUST_H; y++) g.set(15, y, 'U');
+    [[9, T + 2], [9, T + 4], [17, T + 2], [17, T + 4]].forEach(function (p) { g.set(p[0], p[1], 't'); });
+  }
+};
+
+// The bust in symbols. Order: torso, neck, outfit, head and face, facial hair, hair, hat, the bun's
+// knot, glasses, then the outline pass.
+function bustSymbols(L, role) {
+  const g = new Grid(BUST_W, BUST_H, '0');
+  const span = function (y, x0, x1, c) { for (let x = x0; x <= x1; x++) g.set(x, y, c); };
+  const T = BUST_T;
+  span(T, 6, 19, 'T'); span(T + 1, 4, 21, 'T');
+  for (let y = T + 2; y < BUST_H; y++) span(y, 2, 23, 'T');
+  for (let y = T + 1; y < BUST_H; y++) { g.set(20, y, 'U'); g.set(21, y, 'U'); }
+  for (let y = T + 2; y < BUST_H; y++) { g.set(22, y, 'U'); g.set(23, y, 'U'); g.set(2, y, 'V'); }
+  span(T, 6, 7, 'V'); span(T + 1, 4, 6, 'V'); g.set(3, T + 2, 'V');   // rim light along the left shoulder
+  for (let y = 12; y <= T + 1; y++) span(y, 11, 14, 'R');
+  BUST_OUTFIT[role](g, span, T);
+  // head, light from the top left
+  span(3, 9, 16, 'S');
+  for (let y = 4; y <= 12; y++) span(y, 8, 17, 'S');
+  span(13, 9, 16, 'S'); span(14, 10, 15, 'S');
+  for (let y = 4; y <= 12; y++) g.set(17, y, 'R');
+  g.set(16, 13, 'R'); g.set(15, 14, 'R');
+  g.set(9, 5, 'Y'); g.set(9, 6, 'Y'); g.set(10, 4, 'Y');
+  for (let y = 8; y <= 10; y++) { g.set(7, y, 'S'); g.set(18, y, 'R'); }
+  g.set(7, 9, 'R');
+  // face: eyes two pixels tall, brows in the hair shade, nose, mouth, cheeks
+  g.set(10, 8, 'E'); g.set(10, 9, 'E'); g.set(15, 8, 'E'); g.set(15, 9, 'E');
+  if (L.skin >= 4) { g.set(11, 9, 'W'); g.set(14, 9, 'W'); }
+  span(7, 9, 10, 'G'); span(7, 15, 16, 'G');
+  g.set(13, 10, 'R'); g.set(12, 11, 'R');
+  span(12, 11, 14, 'M');
+  g.set(9, 11, 'P'); g.set(16, 11, 'P');
+  const faceId = LOOK.face[L.face];
+  if (faceId === 'mustache' || faceId === 'beard') BUST_FACE[faceId](g, span);
+  const hairId = LOOK.hair[L.hair];
+  BUST_HAIR[hairId](g, span);
+  const hatId = HAT_IDS[L.hat];
+  if (hatId) BUST_HAT[hatId](g, span);
+  // Review 1: under a cap, long hair shows only from row 7 down (below the brim), so the strands
+  // never run up beside the cap like a hood.
+  if (hatId === 'cap' && hairId === 'long') {
+    for (let y = 0; y <= 6; y++) for (let x = 0; x < BUST_W; x++) {
+      const v = g.get(x, y);
+      if ((x < 7 || x > 18) && (v === 'H' || v === 'J' || v === 'G')) g.set(x, y, '0');
+    }
+  }
+  if (hairId === 'bun') BUST_KNOT.forEach(function (p) { if (g.get(p[0], p[1]) === '0') g.set(p[0], p[1], p[2]); });
+  if (faceId === 'glasses') BUST_FACE.glasses(g, span);
+  g.outline('O');
+  return g.done();
+}
+
+function bustMap(L, role) {
+  const sk = LOOK.skin[L.skin], hc = LOOK.hairColor[L.hairColor], ap = LOOK.apron[L.apron], ht = crewHat(L);
+  const m = crewMap(L, role);
+  return {
+    O: '5', S: sk.S, R: sk.R, Y: BUST_SKIN_HI[L.skin], P: sk.P, M: sk.M, E: '1', W: 'h',
+    H: hc.H, J: hc.J, G: HAIR_SHADE[L.hairColor],
+    C: ht ? ht.C : '0', F: ht ? ht.F : '0', D: ht ? ht.D : '0',
+    T: m.T, V: m.V, U: m.U, A: ap.A, B: ap.B, K: ap.A
+  };
+}
+
+// art.bustRows (X12.2): 22 rows of 26 legend characters, '0' transparent.
+function bustRows(look, role) {
+  if (!isRole(role)) throw new Error('sprites: unknown crew role "' + role + '"');
+  const L = normLook(look);
+  return paint(bustSymbols(L, role), bustMap(L, role));
 }
 
 // Soft shadow under people: a checker ellipse in dark brown.
@@ -2197,14 +2484,48 @@ function evFinale() {
 }
 
 const STAR_ROWS = ['....5....', '...5k5...', '5555kk555', '5hkkkkkk5', '.5kkkkk5.', '..5kkk5..', '.5kk5kk5.', '.5k5.5k5.', '.55...55.'];
-const STAR = [paint(STAR_ROWS), recolor(paint(STAR_ROWS), { k: 'v', h: 'v' })];
+// v3.1 (X12.1): frame 2 half (frame 0's columns 0 to 4, frame 1's columns 5 to 8), frame 3 hollow
+// (the outline in yellow, the body transparent) for potential.
+const STAR_FULL = paint(STAR_ROWS);
+const STAR_EMPTY = recolor(STAR_FULL, { k: 'v', h: 'v' });
+const STAR_HALF = STAR_FULL.map(function (r, y) { return r.slice(0, 5) + STAR_EMPTY[y].slice(5); });
+const STAR_HOLLOW = STAR_FULL.map(function (r) { return r.replace(/[^5]/g, '0').replace(/5/g, 'k'); });
+const STAR = [STAR_FULL, STAR_EMPTY, STAR_HALF, STAR_HOLLOW];
+
+// v3.1 mood faces (X12.1), 10x10, frame 2 - mood: 0 Fired up, 1 Happy, 2 OK, 3 Grumpy, 4 Done.
+// A round face, outline brown edge, a light pixel top left and a shade arc bottom right in the
+// face's own ramp, near black eyes two pixels tall; only the mouth and brows change with the mood.
+const MOOD_BODY = ['..555555..', '.5XXXXXX5.', '5XXXXXXXX5', '5XXXXXXXX5', '5XX1XX1XX5',
+  '5XX1XX1XX5', '5XXXXXXXX5', '5XXXXXXXX5', '.5XXXXXX5.', '..555555..'];
+const MOOD_RAMP = { k: { X: 'k', L: 'h', Z: '8' }, 4: { X: '4', L: '8', Z: 'r' }, o: { X: 'o', L: 'p', Z: 'r' } };
+function moodFrame(fill, mouth) {
+  const g = new Grid(10, 10, '0');
+  g.stamp(MOOD_BODY, 0, 0);
+  for (let y = 1; y < 9; y++) {
+    for (let x = 1; x < 9; x++) {
+      if (g.get(x, y) !== 'X') continue;
+      const edgeBR = g.get(x + 1, y) === '5' || g.get(x, y + 1) === '5';
+      if (edgeBR && x + y >= 12) g.set(x, y, 'Z');
+    }
+  }
+  g.set(3, 1, 'L'); g.set(2, 2, 'L');
+  mouth.forEach(function (p) { g.set(p[0], p[1], p[2] || '1'); });
+  return paint(g.done(), MOOD_RAMP[fill]);
+}
+const MOOD = [
+  moodFrame('k', [[2, 6], [3, 6, 'h'], [4, 6, 'h'], [5, 6, 'h'], [6, 6, 'h'], [7, 6], [3, 7], [4, 7, 'o'], [5, 7, 'o'], [6, 7]]),
+  moodFrame('k', [[2, 6], [7, 6], [3, 7], [4, 7], [5, 7], [6, 7]]),
+  moodFrame('k', [[3, 7], [4, 7], [5, 7], [6, 7]]),
+  moodFrame('4', [[3, 6], [4, 6], [5, 6], [6, 6], [2, 7], [7, 7]]),
+  moodFrame('o', [[2, 2], [3, 3], [7, 2], [6, 3], [3, 6], [4, 6], [5, 6], [6, 6], [2, 7], [7, 7]])
+];
 
 const FLAME_ROWS = ['....5...', '...545..', '..5445..', '..54445.', '.544k45.', '.54kk45.', '54kkhk45', '54khhk45', '.54kk45.', '..5555..'];
 const FLAME = [paint(FLAME_ROWS), recolor(paint(FLAME_ROWS), { 4: 'v', k: '2', h: '2' })];
 
 const CHECK_BOX = paint(['.555555.', '5bcccch5', '5bccchh5', '5hcchhc5', '5hhhhcc5', '5chhccd5', '5dddddd5', '.555555.']);
 
-/* ------------------------------------------------------------------ the set (W16.2, 123 names, 334 frames) */
+/* ------------------------------------------------------------------ the set (X12.1, 128 names, 352 frames) */
 
 const SPRITES = {};
 function add(name, w, h, frames) { SPRITES[name] = sprite(w, h, frames); }
@@ -2307,6 +2628,13 @@ add('star', 9, 9, STAR);
 add('flame', 8, 10, FLAME);
 add('check', 8, 8, [CHECK_BOX]);
 
+// v3.1 (X12.1): 5 names, 16 frames (star grew by 2 above). 128 names, 352 frames in all.
+(function () {
+  const pf = crewFrames(normLook(PREP_DEFAULT_LOOK), 'prep');
+  ['prep_down', 'prep_up', 'prep_side', 'prep_slice'].forEach(function (n) { add(n, 16, 24, pf[n]); });
+})();
+add('mood', 10, 10, MOOD);
+
 /* ------------------------------------------------------------------ build and draw */
 
 let built = false;
@@ -2407,7 +2735,89 @@ function setLook(look) {
 }
 
 function lookKey() {
-  return LOOK_KEYS.map(function (k) { return lookNow[k]; }).join('-');
+  return lookKeyOf(lookNow);
+}
+
+/* ------------------------------------------------ crew looks: setCrewLook, crewKey, portrait (X12.2) */
+
+const CREW_NAMES = Object.freeze({
+  run: ['buddy_down', 'buddy_up', 'buddy_side'],
+  fire: ['tender_down', 'tender_up', 'tender_side'],
+  prep: ['prep_down', 'prep_up', 'prep_side', 'prep_slice']
+});
+// The key in effect per role: '' for run and fire until the first setCrewLook (v2's buddy and
+// tender grids), the prep default from load.
+const crewNow = { run: '', fire: '', prep: 'prep:' + lookKeyOf(normLook(PREP_DEFAULT_LOOK)) };
+// Built looks per role, so the drawing sites can call setCrewLook every frame for free: key ->
+// { grids, canvas, flip }. Cleared when it reaches CREW_MEMO_MAX looks for a role.
+const CREW_MEMO_MAX = 24;
+const crewMemo = { run: {}, fire: {}, prep: {} };
+
+function setCrewLook(role, look) {
+  if (!isRole(role)) throw new Error('sprites: unknown crew role "' + role + '"');
+  const L = normLook(look);
+  const key = role + ':' + lookKeyOf(L);
+  if (crewNow[role] === key) return key;
+  let entry = crewMemo[role][key];
+  if (!entry) {
+    if (Object.keys(crewMemo[role]).length >= CREW_MEMO_MAX) crewMemo[role] = {};
+    entry = { grids: crewFrames(L, role), canvas: null, flip: null };
+    crewMemo[role][key] = entry;
+  }
+  CREW_NAMES[role].forEach(function (name) {
+    const s = SPRITES[name];
+    for (let i = 0; i < s.frames.length; i++) s.frames[i] = entry.grids[name][i];
+  });
+  if (built) {
+    if (!entry.canvas) {
+      entry.canvas = {}; entry.flip = {};
+      CREW_NAMES[role].forEach(function (name) {
+        const s = SPRITES[name];
+        entry.canvas[name] = entry.grids[name].map(function (fr) { return render(fr, s.w, s.h); });
+        entry.flip[name] = entry.grids[name].map(function (fr) { return render(hflip(fr), s.w, s.h); });
+      });
+    }
+    CREW_NAMES[role].forEach(function (name) {
+      cache[name] = entry.canvas[name];
+      flipCache[name] = entry.flip[name];
+    });
+  }
+  crewNow[role] = key;
+  return key;
+}
+
+function crewKey(role) {
+  return isRole(role) ? crewNow[role] : '';
+}
+
+// The bust drawn at scale CSS px per art pixel, a whole number of device px per art pixel.
+function portrait(look, role, opts) {
+  const rows = bustRows(look, role);
+  const o = opts && typeof opts === 'object' ? opts : {};
+  const scale = Math.max(1, Math.trunc(Number(o.scale) || 1));
+  const dpr = Number(o.dpr) > 0 ? Number(o.dpr) : 1;
+  const k = Math.max(1, Math.round(scale * dpr));
+  const c = document.createElement('canvas');
+  c.width = BUST_W * k;
+  c.height = BUST_H * k;
+  if (c.style) { c.style.width = (BUST_W * scale) + 'px'; c.style.height = (BUST_H * scale) + 'px'; }
+  if (typeof c.setAttribute === 'function') c.setAttribute('aria-hidden', 'true');
+  const g = c.getContext('2d');
+  g.imageSmoothingEnabled = false;
+  for (let y = 0; y < BUST_H; y++) {
+    const row = rows[y];
+    let x = 0;
+    while (x < BUST_W) {
+      const ch = row[x];
+      if (ch === '0') { x++; continue; }
+      let x2 = x + 1;
+      while (x2 < BUST_W && row[x2] === ch) x2++;
+      g.fillStyle = PALETTE[CHARS.indexOf(ch)];
+      g.fillRect(x * k, y * k, (x2 - x) * k, k);
+      x = x2;
+    }
+  }
+  return c;
 }
 
 function has(name) {
@@ -2673,7 +3083,12 @@ const art = {
   uiText: uiText,
   setLook: setLook,
   lookKey: lookKey,
-  LOOK: LOOK
+  LOOK: LOOK,
+  setCrewLook: setCrewLook,
+  crewKey: crewKey,
+  bustRows: bustRows,
+  portrait: portrait,
+  CREW_OUTFIT: CREW_OUTFIT
 };
 Object.defineProperty(art, 'built', { enumerable: true, get: function () { return built; } });
 

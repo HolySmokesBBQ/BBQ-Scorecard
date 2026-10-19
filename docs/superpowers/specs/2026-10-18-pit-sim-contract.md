@@ -10,6 +10,16 @@ Every rule of play (numbers, step order, order rule, pull order, strings) lives 
 
 ---
 
+## v3.1 crew cards
+
+**Date:** 2026-10-19. The v3.1 round (crew cards: the buddy and fire tender become RUN and FIRE cards and PREP joins them; two skills a role with stars that tune the cook constants; mood with notice before leaving; wages per event under a payroll budget and roster slots; Hiring Day every season with 18 applicants, 3 rounds, other outfits and tryouts; walk-ins with a signing fee; one training pick a week; XP, banked levels and the raise; crew rows on the report; the 1 star vs 5 star felt-difference check; save version 5; and the four v3.0 playtest carry-forward fixes) has its own contract: `docs/superpowers/specs/2026-10-19-pit-sim-v3-1-contract.md`, sections X0 to X18. It is law for the v3.1 builders: where it and the v3.0 contract or anything below disagree, it wins, and everything else stands.
+
+The headline changes to this document's names: `C.SAVE_VERSION` 5 and `validateSave` accepts 1 to 5; `PitSim.game.version` `'0.6.0'`; six new top level names from `sim.js` (`ROLE_IDS`, `genPool`, `genWalkins`, `cardStars`, `wageFor`, `skillValue`); `state.crew`, `state.crewSeq`, `state.hiring`, `state.prep` and loop `'hiring'`; `state.hires` and the `hires` save key removed (`hire()` is an inert stub); `GOAL_ORDER` without the buddy; 128 required sprites and 352 frames; the 76 step harness of X15.
+
+Integrated 2026-10-19: the harness passes 76 of 76 on phone and desktop with zero console errors, and the econ season bot passes at every length. The record (one tuned value, the builder deviations, the known gaps) is the v3.1 contract's X19, and the econ numbers are design section 10.8.
+
+---
+
 ## v3.0 season
 
 **Date:** 2026-10-18, night. The v3.0 round (the season, the week screen hub, bookings with deposits and client stars, the ticket rail, fan rating thirds, the event length setting, the season end card, the character creator with player and pit names, the visible rolling inventory, save version 4, the econ season bot, and two tutorial strand fixes) has its own contract: `docs/superpowers/specs/2026-10-18-pit-sim-v3-0-contract.md`, sections W0 to W21. It is law for the v3.0 builders: where it and anything below disagree, it wins, and everything below stands unless a W section names it. Rules of play are in `docs/superpowers/specs/2026-10-18-pit-sim-v3-season-design.md`.

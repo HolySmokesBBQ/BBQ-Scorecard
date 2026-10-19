@@ -1,5 +1,79 @@
 // game.js: input, canvas rendering, DOM panels, aria-live, save hooks, pause, feedback, the dog.
-// Contract: docs/superpowers/specs/2026-10-18-pit-sim-v3-0-contract.md (v3.0: W1, W4 to W7 reads, W14
+// Contract v3.1: docs/superpowers/specs/2026-10-19-pit-sim-v3-1-contract.md (X1, X4 to X10 reads, X12 calls
+//           only, X13, X14, X17, with the X18 Overseer's calls); design [S 6], [S 8], [S 12.3]; mocks
+//           docs/superpowers/mocks/pit-sim-v3/screen-2-crew (.png and .html), screen-3-week, screen-4-report.
+//
+// v3.1 deviations (PitSim.game is X13.8: every W17.7 member, version '0.6.0', crew, hiringPage):
+// 43. #card and the crew sheet stand in place of the panel that opened them (panels are exclusive, as
+//     the sheets were in v3.0); Back or Escape rebuilds that panel and focuses the opener. While #card
+//     is open over #hiring or the crew sheet, the hidden panel is rebuilt after every action, so its
+//     ids (#hire-tryouts, #hire-round, #crew-slots) always read the live state.
+// 44. A successful hire (card-hire) closes #card: a Hiring Day hire returns to #hiring with focus on the
+//     hired card (the round is over and other outfits have picked), a walk-in hire returns to the crew
+//     sheet with focus on the new card. Letting a card go returns to the panel under the card sheet.
+// 45. Level mode (X13.3): when both skills are at potential the two picks stay enabled under
+//     ui.levelBoth, since a level then lifts the mood whatever skill is passed (X5.5); a pick at
+//     potential otherwise is disabled with ui.atPotential on the line under it and as its title.
+//     When the last banked level is spent the sheet shows the card (crew mode, its week controls
+//     hidden outside the week), so the new stars are in view; Back returns to where it opened.
+// 46. Stars: the grid cards show only filled stars (full, half) and, once potential is known, hollow
+//     stars up to it (a half potential is the hollow frame's left five columns beside an empty
+//     right half); the card sheet shows five slots (full, half, hollow, empty). While sprites.js has
+//     fewer than four star frames, or no mood or portrait, the mock's maps (screen-2-crew) and the
+//     role's in-yard down frame stand in.
+// 47. The application cards and crew cards keep their aria-label to X10 (ui.appAria or ui.appTaken);
+//     a card you hired adds ", On your crew", a held card adds its ui.moodAria sentence. The mood face
+//     on each card carries data-mood and its own ui.moodAria label.
+// 48. #hire-go and #hire-crew wear the mock's blue framed button with the white border (screen-2-crew)
+//     over the hub's orange primary; #hire-go keeps the class primary. #hiring-foot (the payroll box
+//     and the bottom bar) is sticky at the bottom of the screen on a phone, as the creator's footer is.
+// 49. The crew sheet lists each card beside a column of its Bring and Train buttons, its XP meter
+//     (xp-{id}, ui.xp) and, while it has levels banked, ui.banked (banked-{id}); the walk-ins sit in
+//     the Hiring Day grid's two columns. Train buttons keep ui.train and are disabled once anyone
+//     trained (X13.5); card-train reads ui.trainDone when disabled (X13.3).
+// 50. The compact money table: the Fee row's detail is ui.deposit ("Deposit 30"); Signing and send-off
+//     also joins the detail table (rep-money-detail, a box of its own under Money and Word of mouth)
+//     when crewSpent is above 0, and the stock and Paid at the shop rows count crewSpent, so both
+//     tables add up. The Yard day report gets the same Show every row control over its v2.1 rows.
+// 51. rep-third sits under rep-host-third in the host box on a booking report, and under the money
+//     boxes on a Yard day report. The report crew rows show ui.xp beside the meter.
+// 52. The report fit (X13.6): rfit1 to rfit3 apply in order while #till is taller than two screens;
+//     the fourth step (word of mouth beside money) is v3.0's container rule from 300 px already.
+// 53. Offer tags sit in the band's top left where the SAT and SUN tags were, in the UI font at 2x, green
+//     for SAFE BET, orange for STRETCH and gold for INVITE on near black.
+// 54. Crew looks: ensureCrewLook(role, look) calls art.setCrewLook only when art.crewKey(role) does not
+//     already name that look (remembering what an earlier call returned), so the yard can check every
+//     frame without rebuilding sprites; the yard, the hub crew tile and the report hero all call it.
+// 55. #third-line (X13.6 "one line") wraps to a second line on a phone: ui.thirdNow runs to 61
+//     characters and the hub's 12 px monospace holds about 48 on a 375 phone. It stays 12 px.
+// 56. The card sheet's portrait carries the NEW badge and the taken or yours band as the grid card
+//     does; the role badge and the mood face sit in card-role and card-mood under it (X13.3). The
+//     overall stars also have a .sr text (ui.starsMany or ui.starsOne).
+// Carry-forward items (X17) in this file: (2) #third-line under the hub pills, rep-host-third under the
+//     host quote and rep-third when a third is crossed; (4) the compact money table with Show every
+//     row (rep-money-more over rep-money-detail) and the report shrink steps; (1) the SAFE BET,
+//     STRETCH and INVITE tags on the offer cards. Item (3) is sim.js (X5.10).
+// Review round 1 (2026-10-19, contract X20.6 and X20.11; each is an Overseer's call):
+// 57. Hiring Day: the round and the tryouts sit in the UI font in the top row (no tryouts once every
+//     round is done); #hire-news shows the last round_done sentence and ui.tryoutTaken lines; a page
+//     arrow toward cards just taken carries hire-page-taken; #hire-go shows PASS, and a pass with an
+//     empty crew asks once (hire-pass-yes, hire-pass-no); the done bar drops Hires left.
+// 58. Action buttons on the card and crew sheets (and the report's Level up) are pixBtn: uppercase UI
+//     font with a shadow, the accessible name in sentence case; Pass is quiet; Bring shows COMING with
+//     a check or RESTING (ui.bringOn, ui.bringOff), aria-pressed unchanged; resting cards dim.
+// 59. Level mode: ui.levelWhat under each pick, say.levelUp and ui.levelStars in #card-why, and the
+//     risen skill row outlined gold (.lvl-new, static).
+// 60. The hub: next-crew (ui.crewNext or ui.crewNone) on the Next event card; the crew tile draws up
+//     to three portrait busts with mood faces; Pit news adds news-fired-{id} (ui.firedUp).
+// 61. The report: wages on their own compact row, Costs without a detail line, one line rows at 14 px
+//     in a minmax(0, 1fr) money column; crew rows put name, face and XP meter on one line with a
+//     13 character XP label, then the line, the mood words, ui.wageRow and a gold Level up chip; the
+//     tutorial till shows tut-floor.
+// 62. Grid cards draw the mock's 11 px outlined stars and its 6 by 6 coin; hollowHalf is one glyph.
+// 63. Yard numbers: tips and seat tips merge into a fresh one of the same kind within 12 by 8 px, a
+//     tip that overlaps another number sits 9 px higher per number, and tips keep 6 px off the fence.
+//
+// Contract v3.0: docs/superpowers/specs/2026-10-18-pit-sim-v3-0-contract.md (v3.0: W1, W4 to W7 reads, W14
 //           sentences, W15, W16 calls only, W17, W18, with the W22 Overseer's calls), on top of
 //           docs/superpowers/specs/2026-10-18-pit-sim-contract.md, v2.1 section K7 sentences, K8, K9 (calls
 //           only), K10; v2 delta D11 (calls only), D12, D13, D14.
@@ -258,7 +332,7 @@
 'use strict';
 const PitSim = globalThis.PitSim || (globalThis.PitSim = {});
 
-const VERSION = '0.5.0';
+const VERSION = '0.6.0';
 
 const FALLBACK_COLOR = {
   K: '#1b1714', U: '#2a2015', C: '#E6D8B8', O: '#D06129', outline: '#3b2417', woodD: '#7a4a26', woodM: '#a8693a',
@@ -274,9 +348,11 @@ const SHELL_IDS = [
   'till', 'till-h', 'till-body', 'pause', 'pause-h', 'pause-body', 'howto', 'howto-h', 'howto-body',
   'newgame', 'newgame-h', 'newgame-body', 'broke', 'broke-h', 'broke-body', 'foot', 'live',
   'week', 'week-h', 'week-top', 'week-body', 'week-foot', 'sheet', 'sheet-h', 'sheet-body',
-  'creator', 'creator-h', 'creator-body', 'season-end', 'season-end-h', 'season-end-body'
+  'creator', 'creator-h', 'creator-body', 'season-end', 'season-end-h', 'season-end-body',
+  // v3.1 (X14): Hiring Day and the card sheet.
+  'hiring', 'hiring-h', 'hiring-top', 'hiring-body', 'hiring-foot', 'card', 'card-h', 'card-body'
 ];
-const PANEL_IDS = ['clipboard', 'till', 'pause', 'newgame', 'broke', 'week', 'sheet', 'creator', 'season-end'];
+const PANEL_IDS = ['clipboard', 'till', 'pause', 'newgame', 'broke', 'week', 'sheet', 'creator', 'season-end', 'hiring', 'card'];
 // v3.0: the mock palette (screen-1-season, screen-3-week, screen-4-report, screen-6-creator).
 const UI = {
   K: '#1b1714', cream: '#E6D8B8', creamL: '#fff4dc', creamDim: '#b9a888', gold: '#F3CF6D', white: '#ffffff',
@@ -302,9 +378,40 @@ const PIX = {
   arrowR: { map: ['##...', '###..', '####.', '#####', '####.', '###..', '##...'], pal: { '#': '#ffffff' } },
   // Q-6: the die on Random (screen-6-creator); Q-4: the waiting guest on the rail.
   arrowD: { map: ['#######', '.#####.', '..###..', '...#...'], pal: { '#': '#ffffff' } },   // Q-2: an open fold
-  dice: { map: ['kkkkkkk', 'kwwwwwk', 'kwkwwwk', 'kwwkwwk', 'kwwwkwk', 'kwwwwwk', 'kkkkkkk'], pal: { k: '#1b1714', w: '#ffffff' } }
+  dice: { map: ['kkkkkkk', 'kwwwwwk', 'kwkwwwk', 'kwwkwwk', 'kwwwkwk', 'kwwwwwk', 'kkkkkkk'], pal: { k: '#1b1714', w: '#ffffff' } },
+  // v3.1 (screen-2-crew): the info box glyph, the Crew button's two people, the next arrow.
+  info: { map: ['.##.', '.##.', '....', '###.', '.##.', '.##.', '.##.', '####'], pal: { '#': '#ffffff' } },
+  crew2: { map: ['..##....##..', '.####..####.', '.####..####.', '..##....##..', '.####..####.', '######.#####', '######.#####'], pal: { '#': '#ffffff' } },
+  arrowBig: { map: ['.....#...', '.....##..', '########.', '#########', '########.', '.....##..', '.....#...'], pal: { '#': '#ffffff' } }
 };
-const DAY_TAGS = ['SAT', 'SUN'];   // Q-5: the offer scenes' day tags, by card order
+// v3.1 deviation 46: the half and hollow star frames from the 9 by 9 maps, for a sprites.js without them.
+PIX.starHalf = { map: PIX.starOn.map.map(function (r, i) { return r.slice(0, 5) + PIX.starOff.map[i].slice(5).replace(/y/g, 'd'); }),
+  pal: { k: '#1b1714', y: '#F3CF6D', o: '#fff6c9', d: '#6e6863' } };
+PIX.starHollow = { map: PIX.starOff.map.map(function (r) { return r.replace(/y/g, '.').replace(/k/g, 'g'); }), pal: { g: '#F3CF6D' } };
+// The mock's 7 by 7 title stars (screen-2-crew), with a darker foot.
+const TITLE_STAR = ['...a...', '..aaa..', 'aaaaaaa', '.aaaaa.', '.aaaaa.', '.bb.bb.', '.b...b.'];
+const TITLE_STAR_COLS = [['#E8503A', '#97341f'], ['#FFFFFF', '#a9b4cc'], ['#10215E', '#081236']];
+// The mood faces of the mock (screen-2-crew moodFace), frame 2 - mood: Fired up, Happy, OK, Grumpy, Done.
+const MOOD_PIX = (function () {
+  const base = ['..######..', '.#oooooo#.', '#oooooooo#', '#oooooooo#', '#oooooooo#', '#oooooooo#', '#oooooooo#', '#oooooooo#', '.#oooooo#.', '..######..'];
+  const eyes = [[3, 4], [3, 5], [6, 4], [6, 5]];
+  const shapes = [
+    { fill: '#FFD23F', k: [[2, 6], [7, 6], [3, 7], [4, 7], [5, 7], [6, 7]], w: [[3, 6], [4, 6], [5, 6], [6, 6]] },
+    { fill: '#FFD23F', k: [[2, 6], [7, 6], [3, 7], [4, 7], [5, 7], [6, 7]], w: [] },
+    { fill: '#FFD23F', k: [[3, 7], [4, 7], [5, 7], [6, 7]], w: [] },
+    { fill: '#F6A623', k: [[3, 6], [4, 6], [5, 6], [6, 6], [2, 7], [7, 7]], w: [] },
+    { fill: '#EE5A3A', k: [[2, 2], [3, 3], [7, 2], [6, 3], [3, 6], [4, 6], [5, 6], [6, 6], [2, 7], [7, 7]], w: [] }
+  ];
+  return shapes.map(function (sh) {
+    const g = base.map(function (r) { return r.split(''); });
+    eyes.concat(sh.k).forEach(function (p) { g[p[1]][p[0]] = 'e'; });
+    sh.w.forEach(function (p) { g[p[1]][p[0]] = 'w'; });
+    return { map: g.map(function (r) { return r.join(''); }), pal: { '#': '#2A1406', o: sh.fill, e: '#2A1406', w: '#ffffff' } };
+  });
+})();
+const ROLE_FALLBACK = ['run', 'fire', 'prep'];
+const ROLE_KIND = { run: 'buddy', fire: 'tender', prep: 'prep' };   // the in-yard sprite prefix of each role (X12.2)
+const TAG_COLOR = { safe: '#9ff0a8', stretch: '#ffb070', invite: '#F3CF6D' };   // deviation 53
 const CR_ROWS = [   // creator option rows in W17.5 order: [look key, id part, kind, label key]
   ['skin', 'skin', 'swatch', 'crSkin'], ['hair', 'hair', 'chooser', 'crHair'],
   ['hairColor', 'haircolor', 'swatch', 'crHairColor'], ['face', 'face', 'chooser', 'crFace'],
@@ -330,7 +437,7 @@ const SPARKLE_OFFS = [[-3, -4], [6, -7], [2, 2]];          // from the served pl
 const BURST_OFFS = [[-3, 0], [0, -2], [3, 0]];             // from the burnt piece
 const FX_LOG_MAX = 500;
 const LAWN_FROM_ROW = 6;                                   // fence, hedge and bed tiles sit on lawn from this row down
-const OVERFLOW_OK = /^(shadow|hand_|player_|buddy_|tender_|cust[0-9]_)/;
+const OVERFLOW_OK = /^(shadow|hand_|player_|buddy_|tender_|prep_|cust[0-9]_)/;
 const GHOST_ALPHA = 0.5;                                   // unowned gear and decor, morning and evening only
 const CONTROLS_H = 24 + 48 + 52 + 8;                       // #status, #act, #chips with its margin, slack (D13 3x test)
 const CASH_ABOVE_PX = 26;                                  // the cash number sits at the served customer's py - 26
@@ -431,6 +538,22 @@ let crDraft = null;             // the look being edited
 let crAnim = 0, crAnimAt = -1;  // creator smoke phase (seconds) and the last redraw
 let crOff = null;               // the creator preview's 96 x 64 offscreen canvas
 const lastChips = { charcoal: '' };
+
+// Crew cards (v3.1).
+let sheetFrom = 'week';         // the panel the sheet returns to: 'week' or 'hiring' (X13.1)
+let hirePage = 1;               // the Hiring Day page on screen (X13.2)
+let hireHelpOpen = false;       // hire-help is showing
+let hireMsg = '';               // finishHiring's refusal, in #hire-why
+let hireNews = null;            // review 1: the last round_done, shown in #hire-news: { line, idxs, tried }
+let hirePassSure = false;       // review 1: the pass confirm is showing (the crew is empty)
+let crewMsg = '';               // the crew sheet's last refusal or swap note, in #crew-why
+let cardCtx = null;             // #card: { mode, key, from, opener, back, msg, sure }
+let moneyMore = false;          // the report's rep-money-detail is open
+let tillFit = 0;                // the report's shrink level (X13.6, deviation 52)
+let noticeKey = 'notice';       // the save notice on #status: 'notice' or 'noticeCrew' (X11.3)
+const lookCache = new Map();    // card id -> its look, so a card that moved on still has a face on the report
+const nameCache = new Map();    // card id -> its name
+const crewLookMemo = {};        // role -> { want, got } of the last setCrewLook (deviation 54)
 
 // ---------------------------------------------------------------- helpers
 
@@ -583,6 +706,8 @@ function sprEl(name, frame, scale, fb) {
   c.className = 'px';
   return c;
 }
+// Review 1: the mock's 6 by 6 coin for the grid cards (palette colors: outline, yellow, white, woodL).
+const COIN6 = { map: ['.oooo.', 'oyhyyo', 'ohyyyo', 'oyyyso', 'oyyyso', '.oooo.'], pal: { o: '#3b2417', y: '#ffd84a', h: '#fbf7ef', s: '#d79a5b' } };
 function starEl(on, scale) { return sprEl('star', on ? 0 : 1, scale || 1, on ? PIX.starOn : PIX.starOff); }
 function flameEl(on, scale) { return sprEl('flame', on ? 0 : 1, scale || 1, on ? PIX.flameOn : PIX.flameOff); }
 function checkEl(scale) { return sprEl('check', 0, scale || 1, PIX.check); }
@@ -649,6 +774,201 @@ function applyLook(look) {
 }
 function lookLabel(key, idx) { const l = STRINGS.look && STRINGS.look[key]; return l && l[idx] !== undefined ? l[idx] : String(idx); }
 function rowWord(labelKey) { return U(labelKey).toLowerCase(); }
+
+// ---------------------------------------------------------------- v3.1 crew helpers
+
+// An array valued ui string (thirdNow, thirdUp) at index i, filled.
+function UA(key, i, map) {
+  const a = STRINGS.ui ? STRINGS.ui[key] : null;
+  return fill(Array.isArray(a) && a[i] !== undefined ? a[i] : '', map);
+}
+function roleIds() { return Array.isArray(PitSim.ROLE_IDS) ? PitSim.ROLE_IDS : ROLE_FALLBACK; }
+function roleOf(r) { return roleIds().indexOf(r) >= 0 ? r : 'run'; }
+function roleWord(r) { return STRINGS.role && STRINGS.role[r] ? STRINGS.role[r] : String(r).toUpperCase(); }
+function roleName(r) { return STRINGS.roleName && STRINGS.roleName[r] ? STRINGS.roleName[r] : String(r); }
+function roleJob(r) { return STRINGS.roleJob && STRINGS.roleJob[r] ? STRINGS.roleJob[r] : ''; }
+function skillName(r, i) { const k = STRINGS.skill && STRINGS.skill[r]; return k && k[i] !== undefined ? k[i] : ''; }
+function skillHelp(r, i) { const k = STRINGS.skillHelp && STRINGS.skillHelp[r]; return k && k[i] !== undefined ? k[i] : ''; }
+function clampMood(m) { return Math.max(-2, Math.min(2, Math.round(Number(m) || 0))); }
+function moodWord(m) { const l = STRINGS.mood || []; return l[clampMood(m) + 2] || ''; }
+// Stars as text: 2.5, 3 (half steps).
+function half(n) { return String(Math.round((Number(n) || 0) * 2) / 2); }
+function starsText(n) { const v = Math.round((Number(n) || 0) * 2) / 2; return U1(v, 'starsOne', 'starsMany', { n: half(v) }); }
+function cardStarsOf(skills) {
+  if (typeof PitSim.cardStars === 'function') return PitSim.cardStars(skills);
+  const a = skills && Number(skills[0]) || 1, b = skills && Number(skills[1]) || 1;
+  return Math.floor(((a + b) / 2) * 2) / 2;
+}
+function wageOf(stars, role) {
+  if (typeof PitSim.wageFor === 'function') return PitSim.wageFor(stars, role);
+  const t = C.WAGE_TABLE || [10, 13, 16, 20, 24, 29, 34, 40, 46], f = C.ROLE_WAGE || { run: 1, fire: 1.25, prep: 1 };
+  return Math.round(t[Math.max(0, Math.min(8, Math.round((stars - 1) * 2)))] * (f[role] || 1));
+}
+// The cards you hold (state.crew), noting each look and name for the report (deviation 47).
+function crewList() {
+  const list = sim && Array.isArray(sim.state.crew) ? sim.state.crew : [];
+  for (let i = 0; i < list.length; i++) {
+    if (list[i] && list[i].look) lookCache.set(list[i].id, list[i].look);
+    if (list[i] && list[i].name) nameCache.set(list[i].id, list[i].name);
+  }
+  return list;
+}
+function crewCard(id) {
+  const list = crewList();
+  for (let i = 0; i < list.length; i++) if (list[i].id === id) return list[i];
+  return null;
+}
+// sim.crewView (X7) as fresh card views in id order, or the raw cards with their stars.
+function crewViews() {
+  crewList();
+  let v = null;
+  if (typeof sim.crewView === 'function') { try { v = sim.crewView(); } catch (e) { v = null; } }
+  if (!Array.isArray(v)) v = crewList().map(function (c) { return Object.assign({}, c, { stars: cardStarsOf(c.skills) }); });
+  return v.slice().sort(byId);
+}
+function crewViewOf(id) {
+  if (typeof sim.crewView === 'function') { try { return sim.crewView(id) || null; } catch (e) { return null; } }
+  const c = crewCard(id);
+  return c ? Object.assign({}, c, { stars: cardStarsOf(c.skills) }) : null;
+}
+function payrollNow() {
+  if (typeof sim.payroll === 'function') { try { const p = sim.payroll(); if (p) return p; } catch (e) { /* fall through */ } }
+  let now = 0;
+  const list = crewList();
+  for (let i = 0; i < list.length; i++) if (list[i].bring) now += list[i].wage | 0;
+  return { now: now, budget: C.PAYROLL ? C.PAYROLL[0] : 60, slots: C.ROSTER_SLOTS ? C.ROSTER_SLOTS[0] : 2, count: list.length };
+}
+function hiringData() {
+  if (typeof sim.hiringView !== 'function') return null;
+  try { return sim.hiringView() || null; } catch (e) { return null; }
+}
+// X7: "crew loops" (week or hiring, morning) and "week only".
+function crewLoops() { const s = sim.state; const l = loopOf(s); return (l === 'week' || l === 'hiring') && s.phase === 'morning'; }
+function weekOnly() { const s = sim.state; return loopOf(s) === 'week' && s.phase === 'morning'; }
+function trainedId() { const se = sim.state.season; return se && se.trained !== undefined && se.trained !== null ? se.trained : null; }
+// The look key art.crewKey reports: 'skin-hair-hairColor-face-hat-apron'.
+function lookKeyOf(look) {
+  const keys = PitSim.LOOK_KEYS || ['skin', 'hair', 'hairColor', 'face', 'hat', 'apron'];
+  const l = copyLook(look);
+  return keys.map(function (k) { return l[k]; }).join('-');
+}
+// Deviation 54: dresses the role's in-yard sprites in this look unless they already wear it.
+function ensureCrewLook(role, look) {
+  if (!art || typeof art.setCrewLook !== 'function' || !look) return '';
+  const want = role + ':' + lookKeyOf(look);
+  let have = '';
+  try { have = typeof art.crewKey === 'function' ? art.crewKey(role) : ''; } catch (e) { have = ''; }
+  const m = crewLookMemo[role];
+  if (have === want || (m && m.want === want && m.got === have && have !== '')) return have;
+  let got = '';
+  try { got = art.setCrewLook(role, copyLook(look)); } catch (e) { console.error(e); }
+  try { if (typeof art.crewKey === 'function') got = art.crewKey(role); } catch (e) { /* keep the return */ }
+  crewLookMemo[role] = { want: want, got: String(got || '') };
+  return got;
+}
+// The sprite prefix for a role: prep_ once sprites.js has it, else the buddy's.
+function roleSprite(role) {
+  const k = ROLE_KIND[role] || 'buddy';
+  return art.has(k + '_down') ? k : 'buddy';
+}
+// The card a mover works for (state.buddy, state.tender, state.prep carry cardId).
+function moverCard(m) { return m && m.cardId !== undefined && m.cardId !== null ? crewCard(m.cardId) : null; }
+// X13.7: at yard_open each lineup card's look goes on its role's in-yard sprites.
+function dressCrew() {
+  const s = sim.state;
+  const movers = [['run', s.buddy], ['fire', s.tender], ['prep', s.prep || null]];
+  for (let i = 0; i < movers.length; i++) {
+    const card = moverCard(movers[i][1]);
+    if (card && card.look) ensureCrewLook(movers[i][0], card.look);
+  }
+}
+
+// One star at scale: 'full' | 'half' | 'empty' | 'hollow' | 'hollowHalf' (deviation 46).
+function starKind(kind, scale) {
+  const k = Math.max(1, scale | 0);
+  if (kind === 'full' || kind === 'empty') return starEl(kind === 'full', k);
+  const many = art.has('star') && art.frames('star') >= 4;
+  if (kind === 'half') return many ? sprEl('star', 2, k, null) : pixCanvas(PIX.starHalf.map, PIX.starHalf.pal, k);
+  if (kind === 'hollow') return many ? sprEl('star', 3, k, null) : pixCanvas(PIX.starHollow.map, PIX.starHollow.pal, k);
+  // hollowHalf (review 1): one clean glyph, the whole empty star with the hollow frame's yellow
+  // outline over its left five columns, so the body reads as one star and the left edge as gold.
+  const l = many ? sprEl('star', 3, k, null) : pixCanvas(PIX.starHollow.map, PIX.starHollow.pal, k);
+  const r = starEl(false, k);
+  if (!l || !r) return l || r;
+  const c = document.createElement('canvas');
+  c.width = r.width; c.height = r.height;
+  const g = c.getContext('2d');
+  g.imageSmoothingEnabled = false;
+  const cut = Math.round(5 * r.width / 9);
+  g.drawImage(r, 0, 0);
+  g.drawImage(l, 0, 0, Math.round(5 * l.width / 9), l.height, 0, 0, cut, r.height);
+  if (r.style && r.style.width) { c.style.width = r.style.width; c.style.height = r.style.height; }
+  c.setAttribute('aria-hidden', 'true');
+  c.className = 'px';
+  return c;
+}
+// Five star slots: filled by value (full, half), then hollow up to a known potential, then empty
+// when empties is set (the card sheet), else nothing (the grid cards, as the mock).
+function starRow(value, potential, scale, empties) {
+  const row = mk('span', { cls: 'srow', attrs: { 'aria-hidden': 'true' } });
+  const v = Math.round((Number(value) || 0) * 2) / 2;
+  const p = typeof potential === 'number' ? Math.round(potential * 2) / 2 : null;
+  for (let i = 0; i < 5; i++) {
+    let k = null;
+    if (v - i >= 1) k = 'full';
+    else if (v - i >= 0.5) k = 'half';
+    else if (p !== null && p - i >= 1) k = 'hollow';
+    else if (p !== null && p - i >= 0.5) k = 'hollowHalf';
+    else if (empties) k = 'empty';
+    if (!k) continue;
+    const c = starKind(k, scale);
+    if (c) { c.setAttribute('data-star', k); row.appendChild(c); }
+  }
+  return row;
+}
+function moodEl(mood, scale) {
+  const f = 2 - clampMood(mood);
+  return sprEl('mood', f, scale, MOOD_PIX[f]);
+}
+// The portrait bust (X12.2 art.portrait), or the role's in-yard down frame before sprites.js has it.
+function portraitEl(look, role, scale) {
+  let c = null;
+  if (art && typeof art.portrait === 'function') {
+    try { c = art.portrait(copyLook(look), role, { scale: scale, dpr: dpr() }); } catch (e) { c = null; }
+  }
+  if (!c) {
+    if (look) ensureCrewLook(role, look);
+    c = sprEl(roleSprite(role) + '_down', 0, scale, null);
+  }
+  if (c) { c.setAttribute('aria-hidden', 'true'); c.classList.add('bust'); }
+  return c;
+}
+// The role badge: white UI letters on an ink box (X13.4).
+function roleBadge(role, cls) {
+  const b = mk('span', { cls: 'rbadge' + (cls ? ' ' + cls : '') });
+  uiPut(b, roleWord(role), 2, '#ffffff', null, roleWord(role));
+  return b;
+}
+function miniStar(i) {
+  const c = TITLE_STAR_COLS[i];
+  return pixCanvas(TITLE_STAR, { a: c[0], b: c[1] }, 2);
+}
+// A 10 segment meter (XP), role meter with the given label; with words, the label shows beside it.
+function segMeter(id, value, max, label, cls, words) {
+  const m = mk('div', { id: id, cls: 'xpbar' + (cls ? ' ' + cls : ''), attrs: { role: 'meter', 'aria-valuenow': String(value | 0), 'aria-valuemin': '0', 'aria-valuemax': String(max | 0), 'aria-label': label } });
+  const bar = mk('span', { cls: 'segs xp', attrs: { 'aria-hidden': 'true' } });
+  const on = max > 0 ? Math.floor(10 * Math.max(0, Math.min(1, value / max))) : 0;
+  for (let k = 0; k < 10; k++) bar.appendChild(mk('span', { cls: 'seg' + (k < on ? ' on' : '') }));
+  m.appendChild(bar);
+  if (words) m.appendChild(mk('span', { cls: 'xpt', attrs: { 'aria-hidden': 'true' }, text: label }));
+  return m;
+}
+// Focuses the element with this id when it is usable, else the fallback element.
+function focusOr(id, fallback) {
+  const f = id ? document.getElementById(id) : null;
+  if (f && !f.disabled && !f.hidden && typeof f.focus === 'function') { f.focus(); return; }
+  if (fallback && typeof fallback.focus === 'function') fallback.focus();
+}
 
 // ---------------------------------------------------------------- tutorial helpers (v2.1)
 
@@ -772,7 +1092,7 @@ function boot() {
   if (saveOff) noteSaveOff();
   if (migrated) {
     noticeUntil = nowMs + FX.NOTICE_S * 1000;
-    announce(U('notice'));
+    announce(U(noticeKey));
     writeSave();
   }
   exposeGame();
@@ -787,11 +1107,14 @@ function readSave() {
   if (!raw) return null;
   let parsed = null;
   try { parsed = JSON.parse(raw); } catch (e) { return null; }
-  // W13.3: any valid save with raw v 1, 2 or 3 shows the notice once; v 4 loads silently.
-  const old = !!(parsed && typeof parsed === 'object' && !Array.isArray(parsed) && (parsed.v === 1 || parsed.v === 2 || parsed.v === 3));
+  // W13.3, X11.3: any valid save with a raw v from 1 to one under C.SAVE_VERSION shows the notice once
+  // (ui.noticeCrew when the migrated crew is not empty, else ui.notice); a current save loads silently.
+  const cur = typeof C.SAVE_VERSION === 'number' ? C.SAVE_VERSION : 5;
+  const old = !!(parsed && typeof parsed === 'object' && !Array.isArray(parsed) && Number.isInteger(parsed.v) && parsed.v >= 1 && parsed.v < cur);
   let valid = null;
   try { valid = PitSim.validateSave(parsed); } catch (e) { valid = null; }
   migrated = old && valid !== null;
+  noticeKey = migrated && valid && Array.isArray(valid.crew) && valid.crew.length > 0 && STRINGS.ui.noticeCrew ? 'noticeCrew' : 'notice';
   return valid;
 }
 
@@ -822,8 +1145,28 @@ function exposeGame() {
     get banner() { return bannerNow(); },
     get rail() { return railNow(); },
     get sign() { return signInfo(); },
-    get panel() { return howtoOpen ? 'howto' : currentPanel; }
+    get panel() { return howtoOpen ? 'howto' : currentPanel; },
+    // X13.8: the crew movers in the yard with art.crewKey(role), and the Hiring Day page on screen.
+    get crew() { return crewNow(); },
+    get hiringPage() { return hiringPageNow(); }
   };
+}
+
+function crewNow() {
+  const s = sim.state;
+  const one = function (m, role) {
+    if (!m) return null;
+    let key = '';
+    try { key = art && typeof art.crewKey === 'function' ? art.crewKey(role) : ''; } catch (e) { key = ''; }
+    return { id: m.cardId !== undefined ? m.cardId : null, key: key };
+  };
+  return { run: one(s.buddy, 'run'), fire: one(s.tender, 'fire'), prep: one(s.prep || null, 'prep') };
+}
+function hiringPageNow() {
+  if (loopOf(sim.state) !== 'hiring') return null;
+  const onHiring = currentPanel === 'hiring' || (currentPanel === 'card' && cardCtx && cardCtx.from === 'hiring') ||
+    (currentPanel === 'sheet' && sheetFrom === 'hiring');
+  return onHiring ? (hirePage === 2 ? 2 : 1) : null;
 }
 
 // Steps the sim, pumps events once, then refreshes the DOM and draws one frame (D14).
@@ -990,6 +1333,8 @@ function onEvent(ev) {
       clearFx();
       dogReset(3);
       dropSheet();
+      cardCtx = null;
+      dressCrew();       // X13.7: each lineup card's look on its role's in-yard sprites
       closePanel();
       break;
     }
@@ -1027,6 +1372,7 @@ function onEvent(ev) {
       break;
     case 'day_over':
       announce(todayKind(sim.state) === 'booking' ? SAY('reportOpen') : 'Day over. Opening the till.');
+      moneyMore = false;
       openTill();
       break;
     case 'purchase':
@@ -1086,6 +1432,42 @@ function onEvent(ev) {
       }
       break;
     case 'tutorial_done': lastSpokenStep = null; break;
+    // v3.1 (X9): crew cards and Hiring Day.
+    case 'hiring_open': announce(SAY('hiringOpen', { n: ev.n | 0 })); break;
+    case 'tryout': announce(SAY('tryout', { name: ev.name || '', n: half(ev.potential) })); break;
+    case 'crew_hired': announce(SAY('hired', { name: ev.name || '' })); break;
+    case 'round_done': {
+      // Review 1: the sentence also shows on the Hiring Day screen (#hire-news), with a line for any
+      // card you tried out that went elsewhere, and the page arrows count the takes.
+      const names = Array.isArray(ev.names) ? ev.names : [];
+      const idxs = Array.isArray(ev.taken) ? ev.taken : [];
+      if (names.length) {
+        const line = SAY('roundDone', { r: ev.round | 0, list: andList(names) });
+        announce(line);
+        const hv = hiringData();
+        const tried = [];
+        if (hv && Array.isArray(hv.pool)) for (let i = 0; i < hv.pool.length; i++) if (idxs.indexOf(hv.pool[i].idx) >= 0 && hv.pool[i].tried) tried.push(hv.pool[i].name);
+        for (let i = 0; i < tried.length; i++) announce(U('tryoutTaken', { name: tried[i] }));
+        hireNews = { line: line, idxs: idxs.slice(), tried: tried };
+      } else hireNews = null;
+      break;
+    }
+    case 'hiring_done': announce(SAY('hiringDone')); break;
+    case 'crew_let_go': announce(SAY('letGo', { name: ev.name || '' })); break;
+    case 'trained': announce(SAY('trained', { name: ev.name || '', xp: ev.xp | 0 })); break;
+    case 'level_ready': announce(SAY('levelReady', { name: ev.name || '' })); break;
+    case 'level_up': {
+      if ((ev.skill | 0) === -1) { announce(SAY('levelMood', { name: ev.name || '' })); break; }
+      const c = crewCard(ev.id);
+      const sk = c ? skillName(c.role, ev.skill | 0) : '';
+      announce(SAY('levelUp', { name: ev.name || '', skill: sk.toLowerCase() }));
+      break;
+    }
+    case 'raise': announce(SAY('raise', { name: ev.name || '', w: ev.wage | 0 })); break;
+    case 'left_for_prep': announce(SAY('leftFor', { name: ev.name || '', label: L.toLowerCase() })); break;
+    case 'crew_notice': announce(SAY('notice', { name: ev.name || '' })); break;
+    case 'crew_left': announce(SAY('left', { name: ev.name || '' })); break;
+    case 'bring_set': case 'crew_mood': case 'slice_done': break;
     case 'burn_warning': {
       const W = STRINGS.burnWarn && STRINGS.burnWarn[ev.meat];
       announce(W || ('The ' + (L ? L.toLowerCase() : 'meat') + ' is about to burn.'));
@@ -1156,13 +1538,31 @@ function onSeatDone(ev) {
 }
 
 // Clamp a number's text x so the text (and its coin) stays inside the canvas with its outline.
+// Review 1: a tip keeps 6 px clear of the right fence posts.
 function numX(x, str, coin) {
   const w = art.textWidth(str);
-  return Math.max(coin ? 10 : 1, Math.min(VW - w - 1, x));
+  return Math.max(coin ? 10 : 1, Math.min(VW - w - (coin ? 1 : 6), x));
 }
 
 // Numbers that would overlap one still fresh start STAGGER_S later per such number (round 2).
+// Review 1: a tip (or a seat tip) landing within 12 px across and 8 px up or down of a fresh one of
+// the same kind adds into it ("+4 TIP") and restarts it, instead of rising through it; a tip that
+// overlaps any other fresh number also sits 9 px higher per number it overlaps.
 function addNum(kind, str, x, y, color, coin) {
+  if (kind === 'tip' || kind === 'seatTip') {
+    const m = /^\+(\d+)/.exec(str);
+    for (let i = nums.length - 1; m && i >= 0; i--) {
+      const n = nums[i];
+      if (n.kind !== kind || tAnim - n.at >= FX.NUMBER_FADE_AT || Math.abs(n.x - x) > 12 || Math.abs(n.y - y) > 8) continue;
+      const had = /^\+(\d+)/.exec(n.str);
+      if (!had) continue;
+      n.str = '+' + (Number(had[1]) + Number(m[1])) + ' TIP';
+      n.x = numX(n.x, n.str, n.coin);
+      n.at = Math.max(n.at, tAnim);
+      log(kind, n.x, n.y);
+      return;
+    }
+  }
   const x0 = coin ? x - 9 : x, x1 = x + art.textWidth(str);
   let k = 0;
   for (let i = 0; i < nums.length; i++) {
@@ -1171,9 +1571,11 @@ function addNum(kind, str, x, y, color, coin) {
     const n0 = n.coin ? n.x - 9 : n.x, n1 = n.x + art.textWidth(n.str);
     if (n0 < x1 && x0 < n1) k++;
   }
-  nums.push({ kind: kind, str: str, x: x, y: y, color: color, coin: coin, at: tAnim + Math.min(STAGGER_MAX, k) * STAGGER_S });
+  const kk = Math.min(STAGGER_MAX, k);
+  const yy = kind === 'tip' || kind === 'seatTip' ? Math.max(1, y - kk * 9) : y;
+  nums.push({ kind: kind, str: str, x: x, y: yy, color: color, coin: coin, at: tAnim + kk * STAGGER_S });
   if (nums.length > 16) nums.shift();
-  log(kind, x, y);
+  log(kind, x, yy);
 }
 
 function log(kind, x, y) {
@@ -1226,7 +1628,7 @@ function noteSaveOff() {
 function openPanel(name, focusId) {
   howtoOpen = false; howtoFrom = null;
   if (name === 'pause') buildPauseBody();
-  if (name === 'week' || name === 'sheet' || name === 'creator' || name === 'season-end' || name === 'till') dropClipboard();
+  if (name === 'week' || name === 'sheet' || name === 'creator' || name === 'season-end' || name === 'till' || name === 'hiring' || name === 'card') dropClipboard();
   for (let i = 0; i < PANEL_IDS.length; i++) el[PANEL_IDS[i]].hidden = PANEL_IDS[i] !== name;
   currentPanel = name;
   syncPanels();
@@ -1302,6 +1704,7 @@ function showLoop() {
   const s = sim.state;
   const loop = loopOf(s);
   if (loop === 'creator') { openCreator(false); return; }
+  if (loop === 'hiring') { openHiring(true); return; }   // X8, X13.1
   if (loop === 'seasonEnd') { openSeasonEnd(); return; }
   if (loop === 'week') { if (s.broke) openBroke(); else openWeek(); return; }
   if (loop === 'report' || (loop === 'tutorial' && s.phase === 'evening')) { openTill(); return; }
@@ -1332,6 +1735,8 @@ function afterAct() {
   if (currentPanel === 'week') rebuildKeepFocus(buildWeek, 'week');
   else if (currentPanel === 'sheet') refreshSheet();
   else if (currentPanel === 'clipboard') refreshClipboard();
+  else if (currentPanel === 'hiring') rebuildKeepFocus(buildHiring, 'hiring');
+  else if (currentPanel === 'card') { rebuildUnderCard(); rebuildKeepFocus(buildCard, 'card'); }
   updateDom();
 }
 
@@ -1373,6 +1778,8 @@ function confirmYes() {
   crFromPause = false;
   migrated = false;
   dropSheet();
+  cardCtx = null; crewMsg = ''; hireMsg = ''; moneyMore = false; hirePage = 1; hireHelpOpen = false; hireNews = null; hirePassSure = false;
+  lookCache.clear(); nameCache.clear();
   sim.reset();
   sim.setPaused(false);
   applyLook(lookNow());
@@ -1560,11 +1967,8 @@ function buildClipboard() {
     el.shop.appendChild(h3('Decor'));
     el.shop.appendChild(mk('p', { cls: 'muted', text: 'Charm adds to the tip each seated customer leaves, up to 3 more, and lets word of mouth climb a little faster.' }));
     for (let i = 0; i < CATALOG.length; i++) if (CATALOG[i].kind === 'decor') el.shop.appendChild(ownRow(CATALOG[i]));
-
-    // Hires.
-    el.hire.appendChild(h3('Hires'));
-    for (let i = 0; i < CATALOG.length; i++) if (CATALOG[i].kind === 'hire') el.hire.appendChild(hireRow(CATALOG[i]));
-    el.hire.appendChild(mk('div', { cls: 'row' }, [
+    // X4.1: the v2 hire rows are gone (crew cards replace them) and #hire stays empty.
+    el.shop.appendChild(mk('div', { cls: 'row' }, [
       mk('span', { cls: 'name', text: 'Daily costs: ice and trash bags, ' + C.DAILY_COSTS + '.' })
     ]));
   }
@@ -1770,26 +2174,6 @@ function goalRow(item) {
   return row;
 }
 
-function hireRow(item) {
-  const price = mk('span', { cls: 'price' });
-  const b = btn('hire-' + item.id, 'Hire', 'primary', function () { sim.hire(item.id); afterAct(); });
-  const row = mk('div', { cls: 'row' }, [nameCell(item, false), price, b]);
-  rowSink.push(function () {
-    const s = sim.state;
-    const locked = lockedBy(item, s);
-    const on = s.hires[item.id] === true;
-    price.textContent = locked ? item.needsText : item.price + ' a day';
-    price.classList.toggle('muted', locked);
-    price.style.whiteSpace = locked ? 'normal' : '';
-    b.textContent = on ? 'Let go' : 'Hire';
-    b.className = on ? 'alt' : 'primary';
-    b.setAttribute('aria-pressed', on ? 'true' : 'false');
-    b.setAttribute('aria-label', on ? 'Let ' + item.label + ' go' : 'Hire ' + item.label);
-    b.disabled = locked;
-  });
-  return row;
-}
-
 function onOpen() {
   const r = sim.openGate();
   pump();
@@ -1798,9 +2182,27 @@ function onOpen() {
 
 // ---------------------------------------------------------------- till and the report (W17.4)
 
-function openTill() {
+function openTill(focusId) {
+  tillFit = 0;
   buildTill();
-  if (currentPanel !== 'till') openPanel('till');
+  if (currentPanel !== 'till') openPanel('till', focusId);
+  else if (focusId) focusOr(focusId, el['till-h']);
+  fitTill();
+}
+
+// X13.6, deviation 52: while the report is taller than two screens, rfit1 to rfit3 apply in order.
+function fitTill() {
+  const w = el.till;
+  if (!w || w.hidden || el.panels.hidden) return;
+  const t = sim.state.till;
+  if (!t || (t.kind !== 'booking' && t.kind !== 'yard')) return;
+  const a = document.activeElement;
+  const id = a && a.id && w.contains(a) ? a.id : null;
+  const lim = 2 * (window.innerHeight || 812);
+  let lvl = 0;
+  if (tillFit !== 0) { tillFit = 0; buildTill(); }
+  while (w.scrollHeight > lim && lvl < 3) { lvl++; tillFit = lvl; buildTill(); }
+  if (id) { const f = document.getElementById(id); if (f && f !== document.activeElement) f.focus(); }
 }
 
 // Signed money for the till. Zero prints as 0 with no sign (round 2 finding).
@@ -1859,6 +2261,7 @@ function buildTill() {
   clear(head);
   head.className = '';
   el.till.classList.remove('booking', 'yardday');
+  for (let k = 1; k <= 3; k++) el.till.classList.toggle('rfit' + k, tillFit >= k);
   const oldTop = document.getElementById('rep-top');
   if (oldTop && oldTop.parentNode) oldTop.parentNode.removeChild(oldTop);
   if (!t) {
@@ -1905,7 +2308,7 @@ function heroHead(head, t, title, low) {
   const word = cut > 0 ? title.slice(cut + 2) : title;
   const top = lead ? uiCanvas(lead.toUpperCase(), 2, UI.creamL, { shadow: UI.K }) : null;
   let big = null;
-  for (let sc = 6; sc >= 3 && !big; sc--) {
+  for (let sc = tillFit >= 1 ? 4 : 6; sc >= 3 && !big; sc--) {
     const c = uiCanvas(word.toUpperCase(), sc, low ? UI.creamL : UI.gold, { bold: true, shadow: UI.K });
     if (c && parseFloat(c.style.width) <= room) big = c;
   }
@@ -1919,9 +2322,14 @@ function heroHead(head, t, title, low) {
   }
   head.appendChild(tt);
   const crowd = mk('span', { cls: 'hero-row', attrs: { 'aria-hidden': 'true' } });
-  const cast = low ? [['ev_' + type, 0]] : [['cust0_down', 0], ['cust1_down', 0], ['ev_' + type, 0], ['cust2_down', 0], ['buddy_down', 0]];
+  // X13.7 and Overseer item 46: the buddy on the grass is the RUN card that worked, in its own look;
+  // with no RUN card at the event, nobody stands there.
+  const runner = runWorked(t);
+  if (runner && runner.look) ensureCrewLook('run', runner.look);
+  const cast = low ? [['ev_' + type, 0]] : [['cust0_down', 0], ['cust1_down', 0], ['ev_' + type, 0], ['cust2_down', 0]];
+  if (!low && runner) cast.push(['buddy_down', 0]);
   for (let i = 0; i < cast.length; i++) {
-    const c = sprEl(cast[i][0], cast[i][1], 3, null);
+    const c = sprEl(cast[i][0], cast[i][1], tillFit >= 1 ? 2 : 3, null);   // X13.6 step 1: a 96 px hero
     if (c) { if (cast[i][0] === 'ev_' + type) c.classList.add('hero-ic'); crowd.appendChild(c); }
   }
   head.appendChild(crowd);
@@ -2045,11 +2453,113 @@ function buildBookingReport(t, head, body) {
   if ((t.cold | 0) > 0) res += ' ' + U1(t.cold | 0, 'coldLineOne', 'coldLine');
   body.appendChild(mk('p', { id: 'rep-result', text: res }));
 
-  // Money, with word of mouth beside it. P-3: the rows add up to Take today (sim.js P-3), so the meat
-  // left on the grate or thrown out shows as information inside Food cost. P-10: rows that would read
-  // zero or none are left out, and the detail sits on the label line.
+  // Money, with word of mouth beside it. X13.6 (carry-forward 4): the compact table shows, with every
+  // v3.0 row one tap away under rep-money-more in rep-money-detail.
   const mf = mk('div', { cls: 'money-fans' });
   const money = repBox('rep-money', U('money'), 'money', coinEl(2));
+  compactBookingRows(money, t, stars);
+  money.appendChild(moneyMoreButton());
+  mf.appendChild(money);
+  mf.appendChild(fansBox(t, true));
+  body.appendChild(mf);
+  const detail = repBox('rep-money-detail', null, 'money detail');
+  detail.hidden = !moneyMore;
+  fullBookingRows(detail, t, stars);
+  body.appendChild(detail);
+
+  // X13.6: the crew box right after the money and word of mouth boxes ([S 8] item 4).
+  const crew = crewBox(t);
+  if (crew) body.appendChild(crew);
+
+  // What the host said (R-11: beside a framed guest head), then the word of mouth third (X13.6).
+  const host = repBox('rep-host', U('hostH'), 'host');
+  const says = STRINGS.hostSays && STRINGS.hostSays[stars - 1] ? STRINGS.hostSays[stars - 1] : '';
+  host.appendChild(hostQuote(t, fill(says, { name: profileName(s) })));
+  const third = typeof t.third === 'number' ? t.third : 0;
+  const ht = mk('p', { id: 'rep-host-third', cls: 'host3', text: third > 0 && STRINGS.hostThird ? fill(STRINGS.hostThird[third] || '', { name: profileName(s) }) : '' });
+  ht.hidden = !(third > 0);
+  host.appendChild(ht);
+  const tl = thirdLine(t);
+  if (tl) host.appendChild(tl);
+  body.appendChild(host);
+
+  const inv = repBox('rep-inv', U('inventory'), 'plain');
+  coolerLines(inv, t);
+  body.appendChild(inv);
+  body.appendChild(nextButton());
+}
+
+// X13.6: the third the event moved word of mouth into, or null when it stayed.
+function thirdLine(t) {
+  if (typeof t.third !== 'number' || typeof t.thirdTo !== 'number' || t.thirdTo === t.third) return null;
+  const edges = C.THIRD_EDGES || [34, 67];
+  const up = t.thirdTo > t.third;
+  const text = up ? UA('thirdUp', t.thirdTo) : U('thirdDown', { edge: edges[Math.max(0, Math.min(1, t.thirdTo))] });
+  return mk('p', { id: 'rep-third', cls: 'third ' + (up ? 'up' : 'down'), text: text });
+}
+
+// The Show every row control (aria-expanded) over rep-money-detail; it toggles in place.
+function moneyMoreButton() {
+  const b = btn('rep-money-more', moneyMore ? U('moneyLess') : U('moneyMore'), 'alt', function () {
+    moneyMore = !moneyMore;
+    const d = document.getElementById('rep-money-detail');
+    if (d) d.hidden = !moneyMore;
+    b.textContent = moneyMore ? U('moneyLess') : U('moneyMore');
+    b.setAttribute('aria-expanded', moneyMore ? 'true' : 'false');
+  });
+  b.classList.add('more');
+  b.setAttribute('aria-expanded', moneyMore ? 'true' : 'false');
+  b.setAttribute('aria-controls', 'rep-money-detail');
+  return b;
+}
+
+// Week start for the ledger rows: the till's cashStart, else the season's week cash.
+function ledgerStart(t) {
+  const se = sim.state.season || {};
+  return typeof t.cashStart === 'number' ? t.cashStart : (typeof se.weekCash === 'number' ? se.weekCash : null);
+}
+function crewSpentOf(t) { return Math.max(0, t.crewSpent | 0); }
+function crewPaidRow(t) {
+  return repRow(U('rowCrewPaid'), Array.isArray(t.crewPaid) ? t.crewPaid.join(', ') : '', minus(crewSpentOf(t)));
+}
+// The stock the cook kept (dir 1, the money is in the pile and cooler) or drew on, so the column adds up.
+function stockRow(t, start, gear) {
+  const stock = (t.cashAfter | 0) - start - (t.net | 0) + gear + crewSpentOf(t);
+  if (stock < 0) return tillRow(U('rowKept'), stockMoved(t, 1), minus(-stock), 'info');
+  if (stock > 0) return tillRow(U('rowDrawn'), stockMoved(t, -1), plus(stock), 'info');
+  return null;
+}
+function takeRow(t, label, detail) {
+  const take = repRow(label, detail, signed(t.net | 0), 'net');
+  // Q-3: Take today in the UI font at 3x, gold on its band (the words stay as the .sr text).
+  const tp = take.querySelector('.price');
+  if (tp) { clear(tp); uiPut(tp, signed(t.net | 0), 3, UI.gold, { shadow: '#0d0a08' }); }
+  return take;
+}
+
+// X13.6 carry-forward 4: Fee (detail the deposit), Tips and bonus, Costs, Take today, then Gear bought,
+// Signing and send-off and the stock row when they are not 0, and Cash. Week start + Take + Gear +
+// Signing and send-off + the stock row = Cash. Review 1: the crew's wages come out of Costs onto their
+// own row with the names (so bringing the crew shows its price), and Costs carries no detail line.
+function compactBookingRows(box, t, stars) {
+  const feeAt = Math.round((t.fee | 0) * (C.PAY_BASE + C.PAY_PER_STAR * stars));
+  box.appendChild(repRow(U1(stars, 'rowFeeOne', 'rowFee'), U('deposit', { d: t.deposit | 0 }), plus(feeAt)));
+  const extras = (t.tips | 0) + (t.seatTips | 0) + (t.addon ? t.menuBonus | 0 : 0);
+  box.appendChild(repRow(U('rowExtras'), '', plus(extras)));
+  const costs = (t.foodCost | 0) + (t.rawWaste | 0) + (t.bags | 0) * C.CHARCOAL_PRICE + (t.spoilCost | 0) + C.DAILY_COSTS;
+  box.appendChild(repRow(U('rowCosts'), '', minus(costs)));
+  if ((t.wages | 0) > 0) box.appendChild(repRow(U('rowWages'), t.wageNames && t.wageNames.length ? t.wageNames.join(', ') : '', minus(t.wages | 0)));
+  box.appendChild(takeRow(t, U('rowTake'), ''));
+  const start = ledgerStart(t);
+  const gear = t.gearSpent | 0;
+  if (gear > 0) box.appendChild(repRow(U('rowGear'), (t.gearBought || []).join(', '), minus(gear)));
+  if (crewSpentOf(t) > 0) box.appendChild(crewPaidRow(t));
+  if (start !== null) { const sr = stockRow(t, start, gear); if (sr) box.appendChild(sr); }
+  box.appendChild(repRow(U('rowCash'), start !== null ? U('cashFrom', { a: fmt(start) }) : '', fmt(t.cashAfter)));
+}
+
+// Every v3.0 row (W17.4 with P-10, R-4 and Q-3), for rep-money-detail.
+function fullBookingRows(money, t, stars) {
   const feeAt = Math.round((t.fee | 0) * (C.PAY_BASE + C.PAY_PER_STAR * stars));
   const seated = t.seated | 0;
   const food = (t.foodCost | 0) + (t.rawWaste | 0);
@@ -2071,38 +2581,95 @@ function buildBookingReport(t, head, body) {
   }
   if ((t.grateCost | 0) > 0) money.appendChild(repRow(U('rowGrate'), meatList(t.grateLeft) + ', ' + U('counted'), String(t.grateCost | 0), 'info'));
   if ((t.burnt | 0) > 0) money.appendChild(repRow(U('rowBurnt'), plural(t.burnt | 0, 'piece', 'pieces'), ''));
-  const take = repRow(U('rowTake'), U('takeDetail'), signed(t.net | 0), 'net');
-  // Q-3: Take today in the UI font at 3x, gold on its band (the words stay as the .sr text).
-  const tp = take.querySelector('.price');
-  if (tp) { clear(tp); uiPut(tp, signed(t.net | 0), 3, UI.gold, { shadow: '#0d0a08' }); }
-  money.appendChild(take);
-  // R-4: week start + Take - gear + what the cook kept or drew on = Cash.
-  const se = s.season || {};
-  const start = typeof t.cashStart === 'number' ? t.cashStart : (typeof se.weekCash === 'number' ? se.weekCash : null);
+  money.appendChild(takeRow(t, U('rowTake'), U('takeDetail')));
+  // R-4: week start + Take - gear + what the cook kept or drew on = Cash. Q-3: the stock row is an
+  // information row (the money is in the pile and cooler, or was paid in an earlier week), its amount
+  // signed so the column still adds up. Deviation 50: Signing and send-off joins when it is not 0.
+  const start = ledgerStart(t);
   const gear = t.gearSpent | 0;
   if (gear > 0) money.appendChild(repRow(U('rowGear'), (t.gearBought || []).join(', '), minus(gear)));
-  if (start !== null) {
-    // Q-3: an information row (the money is in the pile and cooler, or was paid in an earlier week),
-    // its amount signed so the column still adds up, the bags and units in the detail.
-    const stock = (t.cashAfter | 0) - start - (t.net | 0) + gear;
-    if (stock < 0) money.appendChild(tillRow(U('rowKept'), stockMoved(t, 1), minus(-stock), 'info'));
-    else if (stock > 0) money.appendChild(tillRow(U('rowDrawn'), stockMoved(t, -1), plus(stock), 'info'));
-  }
+  if (crewSpentOf(t) > 0) money.appendChild(crewPaidRow(t));
+  if (start !== null) { const sr = stockRow(t, start, gear); if (sr) money.appendChild(sr); }
   money.appendChild(repRow(U('rowCash'), start !== null ? U('cashFrom', { a: fmt(start) }) : '', fmt(t.cashAfter)));
-  mf.appendChild(money);
-  mf.appendChild(fansBox(t, true));
-  body.appendChild(mf);
+}
 
-  // What the host said (R-11: beside a framed guest head).
-  const host = repBox('rep-host', U('hostH'), 'host');
-  const says = STRINGS.hostSays && STRINGS.hostSays[stars - 1] ? STRINGS.hostSays[stars - 1] : '';
-  host.appendChild(hostQuote(t, fill(says, { name: profileName(s) })));
-  body.appendChild(host);
+// The report's crew box (X13.6): a row per lineup card with its portrait, name, mood, XP, the till
+// row's line and Level up while a level is banked; resting cards share one line; notices and leavers.
+function crewBox(t) {
+  const rows = Array.isArray(t.crew) ? t.crew : [];
+  const left = Array.isArray(t.left) ? t.left : [];
+  if (!rows.length && !left.length) return null;
+  const box = repBox('rep-crew', U('crewH'), 'crewbox');
+  // The title's id leaves the rep-crew-{id} pattern to the rows.
+  const bt = box.querySelector('h3');
+  if (bt) { bt.id = 'crew-box-t'; box.setAttribute('aria-labelledby', 'crew-box-t'); }
+  const need = C.LEVEL_XP || 200;
+  const rested = [];
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    if (!r.worked) { rested.push(r.name); continue; }
+    const role = roleOf(r.role);
+    const live = crewCard(r.id);
+    const look = live && live.look ? live.look : (lookCache.get(r.id) || null);
+    const row = mk('div', { id: 'rep-crew-' + r.id, cls: 'rc-row r-' + role });
+    const pic = mk('span', { cls: 'rc-pic', attrs: { 'aria-hidden': 'true' } });
+    const bust = portraitEl(look, role, 1);
+    if (bust) pic.appendChild(bust);
+    row.appendChild(pic);
+    // Review 1: the name, the face and the XP meter on one line; the till row's sentence; then the
+    // mood words, the wage and a gold Level up chip on one short line.
+    const main = mk('div', { cls: 'rc-main' });
+    const top = mk('div', { cls: 'rc-top' });
+    top.appendChild(roleBadge(role, 'sm'));
+    top.appendChild(mk('span', { cls: 'rc-name', text: r.name }));
+    const face = mk('span', { cls: 'rc-face', attrs: { role: 'img', 'aria-label': U('moodAria', { name: r.name, mood: moodWord(r.moodTo) }), 'data-mood': String(clampMood(r.moodTo)) } });
+    const mc = moodEl(r.moodTo, 2);
+    if (mc) face.appendChild(mc);
+    top.appendChild(face);
+    const xp = live ? live.xp | 0 : r.xp | 0;
+    const xr = mk('div', { cls: 'rc-xp' });
+    xr.appendChild(segMeter('rep-crew-' + r.id + '-xp', xp, need, U('xp', { x: xp, max: need })));
+    xr.appendChild(mk('span', { cls: 'rc-xpt', attrs: { 'aria-hidden': 'true' }, text: U('xp', { x: xp, max: need }) }));
+    top.appendChild(xr);
+    main.appendChild(top);
+    main.appendChild(mk('p', { id: 'rep-crew-' + r.id + '-line', cls: 'rc-line', text: r.line || '' }));
+    const sub = mk('div', { cls: 'rc-sub' });
+    const moved = clampMood(r.moodFrom) !== clampMood(r.moodTo);
+    sub.appendChild(mk('span', { cls: 'rc-mood' + (moved ? (clampMood(r.moodTo) > clampMood(r.moodFrom) ? ' up' : ' down') : ''), text: moved ? U('moodWas', { mood: moodWord(r.moodTo), was: moodWord(r.moodFrom) }) : moodWord(r.moodTo) }));
+    const wage = live ? live.wage | 0 : 0;
+    if (wage > 0) sub.appendChild(mk('span', { cls: 'rc-wage', text: U('wageRow', { w: wage }) }));
+    const banked = live ? live.banked | 0 : 0;
+    if (banked > 0) {
+      const lv = pixBtn('rep-crew-' + r.id + '-level', U('levelUp'), 'alt lvl', function () {
+        openCard({ mode: 'level', key: r.id, from: 'till', opener: 'rep-crew-' + r.id + '-level' });
+      }, 22, { color: '#FFD23F', shadow: '#0d0a08' });
+      sub.appendChild(lv);
+    }
+    main.appendChild(sub);
+    row.appendChild(main);
+    box.appendChild(row);
+  }
+  if (rested.length) box.appendChild(mk('p', { id: 'rep-rested', cls: 'rc-rest', text: U('rested', { list: andList(rested) }) }));
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    if (r.notice && crewCard(r.id)) box.appendChild(mk('p', { id: 'rep-notice-' + r.id, cls: 'bad', text: U('noticeLine', { name: r.name }) }));
+  }
+  if (left.length) box.appendChild(mk('p', { id: 'rep-left', cls: 'bad', text: left.map(function (x) { return U('leftLine', { name: x.name }); }).join(' ') }));
+  return box;
+}
 
-  const inv = repBox('rep-inv', U('inventory'), 'plain');
-  coolerLines(inv, t);
-  body.appendChild(inv);
-  body.appendChild(nextButton());
+// The RUN row that worked this event ({ id, look }), or null (Overseer item 46). A till with no crew
+// rows (a v3.0 sim) keeps the v3.0 buddy.
+function runWorked(t) {
+  if (!t || !Array.isArray(t.crew)) return { id: null, look: null };
+  for (let i = 0; i < t.crew.length; i++) {
+    const r = t.crew[i];
+    if (r && r.worked && r.role === 'run') {
+      const c = crewCard(r.id);
+      return { id: r.id, look: c && c.look ? c.look : (lookCache.get(r.id) || null) };
+    }
+  }
+  return null;
 }
 
 // Q-3: what the pile and cooler gained (dir 1) or gave up (dir -1) over the cook, as "15 bags, 2 Sausage".
@@ -2140,18 +2707,35 @@ function hostQuote(t, words) {
 }
 
 function buildYardReport(t, head, body) {
-  const s = sim.state;
   el.till.classList.add('yardday');
   el.till.insertBefore(repTop(t), head);
   heroHead(head, t, U('reportH', { label: bookingLabel('yard') }));
   const mf = mk('div', { cls: 'money-fans' });
   const money = repBox('rep-money', U('money'), 'money', coinEl(2));
-  const se = s.season || {};
-  const start = typeof t.cashStart === 'number' ? t.cashStart : (typeof se.weekCash === 'number' ? se.weekCash : null);
-  tutorialRows(money, t, start !== null ? U('cashFrom', { a: fmt(start) }) : '');
+  const start = ledgerStart(t);
+  const cashDetail = start !== null ? U('cashFrom', { a: fmt(start) }) : '';
+  // X13.6: Served, Tips and bonus, Take today, Gear bought and Signing and send-off when they apply,
+  // Paid at the shop and Cash; every v2.1 row under Show every row (deviation 50).
+  money.appendChild(repRow('Served', plural(t.served | 0, 'plate', 'plates'), plus(t.revenue | 0)));
+  money.appendChild(repRow(U('rowExtras'), '', plus((t.tips | 0) + (t.seatTips | 0))));
+  money.appendChild(takeRow(t, 'Take today', 'sales and tips after wages and daily costs'));
+  const gear = t.gearSpent | 0;
+  if (gear > 0) money.appendChild(repRow(U('rowGear'), (t.gearBought || []).join(', '), minus(gear)));
+  if (crewSpentOf(t) > 0) money.appendChild(crewPaidRow(t));
+  if (typeof t.cashStart === 'number') money.appendChild(repRow(U('rowShop'), '', minus(t.cashStart + (t.net | 0) - gear - crewSpentOf(t) - (t.cashAfter | 0))));
+  money.appendChild(repRow('Cash', cashDetail, fmt(t.cashAfter)));
+  money.appendChild(moneyMoreButton());
   mf.appendChild(money);
   mf.appendChild(fansBox(t, false));
   body.appendChild(mf);
+  const detail = repBox('rep-money-detail', null, 'money detail');
+  detail.hidden = !moneyMore;
+  tutorialRows(detail, t, cashDetail);
+  body.appendChild(detail);
+  const tl = thirdLine(t);
+  if (tl) body.appendChild(tl);
+  const crew = crewBox(t);
+  if (crew) body.appendChild(crew);
   const inv = repBox('rep-inv', U('inventory'), 'plain');
   coolerLines(inv, t);
   body.appendChild(inv);
@@ -2183,7 +2767,8 @@ function tutorialRows(box, t, cashDetail) {
   box.appendChild(repRow('Take today', 'sales and tips after wages and daily costs', signed(t.net), 'net'));
   const gear = t.gearSpent | 0;
   if (gear > 0) box.appendChild(repRow(U('rowGear'), (t.gearBought || []).join(', '), minus(gear)));
-  if (typeof t.cashStart === 'number') box.appendChild(repRow(U('rowShop'), '', minus(t.cashStart + (t.net | 0) - gear - (t.cashAfter | 0))));
+  if (crewSpentOf(t) > 0) box.appendChild(crewPaidRow(t));
+  if (typeof t.cashStart === 'number') box.appendChild(repRow(U('rowShop'), '', minus(t.cashStart + (t.net | 0) - gear - crewSpentOf(t) - (t.cashAfter | 0))));
   box.appendChild(repRow('Cash', cashDetail || '', fmt(t.cashAfter)));
 }
 
@@ -2203,6 +2788,8 @@ function buildTutorialTill(t, head, body) {
   tutorialRows(rows, t);
   body.appendChild(rows);
   body.appendChild(mk('p', { cls: 'muted', text: 'Food, charcoal and spoilage were paid at the shop. They are listed so you can see where the money went.' }));
+  // Review 1 (sim.js floorAfterTutorial): the practice day never costs the season.
+  if (loopOf(sim.state) === 'tutorial') body.appendChild(mk('p', { id: 'tut-floor', cls: 'gold', text: U('tutorialFloor', { c: fmt(Math.max(sim.state.cash | 0, C.START_CASH | 0)) }) }));
   const inv = mk('div', { cls: 'rbox plain' });
   coolerLines(inv, t);
   body.appendChild(inv);
@@ -2325,7 +2912,9 @@ function weekSig(s) {
   return [(se.offers || []).map(function (x) { return x.id + (x.needs ? '!' : ''); }).join(','), o ? (o.type === 'yard' ? 'y' : 'b') : '', rl, meats,
     inv ? (inv.over > 0 || (inv.cap === 0 && inv.units > 0)) : '', inv ? inv.wood > 0 : '', nextGear, g ? g.id : '',
     !!s.comingNext, s.day >= C.RAIN_FROM_DAY, cl.ok ? '' : cl.reason, window.innerHeight, document.documentElement.clientWidth,
-    rail ? !!mixHint(rail) : '', se.week | 0, !!s.gear.bigtable].join('|');   // R-7, R-3, Q-4: the hint line and the finale news lines
+    rail ? !!mixHint(rail) : '', se.week | 0, !!s.gear.bigtable,   // R-7, R-3, Q-4: the hint line and the finale news lines
+    typeof sim.fanThird === 'function' ? sim.fanThird() : 0,     // X13.6: #third-line and the notice lines
+    crewList().filter(function (c) { return c.notice; }).map(function (c) { return c.id; }).join('.')].join('|');
 }
 function fitWeek() {
   const w = el.week;
@@ -2401,6 +2990,10 @@ function buildWeekAt(level) {
   for (let i = 0; i < 3; i++) thirds.appendChild(mk('span', { cls: 'seg' + (i === third ? ' on' : '') }));
   pills.appendChild(mk('div', { id: 'week-fans', cls: 'pill' }, [sprEl('heart', 0, 2, null), pillLabel(U('fans')), pillValue(String(s.rep)), thirds]));
   top.appendChild(pills);
+  // X13.6 carry-forward 2: the third word of mouth is in and what it brings, one line under the pills.
+  const tl = mk('p', { id: 'third-line', cls: 'muted t' + third, text: UA('thirdNow', third) });
+  tl.hidden = !tl.textContent;
+  top.appendChild(tl);
 
   // The season strip.
   const strip = mk('ol', { id: 'season-strip', attrs: { 'aria-label': U('stripAria', { y: se.year || 1 }) } });
@@ -2547,6 +3140,10 @@ function offerCard(o, pickedId, level, idx) {
     if (ev) band.appendChild(ev);
   }
   card.appendChild(band);
+  // X13.6 and Overseer item 30: SAFE BET, STRETCH or INVITE on booking cards in weeks 1 to 8, on the
+  // card's top left corner over the band's fence, so the scene stays in view (deviation 53).
+  const tag = offerTag(o);
+  if (tag) card.appendChild(tag);
   const info = mk('div', { cls: 'oinfo' });
   info.appendChild(uiPut(mk('h4', { id: 'offer-' + o.id + '-t', cls: 'olabel' }), o.label, 2, UI.creamL, { shadow: UI.K }));
   if (!isYard && o.host) {
@@ -2629,8 +3226,21 @@ function offerScene(band, o, idx, wide, short) {
   cv.setAttribute('aria-hidden', 'true');
   cv.className = 'px';
   band.appendChild(cv);
-  const tag = uiCanvas(DAY_TAGS[idx % DAY_TAGS.length], 2, UI.gold, { bold: true });
-  if (tag) band.appendChild(mk('span', { cls: 'daytag' }, [tag]));
+}
+
+// The offer's tag (offer-{id}-tag): INVITE on the invite, else STRETCH or SAFE BET by tier; none on the
+// finale, the Yard day or week 9 (Overseer item 30). The words are the tag's text (deviation 53).
+function offerTag(o) {
+  if (!o || o.type === 'yard' || o.type === 'finale') return null;
+  const se = sim.state.season || {};
+  if ((se.week | 0) > (C.SEASON_WEEKS || 9) - 1) return null;
+  const kind = o.invite === true ? 'invite' : (o.tier === 'stretch' || (o.tier === undefined && o.needs) ? 'stretch' : 'safe');
+  const key = kind === 'invite' ? 'tagInvite' : kind === 'stretch' ? 'tagStretch' : 'tagSafe';
+  const words = U(key);
+  if (!words) return null;
+  const t = mk('span', { id: 'offer-' + o.id + '-tag', cls: 'otag ' + kind });
+  uiPut(t, words, 2, TAG_COLOR[kind], null, words);
+  return t;
 }
 
 // R-3: the Season finale this save would get with the second kettle and the drum, from the generator.
@@ -2723,6 +3333,12 @@ function nextCard(s, se) {
   if (hint) sec.appendChild(mk('p', { id: 'next-hint', text: hint }));
   const dep = o && o.type !== 'yard' ? U('depositLine', { d: o.deposit | 0 }) : U('yardLine');
   sec.appendChild(mk('p', { id: 'go-deposit', text: dep }));
+  // Review 1: who comes along and what they cost, next to the pay (wages come off the take).
+  const lineup = crewList().filter(function (c) { return c.bring; }).sort(byId);
+  const wages = payrollNow().now | 0;
+  sec.appendChild(mk('p', { id: 'next-crew', cls: 'ncrew', text: lineup.length
+    ? U('crewNext', { names: andList(lineup.map(function (c) { return c.name; })), w: wages })
+    : U('crewNone') }));
   const cl = typeof sim.canLoadUp === 'function' ? sim.canLoadUp() : { ok: false, reason: '' };
   const go = mk('button', { id: 'go', cls: 'primary big go', type: 'button' });
   const fl = flameEl(true, 2);
@@ -2746,10 +3362,12 @@ function onGo() {
   updateDom();
 }
 
-function hubTile(id, cls, title, win, l1, l2) {
-  const b = mk('button', { id: id, cls: 'tile ' + cls, type: 'button', attrs: { 'aria-label': title + ', ' + l1 + (l2 ? ', ' + l2 : '') } });
+function hubTile(id, cls, title, win, l1, l2, alert) {
+  const b = mk('button', { id: id, cls: 'tile ' + cls, type: 'button', attrs: { 'aria-label': title + ', ' + l1 + (l2 ? ', ' + l2 : '') + (alert ? '. ' + alert : '') } });
   const tt = mk('span', { cls: 'tt' });
   uiPut(tt, title.toUpperCase(), 2, UI.white, { bold: true, shadow: 'rgba(0, 0, 0, 0.45)' }, title);
+  // X13.6: a red dot on the Crew tile while a card has given notice.
+  if (alert) tt.appendChild(mk('span', { cls: 'ndot', attrs: { 'aria-hidden': 'true' } }));
   // P-14: a chevron after the title, as on screen-3-week's tiles (it opens a sheet).
   const chev = pixCanvas(PIX.arrowR.map, PIX.arrowR.pal, 2);
   if (chev) { chev.classList.add('chev'); tt.appendChild(chev); }
@@ -2773,10 +3391,27 @@ function tileWin(names, frames) {
 
 function hubGrid(s, se) {
   const g = mk('div', { id: 'hub-grid' });
-  // Crew.
-  let hired = 0;
-  for (const k in s.hires) if (s.hires[k] === true) hired++;
-  g.appendChild(hubTile('card-crew', 't-crew', U('crew'), tileWin(['buddy_down', 'tender_down']), U('crewLine', { n: hired }), U('crewSub')));
+  // Crew (X13.6): the count against the slots, the payroll, and the crew. Review 1: as
+  // screen-3-week's tile, up to three portrait busts on their role bands with a mood face in the
+  // corner, the lineup first and resting cards dimmed, on a flat ink window.
+  const crew = crewList();
+  const pay = payrollNow();
+  const roleRank = function (c) { return roleIds().indexOf(c.role); };
+  const shown = crew.slice().sort(function (a, b) { return (b.bring ? 1 : 0) - (a.bring ? 1 : 0) || roleRank(a) - roleRank(b) || a.id - b.id; });
+  const cw = mk('span', { cls: 'win cwin', attrs: { 'aria-hidden': 'true' } });
+  for (let i = 0; i < shown.length && i < 3; i++) {
+    const c = shown[i];
+    const cell = mk('span', { cls: 'ctw r-' + roleOf(c.role) + (c.bring ? '' : ' resting') });
+    const bust = portraitEl(c.look, roleOf(c.role), 2);
+    if (bust) cell.appendChild(bust);
+    const face = moodEl(c.mood, 1);
+    if (face) cell.appendChild(mk('span', { cls: 'ctw-mood' }, [face]));
+    cw.appendChild(cell);
+  }
+  let noticed = null;
+  for (let i = 0; i < crew.length; i++) if (crew[i].notice) { noticed = crew[i]; break; }
+  g.appendChild(hubTile('card-crew', 't-crew', U('crew'), cw, U('crewLine', { n: crew.length, s: pay.slots }),
+    U('crewSub', { p: pay.now, b: pay.budget }), noticed ? U('noticeLine', { name: noticed.name }) : ''));
   // Gear.
   let ownedN = 0, next = null;
   for (let i = 0; i < CATALOG.length; i++) {
@@ -2880,6 +3515,18 @@ function newsCard(s) {
     if (!gp.hidden) shown++;
     nb.appendChild(gp);
   }
+  // X13.6: a line per card that gave notice. Review 1: and one per lineup card that is fired up.
+  const crew = crewList();
+  for (let i = 0; i < crew.length; i++) {
+    if (!crew[i].notice) continue;
+    nb.appendChild(mk('p', { id: 'news-notice-' + crew[i].id, cls: 'bad', text: U('noticeLine', { name: crew[i].name }) }));
+    shown++;
+  }
+  for (let i = 0; i < crew.length; i++) {
+    if (!(crew[i].bring && clampMood(crew[i].mood) === 2)) continue;
+    nb.appendChild(mk('p', { id: 'news-fired-' + crew[i].id, cls: 'gold', text: U('firedUp', { name: crew[i].name }) }));
+    shown++;
+  }
   // R-3: from week 5, what the drum smoker makes of the finale while it is not owned.
   const se = s.season;
   if (se && se.week >= 5 && se.week < (C.SEASON_WEEKS || 9) && s.gear.drum !== true) {
@@ -2928,19 +3575,28 @@ function lengthSection(s) {
 
 // ---------------------------------------------------------------- sheets (W17.3)
 
-function openSheet(kind, openerId) {
+function openSheet(kind, openerId, from) {
   sheetKind = kind;
   sheetOpener = openerId || null;
+  sheetFrom = from === 'hiring' ? 'hiring' : 'week';
   sheetMsg = '';
   shopOther = false;
+  crewMsg = '';
+  cardCtx = null;
   buildSheet();
   openPanel('sheet');
 }
 
+// Back from a sheet: to the week hub, or to Hiring Day for the crew sheet opened there (X13.1).
 function closeSheet() {
   const opener = sheetOpener;
+  const from = sheetFrom;
   dropSheet();
-  openWeek();
+  if (from === 'hiring' && loopOf(sim.state) === 'hiring') {
+    openHiring(false);
+  } else {
+    openWeek();
+  }
   const f = opener ? document.getElementById(opener) : null;
   if (f && typeof f.focus === 'function') f.focus();
 }
@@ -2972,6 +3628,7 @@ function buildSheet() {
   back.appendChild(pixCanvas(PIX.arrowL.map, PIX.arrowL.pal, 2));
   back.addEventListener('click', closeSheet);
   body.appendChild(back);
+  if (sheetKind === 'crew') { buildCrewSheet(body); return; }   // X13.5
   const card = mk('div', { cls: 'card3 sheet-card' });
   if (sheetKind === 'shop') {
     // Q-2: at a booking only the rail meats show; guests order nothing else, so the rest fold away.
@@ -3039,15 +3696,763 @@ function buildSheet() {
       card.appendChild(row);
       card.appendChild(mk('p', { id: 'addon-note', cls: 'muted', text: U('addonNote', { b: Math.round((o.pay | 0) * (C.MENU_BONUS || 0.1)) }) }));
     }
-  } else if (sheetKind === 'crew') {
-    card.appendChild(h3('Hires'));
-    for (let i = 0; i < CATALOG.length; i++) if (CATALOG[i].kind === 'hire') card.appendChild(hireRow(CATALOG[i]));
-    card.appendChild(mk('div', { cls: 'row' }, [
-      mk('span', { cls: 'name', text: 'Daily costs: ice and trash bags, ' + C.DAILY_COSTS + '.' })
-    ]));
   }
   body.appendChild(card);
   runSheetRows();
+}
+
+// X13.5: the crew sheet. The payroll box, the slots, a card per crew member with Bring and (in the
+// week) Train beside it, the train line, the last refusal, then this week's walk-ins (week only).
+function buildCrewSheet(body) {
+  const s = sim.state;
+  const week = weekOnly();
+  const pay = payrollNow();
+  body.appendChild(payrollMeter('crew-payroll'));
+  const views = crewViews();
+  body.appendChild(mk('p', { id: 'crew-slots', cls: 'crew-slots', text: views.length ? U('slots', { n: views.length, s: pay.slots }) : U('crewEmpty') }));
+  const tid = trainedId();
+  const ul = mk('ul', { id: 'crew-list' });
+  for (let i = 0; i < views.length; i++) {
+    const c = views[i];
+    const li = mk('li', { cls: 'crew-li' + (c.bring ? '' : ' resting') });
+    li.appendChild(heldCard('crew-' + c.id, c, function () { openCard({ mode: 'crew', key: c.id, from: 'sheet', opener: 'crew-' + c.id }); }));
+    const ctl = mk('div', { cls: 'crew-ctl' });
+    const bring = bringBtn('bring-' + c.id, c, function () { onBring(c.id, !c.bring); }, 10);
+    bring.disabled = !crewLoops();
+    ctl.appendChild(bring);
+    if (week) {
+      const tr = pixBtn('train-' + c.id, U('train'), 'alt', function () { onTrain(c.id); }, 10);
+      tr.disabled = tid !== null;
+      ctl.appendChild(tr);
+    }
+    // Deviation 49: each card's XP toward the next level, and the levels it has banked.
+    const need = C.LEVEL_XP || 200;
+    ctl.appendChild(segMeter('xp-' + c.id, c.xp | 0, need, U('xp', { x: c.xp | 0, max: need }), 'crew-xp', true));
+    if ((c.banked | 0) > 0) ctl.appendChild(mk('p', { id: 'banked-' + c.id, cls: 'gold crew-banked', text: U('banked', { n: c.banked | 0 }) }));
+    li.appendChild(ctl);
+    if (c.notice) li.appendChild(mk('p', { id: 'crew-notice-' + c.id, cls: 'bad crew-notice', text: U('noticeLine', { name: c.name }) }));
+    ul.appendChild(li);
+  }
+  body.appendChild(ul);
+  if (week) {
+    const who = tid !== null ? (crewCard(tid) ? crewCard(tid).name : (nameCache.get(tid) || '')) : '';
+    const line = tid === null ? U('trainLine', { xp: C.TRAIN_XP || 40 }) : (who ? U('trainedLine', { name: who }) : U('trainDone'));
+    body.appendChild(mk('p', { id: 'crew-train-line', cls: 'muted', text: line }));
+  }
+  body.appendChild(mk('p', { id: 'crew-why', cls: 'muted', text: crewMsg }));
+  if (!week) return;
+  const wk = s.season && Array.isArray(s.season.walkins) ? s.season.walkins : [];
+  const sec = mk('section', { cls: 'walkins', attrs: { 'aria-labelledby': 'walkins-h' } });
+  sec.appendChild(mk('h3', { id: 'walkins-h', text: U('walkinsH') }));
+  // Review 1: no walk-ins the week of Hiring Day (sim.js genWalkins), so week 1 says when they come.
+  sec.appendChild(mk('p', { id: 'walkins-line', cls: 'muted', text: wk.length ? U('walkinLine') : U('walkinsLater') }));
+  const grid = mk('div', { cls: 'walkin-grid' });
+  for (let i = 0; i < wk.length; i++) {
+    const w = wk[i];
+    if (!w || w.hired) continue;
+    const d = walkinData(w);
+    grid.appendChild(crewCardEl('walkin-' + i, {
+      role: d.role, name: d.name, look: d.look, stars: d.stars, potential: d.potential, mood: d.mood, wage: d.wage, rookie: false,
+      aria: U('appAria', { name: d.name, role: roleName(d.role), stars: starsText(d.stars), w: d.wage })
+    }, (function (k) { return function () { openCard({ mode: 'walkin', key: k, from: 'sheet', opener: 'walkin-' + k }); }; })(i)));
+  }
+  sec.appendChild(grid);
+  body.appendChild(sec);
+}
+
+// A walk-in with its derived stars and wage (X4.3: derived on load, never saved).
+function walkinData(w) {
+  const role = roleOf(w.role);
+  const skills = Array.isArray(w.skills) ? w.skills : [1, 1];
+  const stars = typeof w.stars === 'number' ? w.stars : cardStarsOf(skills);
+  return { name: String(w.name || ''), role: role, skills: skills, look: w.look, mood: w.mood | 0,
+    potential: typeof w.potential === 'number' ? w.potential : null, stars: stars,
+    wage: typeof w.wage === 'number' ? w.wage : wageOf(stars, role), hired: w.hired === true };
+}
+
+// A card you hold as a .crewcard (deviation 47: its mood sentence joins the label).
+function heldCard(id, c, onClick) {
+  const role = roleOf(c.role);
+  const stars = typeof c.stars === 'number' ? c.stars : cardStarsOf(c.skills);
+  return crewCardEl(id, {
+    role: role, name: c.name, look: c.look, stars: stars, potential: typeof c.potential === 'number' ? c.potential : null,
+    mood: c.mood, wage: c.wage | 0, rookie: c.rookie === true,
+    aria: U('appAria', { name: c.name, role: roleName(role), stars: starsText(stars), w: c.wage | 0 }) + '. ' + U('moodAria', { name: c.name, mood: moodWord(c.mood) })
+  }, onClick);
+}
+
+// Review 1: Bring shows its state as a state, a check and COMING when the card is in the lineup,
+// RESTING when not; aria-pressed and ui.bringAria carry it for screen readers.
+function bringBtn(id, c, on, maxChars) {
+  const w = c.bring ? U('bringOn') : U('bringOff');
+  const b = mk('button', { id: id, cls: 'alt pxbtn bringb', type: 'button', on: on, attrs: { 'aria-pressed': c.bring ? 'true' : 'false', 'aria-label': U('bringAria', { name: c.name }) } });
+  const row = mk('span', { cls: 'brow' });
+  if (c.bring) { const ck = sprEl('check', 0, 2, null); if (ck) row.appendChild(ck); }
+  pixLines(row, w, maxChars || 22, 2, c.bring ? '#1b1714' : '#ffffff', { bold: true, shadow: c.bring ? '#fff6c9' : '#10215E' }, w);
+  b.appendChild(row);
+  return b;
+}
+
+function onBring(id, on) {
+  if (typeof sim.setBring !== 'function') return;
+  const r = sim.setBring(id, on);
+  crewMsg = r && r.message ? String(r.message) : '';
+  afterAct();
+}
+function onTrain(id) {
+  if (typeof sim.train !== 'function') return;
+  const r = sim.train(id);
+  crewMsg = r && r.ok === false && r.message ? String(r.message) : '';
+  afterAct();
+}
+
+// The payroll box (X13.2): the words set into the top border, a near black bar with the yellow fill,
+// orange past 80 percent and red past 95, a tick every 10. role meter, so its numbers are read out.
+function payrollMeter(id) {
+  const p = payrollNow();
+  const now = p.now | 0, budget = Math.max(1, p.budget | 0);
+  const label = U('payroll', { p: now, b: budget });
+  const m = mk('div', { id: id, cls: 'paybar', attrs: { role: 'meter', 'aria-valuenow': String(now), 'aria-valuemin': '0',
+    'aria-valuemax': String(budget), 'aria-label': U('payrollAria', { p: now, b: budget }) } });
+  const t = mk('span', { cls: 'pb-t' });
+  uiPut(t, label.toUpperCase(), 2, '#ffffff', { shadow: '#10215E' }, label);
+  m.appendChild(t);
+  const track = mk('span', { cls: 'pb-track', attrs: { 'aria-hidden': 'true' } });
+  const frac = now / budget;
+  const fillEl = mk('span', { cls: 'pb-fill' + (frac > 0.95 ? ' red' : frac > 0.8 ? ' orange' : '') });
+  fillEl.style.width = (Math.max(0, Math.min(1, frac)) * 100).toFixed(2) + '%';
+  track.appendChild(fillEl);
+  for (let v = 10; v < budget; v += 10) {
+    const tk = mk('span', { cls: 'pb-tick' + (v <= now ? ' under' : '') });
+    tk.style.left = (v / budget * 100).toFixed(2) + '%';
+    track.appendChild(tk);
+  }
+  m.appendChild(track);
+  return m;
+}
+
+// ---------------------------------------------------------------- crew cards (X13.4)
+
+// d: { role, name, look, stars, potential (number or null), mood, wage, rookie, status, aria }.
+function crewCardEl(id, d, onClick) {
+  const role = roleOf(d.role);
+  const st = d.status === 'taken' || d.status === 'mine' ? d.status : '';
+  const b = mk('button', { id: id, cls: 'crewcard r-' + role + (st ? ' ' + st : ''), type: 'button', attrs: { 'aria-label': d.aria || d.name } });
+  if (st === 'taken') b.setAttribute('aria-disabled', 'true');
+  const win = mk('span', { cls: 'cc-win' });
+  const bust = portraitEl(d.look, role, 3);
+  if (bust) win.appendChild(bust);
+  win.appendChild(roleBadge(role, ''));
+  if (d.rookie) {
+    const nb = mk('span', { cls: 'cc-new' });
+    uiPut(nb, U('newBadge') || 'NEW', 2, '#FFD23F', null, U('newBadge') || 'NEW');
+    win.appendChild(nb);
+  }
+  const mood = clampMood(d.mood);
+  const face = mk('span', { cls: 'cc-mood', attrs: { role: 'img', 'aria-label': U('moodAria', { name: d.name, mood: moodWord(mood) }), 'data-mood': String(mood) } });
+  const mc = moodEl(mood, 2);
+  if (mc) face.appendChild(mc);
+  win.appendChild(face);
+  if (st) win.appendChild(mk('span', { cls: 'cc-band', text: U(st === 'taken' ? 'taken' : 'yours') }));
+  b.appendChild(win);
+  const info = mk('span', { cls: 'cc-info' });
+  info.appendChild(uiPut(mk('span', { cls: 'cc-name' }), String(d.name).toUpperCase(), 2, '#ffffff', { shadow: '#2A2C38' }, d.name));
+  const row = mk('span', { cls: 'cc-row' });
+  // Review 1: the mock's 11 px outlined stars (the 9 px star with a 1 px ink edge, .g11) and its
+  // 6 by 6 coin at 2x.
+  const sr = starRow(d.stars, d.potential, 1, false);
+  sr.classList.add('g11');
+  row.appendChild(sr);
+  const wage = mk('span', { cls: 'cc-wage' });
+  wage.appendChild(uiPut(mk('span', { cls: 'cc-wl' }), U('wage').toUpperCase(), 2, '#CFDEFF', { shadow: '#2A2C38' }, U('wage')));
+  const coin = pixCanvas(COIN6.map, COIN6.pal, 2);
+  if (coin) wage.appendChild(coin);
+  wage.appendChild(uiPut(mk('span', { cls: 'cc-wv' }), String(d.wage | 0), 2, '#FFF1B0', { shadow: '#2A2C38' }));
+  row.appendChild(wage);
+  info.appendChild(row);
+  b.appendChild(info);
+  if (onClick) b.addEventListener('click', onClick);
+  return b;
+}
+
+// ---------------------------------------------------------------- Hiring Day (X13.2)
+
+function openHiring(fresh, focusId) {
+  dropSheet();
+  if (fresh) { hirePage = 1; hireHelpOpen = false; hireMsg = ''; hireNews = null; hirePassSure = false; }
+  cardCtx = null;
+  buildHiring();
+  openPanel('hiring', focusId);
+  if (focusId && document.activeElement !== document.getElementById(focusId)) el['hiring-h'].focus();
+}
+
+// Review 1: words in the UI font, wrapped onto lines of at most maxChars characters (a canvas a
+// line), with one .sr span holding the sentence. Returns parent.
+function pixLines(parent, text, maxChars, scale, color, opts, srText) {
+  const words = String(text).toUpperCase().split(' ');
+  const lines = [];
+  let cur = '';
+  for (let i = 0; i < words.length; i++) {
+    const next = cur ? cur + ' ' + words[i] : words[i];
+    if (cur && next.length > maxChars) { lines.push(cur); cur = words[i]; } else cur = next;
+  }
+  if (cur) lines.push(cur);
+  let drew = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const c = uiCanvas(lines[i], scale, color, opts);
+    if (c) { parent.appendChild(mk('span', { cls: 'pxl' }, [c])); drew++; }
+  }
+  const sr = srText === undefined ? String(text) : String(srText);
+  if (drew) parent.appendChild(mk('span', { cls: 'sr', text: sr }));
+  else parent.appendChild(mk('span', { cls: 'utf', text: sr }));
+  return parent;
+}
+
+// Review 1: an action button drawn like #go and the v3.0 screens, uppercase UI font with a shadow,
+// wrapped at maxChars, with the sentence as its accessible name (the .sr span). opts.color and
+// opts.shadow override the white text and the shadow of its class.
+function pixBtn(id, text, cls, on, maxChars, opts) {
+  const o = opts || {};
+  const b = mk('button', { id: id, cls: cls + ' pxbtn', type: 'button', on: on });
+  const primary = /(^| )primary( |$)/.test(cls);
+  pixLines(b, text, maxChars || 22, 2, o.color || '#ffffff', { bold: true, shadow: o.shadow || (primary ? '#8a3a14' : '#10215E') }, text);
+  return b;
+}
+
+function buildHiring() {
+  const s = sim.state;
+  const hv = hiringData();
+  const top = el['hiring-top'], body = el['hiring-body'], foot = el['hiring-foot'];
+  clear(top); clear(body); clear(foot);
+  const h = el['hiring-h'];
+  clear(h);
+  const ls = mk('span', { cls: 'hstars', attrs: { 'aria-hidden': 'true' } }), rs = mk('span', { cls: 'hstars', attrs: { 'aria-hidden': 'true' } });
+  for (let i = 0; i < 3; i++) { ls.appendChild(miniStar(i)); rs.appendChild(miniStar(2 - i)); }
+  h.appendChild(ls);
+  uiPut(h, U('hiringH').toUpperCase(), 3, '#ffffff', { bold: true, shadow: '#10215E' }, U('hiringH'));
+  h.appendChild(rs);
+
+  // The top row: cash, the round and the tryouts in the UI font (review 1: folded in from the old
+  // status line, so the grid starts higher), and the info box.
+  const round = hv ? hv.round | 0 : 4;
+  const tries = hv ? hv.tryouts | 0 : 0;
+  const cash = mk('div', { id: 'hire-cash', cls: 'pill mockpill' }, [mk('span', { cls: 'sr', text: U('cash') + ' ' }), coinEl(2),
+    uiPut(mk('span', { cls: 'pv' }), fmt(s.cash), 2, '#ffffff', { bold: true, shadow: '#10215E' })]);
+  const info = mk('button', { id: 'hire-info', cls: 'alt mockbtn hinfo', type: 'button', attrs: { 'aria-label': U('hireInfo'),
+    'aria-expanded': hireHelpOpen ? 'true' : 'false', 'aria-controls': 'hire-help' } });
+  info.appendChild(pixCanvas(PIX.info.map, PIX.info.pal, 2));
+  info.addEventListener('click', function () {
+    hireHelpOpen = !hireHelpOpen;
+    const hp = document.getElementById('hire-help');
+    if (hp) hp.hidden = !hireHelpOpen;
+    info.setAttribute('aria-expanded', hireHelpOpen ? 'true' : 'false');
+  });
+  const stat = mk('div', { cls: 'hire-stat' });
+  const rw = round <= 3 ? U('hireRound', { r: round }) : U('hireRoundsDone');
+  stat.appendChild(pixLines(mk('span', { id: 'hire-round', cls: 'hst' }), rw, round <= 3 ? 16 : 12, 2, '#ffffff', { shadow: '#10215E' }, rw));
+  if (round <= 3) {   // review 1: no tryouts line once every round is done
+    const tw = U('tryoutsLeft', { n: tries });
+    stat.appendChild(pixLines(mk('span', { id: 'hire-tryouts', cls: 'hst' }), tw, 16, 2, '#CFDEFF', { shadow: '#10215E' }, tw));
+  }
+  top.appendChild(mk('div', { cls: 'hire-toprow' }, [cash, stat, info]));
+  const help = mk('p', { id: 'hire-help', cls: 'hhelp', text: U('hireHelp') });
+  help.hidden = !hireHelpOpen;
+  top.appendChild(help);
+
+  // The page line, then nine cards a page. Review 1: an arrow toward a page where other outfits just
+  // took cards carries a "2 taken" chip.
+  const pool = hv && Array.isArray(hv.pool) ? hv.pool : [];
+  const per = C.POOL_PAGE || 9;
+  const pages = Math.max(1, Math.ceil(pool.length / per));
+  hirePage = Math.max(1, Math.min(pages, hirePage));
+  const takenOn = function (pg) {
+    if (!hireNews) return 0;
+    let n = 0;
+    for (let i = 0; i < hireNews.idxs.length; i++) if (Math.floor(hireNews.idxs[i] / per) + 1 === pg) n++;
+    return n;
+  };
+  const pg = mk('p', { id: 'hire-page' });
+  const arrow = function (id, d, label) {
+    const target = hirePage + d;
+    const n = target >= 1 && target <= pages ? takenOn(target) : 0;
+    const b = mk('button', { id: id, cls: 'pgarrow', type: 'button', attrs: { 'aria-label': label + (n ? '. ' + U('takenPageAria', { n: n, p: target }) : '') } });
+    b.appendChild(pixCanvas(d < 0 ? PIX.arrowL.map : PIX.arrowR.map, d < 0 ? PIX.arrowL.pal : PIX.arrowR.pal, 2));
+    b.disabled = target < 1 || target > pages;
+    b.addEventListener('click', function () { turnPage(d); });
+    return { b: b, n: n };
+  };
+  const prev = arrow('hire-page-prev', -1, U('pagePrev'));
+  const next = arrow('hire-page-next', 1, U('pageNext'));
+  const chip = function (n) {
+    const w = U('takenBadge', { n: n });
+    return uiPut(mk('span', { id: 'hire-page-taken', cls: 'tchip', attrs: { 'aria-hidden': 'true' } }), w.toUpperCase(), 2, '#FFD23F', { shadow: '#0B1640' }, w);
+  };
+  if (prev.n) pg.appendChild(chip(prev.n));
+  pg.appendChild(prev.b);
+  const pw = U('pageOf', { p: hirePage, n: pages });
+  pg.appendChild(uiPut(mk('span', { cls: 'pgl' }), pw.toUpperCase(), 2, '#CFDEFF', { shadow: '#1E4CC4' }, pw));
+  pg.appendChild(next.b);
+  if (next.n) pg.appendChild(chip(next.n));
+  body.appendChild(pg);
+  const grid = mk('ol', { id: 'hire-grid', attrs: { 'aria-label': pw } });
+  for (let k = (hirePage - 1) * per; k < Math.min(pool.length, hirePage * per); k++) grid.appendChild(mk('li', null, [appCard(pool[k])]));
+  body.appendChild(grid);
+
+  // The payroll box, then the last round's news and any refusal or confirm (review 1: above the bar,
+  // next to the button they explain), then the bottom bar: Crew, Hires left, the arrow.
+  foot.appendChild(payrollMeter('hire-payroll'));
+  const news = mk('div', { id: 'hire-news', cls: 'hnews' });
+  if (hireNews) {
+    news.appendChild(mk('p', { text: hireNews.line }));
+    for (let i = 0; i < hireNews.tried.length; i++) news.appendChild(mk('p', { cls: 'gold', text: U('tryoutTaken', { name: hireNews.tried[i] }) }));
+  }
+  news.hidden = !news.firstChild;
+  foot.appendChild(news);
+  if (hirePassSure && round <= 3) {
+    foot.appendChild(mk('p', { id: 'hire-why', cls: 'muted', text: U('passEmpty', { r: round }) }));
+    foot.appendChild(mk('div', { cls: 'hsure' }, [
+      pixBtn('hire-pass-yes', U('yes'), 'primary', function () { hirePassSure = false; doPassRound(); }),
+      pixBtn('hire-pass-no', U('no'), 'alt', function () {
+        hirePassSure = false;
+        buildHiring();
+        focusOr('hire-go', el['hiring-h']);
+      })
+    ]));
+  } else {
+    foot.appendChild(mk('p', { id: 'hire-why', cls: 'muted', text: hireMsg }));
+  }
+  const done = round > 3;
+  const bar = mk('div', { cls: 'hire-bar' + (done ? ' done' : '') });
+  const crewB = mk('button', { id: 'hire-crew', cls: 'alt mockbtn hcrew', type: 'button' });
+  crewB.appendChild(pixCanvas(PIX.crew2.map, PIX.crew2.pal, 2));
+  uiPut(crewB, U('crewBtn').toUpperCase(), 2, '#ffffff', { bold: true, shadow: '#10215E' }, U('crewBtn'));
+  crewB.addEventListener('click', function () { openSheet('crew', 'hire-crew', 'hiring'); });
+  bar.appendChild(crewB);
+  if (!done) {   // review 1: no Hires left box once the picks are spent; Start week 1 takes its room
+    const left = mk('div', { id: 'hires-left' });
+    // A canvas a word, so a narrow bar wraps HIRES over LEFT instead of running past the screen.
+    const hl = mk('span', { cls: 'hl-l' });
+    const hw = U('hiresLeft').split(' ');
+    for (let i = 0; i < hw.length; i++) {
+      const c = uiCanvas(hw[i].toUpperCase(), 2, '#ffffff', { shadow: '#10215E' });
+      if (c) hl.appendChild(c);
+    }
+    if (hl.firstChild) hl.appendChild(mk('span', { cls: 'sr', text: U('hiresLeft') }));
+    else hl.textContent = U('hiresLeft');
+    left.appendChild(hl);
+    left.appendChild(uiPut(mk('span', { id: 'hires-left-n', cls: 'hl-n' }), String(hv ? hv.picksLeft | 0 : 0), 2, '#ffffff', null));
+    bar.appendChild(left);
+  }
+  const go = mk('button', { id: 'hire-go', cls: 'primary mockbtn hgo' + (done ? ' done' : ''), type: 'button' });
+  go.appendChild(pixCanvas(PIX.arrowBig.map, PIX.arrowBig.pal, 2));
+  // Review 1: the arrow says what it does, PASS while rounds are open (its label names the round),
+  // START WEEK 1 once they are done.
+  if (!done) {
+    go.setAttribute('aria-label', U('passRound', { r: round }));
+    const pc = uiCanvas(U('pass').toUpperCase(), 2, '#ffffff', { bold: true, shadow: '#10215E' });
+    if (pc) go.appendChild(pc); else go.appendChild(mk('span', { cls: 'utf', text: U('pass') }));
+  } else uiPut(go, U('startWeek').toUpperCase(), 2, '#ffffff', { bold: true, shadow: '#10215E' }, U('startWeek'));
+  go.addEventListener('click', onHireGo);
+  bar.appendChild(go);
+  foot.appendChild(bar);
+}
+
+// An application card (X13.2): taken cards are greyed and aria-disabled but still open read only.
+function appCard(e) {
+  const idx = e.idx;
+  const role = roleOf(e.role);
+  const aria = e.status === 'taken' ? U('appTaken', { name: e.name })
+    : U('appAria', { name: e.name, role: roleName(role), stars: starsText(e.stars), w: e.wage | 0 }) + (e.status === 'mine' ? ', ' + U('yours') : '');
+  return crewCardEl('app-' + idx, {
+    role: role, name: e.name, look: e.look, stars: e.stars, potential: typeof e.potential === 'number' ? e.potential : null,
+    mood: e.mood, wage: e.wage | 0, rookie: false, status: e.status === 'open' ? '' : e.status, aria: aria
+  }, function () { openCard({ mode: 'applicant', key: idx, from: 'hiring', opener: 'app-' + idx }); });
+}
+
+function turnPage(d) {
+  const id = d < 0 ? 'hire-page-prev' : 'hire-page-next';
+  hirePage += d;
+  buildHiring();
+  let f = document.getElementById(id);
+  if (!f || f.disabled) f = document.getElementById(d < 0 ? 'hire-page-next' : 'hire-page-prev');
+  if (f && !f.disabled) f.focus(); else el['hiring-h'].focus();
+}
+
+// The arrow: passes the round while picks are open, then starts week 1 (X13.2). Review 1: with
+// nobody on the crew a pass asks once first (ui.passEmpty, Yes and No above the bar).
+function onHireGo() {
+  const hv = hiringData();
+  if (hv && hv.round <= 3) {
+    if (crewList().length === 0 && !hirePassSure) {
+      hirePassSure = true;
+      buildHiring();
+      focusOr('hire-pass-yes', el['hiring-h']);
+      announce(U('passEmpty', { r: hv.round | 0 }));
+      return;
+    }
+    hirePassSure = false;
+    doPassRound();
+    return;
+  }
+  const r = typeof sim.finishHiring === 'function' ? sim.finishHiring() : null;
+  pump();
+  if (r && r.ok) {
+    hireMsg = '';
+    hireNews = null;
+    showLoop();
+    pump();
+    updateDom();
+    return;
+  }
+  hireMsg = r && r.message ? String(r.message) : '';
+  rebuildKeepFocus(buildHiring, 'hiring');
+  updateDom();
+}
+
+function doPassRound() {
+  const r = typeof sim.passRound === 'function' ? sim.passRound() : null;
+  hireMsg = r && r.ok === false && r.message ? String(r.message) : '';
+  afterAct();
+  if (currentPanel === 'hiring') focusOr('hire-go', el['hiring-h']);
+}
+
+// ---------------------------------------------------------------- the card sheet (X13.3)
+
+// ctx: { mode: 'applicant' | 'walkin' | 'crew' | 'level', key, from: 'hiring' | 'sheet' | 'till', opener }.
+function openCard(ctx) {
+  cardCtx = { mode: ctx.mode, key: ctx.key, from: ctx.from, opener: ctx.opener || null, back: ctx.back || null, msg: '', sure: false };
+  buildCard();
+  if (!cardCtx) return;
+  openPanel('card');
+}
+
+// Back (or Escape): level mode opened from a held card returns to it; else the panel under the sheet.
+function cardBack() {
+  const c = cardCtx;
+  if (!c) return;
+  if (c.mode === 'level' && c.back === 'crew') {
+    c.mode = 'crew'; c.back = null; c.msg = ''; c.sure = false;
+    buildCard();
+    focusOr('card-level', el['card-h']);
+    return;
+  }
+  cardCtx = null;
+  returnFromCard(c.from, c.opener);
+}
+
+function returnFromCard(from, opener) {
+  const l = loopOf(sim.state);
+  if (from === 'hiring' && l === 'hiring') {
+    buildHiring();
+    openPanel('hiring');
+  } else if (from === 'sheet' && sheetKind) {
+    buildSheet();
+    openPanel('sheet');
+  } else if (from === 'till' && (l === 'report' || sim.state.phase === 'evening')) {
+    openTill();
+  } else {
+    showLoop();
+    return;
+  }
+  focusOr(opener, el[currentPanel + '-h']);
+}
+
+// While #card is open, the panel under it is rebuilt after every action (deviation 43).
+function rebuildUnderCard() {
+  const c = cardCtx;
+  if (!c) return;
+  if (c.from === 'hiring' && loopOf(sim.state) === 'hiring') buildHiring();
+  else if (c.from === 'sheet' && sheetKind) buildSheet();
+}
+
+// The card's numbers by mode, or null when it is gone (a taken pool slot still reads).
+function cardData(c) {
+  if (!c) return null;
+  if (c.mode === 'applicant') {
+    const hv = hiringData();
+    const e = hv && Array.isArray(hv.pool) ? hv.pool[c.key] : null;
+    if (!e) return null;
+    return { name: e.name, role: roleOf(e.role), look: e.look, skills: e.skills || [1, 1], stars: e.stars, wage: e.wage | 0,
+      potential: typeof e.potential === 'number' ? e.potential : null, mood: e.mood | 0, rookie: false, contract: 2,
+      status: e.status, tried: e.tried === true, round: hv.round | 0, tryouts: hv.tryouts | 0 };
+  }
+  if (c.mode === 'walkin') {
+    const se = sim.state.season;
+    const w = se && Array.isArray(se.walkins) ? se.walkins[c.key] : null;
+    if (!w) return null;
+    const d = walkinData(w);
+    d.contract = 1; d.rookie = false;
+    return d;
+  }
+  const v = crewViewOf(c.key);
+  if (!v) return null;
+  const role = roleOf(v.role);
+  return { id: v.id, name: v.name, role: role, look: v.look, skills: v.skills || [1, 1], potential: typeof v.potential === 'number' ? v.potential : null,
+    stars: typeof v.stars === 'number' ? v.stars : cardStarsOf(v.skills), wage: v.wage | 0, mood: v.mood | 0, rookie: v.rookie === true,
+    contract: v.contract | 0, xp: v.xp | 0, banked: v.banked | 0, notice: v.notice === true, bring: v.bring === true,
+    raised: v.raised === true, worked: v.worked | 0 };
+}
+
+function buildCard() {
+  const c = cardCtx;
+  const d = cardData(c);
+  if (!d) {
+    cardCtx = null;
+    if (c) returnFromCard(c.from, c.opener);
+    return;
+  }
+  const role = d.role;
+  const h = el['card-h'];
+  clear(h);
+  uiPut(h, String(d.name).toUpperCase(), 3, '#ffffff', { bold: true, shadow: '#10215E' }, d.name);
+  const body = el['card-body'];
+  clear(body);
+  const back = mk('button', { id: 'card-back', cls: 'alt back', type: 'button', attrs: { 'aria-label': U('cardBack') } });
+  back.appendChild(pixCanvas(PIX.arrowL.map, PIX.arrowL.pal, 2));
+  back.addEventListener('click', cardBack);
+  body.appendChild(back);
+
+  // The portrait on the role band, with the role badge and the mood face as on the grid card.
+  const pw = mk('div', { id: 'card-portrait', cls: 'cp-win r-' + role, attrs: { 'aria-hidden': 'true' } });
+  const bust = portraitEl(d.look, role, 4);
+  if (bust) pw.appendChild(bust);
+  if (d.rookie) {
+    const nb = mk('span', { cls: 'cc-new' });
+    uiPut(nb, U('newBadge') || 'NEW', 2, '#FFD23F', null, U('newBadge') || 'NEW');
+    pw.appendChild(nb);
+  }
+  if (d.status === 'taken' || d.status === 'mine') pw.appendChild(mk('span', { cls: 'cc-band ' + d.status, text: U(d.status === 'taken' ? 'taken' : 'yours') }));
+  body.appendChild(pw);
+
+  const info = mk('div', { cls: 'card3 cp-info' });
+  const rl = mk('div', { id: 'card-role', cls: 'cp-role' });
+  rl.appendChild(mk('p', { cls: 'cp-rl' }, [roleBadge(role, ''), mk('span', { cls: 'cp-rn', text: roleName(role) })]));
+  rl.appendChild(mk('p', { cls: 'muted', text: roleJob(role) }));
+  info.appendChild(rl);
+
+  const mood = clampMood(d.mood);
+  const md = mk('div', { id: 'card-mood', cls: 'cp-mood', attrs: { role: 'img', 'aria-label': U('moodAria', { name: d.name, mood: moodWord(mood) }), 'data-mood': String(mood) } });
+  const mc = moodEl(mood, 2);
+  if (mc) md.appendChild(mc);
+  md.appendChild(mk('span', { text: moodWord(mood) }));
+  info.appendChild(md);
+
+  const st = mk('div', { id: 'card-stars', cls: 'cp-stars' });
+  st.appendChild(mk('span', { cls: 'sr', text: starsText(d.stars) }));
+  st.appendChild(starRow(d.stars, d.potential, 2, true));
+  st.appendChild(mk('p', { cls: 'muted', text: typeof d.potential === 'number' ? U('potential', { n: half(d.potential) }) : U('potentialHidden') }));
+  info.appendChild(st);
+
+  for (let i = 0; i < 2; i++) {
+    const v = Math.round((Number(d.skills[i]) || 1) * 2) / 2;
+    const sk = mk('div', { id: 'card-skill-' + i, cls: 'cp-skill' + (c.lifted === i ? ' lvl-new' : ''), attrs: { role: 'meter', 'aria-valuenow': String(v), 'aria-valuemin': '1', 'aria-valuemax': '5',
+      'aria-label': U('skillAria', { skill: skillName(role, i), n: half(v) }) } });
+    sk.appendChild(mk('span', { cls: 'sk-n', text: skillName(role, i) }));
+    sk.appendChild(starRow(v, null, 2, true));
+    sk.appendChild(mk('p', { cls: 'muted sk-h', text: skillHelp(role, i) }));
+    info.appendChild(sk);
+  }
+
+  const wr = mk('div', { cls: 'cp-wage' });
+  wr.appendChild(mk('p', { id: 'card-wage' }, [coinEl(2), mk('span', { text: U('perEvent', { w: d.wage }) })]));
+  wr.appendChild(mk('span', { id: 'card-contract', cls: 'cchip', text: d.contract === 2 ? U('contract2') : U('contract1') }));
+  info.appendChild(wr);
+
+  if (c.mode === 'crew' || c.mode === 'level') {
+    const need = C.LEVEL_XP || 200;
+    info.appendChild(segMeter('card-xp', d.xp, need, U('xp', { x: d.xp, max: need }), 'cp-xp', true));
+    if (d.banked > 0) info.appendChild(mk('p', { id: 'card-banked', cls: 'gold', text: U('banked', { n: d.banked }) }));
+  }
+  if (c.mode === 'crew' && d.notice) info.appendChild(mk('p', { id: 'card-notice', cls: 'bad', text: U('noticeLine', { name: d.name }) }));
+  body.appendChild(info);
+
+  const act = mk('div', { cls: 'cp-act' });
+  if (c.mode === 'applicant') cardApplicantActs(act, d);
+  else if (c.mode === 'walkin') cardWalkinActs(act, d);
+  else if (c.mode === 'crew') cardCrewActs(act, d);
+  else if (c.mode === 'level') cardLevelActs(act, d);
+  body.appendChild(act);
+}
+
+function cardApplicantActs(act, d) {
+  const c = cardCtx;
+  if (!d.tried && d.status === 'open') {
+    const tb = pixBtn('card-tryout', d.tryouts > 0 ? U('tryout') : U('tryoutNone'), 'alt', function () {
+      const r = sim.tryout(c.key);
+      c.msg = r && r.ok === false && r.message ? String(r.message) : '';
+      afterAct();
+      focusOr('card-hire', el['card-h']);
+    });
+    tb.disabled = d.tryouts <= 0;
+    act.appendChild(tb);
+  }
+  const hire = pixBtn('card-hire', U('hire'), 'primary', function () {
+    const k = c.key;
+    const r = sim.hireApplicant(k);
+    pump();
+    if (r && r.ok) {
+      cardCtx = null;
+      buildHiring();
+      openPanel('hiring');
+      focusOr('app-' + k, el['hiring-h']);
+      updateDom();
+      return;
+    }
+    c.msg = r && r.message ? String(r.message) : '';
+    afterAct();
+  });
+  hire.disabled = d.status !== 'open' || d.round > 3;
+  act.appendChild(hire);
+  act.appendChild(pixBtn('card-pass', U('pass'), 'alt quiet', cardBack));
+  act.appendChild(mk('p', { id: 'card-why', cls: 'muted', text: c.msg }));
+}
+
+function cardWalkinActs(act, d) {
+  const c = cardCtx;
+  const hire = pixBtn('card-hire', U('hireFee', { f: d.wage }), 'primary', function () {
+    const r = sim.hireWalkin(c.key);
+    pump();
+    if (r && r.ok) {
+      cardCtx = null;
+      crewMsg = '';
+      returnFromCard('sheet', 'crew-' + r.id);
+      updateDom();
+      return;
+    }
+    c.msg = r && r.message ? String(r.message) : '';
+    afterAct();
+  });
+  hire.disabled = d.hired || !weekOnly();
+  act.appendChild(hire);
+  act.appendChild(pixBtn('card-pass', U('pass'), 'alt quiet', cardBack));
+  act.appendChild(mk('p', { id: 'card-why', cls: 'muted', text: c.msg }));
+}
+
+function cardCrewActs(act, d) {
+  const c = cardCtx;
+  const id = d.id;
+  const done = function (r, keep) {
+    c.msg = r && r.message ? String(r.message) : '';
+    afterAct();
+    focusOr(keep, el['card-h']);
+  };
+  if (crewLoops()) act.appendChild(bringBtn('card-bring', d, function () { done(sim.setBring(id, !d.bring), 'card-bring'); }, 22));
+  if (weekOnly()) {
+    const tid = trainedId();
+    const tr = pixBtn('card-train', tid !== null ? U('trainDone') : U('train'), 'alt', function () {
+      const r = sim.train(id);
+      done(r && r.ok === false ? r : null, 'card-level');
+    });
+    tr.disabled = tid !== null;
+    act.appendChild(tr);
+  }
+  if (d.banked > 0) {
+    act.appendChild(pixBtn('card-level', U('levelUp'), 'primary', function () {
+      c.mode = 'level'; c.back = 'crew'; c.msg = ''; c.sure = false;
+      buildCard();
+      focusOr('card-pick-0', el['card-h']);
+    }));
+  }
+  if (weekOnly()) {
+    const raise = pixBtn('card-raise', d.raised ? U('raiseDone') : U('raise', { w: Math.round(d.wage * (1 + (C.RAISE_FRAC || 0.2))) }), 'alt', function () {
+      const r = sim.giveRaise(id);
+      done(r && r.ok === false ? r : null, 'card-letgo');
+    });
+    raise.disabled = d.raised;
+    act.appendChild(raise);
+  }
+  if (crewLoops()) {
+    act.appendChild(pixBtn('card-letgo', U('letGo'), 'alt', function () {
+      c.sure = true; c.msg = '';
+      buildCard();
+      focusOr('card-letgo-no', el['card-h']);
+    }));
+    if (c.sure) {
+      const sure = mk('div', { cls: 'cp-sure' });
+      sure.appendChild(mk('p', { id: 'card-letgo-sure', text: d.worked > 0 ? U('letGoSure', { name: d.name, f: d.wage }) : U('letGoFree', { name: d.name }) }));
+      sure.appendChild(pixBtn('card-letgo-yes', U('yes'), 'primary', function () {
+        const r = sim.letGo(id);
+        pump();
+        if (r && r.ok) {
+          const from = c.from;
+          cardCtx = null;
+          crewMsg = '';
+          returnFromCard(from, from === 'sheet' ? 'sheet-back' : null);
+          updateDom();
+          return;
+        }
+        c.sure = false;
+        done(r, 'card-letgo');
+      }));
+      sure.appendChild(pixBtn('card-letgo-no', U('no'), 'alt', function () {
+        c.sure = false;
+        buildCard();
+        focusOr('card-letgo', el['card-h']);
+      }));
+      act.appendChild(sure);
+    }
+  }
+  act.appendChild(mk('p', { id: 'card-why', cls: 'muted', text: c.msg }));
+}
+
+// Review 1: the curve each skill's level line names, and how its value reads.
+const LEVEL_KEY = { run: ['runSpeed', 'runTip'], fire: ['fireSense', 'firePace'], prep: ['prepKnife', 'prepPace'] };
+function curveWords(key, v) {
+  if (!Number.isFinite(v)) return '';
+  if (key === 'runTip') return String(Math.round((1 + v) * 100));
+  if (key === 'prepKnife') return String(Math.round(v * 100));
+  if (key === 'fireSense') return String(Math.round(v));
+  return (Math.round(v * 10) / 10).toFixed(1);
+}
+// "Walks 4.4 tiles a second instead of 4.0." for skill i a half star up, or '' at 5 stars.
+function levelWhat(role, i, skill) {
+  const key = (LEVEL_KEY[role] || [])[i];
+  const tpl = STRINGS.ui && STRINGS.ui.levelWhat ? STRINGS.ui.levelWhat[key] : null;
+  const sv = PitSim.skillValue;
+  const s = Number(skill) || 1;
+  if (!key || !tpl || typeof sv !== 'function' || s >= 5) return '';
+  return fill(tpl, { a: curveWords(key, sv(key, s)), b: curveWords(key, sv(key, Math.min(5, s + 0.5))) });
+}
+
+// Level mode (X13.3, deviation 45). Review 1: each pick says what it changes in the cook, and the
+// pick names the skill that improved (and the new overall stars when they rose) in #card-why.
+function cardLevelActs(act, d) {
+  const c = cardCtx;
+  act.appendChild(mk('h3', { id: 'card-level-h', cls: 'cp-lh', text: U('levelH') }));
+  const p = typeof d.potential === 'number' ? d.potential : 5;
+  const both = (Number(d.skills[0]) || 1) >= p && (Number(d.skills[1]) || 1) >= p;
+  for (let i = 0; i < 2; i++) {
+    const at = !both && (Number(d.skills[i]) || 1) >= p;
+    const b = pixBtn('card-pick-' + i, U('levelPick', { skill: skillName(d.role, i) }), 'primary', (function (k) {
+      return function () {
+        const before = cardStarsOf(d.skills);
+        const r = sim.levelUp(d.id, k);
+        pump();
+        const v = crewViewOf(d.id);
+        if (r && r.ok === false) c.msg = r.message ? String(r.message) : '';
+        else if (v) {
+          const lifted = r && r.ok && v.skills && Number(v.skills[k]) > Number(d.skills[k]);
+          c.msg = lifted ? SAY('levelUp', { name: v.name, skill: skillName(v.role, k).toLowerCase() }) : SAY('levelMood', { name: v.name });
+          const now = typeof v.stars === 'number' ? v.stars : cardStarsOf(v.skills);
+          if (lifted && now > before) c.msg += ' ' + U('levelStars', { n: half(now), w: v.wage | 0 });
+          c.lifted = lifted ? k : null;
+        }
+        if (v && (v.banked | 0) <= 0) { c.mode = 'crew'; }
+        afterAct();
+        focusOr(c.mode === 'level' ? 'card-pick-' + k : 'card-back', el['card-h']);
+      };
+    })(i), 16);
+    b.disabled = at;
+    if (at) b.title = U('atPotential');
+    act.appendChild(b);
+    if (at) act.appendChild(mk('p', { id: 'card-pick-' + i + '-note', cls: 'muted', text: U('atPotential') }));
+    else if (!both) {
+      const what = levelWhat(d.role, i, d.skills[i]);
+      if (what) act.appendChild(mk('p', { id: 'card-pick-' + i + '-what', cls: 'muted lwhat', text: what }));
+    }
+  }
+  if (both) act.appendChild(mk('p', { id: 'card-level-both', cls: 'muted', text: U('levelBoth') }));
+  act.appendChild(mk('p', { id: 'card-why', cls: 'muted', text: c.msg }));
 }
 
 function runSheetRows() {
@@ -3097,7 +4502,7 @@ function runSheetRows() {
 }
 
 function refreshSheet() {
-  if (sheetKind === 'menu') { rebuildKeepFocus(buildSheet, 'sheet'); return; }
+  if (sheetKind === 'menu' || sheetKind === 'crew') { rebuildKeepFocus(buildSheet, 'sheet'); return; }
   runSheetRows();
   const a = document.activeElement;
   if (!a || a === document.body || !el.sheet.contains(a)) {
@@ -3467,6 +4872,11 @@ function buildSeasonEnd() {
   box.appendChild(mk('p', { id: 'se-rep', text: U('seRep', { b: P.repTo, a: P.repFrom }) }));
   box.appendChild(mk('p', { id: 'se-meat', text: meat ? U('seMeat', { list: meat }) : U('seMeatNone') }));
   box.appendChild(mk('p', { id: 'se-charcoal', text: U('seCharcoal', { n: P.charcoal }) }));
+  // X5.9, X13.6: each card whose contract renews, at its new wage.
+  const pc = pv && Array.isArray(pv.crew) ? pv.crew : [];
+  for (let i = 0; i < pc.length; i++) {
+    if (pc[i] && pc[i].renews) box.appendChild(mk('p', { id: 'se-crew-' + pc[i].id, cls: 'se-crew', text: U('seCrew', { name: pc[i].name, w: pc[i].wageTo }) }));
+  }
   body.appendChild(box);
   const go = mk('button', { id: 'season-next', cls: 'primary big', type: 'button' });
   const label = U('seNext', { n: year + 1 });
@@ -3591,6 +5001,16 @@ function onKeyDown(e) {
     } else if (currentPanel === 'sheet' && key === 'Escape') {
       e.preventDefault();
       closeSheet();
+    } else if (currentPanel === 'card' && key === 'Escape') {
+      e.preventDefault();
+      cardBack();
+    } else if (currentPanel === 'hiring' && key === 'Escape' && hireHelpOpen) {
+      e.preventDefault();
+      hireHelpOpen = false;
+      const hp = document.getElementById('hire-help');
+      if (hp) hp.hidden = true;
+      const hi = document.getElementById('hire-info');
+      if (hi) { hi.setAttribute('aria-expanded', 'false'); hi.focus(); }
     } else if (currentPanel === 'creator' && crFromPause && key === 'Escape') {
       e.preventDefault();
       creatorBack();
@@ -4282,6 +5702,13 @@ function drawStation(st, s) {
         }
       }
     }
+    // X13.7: up to two pieces left for the PREP card, at the board's left and right thirds.
+    if (b && Array.isArray(b.waiting)) {
+      for (let j = 0; j < b.waiting.length && j < 2; j++) {
+        const w = b.waiting[j];
+        if (w && MEATS[w.meat]) D('hand_cooked_' + w.meat, st.draw.x + (j === 0 ? -1 : 9), st.draw.y + 4);
+      }
+    }
   } else if (st.type === 'cooler') {
     D('cooler', st.draw.x, st.draw.y, s.gear.cooler ? (sim.reach() === 'cooler' ? 2 : 1) : 0);
   } else if (st.type === 'table') {
@@ -4331,6 +5758,11 @@ function runsOf(tiles) {
 function staffBody(kind, m, s) {
   const wf = m.walking ? 1 + (Math.floor((m.anim || 0) * 8) % 2) : 0;
   if (kind === 'player' && s.player.busy) return ['player_slice', Math.floor((s.player.busy.t || 0) * 6) % 2, false];
+  // X13.7: the PREP card at the board while its slice runs (prep_slice, knife up and down).
+  if (kind === 'prep') {
+    const sl = s.stations.board ? s.stations.board.slicing : null;
+    if (sl && sl.who === 'prep' && m.task === 'slice' && art.has('prep_slice')) return ['prep_slice', reduced ? 0 : Math.floor((sl.t || 0) * 6) % 2, false];
+  }
   if (m.face === 'up') return [kind + '_up', wf, false];
   if (m.face === 'left' || m.face === 'right') return [kind + '_side', wf, m.face === 'right'];
   return [kind + '_down', wf, false];
@@ -4517,11 +5949,18 @@ function drawSorted(s) {
     }
   }
 
-  // People (layer 3): the player, the buddy, the tender, then customers by id.
-  const staff = [['player', s.player], ['buddy', s.buddy], ['tender', s.tender]];
+  // People (layer 3): the player, the RUN, FIRE and PREP cards' movers (buddy, tender, prep), then
+  // customers by id. X13.7: each crew mover wears its card's look (deviation 54).
+  const staff = [['player', s.player, ''], ['buddy', s.buddy, 'run'], ['tender', s.tender, 'fire'], ['prep', s.prep || null, 'prep']];
   for (let i = 0; i < staff.length; i++) {
-    const kind = staff[i][0], m = staff[i][1];
+    const m = staff[i][1], role = staff[i][2];
     if (!m) continue;
+    let kind = staff[i][0];
+    if (role) {
+      const card = moverCard(m);
+      if (card && card.look) ensureCrewLook(role, card.look);
+      if (kind === 'prep' && !art.has('prep_down')) kind = 'buddy';
+    }
     push(Math.round(m.py) + 15, 3, Math.round(m.px), function () { drawMover(kind, m, s); });
   }
   const custs = s.customers.slice().sort(byId);
@@ -4870,7 +6309,7 @@ function render() {
 
 function statusText(s) {
   if (saveOffUntil > nowMs) return 'Saving is off in this browser.';
-  if (noticeUntil > nowMs) return U('notice');
+  if (noticeUntil > nowMs) return U(noticeKey);
   if (blockedUntil > nowMs) return STRINGS.cantGetThere;
   if (s.phase === 'service' && s.clock < tGate(s) && !tutRunning()) {
     // Q-4: before the gate on a booking that mixes a two slot and a one slot meat, the cook order tip.

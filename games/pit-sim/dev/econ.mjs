@@ -71,6 +71,49 @@
 //        free stack (C.BOARD_STACKS 5, C.BOARD_STACK 14). No other change; the season bot reads the
 //        sized finale (sim.js R-3), the drum second in GOAL_ORDER and BAGS_PER_COOKER 6 through the
 //        sim's public methods.
+//
+// v3.1, crew cards (contract docs/superpowers/specs/2026-10-19-pit-sim-v3-1-contract.md, X16 and
+// X18.1 item 47). The v2 hires are gone (state.hires, hire()), so the bot drafts on Hiring Day and
+// runs a lineup through the X7 methods:
+//   - Hiring Day, every season: round 1 hires the open FIRE applicant with the most stars (ties to the
+//     lower wage, then the lower idx), round 2 the open RUN applicant the same way, round 3 passes.
+//     From season 2 it hires in a round only for a role the crew lacks (FIRE, then RUN) and passes
+//     otherwise. Over the slots it lets go the card with the fewest stars until it fits. No tryouts.
+//   - The lineup each week: FIRE from the week the cooler is owned, RUN from the week the drum is owned
+//     and week start cash is 200 or more; nobody on a Yard day; nobody when week start cash is under
+//     the W22.19 reserve plus the lineup's wages, and the reserve adds those wages.
+//   - Keeping the crew: notice gets the raise once, else letGo; a wanted role the crew lacks hires the
+//     best walk-in of that role when cash - fee holds the reserve plus two wages; the lowest id card
+//     trains each week; every banked level goes on skill 0, then skill 1.
+//   - Day runs pass Hiring Day; the v2.1 "buddy at word of mouth 45" step hires the best RUN walk-in
+//     and brings it.
+//   Checks (Normal, 50 seeds, 5 seasons): the [S 10.3] drum bands, never stuck and rough never under 0
+//   with wages in the pre-clamp sum, never idle, payroll in budget (every event's wages at most
+//   C.PAYROLL[0]) and payroll a real sink (sharp and steady: median wages a season over seasons 2 to 5
+//   between 8 and 40 percent of median pay and tips) are enforced; the Driveway against S1W9, S2W4,
+//   S3W9, the season end cash beside v3.0's, the eager policy, the season 1 crew counts and the
+//   Birthday's longest empty line (X16 check 7) are information.
+// Deviations from X16 (v3.1, Harness builder, who owns this file this round):
+//   4. "Pay plus tips" per season is deposit + pay rest + menu bonus + tips + seat tips + plate sales
+//      (a Yard day's pay is its plate sales).
+//   5. X16's lineup rules can ask for more than the budget once renewed wages grow, and the sim
+//      refuses Load up and go over it (X5.4). The bot brings FIRE first, then RUN while the lineup
+//      fits C.PAYROLL[0], and after any walk-in hire rests PREP, then RUN, then FIRE until it fits.
+//      The Sim builder's scratch run (sim.js header, The X16 run) used the same order.
+//   6. The X16 lineup reads "from the week the cooler (drum) is owned" as owned at that week's start,
+//      checked each week, and "week start cash is 200 or more" each week too.
+//   7. A refused Load up and go falls back to the Yard day with everyone resting (as v3.0's fallback,
+//      plus the rest, so the payroll can never be the reason a Yard day is refused).
+//   8. The eager policy (X18.1 item 47) is steady stars bringing FIRE and RUN to every booking from
+//      week 1, inside the budget and the cash rule; it prints stuck, under 0 and the median season 1
+//      cash, and its stuck seeds become a Joel playtest watch item, never a FAIL.
+//   9. Exit 2 also when ../sim.js lacks the v3.1 surface (passRound, finishHiring, hiringView, ...).
+// Review round 1 (contract X20; Sim and Harness builder):
+//  10. A new enforced check per policy, "the stretch pays the most": every week the hub opens, a card
+//      of tier 'stretch' pays more than C.STRETCH_EDGE times every tier 'safe' card shown with it (the
+//      invite, the Yard day and the finale aside). The bot's rules are unchanged. A scratch run at a
+//      backyard budget of 50 (the review's suggestion) failed check 5 for sharp (wages 353 a season,
+//      7.8 percent of 4525), so C.PAYROLL[0] stays 60 (contract X20.13).
 
 import fs from 'node:fs';
 import vm from 'node:vm';
@@ -105,7 +148,7 @@ const SEASONS = Math.max(1, Number(arg('--seasons', 5)) | 0);
 const LENGTH = arg('--length', 'normal');
 
 const DECOR_ORDER = ['chair1', 'lights', 'chair2', 'picnic2', 'flowers', 'birdbath'];
-const GEAR_ORDER = ['kettle2', 'cooler', 'buddy', 'bigtable', 'drum', 'tray', 'canopy'];   // the v2.1 day bot
+const GEAR_ORDER = ['kettle2', 'cooler', 'runCard', 'bigtable', 'drum', 'tray', 'canopy'];   // the v2.1 day bot; v3.1: the buddy row is a RUN walk-in
 const SPEND_GEAR = ['kettle2', 'drum', 'tray', 'cooler', 'canopy', 'bigtable'];
 const SPEND_ORDER = SPEND_GEAR.concat(DECOR_ORDER);   // W20
 const COOKERS = ['kettle1', 'kettle2', 'drum'];
@@ -118,6 +161,15 @@ function requireV3() {
   const missing = V3_METHODS.filter((m) => typeof probe[m] !== 'function');
   if (!P.DEFAULT_LOOK || !P.genOffers || missing.length) {
     console.error('econ: ../sim.js does not have the v3.0 surface yet (missing ' + (missing.join(', ') || 'DEFAULT_LOOK or genOffers') + '). Run this after the Sim builder lands.');
+    process.exit(2);
+  }
+}
+const V31_METHODS = ['hiringView', 'passRound', 'hireApplicant', 'finishHiring', 'hireWalkin', 'setBring', 'payroll', 'train', 'levelUp', 'giveRaise', 'letGo', 'crewView'];
+function requireV31() {
+  const probe = P.createSim(null, 1);
+  const missing = V31_METHODS.filter((m) => typeof probe[m] !== 'function');
+  if (missing.length || typeof P.cardStars !== 'function' || !Array.isArray(C.PAYROLL)) {
+    console.error('econ: ../sim.js does not have the v3.1 surface yet (missing ' + (missing.join(', ') || 'cardStars or C.PAYROLL') + '). Run this after the Sim builder lands.');
     process.exit(2);
   }
 }
@@ -230,13 +282,50 @@ function playEvent(sim) {
   return sim.state.phase !== 'service';
 }
 
-// A sim on the week 1 hub: the tutorial skipped, the creator finished with the default look.
-function newSeasonSim(seed, length) {
+// v3.1 (X16): Hiring Day. Season 1 drafts the best FIRE, then the best RUN, then passes; later seasons
+// hire only for a role the crew lacks. Over the slots, the fewest stars go first. Returns the events.
+function hiringDay(sim, firstSeason) {
+  const s = sim.state;
+  const evs = [];
+  const best = (role) => {
+    const v = sim.hiringView();
+    return v ? v.pool.filter((e) => e.status === 'open' && e.role === role).sort((a, b) => b.stars - a.stars || a.wage - b.wage || a.idx - b.idx)[0] || null : null;
+  };
+  const has = (role) => s.crew.some((c) => c.role === role);
+  for (let round = 1; round <= 3 && s.loop === 'hiring'; round++) {
+    let role = null;
+    if (firstSeason) role = round === 1 ? 'fire' : (round === 2 ? 'run' : null);
+    else role = !has('fire') ? 'fire' : (!has('run') ? 'run' : null);
+    const pick = role ? best(role) : null;
+    if (pick) sim.hireApplicant(pick.idx); else sim.passRound();
+    evs.push(...sim.drainEvents());
+  }
+  while (s.crew.length > sim.payroll().slots) {
+    const worst = s.crew.slice().sort((a, b) => P.cardStars(a.skills) - P.cardStars(b.skills) || a.id - b.id)[0];
+    if (!sim.letGo(worst.id).ok) break;
+  }
+  const f = sim.finishHiring();
+  evs.push(...sim.drainEvents());
+  if (!f.ok) throw new Error('econ: finishHiring refused: ' + (f.message || 'rounds left'));
+  return evs;
+}
+// Pass every round (day runs and the Birthday check).
+function passHiringDay(sim) {
+  for (let i = 0; i < 3 && sim.state.loop === 'hiring'; i++) sim.passRound();
+  if (sim.state.loop === 'hiring') sim.finishHiring();
+  sim.drainEvents();
+}
+
+// A sim on the week 1 hub: the tutorial skipped, the creator finished with the default look, Hiring
+// Day left to the caller (draft true) or passed (draft false).
+function newSeasonSim(seed, length, draft) {
   const sim = P.createSim(null, seed);
   sim.skipTutorial();
   sim.drainEvents();
   sim.setPlayer(P.DEFAULT_LOOK, DEFAULT_NAME, DEFAULT_PIT);
-  if (length && length !== 'normal') sim.setLength(length);
+  sim.drainEvents();
+  if (!draft) passHiringDay(sim);
+  if (length && length !== 'normal' && sim.state.loop === 'week') sim.setLength(length);   // V-10: setLength is week only
   sim.drainEvents();
   return sim;
 }
@@ -261,14 +350,20 @@ function morning(sim) {
     const sausage = units - chicken;
     const bags = Math.max(0, 6 * cookers - s.charcoal);
     const cost = sausage * ROW.sausage.price + chicken * ROW.chicken.price + bags * ROW.charcoal.price;
-    const wages = (s.hires.buddy ? C.BUDDY_WAGE : 0) + (s.hires.tender ? C.TENDER_WAGE : 0);
+    const wages = sim.payroll().now;   // v3.1: the lineup's wages (X5.4)
     return { sausage, chicken, bags, reserve: cost + wages + C.DAILY_COSTS };
   };
   for (const g of GEAR_ORDER) {
     const pl = plan();
-    if (g === 'buddy') {   // W22.12: no day gate on the buddy in loop week
-      if (s.hires.buddy) continue;
-      if (s.rep >= 45 && s.cash - pl.reserve - C.BUDDY_WAGE >= 0) { sim.hire('buddy'); bought.push('buddy'); continue; }
+    if (g === 'runCard') {   // v3.1 (X16): the buddy row of the v2.1 order is the best RUN walk-in, brought
+      if (s.crew.some((c) => c.role === 'run')) continue;
+      const w = s.season.walkins.map((x, i) => [x, i]).filter(([x]) => !x.hired && x.role === 'run').sort((a, b) => b[0].stars - a[0].stars || a[0].wage - b[0].wage || a[1] - b[1])[0];
+      if (w && s.rep >= 45 && s.crew.length < sim.payroll().slots && s.cash - pl.reserve - 2 * w[0].wage >= 0 && sim.hireWalkin(w[1]).ok) {
+        const c = s.crew.find((k) => k.role === 'run');
+        if (c && !c.bring) sim.setBring(c.id, true);
+        bought.push('runCard');
+        continue;
+      }
       break;
     }
     if (s.gear[g]) continue;
@@ -296,12 +391,12 @@ function morning(sim) {
 }
 
 function dayRun(seed, days) {
-  const sim = newSeasonSim(seed, LENGTH);
+  const sim = newSeasonSim(seed, LENGTH, false);
   const rows = [];
   const firsts = {};
   for (let d = 1; d <= days; d++) {
     const s = sim.state;
-    if (s.loop === 'seasonEnd') { sim.startSeason(); sim.drainEvents(); }
+    if (s.loop === 'seasonEnd') { sim.startSeason(); sim.drainEvents(); passHiringDay(sim); }   // v3.1: Hiring Day passed
     if (s.loop !== 'week') { firsts.stuck = firsts.stuck || ('loop ' + s.loop); break; }
     const start = s.cash;
     const finale = s.season.week === C.SEASON_WEEKS;
@@ -352,13 +447,15 @@ function dayMode() {
   for (const s of summary) console.log('  seed ' + s.seed + ': kettle2 ' + (s.kettle2 || 'never') + ', drum ' + (s.drum || 'never') + ', driveway ' + (s.driveway || 'not in 25') + ', broke ' + (s.broke || 'never') + (s.stuck ? ', stuck ' + s.stuck : ''));
 }
 
-// ---- mode 2: the season bot (W20) ------------------------------------------------------------
+// ---- mode 2: the season bot (W20, X16) -------------------------------------------------------
 
 const POLICIES = [
   { id: 'sharp', stars: 5, drumBand: 4, drivewayBand: 9 },     // S1W4 / S1W9
   { id: 'steady', stars: 3, drumBand: 8, drivewayBand: 13 },   // S1W8 / S2W4
-  { id: 'rough', stars: 2, drumBand: 18, drivewayBand: 27 }    // S2W9 / S3W9
+  { id: 'rough', stars: 2, drumBand: 18, drivewayBand: 27 },   // S2W9 / S3W9
+  { id: 'eager', stars: 3, drumBand: Infinity, drivewayBand: Infinity, eager: true, info: true }   // X18.1 item 47, information only
 ];
+const V30_SEASON_CASH = { sharp: [827, 2361, 3895, 5429, 6963] };   // [S 10.7], the v3.0 result X16 check 5 prints beside
 const W = () => C.SEASON_WEEKS;
 const absWeek = (year, week) => (year - 1) * W() + week;
 const fmtWeek = (abs) => (Number.isFinite(abs) ? 'S' + (Math.floor((abs - 1) / W()) + 1) + 'W' + (((abs - 1) % W()) + 1) : 'never');
@@ -369,7 +466,8 @@ function median(list) {
 }
 const medianNum = (list) => { const v = list.filter((x) => Number.isFinite(x)).sort((a, b) => a - b); return v.length ? v[Math.floor(v.length / 2)] : NaN; };
 
-// The Birthday's prefill meat cost on an empty cooler at this length (W22.21: 40 at Normal).
+// The Birthday's prefill meat cost on an empty cooler at this length (W22.21), now on the v3.1
+// Birthday of seed 1, week 1 (its size is one SAFE_SIZES draw, X3.4).
 function birthdayMeatCost(length) {
   const gear = Object.fromEntries(Object.keys(P.createSim(null, 1).state.gear).map((g) => [g, false]));
   const offers = P.genOffers({ seed: 1, year: 1, week: 1, rep: C.START_REP, cash: C.START_CASH, gear, length });
@@ -384,7 +482,8 @@ function birthdayMeatCost(length) {
 }
 const needsMet = (s, row) => !row.needs || ((!row.needs.gear || s.gear[row.needs.gear] === true) && (!row.needs.decor || s.decor[row.needs.decor] === true));
 const owned = (s, id) => (ROW[id].kind === 'decor' ? s.decor[id] === true : s.gear[id] === true);
-const wagesOf = (s) => (s.hires.buddy ? C.BUDDY_WAGE : 0) + (s.hires.tender ? C.TENDER_WAGE : 0);
+// The best card of a role on the crew: most stars, then the lowest id.
+const cardOfRole = (s, role) => s.crew.filter((c) => c.role === role).sort((a, b) => P.cardStars(b.skills) - P.cardStars(a.skills) || a.id - b.id)[0] || null;
 
 function choosePick(sim, policy) {
   const s = sim.state;
@@ -403,7 +502,8 @@ function choosePick(sim, policy) {
   return safe[0] || yard;
 }
 
-// One spend pass in the W20 order; returns what it bought.
+// One spend pass in the W20 order; returns what it bought. The v3.0 hire step is gone: crew cards
+// come from Hiring Day and walk-ins (X16).
 function spendPass(sim, reserve) {
   const s = sim.state;
   const bought = [];
@@ -417,33 +517,81 @@ function spendPass(sim, reserve) {
     if (s.cash - row.price >= reserve && sim.buy(id, 1).ok) { bought.push(id); continue; }
     if (SPEND_GEAR.includes(id)) break;   // P-7: the gear stage buys the next item only; decor keeps continue (W22.19)
   }
-  if (!s.hires.buddy && s.gear.drum && s.cash >= 200 && sim.hire('buddy').ok) bought.push('buddy');
-  if (!s.hires.tender && s.gear.cooler && sim.hire('tender').ok) bought.push('tender');
   return bought;
 }
 
 function seasonRun(policy, seed, seasons, length) {
-  const sim = newSeasonSim(seed, length);
+  const sim = newSeasonSim(seed, length, true);
   const s = sim.state;
   const bdayCost = birthdayMeatCost(length);
-  const res = { seed, drum: null, driveway: null, seasonCash: [], stuck: null, underZero: [], idle: [], weeks: [], fallbacks: 0 };
+  const res = { seed, drum: null, driveway: null, seasonCash: [], stuck: null, underZero: [], idle: [], weeks: [], fallbacks: 0,
+    maxWages: 0, overBudget: [], wagesBySeason: [], payBySeason: [], left1: 0, sendoffs1: 0, walkins1: 0, crewAt: [], stretchLow: [] };
+  const count = (evs) => {
+    if (s.season.year !== 1) return;
+    for (const e of evs) {
+      if (e.type === 'crew_left') res.left1 += 1;
+      if (e.type === 'crew_let_go' && e.sendoff > 0) res.sendoffs1 += 1;
+      if (e.type === 'crew_hired' && e.from === 'walkin') res.walkins1 += 1;
+    }
+  };
+  count(hiringDay(sim, true));
+  if (length && length !== 'normal') { sim.setLength(length); sim.drainEvents(); }   // setLength is week only (sim.js V-10)
   let lowStreak = 0;
+  let wages = 0, pay = 0;
   const total = seasons * W();
   for (let n = 1; n <= total + 1; n++) {
     if (s.loop !== 'week' || s.phase !== 'morning') { res.stuck = res.stuck || ('loop ' + s.loop + ' at ' + fmtWeek(n)); break; }
     const abs = absWeek(s.season.year, s.season.week);
     const finalPass = n === total + 1;
+    const weekStart = s.cash;
     // Week start: never stuck and the driveway milestone (cash at week start, deposit excluded).
     if (!finalPass) {
       lowStreak = s.cash < bdayCost ? lowStreak + 1 : 0;
       if (lowStreak >= 2 && !res.stuck) res.stuck = 'cash under ' + bdayCost + ' two weeks running at ' + fmtWeek(abs);
       if (res.driveway === null && s.gear.drum && s.rep >= C.DRIVEWAY_REP && s.cash >= C.DRIVEWAY_PRICE) res.driveway = abs;
     }
-    // 1. pick and read the prefilled cart; reserve.
+    // X16 keeping the crew: a card with notice gets the raise once, else it is let go.
+    for (const c of s.crew.slice()) {
+      if (!c.notice) continue;
+      if (!c.raised) sim.giveRaise(c.id);
+      else sim.letGo(c.id);
+    }
+    count(sim.drainEvents());
+    // Review 1 (deviation 10): a STRETCH card pays more than every SAFE BET card shown beside it (the
+    // invite and the Yard day aside), every week the hub opens, before any gear is bought.
+    if (!finalPass) {
+      const shown = s.season.offers.filter((o) => o.type !== 'yard' && o.type !== 'finale' && !o.invite);
+      const safeTop = Math.max(0, ...shown.filter((o) => o.tier === 'safe').map((o) => o.pay));
+      for (const o of shown) if (o.tier === 'stretch' && !(o.pay > safeTop * C.STRETCH_EDGE)) res.stretchLow.push(fmtWeek(abs) + ' ' + o.id + ' ' + o.pay + ' against ' + safeTop);
+    }
+    // 1. pick and read the prefilled cart.
     const pick = choosePick(sim, policy);
     sim.bookOffer(pick.id);
-    const reserve = Math.max(0, sim.cartTotal() - (pick.deposit | 0)) + wagesOf(s) + C.DAILY_COSTS;
-    // 2. empty every cart line; 3. spend; hires.
+    // X16 the lineup: FIRE from the week the cooler is owned, RUN from the week the drum is owned
+    // with 200 at week start; nobody on a Yard day; eager brings both to every booking. Deviation 5:
+    // FIRE first, then RUN while the payroll budget holds.
+    const isYard = pick.type === 'yard';
+    const wantRoles = [];
+    if (!isYard) {
+      if (policy.eager) wantRoles.push('fire', 'run');
+      else {
+        if (s.gear.cooler) wantRoles.push('fire');
+        if (s.gear.drum && weekStart >= 200) wantRoles.push('run');
+      }
+    }
+    const budget = sim.payroll().budget;
+    let lineWages = 0;
+    const fitRoles = [];
+    for (const role of wantRoles) {
+      const c = cardOfRole(s, role);
+      const w = c ? c.wage : 0;
+      if (lineWages + w <= budget) { fitRoles.push(role); lineWages += w; }
+    }
+    // The reserve of W22.19 adds the lineup's wages; nobody is brought when week start cash is under it.
+    const baseReserve = Math.max(0, sim.cartTotal() - (pick.deposit | 0)) + C.DAILY_COSTS;
+    const bringRoles = weekStart >= baseReserve + lineWages ? fitRoles : [];
+    const reserve = baseReserve + (bringRoles.length ? lineWages : 0);
+    // 2. empty every cart line; 3. spend.
     for (const m of MEAT_IDS) sim.buy(m, -999);
     sim.buy('charcoal', -999);
     const bought = spendPass(sim, reserve);
@@ -454,21 +602,44 @@ function seasonRun(policy, seed, seasons, length) {
       if (next && s.cash - reserve > 2 * ROW[next].price) res.idle.push(fmtWeek(abs) + ' holds ' + (s.cash - reserve) + ' over ' + next + ' at ' + ROW[next].price);
     }
     if (finalPass) break;
-    // 4. book again to re-prefill; 5. load up (a refused pick falls back to the Yard day).
+    // 4. book again to re-prefill (P-8: a gear buy can turn a stretch offer safe).
     let booked = s.season.offers.find((o) => o.id === pick.id) || s.season.offers[0];
-    // P-8: a gear buy can turn a stretch offer safe (W22.11), so pick again and keep it when it loads up.
     const again = choosePick(sim, policy);
     if (again && again.id !== booked.id) {
       sim.bookOffer(again.id);
       if (sim.canLoadUp().ok) booked = again;
     }
     sim.bookOffer(booked.id);
+    // X16: a walk-in for a wanted role the crew lacks, when cash - fee holds the reserve plus two wages.
+    for (const role of bringRoles) {
+      if (cardOfRole(s, role) || s.crew.length >= sim.payroll().slots) continue;
+      const w = s.season.walkins.map((x, i) => [x, i]).filter(([x]) => !x.hired && x.role === role).sort((a, b) => b[0].stars - a[0].stars || a[0].wage - b[0].wage || a[1] - b[1])[0];
+      if (w && s.cash - w[0].wage >= reserve + 2 * w[0].wage) sim.hireWalkin(w[1]);
+    }
+    // Bring the wanted roles, rest the rest, then trim to the budget (PREP, RUN, then FIRE).
+    const bringIds = new Set(bringRoles.map((role) => cardOfRole(s, role)).filter(Boolean).map((c) => c.id));
+    for (const c of s.crew) if (c.bring !== bringIds.has(c.id)) sim.setBring(c.id, bringIds.has(c.id));
+    for (const role of ['prep', 'run', 'fire']) {
+      if (sim.payroll().now <= budget) break;
+      for (const c of s.crew) if (c.bring && c.role === role) sim.setBring(c.id, false);
+    }
+    // X16: train the lowest id card each week; spend every banked level on skill 0, then skill 1.
+    if (s.crew.length && s.season.trained === null) sim.train(s.crew.slice().sort((a, b) => a.id - b.id)[0].id);
+    for (const c of s.crew) {
+      let guard = 0;
+      while (c.banked > 0 && guard++ < 20) if (!sim.levelUp(c.id, 0).ok && !sim.levelUp(c.id, 1).ok) break;
+    }
+    count(sim.drainEvents());
+    // 5. load up (a refused pick falls back to the Yard day with nobody brought).
     let lu = sim.loadUp();
     if (!lu.ok) {
       const yard = s.season.offers.find((o) => o.type === 'yard');
-      if (yard && yard.id !== booked.id) { sim.bookOffer(yard.id); lu = sim.loadUp(); booked = yard; res.fallbacks += 1; }
+      if (yard && yard.id !== booked.id) {
+        for (const c of s.crew) if (c.bring) sim.setBring(c.id, false);
+        sim.bookOffer(yard.id); lu = sim.loadUp(); booked = yard; res.fallbacks += 1;
+      }
     }
-    sim.drainEvents();
+    count(sim.drainEvents());
     if (!lu.ok) { res.stuck = res.stuck || ('loadUp refused at ' + fmtWeek(abs) + ': ' + (sim.canLoadUp().reason || lu.message)); break; }
     const cashAfterLoad = s.cash;
     // 6. the cook.
@@ -478,33 +649,78 @@ function seasonRun(policy, seed, seasons, length) {
     } else {
       playEvent(sim);
     }
-    sim.drainEvents();
+    count(sim.drainEvents());
     const t = s.till;
-    // W22.21: cash before the CASH_FLOOR clamp.
+    // W22.21: cash before the CASH_FLOOR clamp, wages in the sum.
     const preClamp = cashAfterLoad + (t.payRest | 0) + (t.menuBonus | 0) + (t.tips | 0) + (t.seatTips | 0) + (t.revenue | 0) - (t.wages | 0) - C.DAILY_COSTS;
     if (preClamp < 0) res.underZero.push(fmtWeek(abs) + ' ' + preClamp);
-    res.weeks.push({ abs, type: booked.type, stars: t.stars | 0, cash: s.cash, rep: s.rep, bought: bought.join(' ') });
+    // X16 check 4: the event's lineup wages inside the budget.
+    res.maxWages = Math.max(res.maxWages, t.wages | 0);
+    if ((t.wages | 0) > C.PAYROLL[0]) res.overBudget.push(fmtWeek(abs) + ' ' + t.wages);
+    wages += t.wages | 0;
+    pay += (t.deposit | 0) + (t.payRest | 0) + (t.menuBonus | 0) + (t.tips | 0) + (t.seatTips | 0) + (t.revenue | 0);
+    res.weeks.push({ abs, type: booked.type, stars: t.stars | 0, cash: s.cash, rep: s.rep, wages: t.wages | 0, crew: s.crew.length, bought: bought.join(' ') });
     // 7. next.
     sim.finishReport();
-    sim.drainEvents();
+    count(sim.drainEvents());
     if (s.loop === 'seasonEnd') {
       res.seasonCash.push(s.cash);
+      res.wagesBySeason.push(wages);
+      res.payBySeason.push(pay);
+      res.crewAt.push(s.crew.map((c) => c.role + ' ' + P.cardStars(c.skills) + ' at ' + c.wage).join(', '));
+      wages = 0; pay = 0;
       sim.startSeason();
-      sim.drainEvents();
+      count(sim.drainEvents());
+      if (s.loop === 'hiring') count(hiringDay(sim, false));
     }
   }
   return res;
 }
 
+// X16 check 7 (information): the Birthday of week 1 played tick by tick by the competent bot with no
+// crew: fed, stars, and the longest stretch with no booked guest arriving or waiting while food is in
+// progress and guests are still to come (the X18.1 item 38 predicate, until endAt - LAST_CALL_GUARD).
+function foodInProgress(s) {
+  for (const id of COOKERS) if (P.tileOwned(MAP.station(id), s.gear) && s.stations[id].pieces.some((p) => p.state !== 'burnt')) return true;
+  const b = s.stations.board;
+  if (b.stacks.some((x) => x.times.length > 0) || (Array.isArray(b.waiting) && b.waiting.length > 0) || b.slicing !== null) return true;
+  return s.stations.table.spots.some((sp) => sp && sp.times.length > 0);
+}
+function birthdayRun(seed, length) {
+  const sim = newSeasonSim(seed, length, false);
+  const s = sim.state;
+  const b = s.season.offers.find((o) => o.type === 'birthday');
+  if (!b || !sim.bookOffer(b.id).ok) return { seed, error: 'no Birthday on offer' };
+  const lu = sim.loadUp();
+  sim.drainEvents();
+  if (!lu.ok) return { seed, error: 'loadUp ' + (sim.canLoadUp().reason || lu.message) };
+  let gap = 0, maxGap = 0, guard = 0;
+  const dt = C.TICK_SECONDS;
+  while (s.phase === 'service' && guard++ < 100000) {
+    botTick(sim);
+    sim.tick();
+    sim.drainEvents();
+    const t = s.today;
+    if (s.phase === 'service' && t && t.pending > 0 && s.clock >= t.gateAt && s.clock < t.endAt - C.LAST_CALL_GUARD - 1e-9) {
+      const empty = !s.customers.some((c) => c.booked === true && (c.mode === 'arriving' || c.mode === 'waiting'));
+      if (empty && foodInProgress(s)) { gap += dt; if (gap > maxGap) maxGap = gap; } else gap = 0;
+    } else gap = 0;
+  }
+  const t = s.till;
+  return { seed, guests: b.headcount, menu: b.menu.join('+'), fed: t.fed | 0, booked: t.booked | 0, stars: t.stars | 0, maxGap: Math.round(maxGap * 100) / 100 };
+}
+
 function seasonMode() {
   requireV3();
-  const header = 'econ season bot: ' + SEEDS.length + ' seeds (' + SEEDS[0] + ' to ' + SEEDS[SEEDS.length - 1] + '), ' + SEASONS + ' seasons, length ' + LENGTH
-    + '; Birthday meat on an empty cooler ' + birthdayMeatCost(LENGTH) + '; driveway ' + C.DRIVEWAY_PRICE + ' at word of mouth ' + C.DRIVEWAY_REP;
+  requireV31();
+  const header = 'econ season bot (v3.1, X16): ' + SEEDS.length + ' seeds (' + SEEDS[0] + ' to ' + SEEDS[SEEDS.length - 1] + '), ' + SEASONS + ' seasons, length ' + LENGTH
+    + '; Birthday meat on an empty cooler ' + birthdayMeatCost(LENGTH) + '; driveway ' + C.DRIVEWAY_PRICE + ' at word of mouth ' + C.DRIVEWAY_REP + '; payroll budget ' + C.PAYROLL[0];
   console.log(header);
   console.log('policy stars drum band result drivewayAffordable band(info) stuck idle');
   const checks = [];
   const outside = [];
   const extra = [];
+  const summary = {};
   for (const pol of POLICIES) {
     const runs = SEEDS.map((seed) => seasonRun(pol, seed, SEASONS, LENGTH));
     const drumMed = median(runs.map((r) => r.drum));
@@ -512,18 +728,40 @@ function seasonMode() {
     const stuck = runs.filter((r) => r.stuck);
     const idle = runs.filter((r) => r.idle.length);
     const under = runs.filter((r) => r.underZero.length);
+    const over = runs.filter((r) => r.overBudget.length);
     const drumOk = drumMed <= pol.drumBand;
-    console.log([pol.id.padEnd(6), String(pol.stars).padEnd(5), fmtWeek(drumMed).padEnd(5), fmtWeek(pol.drumBand).padEnd(5), (drumOk ? 'PASS' : 'FAIL').padEnd(6),
-      fmtWeek(dwMed).padEnd(18), (fmtWeek(pol.drivewayBand) + (dwMed <= pol.drivewayBand ? '' : ' late')).padEnd(12),
-      (stuck.length + '/' + runs.length).padEnd(5), idle.length + '/' + runs.length].join(' '));
-    checks.push({ ok: drumOk, line: 'drum ' + pol.id + ': median ' + fmtWeek(drumMed) + ' against ' + fmtWeek(pol.drumBand) });
-    checks.push({ ok: stuck.length === 0, line: 'never stuck ' + pol.id + ': ' + stuck.length + ' seed(s)' + (stuck.length ? ', first seed ' + stuck[0].seed + ' ' + stuck[0].stuck : '') });
-    checks.push({ ok: idle.length === 0, line: 'never idle ' + pol.id + ': ' + idle.length + ' seed(s)' + (idle.length ? ', first seed ' + idle[0].seed + ' ' + idle[0].idle[0] : '') });
-    if (pol.id === 'rough') checks.push({ ok: under.length === 0, line: 'rough never under 0: ' + under.length + ' seed(s)' + (under.length ? ', first seed ' + under[0].seed + ' ' + under[0].underZero[0] : '') });
-    for (const r of runs) {
-      if (!((r.drum === null ? Infinity : r.drum) <= pol.drumBand)) outside.push(pol.id + ' seed ' + r.seed + ': drum ' + fmtWeek(r.drum === null ? Infinity : r.drum) + ' after ' + fmtWeek(pol.drumBand));
-      if (!((r.driveway === null ? Infinity : r.driveway) <= pol.drivewayBand)) outside.push(pol.id + ' seed ' + r.seed + ': drivewayAffordable ' + fmtWeek(r.driveway === null ? Infinity : r.driveway) + ' after ' + fmtWeek(pol.drivewayBand) + ' (info)');
-      if (r.fallbacks) outside.push(pol.id + ' seed ' + r.seed + ': ' + r.fallbacks + ' week(s) fell back to the Yard day after a refused loadUp');
+    const se = [];
+    for (let k = 0; k < SEASONS; k++) se.push(medianNum(runs.map((r) => r.seasonCash[k])));
+    // X16 check 5: wages paid per season over seasons 2 to 5 against pay plus tips per season.
+    const perSeason = (r, key) => { const v = r[key].slice(1); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : NaN; };
+    const wagesMed = medianNum(runs.map((r) => perSeason(r, 'wagesBySeason')));
+    const payMed = medianNum(runs.map((r) => perSeason(r, 'payBySeason')));
+    const share = wagesMed / payMed;
+    summary[pol.id] = { drumMed, dwMed, se, share, wagesMed, payMed };
+    if (pol.info) {
+      // X18.1 item 47: the eager policy is information only.
+      const s1 = medianNum(runs.map((r) => r.seasonCash[0]));
+      extra.push(pol.id + ' (information): stuck ' + stuck.length + '/' + runs.length + ', under 0 ' + under.length + '/' + runs.length + ', median season 1 cash ' + s1
+        + ', drum ' + fmtWeek(drumMed) + ', cash at each season end ' + se.join(' ') + (stuck.length ? '; a Joel playtest watch item (eager stuck, first seed ' + stuck[0].seed + ' ' + stuck[0].stuck + ')' : ''));
+    } else {
+      console.log([pol.id.padEnd(6), String(pol.stars).padEnd(5), fmtWeek(drumMed).padEnd(5), fmtWeek(pol.drumBand).padEnd(5), (drumOk ? 'PASS' : 'FAIL').padEnd(6),
+        fmtWeek(dwMed).padEnd(18), (fmtWeek(pol.drivewayBand) + (dwMed <= pol.drivewayBand ? '' : ' late')).padEnd(12),
+        (stuck.length + '/' + runs.length).padEnd(5), idle.length + '/' + runs.length].join(' '));
+      checks.push({ ok: drumOk, line: 'drum ' + pol.id + ': median ' + fmtWeek(drumMed) + ' against ' + fmtWeek(pol.drumBand) });
+      checks.push({ ok: stuck.length === 0, line: 'never stuck ' + pol.id + ': ' + stuck.length + ' seed(s)' + (stuck.length ? ', first seed ' + stuck[0].seed + ' ' + stuck[0].stuck : '') });
+      checks.push({ ok: idle.length === 0, line: 'never idle ' + pol.id + ': ' + idle.length + ' seed(s)' + (idle.length ? ', first seed ' + idle[0].seed + ' ' + idle[0].idle[0] : '') });
+      if (pol.id === 'rough') checks.push({ ok: under.length === 0, line: 'rough never under 0: ' + under.length + ' seed(s)' + (under.length ? ', first seed ' + under[0].seed + ' ' + under[0].underZero[0] : '') });
+      checks.push({ ok: over.length === 0, line: 'payroll in budget ' + pol.id + ': ' + over.length + ' seed(s) over ' + C.PAYROLL[0] + ', the largest event wages ' + Math.max(...runs.map((r) => r.maxWages)) + (over.length ? ', first seed ' + over[0].seed + ' ' + over[0].overBudget[0] : '') });
+      const low = runs.filter((r) => r.stretchLow.length);
+      checks.push({ ok: low.length === 0, line: 'the stretch pays the most ' + pol.id + ': ' + low.length + ' seed(s) with a STRETCH card at or under a SAFE BET' + (low.length ? ', first seed ' + low[0].seed + ' ' + low[0].stretchLow[0] : '') });
+      if (pol.id === 'sharp' || pol.id === 'steady') {
+        checks.push({ ok: share >= 0.08 && share <= 0.40, line: 'payroll is a real sink ' + pol.id + ': median wages ' + Math.round(wagesMed) + ' a season of median pay and tips ' + Math.round(payMed) + ' (seasons 2 to ' + SEASONS + '), ' + (100 * share).toFixed(1) + ' percent, wanted 8 to 40' });
+      }
+      for (const r of runs) {
+        if (!((r.drum === null ? Infinity : r.drum) <= pol.drumBand)) outside.push(pol.id + ' seed ' + r.seed + ': drum ' + fmtWeek(r.drum === null ? Infinity : r.drum) + ' after ' + fmtWeek(pol.drumBand));
+        if (!((r.driveway === null ? Infinity : r.driveway) <= pol.drivewayBand)) outside.push(pol.id + ' seed ' + r.seed + ': drivewayAffordable ' + fmtWeek(r.driveway === null ? Infinity : r.driveway) + ' after ' + fmtWeek(pol.drivewayBand) + ' (info)');
+        if (r.fallbacks) outside.push(pol.id + ' seed ' + r.seed + ': ' + r.fallbacks + ' week(s) fell back to the Yard day after a refused loadUp');
+      }
     }
     // Per week (season 1) and per season, medians over seeds (information).
     const wk = [];
@@ -532,22 +770,31 @@ function seasonMode() {
       const rep = medianNum(runs.map((r) => (r.weeks.find((x) => x.abs === w) || {}).rep));
       wk.push('W' + w + ' ' + cash + '/' + rep);
     }
-    const se = [];
-    for (let k = 0; k < SEASONS; k++) se.push('S' + (k + 1) + ' ' + medianNum(runs.map((r) => r.seasonCash[k])));
     extra.push(pol.id + ' season 1 cash/word of mouth after each week: ' + wk.join(', '));
-    extra.push(pol.id + ' cash at each season end: ' + se.join(', '));
+    extra.push(pol.id + ' cash at each season end: ' + se.map((c, k) => 'S' + (k + 1) + ' ' + c).join(', ') + (V30_SEASON_CASH[pol.id] ? ' (v3.0: ' + V30_SEASON_CASH[pol.id].join(', ') + ')' : ''));
+    extra.push(pol.id + ' payroll: median wages ' + Math.round(wagesMed) + ' a season, ' + (100 * share).toFixed(1) + ' percent of pay and tips ' + Math.round(payMed) + ' (seasons 2 to ' + SEASONS + ')');
+    extra.push(pol.id + ' season 1 crew: ' + runs.reduce((a, r) => a + r.left1, 0) + ' moved on, ' + runs.reduce((a, r) => a + r.sendoffs1, 0) + ' send-offs, ' + runs.reduce((a, r) => a + r.walkins1, 0) + ' walk-in hires over ' + runs.length + ' seeds'
+      + '; crew at the season 1 end (seed ' + runs[0].seed + '): ' + (runs[0].crewAt[0] || 'none'));
     if (VERBOSE) {
       for (const r of runs) {
         console.log('  ' + pol.id + ' seed ' + r.seed + ': drum ' + fmtWeek(r.drum === null ? Infinity : r.drum) + ', drivewayAffordable ' + fmtWeek(r.driveway === null ? Infinity : r.driveway)
-          + ', season end cash ' + (r.seasonCash.join(' ') || 'none') + ', stuck ' + (r.stuck || 'no') + ', idle ' + (r.idle.join('; ') || 'no') + (r.underZero.length ? ', under 0 ' + r.underZero.join('; ') : ''));
+          + ', season end cash ' + (r.seasonCash.join(' ') || 'none') + ', stuck ' + (r.stuck || 'no') + ', idle ' + (r.idle.join('; ') || 'no') + (r.underZero.length ? ', under 0 ' + r.underZero.join('; ') : '')
+          + ', wages by season ' + r.wagesBySeason.join(' '));
       }
     }
     if (TRACE && runs[0]) {
       console.log('  trace ' + pol.id + ' seed ' + runs[0].seed + ':');
-      for (const x of runs[0].weeks) console.log('    ' + fmtWeek(x.abs) + ' ' + x.type + ' ' + x.stars + ' stars, cash ' + x.cash + ', word of mouth ' + x.rep + (x.bought ? ', bought ' + x.bought : ''));
+      for (const x of runs[0].weeks) console.log('    ' + fmtWeek(x.abs) + ' ' + x.type + ' ' + x.stars + ' stars, cash ' + x.cash + ', word of mouth ' + x.rep + ', wages ' + x.wages + ', crew ' + x.crew + (x.bought ? ', bought ' + x.bought : ''));
     }
   }
   for (const line of extra) console.log(line);
+  // X16 check 7, information.
+  const bdays = [];
+  for (let seed = 1; seed <= 8; seed++) bdays.push(birthdayRun(seed, LENGTH));
+  const okB = bdays.filter((b) => !b.error);
+  console.log('Birthday tick by tick, competent bot, no crew, seeds 1 to 8 (information): ' + bdays.map((b) => b.error ? 'seed ' + b.seed + ' ' + b.error
+    : 'seed ' + b.seed + ' ' + b.fed + '/' + b.booked + ' fed, ' + b.stars + ' stars, empty line ' + b.maxGap + ' s').join('; '));
+  if (okB.length) console.log('  longest empty line while food cooked: ' + Math.max(...okB.map((b) => b.maxGap)) + ' s (expected at most ' + (C.ARRIVAL_PULL_S + C.TICK_SECONDS) + ')');
   if (outside.length) {
     console.log('outside the bands (' + outside.length + '):');
     for (const line of outside.slice(0, 40)) console.log('  ' + line);
@@ -560,4 +807,4 @@ function seasonMode() {
 }
 
 if (SEASON_MODE) seasonMode();
-else { requireV3(); dayMode(); }
+else { requireV3(); requireV31(); dayMode(); }

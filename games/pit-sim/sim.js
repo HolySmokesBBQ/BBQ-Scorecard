@@ -3,15 +3,26 @@
 // no browser storage. Randomness only through the seeded generator on the sim object. Runs in
 // Node under vm.runInThisContext and in the browser as a classic deferred script.
 //
-// Contract: docs/superpowers/specs/2026-10-18-pit-sim-v3-0-contract.md (W0 to W22, the v3.0
-//           round) first, then docs/superpowers/specs/2026-10-18-pit-sim-contract.md (the v2.1
-//           section K0 to K14, then the v2 delta D0 to D16, then section 2 read with v2
+// Contract: docs/superpowers/specs/2026-10-19-pit-sim-v3-1-contract.md (X0 to X18, the v3.1
+//           round) first, then docs/superpowers/specs/2026-10-18-pit-sim-v3-0-contract.md (W0 to
+//           W26, the v3.0 round), then docs/superpowers/specs/2026-10-18-pit-sim-contract.md (the
+//           v2.1 section K0 to K14, then the v2 delta D0 to D16, then section 2 read with v2
 //           coordinates).
 // Rules:    docs/superpowers/specs/2026-10-18-pit-sim-v3-season-design.md (section 19 first),
 //           then docs/superpowers/specs/2026-10-18-pit-sim-v2-1-tutorial.md (sections 2, 3 and 5),
 //           then docs/superpowers/specs/2026-10-18-pit-sim-design.md, top section "v2" first.
 //
-// Version: v3.0 (2026-10-18, night). The season: nine weeks with Birthday and Church picnic
+// Version: v3.1 (2026-10-19). Crew cards: the buddy and the fire tender become RUN and FIRE cards,
+//          a PREP card slices what you leave on the board; two skills per role tune the cook
+//          constants by stars; mood with notice, wages per event worked, the payroll budget and
+//          roster slots; Hiring Day each season with 18 applicants, other outfits and tryouts;
+//          walk-ins; the weekly training pick; XP, banked levels and the raise; crew rows on the
+//          report; save version 5 with the v2 hires migrated to cards. The four v3.0 playtest
+//          carry-forward items: offers that vary by menu, size and a safe or stretch tier, the
+//          word of mouth third paying on the fee with a third card at the top, booked guests
+//          pulled forward when the line sits empty, and the report's till fields for the compact
+//          money table.
+// v3.0 (2026-10-18, night). The season: nine weeks with Birthday and Church picnic
 //          bookings, the Yard day and the Season finale in week 9; deposits, booked headcounts
 //          and menus, client stars and the fee, fan rating thirds, the event length setting, the
 //          season end, the creator's profile and pit name, the rolling inventory with cooler
@@ -217,6 +228,111 @@
 //      units of meat. The charcoal row says six bags a cook.
 // Q-11. ui.rowKept reads "Bought for later" and ui.rowDrawn "Paid for in an earlier week" (the report
 //      shows them as information rows with the items in the detail).
+//
+// v3.1 deviations (contract 2026-10-19-pit-sim-v3-1-contract.md; X18 item 25: every call that touches
+// this file is restated here, then the builder's own choices)
+// Overseer's calls built here (X18 and X18.1, by number):
+// X-1.  Roles RUN, FIRE and PREP; one card a role works a cook, and bringing a second card of a role
+//       rests the first (setBring reports the swap with ui.oneRole). (X18 items 1, 7)
+// X-2.  Skills drive the [S 6.3] curves through skillValue(); RUN Friendliness drives both the handle
+//       pause and the seat tip share on plates the RUN card carried. (item 2)
+// X-3.  The PREP card slices only pieces left on the board (the Leave verb while the board holds
+//       fewer than PREP_WAIT and has room next to the waiting pieces of that meat); a waiting piece
+//       is the PREP card's; 'Board is busy' while a slice runs. (items 5, 39)
+// X-4.  The FIRE card works from the first kettle; validateSave keeps the drum check only for a
+//       legacy v2 tender being migrated. Its pauses and walk stay v2's. (items 6, 40)
+// X-5.  Mood steps run in a fixed order from the end of event moods, with their own seeded crewRng;
+//       nothing in the crew rules draws from rng(). Notice at -2, one more event, then moving on
+//       unless the mood rose. (items 8, 9)
+// X-6.  Levels bank (to BANK_MAX, a level past it is lost) and are spent by hand; the wage moves
+//       only when a contract renews, and until v3.2 every contract renews for one season at the table
+//       wage. (items 10, 11, 43)
+// X-7.  Hiring Day pools are six of each role, saved while open, other outfits take 3 of the 6 best
+//       open cards after every round; pool and walk-ins draw from the season seed. (items 12, 13)
+// X-8.  Walk-ins come trained, sign for one season, cost one event's wage and go at the week's end;
+//       a reload keeps their hired flags and the training pick. (items 14, 31)
+// X-9.  A migrated hire has worked 1 (a send-off to let go) and skips Hiring Day in its season;
+//       state.hires and the hires save key are gone and hire() is an inert stub. (items 17, 18)
+// X-10. Offers vary by menu pair, size and tier inside the v3.0 types (item 19, X3.4): one ry() draw
+//       per types index (item 27), the rotation steps past a pair the gear cannot cook when the first
+//       pair can (item 26), the stretch is the gear stretch or one rv() draw sized at STRETCH_LOAD
+//       (item 28), the invite repeats the best paying loadable type with its next cookable pair
+//       (items 21, 29). The third pays on the fee, 1.0, 1.1 and 1.2 (item 20, overrides [S 9]).
+// X-11. Booked guests pull forward after ARRIVAL_PULL_S of an empty line while food cooks, timed by
+//       a closure timer (items 22, 38).
+// X-12. crewSpent and crewPaid live in a closure like the R-4 gear rows, cleared in beginMorning and
+//       startWeek, so Hiring Day send-offs never reach the week 1 report (item 32). Letting go a card
+//       drafted the same Hiring Day turns its pool entry taken (item 33). Saved pool and walk-in
+//       names are checked within their own list and hiring keeps only for this season (item 34).
+//       Only untried pool entries hide potential (item 35).
+// X-13. CrewRow.line by item 37; goodPct and the held count read fireGoodS and fireDipped, sampled
+//       once a tick after tickFire from the gate on. Movers carry cardId, eff and vals (item 41).
+//       Placeholders by item 42. trained validates as 1 to crewSeq - 1 (item 44); hireApplicant
+//       guards CREW_MAX (item 45).
+// X-14. Item 48, the felt-difference margin: at the starting values step 67's FIRE scenario (seed 72)
+//       gave 74.95 good seconds at 1 star and 95.05 at 5, 1.268 times, under 1.30. The 1 star column
+//       of SKILL_CURVE.fireSense moved 45 to 40 (old 45, new 40): 59.95 and 95.05, 1.585 times.
+//       firePace stays [5.0, 4.0, 2.5]; the 3 star column never moved. RUN (seed 71): plates in
+//       10 s 4 and 8, fed in 4 s 2 and 3, mean wait 3.80 s and 2.00 s. PREP (seed 73): 10.85 s and
+//       4.90 s. The tip perk only shows at charm 10 and up (seatBonus 2 or 3).
+// The builder's own choices:
+// V-1.  tryout() emits only the tryout event (X6.2 names no save_wanted there); the tryout is saved
+//       at the round's end, so a reload before then hands the tryout back.
+// V-2.  levelUp's mood lift (both skills at potential) also clears notice once the mood is above
+//       -2, as giveRaise does, so a card lifted out of -2 by a level never leaves on its old notice.
+// V-3.  Item 26's second Needs card (only possible on a stub types list at rep 34 and up) keeps its
+//       step 6 rv() draw so the stream stays one draw per other picked card, and is not resized.
+// V-4.  train() emits level_ready before trained (the level banks as the XP lands), then save_wanted.
+// V-5.  The pull forward check runs in tickBookedSpawns before the spawn loop, so a pulled party
+//       joins the line that tick: the longest empty line while food cooks measures 2.95 s.
+// V-6.  A load into Hiring Day drops every event the load made, the morning's rain event included.
+// V-7.  hireWalkin() also refuses at CREW_MAX (unreachable with 2 slots).
+// V-8.  CrewRow.stat.goodPct carries the event's percent on every lineup row (0 on a resting row);
+//       only the FIRE line prints it.
+// V-9.  cardStars() clamps each skill to 1 to 5 before averaging; validateSave takes the first three
+//       of a longer walk-in list; a new card takes a free list name if its own is on the crew already
+//       (defensive), and state.crew stays in id order.
+// V-10. setLength() stays week and tutorial only (X7 adds no Hiring Day row), so a bot or a player
+//       sets the length from the week hub.
+// The X16 run (a scratch copy of the season bot following X16, 50 seeds, 5 seasons, run before
+// dev/econ.mjs carried the X16 bot). Every enforced check passed at Normal, Short and Long with
+// the starting values (fireSense aside, which no settle() event reads). Normal: drum medians sharp
+// S1W3, steady S1W5, rough S1W6 (bands S1W4, S1W8, S2W9); Driveway affordable (information) S1W6,
+// S2W4, S3W2; stuck, idle, rough under 0 and over payroll all 0 of 50. Payroll share of pay and tips,
+// seasons 2 to 5: sharp 10.1 percent (455 of 4488 a season), steady 16.6 (464 of 2784), rough 15.2.
+// Median cash at the season ends: sharp 1530, 4271, 7007, 9670, 12492 (v3.0: 827, 2361, 3895, 5429,
+// 6963); steady 319, 1247, 2335, 3339, 4352; rough 201, 519, 1031, 1543, 2044. Sharp holds more than
+// v3.0: the stretch card (up to 1.4 times the guests at 1.15 times the pay) and the third's pay
+// outrun the wages under settle(), which feeds every guest whatever the size. Short: sharp S1W4,
+// steady S1W7, rough S1W8; Long: S1W3, S1W4, S1W5. The eager policy (information, item 47) is never
+// stuck but never reaches the drum in five seasons at Normal (season end cash 129 to 158): two cards
+// on every 3 star Birthday cost 389 a season against 956 of pay. In season 1 no card moved on under
+// any policy; steady paid 35 send-offs over 50 seeds (benched cards drop to notice) and hired 3
+// walk-ins. The X16 lineup rule needs a payroll order to stay inside 60 once renewed wages grow
+// (FIRE first, then RUN while it fits, the rest resting); the scratch bot used that order.
+// Integration (2026-10-19): dev/econ.mjs now carries the X16 bot. `node dev/econ.mjs --season` at
+// Normal matches the scratch run on every drum median, both payroll shares and the sharp and steady
+// season end cash; rough ends 201, 519, 1017, 1560, 2096, and in season 1 steady paid 7 send-offs
+// and hired 3 walk-ins over 50 seeds (the scratch bot benched more). Recorded in [S 10.8].
+// Review round 1 (2026-10-19, contract X20; each is an Overseer's call):
+// R1-1. X20.1: SKILL_CURVE.runTip [-0.25, 0, 1.0] on Friendliness; a plate the RUN card set down tips
+//       (1 + runTip) times the plate tip, and its seat bonus is seatBonus() + round(2 * runSeatTip).
+//       Both add to today.crew[id].tips; crewSay.run names them.
+// R1-2. X20.2: fireSense [40, 55, 88]; the FIRE card walks at NPC_TILES_PER_S * TENDER_CYCLE / firePace
+//       clamped to FIRE_WALK (overrides X18.1 item 40 for the walk); prefill() buys a sharp FIRE card's
+//       charcoal; today.fireHotS feeds crewSay.fireHot; XP_FIRE_BAG 3, XP_FIRE_HOLD 15.
+// R1-3. X20.3: STRETCH_SIZE 1.2, STRETCH_MIN 1.1, STRETCH_PAY 1.1, STRETCH_EDGE 1.0; with no Needs card
+//       the stretch is drawn only among the cards that would pay the most when sized up.
+// R1-4. X20.4: a gear buy keeps every shown card's numbers (keepShown); only needs and safe follow.
+// R1-5. X20.5: a lineup card at Fired up eases a step after an event; 5 and 4 star bookings lift only
+//       up to Happy, a 5 star stretch lifts everyone a full step.
+// R1-6. X20.7: a headliner (HEADLINER) per role in every pool; no walk-ins in week 1 and walk-ins at
+//       their ceiling; pool, walk-ins and hosts avoid the crew's and the pitmaster's names.
+// R1-7. X20.8: drawLook (HAT_SHARE) for pool, walk-in and migrated looks; long hair drops a cap.
+// R1-8. X20.9: floorAfterTutorial() when the tutorial day hands over.
+// R1-9. X20.13: LEVEL_XP 120; PREP savedS counts the knife; PAYROLL stays 60 (at 50 the econ sink check
+//       failed for sharp, 7.8 percent).
+// R1-10. X20.12: the new and changed STRINGS. The econ run after the round is in [S 10.9].
 
 (function () {
 'use strict';
@@ -261,7 +377,7 @@ const C = Object.freeze({
   // weather
   RAIN_FROM_DAY: 4, RAIN_CHANCE: 0.15, RAIN_ARRIVALS: 0.6,
   // save clamps
-  SAVE_VERSION: 4, MAX_DAY: 999, MAX_CASH: 999999, MAX_STAT: 9999999,
+  SAVE_VERSION: 5, MAX_DAY: 999, MAX_CASH: 999999, MAX_STAT: 9999999,   // X2: 5 (was 4)
   // v3.0 season and week [S 3], contract W2
   SEASON_WEEKS: 9,
   YEAR_MAX: 99,
@@ -309,6 +425,51 @@ const C = Object.freeze({
   // the driveway goal [S 7.1]
   DRIVEWAY_REP: 34,
   DRIVEWAY_BUYABLE: false,            // Q-8: v3.3 builds the Driveway; until then no Coming next card and no driveway goal
+  // v3.1 crew cards [S 6], contract X2
+  SKILL_CURVE: Object.freeze({                     // the value at 1, 3 and 5 effective stars; piecewise linear between [S 6.3]
+    fireSense: Object.freeze([40, 55, 88]),        // the fire level the FIRE card keeps cookers above (X18.1 item 48: 1 star 45 to 40; review 1: 5 star 65 to 88)
+    firePace: Object.freeze([5.0, 4.0, 2.5]),      // seconds between the FIRE card's adds (its cooldown)
+    runSpeed: Object.freeze([3.5, 4.0, 5.5]),      // the RUN card's walk, tiles a second
+    runHandle: Object.freeze([0.6, 0.4, 0.2]),     // the RUN card's pause at the board and at the table, seconds
+    runSeatTip: Object.freeze([0, 0.1, 0.4]),      // extra share of the seat tip on a plate the RUN card carried
+    runTip: Object.freeze([-0.25, 0, 1.0]),        // review 1: extra share of the plate tip on a plate the RUN card carried
+    prepKnife: Object.freeze([1.4, 1.0, 0.6]),     // the PREP card's slice time as a share of MEATS[m].slice
+    prepPace: Object.freeze([3.5, 4.0, 5.5])       // the PREP card's walk, tiles a second
+  }),
+  ROLE_SKILLS: Object.freeze({                     // the curve keys each skill drives, skill 0 then skill 1
+    run: Object.freeze([Object.freeze(['runSpeed']), Object.freeze(['runHandle', 'runSeatTip', 'runTip'])]),
+    fire: Object.freeze([Object.freeze(['fireSense']), Object.freeze(['firePace'])]),
+    prep: Object.freeze([Object.freeze(['prepKnife']), Object.freeze(['prepPace'])])
+  }),
+  MOOD_STARS: Object.freeze([-1, -0.5, 0, 0, 0.5]),      // added to both skills during a cook, index mood + 2 [S 6.4]
+  WAGE_TABLE: Object.freeze([10, 13, 16, 20, 24, 29, 34, 40, 46]),   // overall stars 1, 1.5, 2, ... 5 [S 6.5]
+  ROLE_WAGE: Object.freeze({ run: 1.0, fire: 1.25, prep: 1.0 }),
+  PAYROLL: Object.freeze([60, 90, 140, 220]),            // by rung index; v3.1 is always index 0, the backyard (review 1: kept, X20.13)
+  ROSTER_SLOTS: Object.freeze([2, 3, 4, 6]),
+  CREW_MAX: 8,                                           // cards a save may hold: the slots plus a full draft
+  BENCH_STREAK: 2,                                       // booked events left home in a row that cost a mood step
+  HIRE_ROUNDS: 3, POOL_SIZE: 18, POOL_PAGE: 9,
+  TAKEN_PER_ROUND: 3, TAKEN_SHORTLIST: 6,                // other outfits take 3 of the 6 best open cards after every round
+  TRYOUTS: 2,
+  WALKINS: Object.freeze([2, 2, 3]),                     // walk-ins a week by fan rating third
+  LEVEL_XP: 120, BANK_MAX: 9,                            // review 1: LEVEL_XP 200 to 120
+  XP_RUN_PLATE: 3, XP_PREP_CUT: 3, XP_FIRE_BAG: 3, XP_FIRE_HOLD: 15,   // review 1: FIRE 1 and 10 to 3 and 15
+  FIRE_WALK: Object.freeze([3.5, 5.5]),                  // review 1: the FIRE card's walk, NPC_TILES_PER_S * TENDER_CYCLE / firePace clamped to this
+  HEADLINER: Object.freeze([2.5, 2]),                    // review 1: a role's first pool card draws each skill as 2.5 + floor(r() * 2) / 2
+  HAT_SHARE: 0.25,                                       // review 1: the share of crew looks that wear a hat
+  STRETCH_EDGE: 1.0,                                     // review 1: a drawn stretch pays more than this times every safe card
+  TRAIN_XP: 40,
+  SETTLE_XP: 30,                                         // dev: XP each lineup card gets from settle(stars)
+  RAISE_FRAC: 0.2,
+  PREP_WAIT: 2,                                          // cooked pieces the board holds for the PREP card
+  // offers that vary week to week (X3, carry-forward 1 and 2)
+  SAFE_SIZES: Object.freeze([0.8, 0.9, 1.0]),            // the safe card's headcount factor, one draw
+  STRETCH_SIZE: 1.2, STRETCH_MIN: 1.1,                   // the stretch card's headcount factor: the largest that fits, from 1.2 down to 1.1 (review 1: 1.4 and 1.15)
+  STRETCH_LOAD: 1.0,                                     // the stretch card fits the grate at this load instead of SAFE_LOAD
+  STRETCH_PAY: 1.1, STRETCH_PATIENCE: -5,                // review 1: STRETCH_PAY 1.15 to 1.1
+  THIRD_PAY: Object.freeze([1.0, 1.1, 1.2]),             // fee factor by fan rating third
+  // booked arrivals (X5.10, carry-forward 3)
+  ARRIVAL_PULL_S: 3,
   // seating and charm [V2.5], [V2.6]
   EAT_MIN: 8, EAT_MAX: 12,            // seconds a seated customer eats: EAT_MIN + (EAT_MAX - EAT_MIN) * rng()
   HEART_SECONDS: 0.6,                 // seated pause after the bonus is paid, before standing up
@@ -362,7 +523,8 @@ const HIRE_IDS = Object.freeze(['buddy', 'tender']);
 const COOKER_IDS = Object.freeze(['kettle1', 'kettle2', 'drum']);
 const STAT_IDS_V1 = Object.freeze(['days', 'served', 'walkouts', 'past', 'burnt']);
 const STAT_IDS = Object.freeze(['days', 'served', 'walkouts', 'past', 'burnt', 'seated']);
-const GOAL_ORDER = Object.freeze(['kettle2', 'drum', 'buddy', 'bigtable', 'driveway']);   // R-3: the drum second
+const GOAL_ORDER = Object.freeze(['kettle2', 'drum', 'bigtable', 'driveway']);   // R-3: the drum second; X4.1: no buddy step (Hiring Day replaces it)
+const ROLE_IDS = Object.freeze(['run', 'fire', 'prep']);   // X1
 const DIRS = Object.freeze({
   up: Object.freeze({ dx: 0, dy: -1 }),
   down: Object.freeze({ dx: 0, dy: 1 }),
@@ -568,6 +730,8 @@ const MAP = Object.freeze({
   ]),
   buddyIdle: Object.freeze({ x: 4, y: 5, face: 'up' }),
   tenderIdle: Object.freeze({ x: 3, y: 2, face: 'right' }),
+  prepIdle: Object.freeze({ x: 2, y: 5, face: 'right' }),   // X5.3: the PREP card's home
+  prepUse: Object.freeze({ x: 4, y: 4, face: 'right' }),    // X5.3: where the PREP card slices (the board's use tile 3)
   dogHome: px(4, 7),
   dogRoam: list([px(2, 7), px(3, 7), px(4, 7), px(5, 7), px(6, 7), px(7, 8), px(8, 8)]),
   overhead: Object.freeze({ lights: px(71, 80), canopy: px(76, 106) }),
@@ -688,6 +852,39 @@ const STRINGS = Object.freeze({
     'Thanks, {name}. Everyone ate well.',
     'Thanks, {name}. We will call you again next year.'
   ]),                                                     // index stars - 1; {name} is state.player.name
+  // v3.1 (contract X10, exact text)
+  role: Object.freeze({ run: 'RUN', fire: 'FIRE', prep: 'PREP' }),
+  roleName: Object.freeze({ run: 'Server', fire: 'Pit hand', prep: 'Prep cook' }),
+  roleJob: Object.freeze({
+    run: 'Carries plates from the board to the table.',
+    fire: 'Keeps every lit cooker fed with charcoal.',
+    prep: 'Slices the cuts you leave on the board.'
+  }),
+  skill: Object.freeze({
+    run: Object.freeze(['Speed', 'Friendliness']),
+    fire: Object.freeze(['Fire sense', 'Pace']),
+    prep: Object.freeze(['Knife', 'Pace'])
+  }),
+  skillHelp: Object.freeze({
+    run: Object.freeze(['Walks plates over faster.', 'Hands plates over quicker. Guests tip more on the plates they carry.']),
+    fire: Object.freeze(['Keeps the fire hotter.', 'Checks the fires more often.']),
+    prep: Object.freeze(['Slices faster than you do.', 'Walks to the board faster.'])
+  }),
+  mood: Object.freeze(['Done', 'Grumpy', 'OK', 'Happy', 'Fired up']),      // index mood + 2
+  crewSay: Object.freeze({
+    run: '{name} ran {n} plates. Guests tipped {t}.',             // review 1: the tips on the plates they carried
+    runOne: '{name} ran 1 plate. Guests tipped {t}.',
+    fire: '{name} added {n} bags. The fire was hot enough to cook {p} percent of the time.',
+    fireOne: '{name} added 1 bag. The fire was hot enough to cook {p} percent of the time.',
+    fireHot: '{name} added {n} bags and kept the fire hot for {s} seconds. Food came off faster.',   // review 1
+    fireHotOne: '{name} added 1 bag and kept the fire hot for {s} seconds. Food came off faster.',
+    prep: '{name} sliced {n} cuts and saved you {s} seconds.',
+    prepOne: '{name} sliced 1 cut and saved you {s} seconds.',
+    idle: '{name} had nothing to do this time.',
+    settled: '{name} worked the event.',
+    rested: '{name} rested.'
+  }),
+  hostThird: Object.freeze(['', 'Folks at the last event asked who cooked, {name}.', 'People ask for you by name now, {name}.']),
   say: Object.freeze({
     picked: '{label}. {n} guests. Pay {fee}.',
     pickedYard: 'Yard day. Guests pay for each plate.',
@@ -703,7 +900,22 @@ const STRINGS = Object.freeze({
     week: 'Week {w}. {when}.',
     seasonEnd: 'Season {y} is done.',
     refillMeat: 'One more {label} is in the cooler.',               // {label}: MEATS[meat].label
-    refillCharcoal: 'One more bag is on the pile.'
+    refillCharcoal: 'One more bag is on the pile.',
+    // v3.1 (contract X10, exact text)
+    hiringOpen: 'Hiring Day. {n} people want to work your pit.',
+    hired: '{name} joins the crew.',
+    tryout: '{name} could reach {n} stars.',
+    roundDone: 'Round {r} is over. Other outfits hired {list}.',
+    hiringDone: 'Hiring Day is done.',
+    letGo: '{name} is off the crew.',
+    trained: '{name} trained. Plus {xp} XP.',
+    levelReady: '{name} can level up.',
+    levelUp: '{name} got better at {skill}.',
+    levelMood: '{name} is at full potential and in a better mood.',
+    raise: '{name} got a raise to {w}.',
+    leftFor: '{name} has the {label}.',
+    notice: '{name} gave notice.',
+    left: '{name} moved on.'
   }),
   ui: Object.freeze({
     // header and HUD
@@ -752,8 +964,8 @@ const STRINGS = Object.freeze({
     goCash: 'Not enough cash for this cart. Take something out.',
     // the 2 by 2 grid
     crew: 'Crew',
-    crewLine: '{n} of 2 hired',
-    crewSub: 'Buddy and fire tender',
+    crewLine: '{n} of {s} on the crew',          // X10 (was '{n} of 2 hired')
+    crewSub: 'Payroll {p} / {b}',                // X10 (was 'Buddy and fire tender')
     gear: 'Gear',
     gearLine: '{n} of 6 owned',
     gearNext: 'Next: {label}, {price}',
@@ -847,7 +1059,7 @@ const STRINGS = Object.freeze({
     takeDetail: 'pay and tips after what the cook used',
     rowGear: 'Gear bought',                       // R-4: the rows between Take today and Cash
     rowKept: 'Bought for later',                  // Q-11: stock the cart added to the pile and cooler
-    rowDrawn: 'Paid for in an earlier week',      // Q-11: stock an earlier cart paid for, used today
+    rowDrawn: 'Bought earlier',                   // Q-11: stock an earlier cart paid for, used today (review 1: shortened)
     rowShop: 'Paid at the shop',
     rowCash: 'Cash',
     fansH: 'Word of mouth',
@@ -896,7 +1108,122 @@ const STRINGS = Object.freeze({
     crBack: 'Back',
     pauseLook: 'Pitmaster',
     // save notice
-    notice: 'Your save was updated for the season.'
+    notice: 'Your save was updated for the season.',
+    // v3.1 (contract X10, exact text)
+    // Hiring Day
+    hiringH: 'Hiring Day',
+    hireRound: 'Round {r} of 3',
+    hireRoundsDone: 'Every round is done',
+    pageOf: 'Page {p}/{n}',
+    pagePrev: 'Previous page',
+    pageNext: 'Next page',
+    hireInfo: 'How Hiring Day works',
+    hireHelp: 'Tap a card to see it. Each round you can hire one person or pass. Other outfits hire after every round.',
+    payroll: 'Payroll {p} / {b}',
+    payrollAria: 'Payroll {p} of {b} for one event',
+    crewBtn: 'Crew',
+    hiresLeft: 'Hires left',
+    passRound: 'Pass round {r}',
+    startWeek: 'Start week 1',
+    tryoutsLeft: 'Tryouts left: {n}',
+    tooMany: 'Let someone go. The crew has room for {s}.',
+    taken: 'Hired elsewhere',
+    yours: 'On your crew',
+    newBadge: 'NEW',
+    wage: 'Wage',
+    perEvent: '{w} an event',
+    contract1: '1 season',
+    contract2: '2 seasons',
+    appAria: '{name}, {role}, {stars}, wage {w}',
+    appTaken: '{name}, hired elsewhere',
+    potential: 'Potential {n} stars',
+    potentialHidden: 'Potential unknown. A tryout shows it.',
+    tryout: 'Try out',
+    tryoutNone: 'No tryouts left',
+    hire: 'Hire',
+    hireFee: 'Hire for {f}',
+    pass: 'Pass',
+    // the card sheet and the crew sheet
+    cardBack: 'Back',
+    skillAria: '{skill} {n} of 5',
+    xp: 'XP {x} of {max}',
+    banked: 'Levels to spend: {n}',
+    levelUp: 'Level up',
+    levelH: 'Pick a skill',
+    levelPick: '{skill} up half a star',
+    atPotential: 'That skill is at its potential.',
+    levelBoth: 'Both skills are at potential. A level lifts the mood instead.',
+    bring: 'Bring',
+    rest: 'Rest',
+    bringAria: 'Bring {name} to the next event',
+    oneRole: 'One {role} works a cook. {name} rests.',
+    train: 'Train this week',
+    trainDone: 'Trained this week',
+    trainLine: 'Pick one helper to train each week. They get {xp} XP.',
+    trainedLine: '{name} trained this week.',
+    raise: 'Give a raise: wage {w}',
+    raiseDone: 'Raise given this contract',
+    letGo: 'Let go',
+    letGoSure: 'Let {name} go? Send-off {f}.',
+    letGoFree: 'Let {name} go? No send-off before their first event.',
+    yes: 'Yes',
+    no: 'No',
+    sendOffCash: 'Not enough cash for the send-off.',
+    slots: '{n} of {s} on the crew',
+    crewEmpty: 'No crew yet. Walk-ins come by every week.',
+    walkinsH: 'Walk-ins this week',
+    walkinLine: 'They sign for one season. The signing fee is one event of wages.',
+    crewFull: 'The crew is full. Let someone go first.',
+    noticeLine: '{name} gives notice. Lift their mood or they leave after the next event.',
+    goPayroll: 'Payroll {p} is over {b}. Rest someone.',
+    moodAria: '{name} is {mood}',
+    moodWas: '{mood}, was {was}',
+    // the report
+    crewH: 'Crew',
+    rested: 'Rested: {list}.',
+    leftLine: '{name} moved on.',
+    rowExtras: 'Tips and bonus',
+    rowCosts: 'Costs',
+    costsDetail: 'meat, charcoal, spoilage and daily costs',   // review 1: wages have their own row
+    rowCrewPaid: 'Signing and send-off',
+    moneyMore: 'Show every row',
+    moneyLess: 'Hide the rows',
+    // offers and word of mouth thirds
+    tagSafe: 'SAFE BET',
+    tagStretch: 'STRETCH',
+    tagInvite: 'INVITE',
+    thirdNow: Object.freeze([
+      'Neighbors. At word of mouth 34 hosts pay a tenth more.',
+      "Word's out. Hosts pay a tenth more. At 67 a third host calls.",
+      'In demand. Hosts pay a fifth more and a third host calls.'
+    ]),
+    thirdUp: Object.freeze(['', "Word's out. Hosts pay a tenth more from next week.", 'In demand. A third host calls from next week.']),
+    thirdDown: 'Word of mouth slipped under {edge}.',
+    // the season end card and the save notice
+    seCrew: '{name} signs on for another season at {w}.',
+    noticeCrew: 'Your save was updated. Your helpers are crew cards now.',
+    // review round 1 (contract X20)
+    passEmpty: 'Pass round {r}? Nobody is on your crew yet.',
+    tryoutTaken: '{name} went to another outfit after the tryout.',
+    takenBadge: '{n} taken',
+    takenPageAria: '{n} hired elsewhere on page {p}',
+    crewNext: 'Crew: {names}. Wages {w}.',
+    crewNone: 'Nobody on the crew this time.',
+    wageRow: 'Wage {w}',
+    levelWhat: Object.freeze({
+      runSpeed: 'Walks {b} tiles a second instead of {a}.',
+      runTip: 'Guests tip {b} percent of the usual instead of {a}.',
+      fireSense: 'Keeps the fire over {b} instead of {a}.',
+      firePace: 'Checks the fire every {b} seconds instead of {a}.',
+      prepKnife: 'Slices in {b} percent of your time instead of {a}.',
+      prepPace: 'Walks {b} tiles a second instead of {a}.'
+    }),
+    levelStars: 'Now {n} stars. The wage stays {w} this contract.',
+    firedUp: '{name} is fired up for this one.',
+    walkinsLater: 'Walk-ins start next week.',
+    bringOn: 'Coming',
+    bringOff: 'Resting',
+    tutorialFloor: 'Practice day. Season 1 starts at {c} cash.'
   })
 });
 
@@ -943,21 +1270,25 @@ function burnMult(fire) {
 
 const BOOKING_IDS = Object.freeze(['birthday', 'picnic', 'finale', 'yard']);
 
-function bookingRow(id, guests, menu, patience, win, flames, icon) {
+function bookingRow(id, guests, menu, patience, win, flames, icon, menus) {
   return Object.freeze({
     id, label: STRINGS.booking[id], guests,
     menu: menu === null ? null : Object.freeze(menu.slice()),
+    menus: menus === null ? null : Object.freeze(menus.map((pair) => Object.freeze(pair.slice()))),
     patience, window: win, flames, venue: 'backyard', icon, unlock: null
   });
 }
 
-// Row shape { id, label, guests, menu, patience, window, flames, venue, icon, unlock }. The finale
-// menu is null: every meat the owned gear can cook (W3.2). Every row plays in the backyard in v3.0.
+// Row shape { id, label, guests, menu, menus, patience, window, flames, venue, icon, unlock }. The
+// finale menu is null: every meat the owned gear can cook (W3.2). Every row plays in the backyard.
+// X3.1: menus are the pairs a type rotates through week to week (MEAT_IDS order); menu is menus[0].
 const BOOKINGS = Object.freeze({
-  birthday: bookingRow('birthday', 12, ['sausage', 'chicken'], 45, 60, 1, 'ev_birthday'),   // Q-5: 60 s window (was 80)
-  picnic: bookingRow('picnic', 20, ['chicken', 'butt'], 50, 80, 2, 'ev_picnic'),
-  finale: bookingRow('finale', 40, null, 50, 105, 3, 'ev_finale'),   // Q-2: 105 s window, any length
-  yard: bookingRow('yard', 0, [], C.PATIENCE_BASE, 80, 1, 'ev_yard')
+  birthday: bookingRow('birthday', 12, ['sausage', 'chicken'], 45, 60, 1, 'ev_birthday',   // Q-5: 60 s window (was 80)
+    [['sausage', 'chicken'], ['sausage', 'ribs'], ['chicken', 'ribs']]),
+  picnic: bookingRow('picnic', 20, ['chicken', 'butt'], 50, 80, 2, 'ev_picnic',
+    [['chicken', 'butt'], ['sausage', 'butt'], ['ribs', 'butt'], ['chicken', 'ribs']]),
+  finale: bookingRow('finale', 40, null, 50, 105, 3, 'ev_finale', null),   // Q-2: 105 s window, any length
+  yard: bookingRow('yard', 0, [], C.PATIENCE_BASE, 80, 1, 'ev_yard', [])
 });
 
 // The rows genOffers draws from when no types list is passed (weeks 1 to 8).
@@ -1016,6 +1347,176 @@ function cleanLook(look) {
     out[k] = (typeof v === 'number' && Number.isInteger(v) && v >= 0 && v < LOOK_COUNTS[k]) ? v : DEFAULT_LOOK[k];
   }
   return out;
+}
+
+// ---------------------------------------------------------------------------------------------
+// X5.1, X6.1 and X6.3 Crew cards (pure, never throw)
+// ---------------------------------------------------------------------------------------------
+
+// A star value: a finite number clamped 1 to 5; anything else reads as 1 star (X5.1).
+function starNum(v) {
+  return (typeof v === 'number' && Number.isFinite(v)) ? clamp(v, 1, 5) : 1;
+}
+
+function roleOf(role) {
+  return (typeof role === 'string' && ROLE_IDS.includes(role)) ? role : 'run';
+}
+
+// X5.1: overall stars, the average of the two skills rounded down to the half.
+function cardStars(skills) {
+  let a = 1, b = 1;
+  try {
+    if (Array.isArray(skills)) { a = starNum(skills[0]); b = starNum(skills[1]); }
+  } catch (e) { a = 1; b = 1; }
+  return Math.floor(((a + b) / 2) * 2) / 2;
+}
+
+// X5.1: the table wage for overall stars and a role.
+function wageFor(stars, role) {
+  const s = starNum(stars);
+  const i = clamp(Math.round((s - 1) * 2), 0, C.WAGE_TABLE.length - 1);
+  return Math.round(C.WAGE_TABLE[i] * C.ROLE_WAGE[roleOf(role)]);
+}
+
+// X5.1: a SKILL_CURVE value at a star level, piecewise linear through the 1, 3 and 5 star columns.
+function skillValue(key, stars) {
+  const v = (typeof key === 'string' && Object.prototype.hasOwnProperty.call(C.SKILL_CURVE, key)) ? C.SKILL_CURVE[key] : null;
+  if (v === null) return NaN;
+  const s = starNum(stars);
+  return s <= 3 ? v[0] + (v[1] - v[0]) * (s - 1) / 2 : v[1] + (v[2] - v[1]) * (s - 3) / 2;
+}
+
+// X5.2: skills plus the mood's half stars, clamped 1 to 5.
+function effectiveSkills(card) {
+  const add = C.MOOD_STARS[clamp(Math.trunc(Number(card.mood)) || 0, -2, 2) + 2];
+  return [clamp(card.skills[0] + add, 1, 5), clamp(card.skills[1] + add, 1, 5)];
+}
+
+// The curve values a role's two skills drive at the effective stars (ROLE_SKILLS order).
+function curveValues(role, eff) {
+  const out = {};
+  const keys = C.ROLE_SKILLS[roleOf(role)];
+  for (let i = 0; i < 2; i++) for (const k of keys[i]) out[k] = skillValue(k, eff[i]);
+  return out;
+}
+
+function seedOf(inp) {
+  let n;
+  try { n = Number(readKey(inp, 'seed')); } catch (e) { n = 0; }
+  return Number.isFinite(n) ? (n >>> 0) : 0;
+}
+
+function nameSet(list) {
+  const out = new Set();
+  if (!Array.isArray(list)) return out;
+  const n = Math.min(list.length >>> 0, 1000);
+  for (let i = 0; i < n; i++) {
+    let v;
+    try { v = list[i]; } catch (e) { continue; }
+    if (typeof v === 'string') out.add(v);
+  }
+  return out;
+}
+
+// X6.1: i = floor(r() * 60), stepping forward one at a time (wrapping) past the used names.
+function drawName(r, used) {
+  const names = STRINGS.names;
+  let i = Math.floor(r() * names.length);
+  for (let k = 0; k < names.length && used.has(names[i]); k++) i = (i + 1) % names.length;
+  used.add(names[i]);
+  return names[i];
+}
+
+// Review 1: a crew look, six draws in LOOK_KEYS order. The hat draw lands on no hat for 1 - HAT_SHARE
+// of its range and splits the rest evenly over the three hats; long hair never goes under a cap (the
+// strands read as a hood), so that pair drops the cap. Pool, walk-ins and migrated cards share it.
+const LOOK_HAIR_LONG = 2, LOOK_HAT_CAP = 1;
+function drawLook(r) {
+  const o = {};
+  for (const k of LOOK_KEYS) {
+    const u = r();
+    if (k === 'hat') {
+      const hats = LOOK_COUNTS.hat - 1;
+      const edge = 1 - C.HAT_SHARE;
+      o.hat = u < edge ? 0 : 1 + Math.min(hats - 1, Math.floor((u - edge) / C.HAT_SHARE * hats));
+    } else o[k] = Math.floor(u * LOOK_COUNTS[k]);
+  }
+  if (o.hair === LOOK_HAIR_LONG && o.hat === LOOK_HAT_CAP) o.hat = 0;
+  return o;
+}
+
+function fanThirdOf(rep) {
+  return rep >= C.THIRD_EDGES[1] ? 2 : (rep >= C.THIRD_EDGES[0] ? 1 : 0);
+}
+
+// X6.1: the Hiring Day pool, 18 applicants (six of each role), 1 to 3 stars, potential 2 to 5.
+// Review 1: the first card of each role (in pool order) is a headliner, each skill drawn as
+// HEADLINER[0] + floor(r() * HEADLINER[1]) / 2 (2.5 to 3 stars), so every pool holds one 2.5 or 3 star
+// card a role, the cards other outfits go after first. Same draws, same order.
+function genPool(input) {
+  const inp = isPlainObject(input) ? input : {};
+  const seed = seedOf(inp);
+  const year = toInt(readKey(inp, 'year'), 1, 1, C.YEAR_MAX);
+  const used = nameSet(readKey(inp, 'avoid'));
+  const rp = mulberry32(mix32((seed ^ 0x504F4F4C) >>> 0, year, 0));
+  const roles = [];
+  const each = Math.floor(C.POOL_SIZE / ROLE_IDS.length);
+  for (const role of ROLE_IDS) for (let i = 0; i < each; i++) roles.push(role);
+  for (let i = roles.length - 1; i >= 1; i--) {
+    const j = Math.floor(rp() * (i + 1));
+    const tmp = roles[i]; roles[i] = roles[j]; roles[j] = tmp;
+  }
+  const out = [];
+  const headed = new Set();
+  for (let idx = 0; idx < roles.length; idx++) {
+    const role = roles[idx];
+    const name = drawName(rp, used);
+    const head = !headed.has(role);
+    headed.add(role);
+    const s0 = head ? C.HEADLINER[0] + Math.floor(rp() * C.HEADLINER[1]) / 2 : 1 + Math.floor(rp() * 5) / 2;
+    const s1 = head ? C.HEADLINER[0] + Math.floor(rp() * C.HEADLINER[1]) / 2 : 1 + Math.floor(rp() * 5) / 2;
+    const potential = Math.min(5, Math.max(Math.max(s0, s1) + 0.5, 2 + Math.floor(rp() * 7) / 2));
+    const mood = rp() < 0.5 ? 0 : 1;
+    const look = drawLook(rp);
+    const stars = cardStars([s0, s1]);
+    out.push({ name, role, skills: [s0, s1], potential, mood, look, stars, wage: wageFor(stars, role), idx });
+  }
+  return out;
+}
+
+// X6.3: this week's walk-ins, 2, 2 or 3 by the fan rating third; trained cards of 2 to 4 stars.
+// Review 1: none in week 1 (Hiring Day was this morning), and a walk-in comes at its ceiling
+// (potential = its best skill; the potential draw still happens so the stream keeps its order).
+function genWalkins(input) {
+  const inp = isPlainObject(input) ? input : {};
+  const seed = seedOf(inp);
+  const year = toInt(readKey(inp, 'year'), 1, 1, C.YEAR_MAX);
+  const week = toInt(readKey(inp, 'week'), 1, 1, C.SEASON_WEEKS);
+  const rep = finiteOr0(readKey(inp, 'rep'));
+  const used = nameSet(readKey(inp, 'avoid'));
+  const rw = mulberry32(mix32((seed ^ 0x57414C4B) >>> 0, year, week));
+  const n = week === 1 ? 0 : C.WALKINS[fanThirdOf(rep)];
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const role = ROLE_IDS[Math.floor(rw() * ROLE_IDS.length)];
+    const name = drawName(rw, used);
+    const s0 = 2 + Math.floor(rw() * 5) / 2;
+    const s1 = 2 + Math.floor(rw() * 5) / 2;
+    rw();   // the v3.1 potential draw, kept so the mood and look draws stay in place
+    const potential = Math.max(s0, s1);
+    const mood = rw() < 0.5 ? 0 : 1;
+    const look = drawLook(rw);
+    const stars = cardStars([s0, s1]);
+    out.push({ name, role, skills: [s0, s1], potential, mood, look, stars, wage: wageFor(stars, role) });
+  }
+  return out;
+}
+
+// Plain replacement of every {token} (W15).
+function fillText(tpl, map) {
+  let s = String(tpl);
+  for (const k of Object.keys(map)) s = s.split('{' + k + '}').join(String(map[k]));
+  return s;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1119,30 +1620,44 @@ function finaleHeadcount(rowDef, menu, gear, L, win) {
   return least;
 }
 
+// X3.3: every booking fee, finale included. k is THIRD_PAY[third], times STRETCH_PAY on the stretch.
+function feeFor(headcount, menu, k) {
+  if (menu.length === 0) return 0;
+  let sum = 0;
+  for (const m of menu) sum += MEATS[m].price;
+  const avg = sum / menu.length;
+  return Math.round(headcount * avg * C.FEE_MULT * k / C.FEE_ROUND) * C.FEE_ROUND;
+}
+
 // Fee, deposit and the rest of an offer at a length, without the host. Q-2: the Season finale
-// ignores the length (its own window, Normal's headcount factor).
-function offerFields(rowDef, gear, len) {
+// ignores the length (its own window, Normal's headcount factor). X3.4 step 3: `menuIn` is the week's
+// menu pair (undefined reads the row's own menu) and `k` the third's fee factor.
+function offerFields(rowDef, gear, len, menuIn, k) {
   const L = rowDef.id === 'finale' ? C.LENGTHS.normal : lengthRow(len);
   const isYard = rowDef.id === 'yard';
-  const menu = menuOf(rowDef, gear);
+  const menu = menuOf(menuIn === undefined ? rowDef : { id: rowDef.id, menu: menuIn }, gear);
   const win = rowDef.window * L.window / C.BASE_WINDOW;
   const headcount = isYard ? 0 : (rowDef.id === 'finale' ? finaleHeadcount(rowDef, menu, gear, L, win) : Math.round(rowDef.guests * L.factor));
   const rail = railSplit(headcount, menu, null);
-  let pay = 0;
-  if (!isYard && menu.length > 0) {
-    let sum = 0;
-    for (const m of menu) sum += MEATS[m].price;
-    const avg = sum / menu.length;
-    pay = Math.round(headcount * avg * C.FEE_MULT / C.FEE_ROUND) * C.FEE_ROUND;
-  }
+  const pay = isYard ? 0 : feeFor(headcount, menu, typeof k === 'number' && Number.isFinite(k) ? k : 1);
   const deposit = isYard ? 0 : Math.round(pay * C.DEPOSIT_FRAC);
   const needs = isYard ? '' : (needsFor(menu, gear) || capacityNeeds(rowDef, rail, gear, win));
   return {
     id: rowDef.id, type: rowDef.id, label: rowDef.label, venue: rowDef.venue, host: null,
     headcount, menu, rail, pay, deposit,
     difficulty: rowDef.flames, window: win,
-    patience: rowDef.patience, safe: needs === '', needs, icon: rowDef.icon
+    patience: rowDef.patience, safe: needs === '', needs, icon: rowDef.icon,
+    // X3.2
+    tier: 'safe', invite: false, base: headcount, menuIdx: 0
   };
+}
+
+// X3.4 steps 5 and 6: a card at a new headcount; rail, pay and deposit follow (safe and needs do not).
+function resizeOffer(o, h, k) {
+  o.headcount = h;
+  o.rail = railSplit(h, o.menu, null);
+  o.pay = feeFor(h, o.menu, k);
+  o.deposit = Math.round(o.pay * C.DEPOSIT_FRAC);
 }
 
 function freezeOffer(o, host) {
@@ -1152,8 +1667,17 @@ function freezeOffer(o, host) {
   return Object.freeze(o);
 }
 
-// W3.4. input = { seed, year, week, rep, cash, gear, length, types? }. Returns Offer[] in display
-// order. The only randomness is mulberry32(mix32(seed, year, week)).
+// X3.1 and X18.1 item 27: the menu pairs a row rotates through; a row without menus (or with an
+// empty list) reads [row.menu].
+function rowMenus(t) {
+  const m = readKey(t, 'menus');
+  if (Array.isArray(m) && m.length > 0) return m;
+  return [readKey(t, 'menu')];
+}
+
+// W3.4 as amended by X3.4. input = { seed, year, week, rep, cash, gear, length, types? }. Returns
+// Offer[] in display order. Three generators: r (the shuffle and the hosts, W3.4), ry (the menu
+// rotation, one per season) and rv (the stretch draw and the safe sizes, one per week).
 function genOffers(input) {
   const inp = isPlainObject(input) ? input : {};
   let seedN;
@@ -1161,16 +1685,16 @@ function genOffers(input) {
   const seed = Number.isFinite(seedN) ? (seedN >>> 0) : 0;
   const year = toInt(readKey(inp, 'year'), 1, 1, C.YEAR_MAX);
   const week = toInt(readKey(inp, 'week'), 1, 1, C.SEASON_WEEKS);
-  const repN = Number(readKey(inp, 'rep'));
-  const rep = Number.isFinite(repN) ? repN : 0;
-  const cashN = Number(readKey(inp, 'cash'));
-  const cash = Number.isFinite(cashN) ? cashN : 0;
+  const rep = finiteOr0(readKey(inp, 'rep'));
+  const cash = finiteOr0(readKey(inp, 'cash'));
   const gearIn = readKey(inp, 'gear');
   const gear = isPlainObject(gearIn) ? gearIn : {};
   const len = C.LENGTH_ORDER.includes(readKey(inp, 'length')) ? readKey(inp, 'length') : 'normal';
   const r = mulberry32(mix32(seed, year, week));
+  const ry = mulberry32(mix32(seed ^ 0x4D454E55, year, 0));
+  const rv = mulberry32(mix32(seed ^ 0x56415249, year, week));
   const names = STRINGS.names;
-  const used = new Set();
+  const used = nameSet(readKey(inp, 'avoid'));   // review 1: hosts never share a crew or pitmaster name
   function drawHost() {
     let i = Math.floor(r() * names.length);
     for (let k = 0; k < names.length && used.has(names[i]); k++) i = (i + 1) % names.length;
@@ -1178,33 +1702,54 @@ function genOffers(input) {
     return names[i];
   }
 
-  // 1. Week 9: the Season finale alone, one host draw.
-  if (week === C.SEASON_WEEKS) return [freezeOffer(offerFields(BOOKINGS.finale, gear, len), drawHost())];
-
-  // 2. Slots by the fan rating third.
+  // 2. The fan rating third (read first: the finale's fee takes the third's pay too).
   const third = rep >= C.THIRD_EDGES[1] ? 2 : (rep >= C.THIRD_EDGES[0] ? 1 : 0);
+  const kThird = C.THIRD_PAY[third];
+  const kStretch = C.THIRD_PAY[third] * C.STRETCH_PAY;
+
+  // 1. Week 9: the Season finale alone, one host draw, with the third's pay (X3.3).
+  if (week === C.SEASON_WEEKS) return [freezeOffer(offerFields(BOOKINGS.finale, gear, len, undefined, kThird), drawHost())];
+
   const slots = C.OFFER_SLOTS[third];
   const invite = third === C.INVITE_THIRD;
 
-  // 3. The unlocked types, once each, with their index in the types input for ties.
+  // 3. The unlocked types, once each, with their index in the types input for ties. X3.4: one ry()
+  // draw for every array index before any filtering (item 27); the week's menu pair rotates, and
+  // steps forward past a pair the owned gear cannot cook when the first pair can (item 26).
   const typesIn = readKey(inp, 'types');
   const types = Array.isArray(typesIn) ? typesIn : DEFAULT_TYPES;
   const info = [];
   const seen = new Set();
   for (let i = 0; i < types.length; i++) {
-    const t = types[i];
-    if (!isPlainObject(t) || typeof t.id !== 'string' || t.id === 'yard' || seen.has(t.id)) continue;
+    let t;
+    try { t = types[i]; } catch (e) { t = undefined; }
+    const menus = isPlainObject(t) ? rowMenus(t) : [null];
+    const m0 = Math.floor(ry() * menus.length);
+    if (!isPlainObject(t) || typeof t.id !== 'string' || t.id === 'yard' || t.id === 'finale' || seen.has(t.id)) continue;
     if (!unlockMet(t, rep, gear)) continue;
     seen.add(t.id);
-    info.push({ row: t, idx: i, o: offerFields(t, gear, len) });
+    const n = menus.length;
+    let mi = (m0 + week - 1) % n;
+    let o = offerFields(t, gear, len, menus[mi], kThird);
+    if (!o.safe && mi !== 0) {
+      const first = offerFields(t, gear, len, menus[0], kThird);
+      if (first.safe) {
+        for (let k = 1; k < n; k++) {
+          const j = (mi + k) % n;
+          const oj = j === 0 ? first : offerFields(t, gear, len, menus[j], kThird);
+          if (oj.safe) { mi = j; o = oj; break; }
+        }
+      }
+    }
+    o.menuIdx = mi;
+    info.push({ row: t, idx: i, menus, o });
   }
 
-  // 4. Low cash: the Birthday first.
+  // 4. Low cash: the Birthday first. Then Fisher Yates over the rest, from the last index down to 1,
+  // one draw a swap; the slots; the "no picked offer is safe" swap (W3.4, unchanged).
   const picked = [];
   const bday = info.find((x) => x.row.id === 'birthday') || null;
   if (cash < C.LOW_CASH_BIRTHDAY && bday !== null) picked.push(bday);
-
-  // 5. Fisher Yates over the rest, from the last index down to 1, one draw a swap.
   const rest = info.filter((x) => !picked.includes(x));
   for (let i = rest.length - 1; i >= 1; i--) {
     const j = Math.floor(r() * (i + 1));
@@ -1222,22 +1767,108 @@ function genOffers(input) {
     }
     if (best !== null) picked[picked.length - 1] = best;
   }
-
-  // 6. The invite: the highest fee safe type not yet picked.
+  // W3.4 step 6, found here and placed by X3.4 step 7: the highest fee safe type not yet picked.
+  let typeInvite = null;
   if (invite) {
-    let best = null;
     for (const x of info) {
       if (!x.o.safe || picked.includes(x)) continue;
-      if (best === null || x.o.pay > best.o.pay || (x.o.pay === best.o.pay && x.idx < best.idx)) best = x;
+      if (typeInvite === null || x.o.pay > typeInvite.o.pay || (x.o.pay === typeInvite.o.pay && x.idx < typeInvite.idx)) typeInvite = x;
     }
-    if (best !== null) picked.push(best);
   }
 
-  // 7. Display order: safe by difficulty then pay, then stretch the same way; the Yard day last.
+  // 5. The stretch. A picked card with a Needs line is the week's gear stretch: the first such keeps
+  // its base headcount at the stretch pay, and every other picked card takes a SAFE_SIZES draw in
+  // picked order (step 6, X3.4 as built in v3.1).
+  // Review 1 (contract X20.3) for a week with no Needs card: one rv() draw u, then one SAFE_SIZES draw
+  // for every picked card in picked order. A card can be the stretch when its largest headcount that
+  // fits the grate at STRETCH_LOAD (STRETCH_SIZE down to STRETCH_MIN of its base), at the stretch pay,
+  // pays more than STRETCH_EDGE times every other picked card at its safe size. u picks one of those
+  // in picked order; the rest take their safe sizes. With no such card the week has no stretch and
+  // every card takes its safe size. So the STRETCH card always pays the most.
+  const toStretch = (x) => {
+    x.o.tier = 'stretch';
+    x.o.patience = x.row.patience + C.STRETCH_PATIENCE;
+    x.o.difficulty = Math.min(3, x.row.flames + 1);
+  };
+  const gearStretch = picked.find((x) => x.o.needs !== '') || null;
+  if (gearStretch !== null) {
+    toStretch(gearStretch);
+    resizeOffer(gearStretch.o, gearStretch.o.headcount, kStretch);
+    // X18.1 item 26: any other picked card with a Needs line reads as a stretch (never SAFE BET over
+    // a Needs line), with no stretch pay and no sizing.
+    for (const x of picked) if (x !== gearStretch && x.o.needs !== '') x.o.tier = 'stretch';
+    // 6. The safe cards: one rv() draw each, in picked order, for every other picked card.
+    for (const x of picked) {
+      if (x === gearStretch) continue;
+      const f = C.SAFE_SIZES[Math.floor(rv() * C.SAFE_SIZES.length)];
+      if (x.o.needs !== '') continue;   // item 26: a Needs card keeps its size
+      resizeOffer(x.o, Math.max(x.o.menu.length, Math.round(x.o.base * f)), kThird);
+    }
+  } else if (picked.length > 0) {
+    const u = rv();
+    const slotsN = C.KETTLE_SLOTS * (hasGear(gear, 'kettle2') ? 2 : 1) + (hasGear(gear, 'drum') ? C.DRUM_SLOTS : 0);
+    const safeN = new Map();
+    for (const x of picked) {
+      const f = C.SAFE_SIZES[Math.floor(rv() * C.SAFE_SIZES.length)];
+      safeN.set(x, Math.max(x.o.menu.length, Math.round(x.o.base * f)));
+    }
+    const fitN = new Map();
+    const cands = [];
+    for (const x of picked) {
+      const cap = slotsN * (C.GATE_OPENS + x.o.window) * C.STRETCH_LOAD + 1e-9;
+      let fit = -1;
+      for (let h = Math.round(x.o.base * C.STRETCH_SIZE); h >= Math.ceil(x.o.base * C.STRETCH_MIN); h--) {
+        if (slotSeconds(railSplit(h, x.o.menu, null)) <= cap) { fit = h; break; }
+      }
+      if (fit < 0) continue;
+      let safeTop = 0;
+      for (const y of picked) if (y !== x) safeTop = Math.max(safeTop, feeFor(safeN.get(y), y.o.menu, kThird));
+      if (feeFor(fit, x.o.menu, kStretch) > safeTop * C.STRETCH_EDGE) { fitN.set(x, fit); cands.push(x); }
+    }
+    const held = cands.length > 0 ? cands[Math.floor(u * cands.length)] : null;
+    for (const x of picked) {
+      if (x === held) { toStretch(x); resizeOffer(x.o, fitN.get(x), kStretch); }
+      else resizeOffer(x.o, safeN.get(x), kThird);
+    }
+  }
+
+  // 7. The invite: the v3.0 type invite when step 6 of W3.4 found one, else a repeat card of the
+  // highest pay loadable picked type with its next menu pair that the owned gear can cook (item 29).
+  let inviteO = null;
+  if (invite) {
+    if (typeInvite !== null) {
+      typeInvite.o.invite = true;
+      inviteO = typeInvite.o;
+    } else {
+      let best = null;
+      for (const x of picked) {
+        if (!x.o.safe) continue;
+        if (best === null || x.o.pay > best.o.pay || (x.o.pay === best.o.pay && x.idx < best.idx)) best = x;
+      }
+      if (best !== null) {
+        const n = best.menus.length;
+        for (let k = 1; k <= n; k++) {
+          const j = (best.o.menuIdx + k) % n;
+          const oj = offerFields(best.row, gear, len, best.menus[j], kThird);
+          if (!oj.safe) continue;
+          oj.id = 'invite';
+          oj.invite = true;
+          oj.menuIdx = j;
+          inviteO = oj;
+          break;
+        }
+      }
+    }
+  }
+
+  // 8. Display order: loadable first; then the safe tier before the stretch; then difficulty, pay
+  // and the row index; the invite after every other booking card; then the Yard day. Hosts from r.
   picked.sort((a, b) => (a.o.safe === b.o.safe ? 0 : (a.o.safe ? -1 : 1))
+    || (a.o.tier === b.o.tier ? 0 : (a.o.tier === 'safe' ? -1 : 1))
     || a.o.difficulty - b.o.difficulty || a.o.pay - b.o.pay || a.idx - b.idx);
   const out = picked.map((x) => freezeOffer(x.o, drawHost()));
-  out.push(freezeOffer(offerFields(BOOKINGS.yard, gear, len), null));
+  if (inviteO !== null) out.push(freezeOffer(inviteO, drawHost()));
+  out.push(freezeOffer(offerFields(BOOKINGS.yard, gear, len, undefined, kThird), null));
   return out;
 }
 
@@ -1280,7 +1911,7 @@ function scoreEvent(input) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// D9, K6 and W13.3 Save validation: accepts v 1, 2, 3 and 4, always returns v 4
+// D9, K6, W13.3 and X11 Save validation: accepts v 1 to 5, always returns v 5
 // ---------------------------------------------------------------------------------------------
 
 function isPlainObject(v) {
@@ -1322,53 +1953,225 @@ function readResults(arr) {
   return out;
 }
 
+// X11.2: a star value rounded to the half and clamped; a non number takes the default.
+function halfStar(v, def, lo, hi) {
+  const n = (typeof v === 'number' && Number.isFinite(v)) ? Math.round(v * 2) / 2 : def;
+  return clamp(n, lo, hi);
+}
+
+function readSkills(v) {
+  let a, b;
+  if (Array.isArray(v)) { try { a = v[0]; b = v[1]; } catch (e) { a = undefined; b = undefined; } }
+  return [halfStar(a, 1, 1, 5), halfStar(b, 1, 1, 5)];
+}
+
+// The first list name from names[start % 60], stepping forward, that `used` does not hold.
+function firstFreeName(start, used) {
+  const names = STRINGS.names;
+  const s = ((Math.trunc(start) % names.length) + names.length) % names.length;
+  for (let k = 0; k < names.length; k++) {
+    const nm = names[(s + k) % names.length];
+    if (!used.has(nm)) return nm;
+  }
+  return names[s];
+}
+
+function keepName(v, start, used) {
+  const nm = (typeof v === 'string' && STRINGS.names.includes(v) && !used.has(v)) ? v : firstFreeName(start, used);
+  used.add(nm);
+  return nm;
+}
+
+// X11.2: one crew card, clamped field by field (the id is checked by the caller).
+function cleanCard(e, id, used) {
+  const role = readKey(e, 'role');
+  const skills = readSkills(readKey(e, 'skills'));
+  const top = Math.max(skills[0], skills[1]);
+  const mood = toInt(readKey(e, 'mood'), 0, -2, 2);
+  return {
+    id,
+    name: keepName(readKey(e, 'name'), id, used),
+    role,
+    skills,
+    potential: halfStar(readKey(e, 'potential'), top, top, 5),
+    xp: toInt(readKey(e, 'xp'), 0, 0, C.LEVEL_XP - 1),
+    banked: toInt(readKey(e, 'banked'), 0, 0, C.BANK_MAX),
+    mood,
+    wage: toInt(readKey(e, 'wage'), wageFor(cardStars(skills), role), 1, 999),
+    contract: toInt(readKey(e, 'contract'), 1, 1, 2),
+    seasons: toInt(readKey(e, 'seasons'), 0, 0, 99),
+    rookie: toBool(readKey(e, 'rookie')),
+    trait: null,
+    look: cleanLook(readKey(e, 'look')),
+    bring: toBool(readKey(e, 'bring')),
+    raised: toBool(readKey(e, 'raised')),
+    notice: toBool(readKey(e, 'notice')) && mood === -2,
+    worked: toInt(readKey(e, 'worked'), 0, 0, 9999),
+    bench: toInt(readKey(e, 'bench'), 0, 0, C.BENCH_STREAK - 1)
+  };
+}
+
+// X11.2: the first CREW_MAX plain objects with a known role; a bad or repeated id drops the card;
+// then at most one bring per role (later ones in array order rest).
+function readCrew(arr) {
+  const out = [];
+  if (!Array.isArray(arr)) return out;
+  const n = Math.min(arr.length >>> 0, 10000);
+  const cands = [];
+  for (let i = 0; i < n && cands.length < C.CREW_MAX; i++) {
+    let e;
+    try { e = arr[i]; } catch (x) { continue; }
+    if (!isPlainObject(e)) continue;
+    const role = readKey(e, 'role');
+    if (typeof role !== 'string' || !ROLE_IDS.includes(role)) continue;
+    cands.push(e);
+  }
+  const ids = new Set();
+  const used = new Set();
+  for (const e of cands) {
+    const id = readKey(e, 'id');
+    if (!(typeof id === 'number' && Number.isInteger(id) && id >= 1 && id <= 9999) || ids.has(id)) continue;
+    ids.add(id);
+    out.push(cleanCard(e, id, used));
+  }
+  const brought = new Set();
+  for (const c of out) {
+    if (!c.bring) continue;
+    if (brought.has(c.role)) c.bring = false;
+    else brought.add(c.role);
+  }
+  return out;
+}
+
+// X11.2: an applicant (a walk-in or a pool entry) validated like a card's name, role, skills,
+// potential and look, plus mood 0 or 1. Names are checked only against the list they sit in
+// (X18.1 item 34). null when the entry is not a plain object with a known role.
+function cleanApplicant(e, i, used) {
+  if (!isPlainObject(e)) return null;
+  const role = readKey(e, 'role');
+  if (typeof role !== 'string' || !ROLE_IDS.includes(role)) return null;
+  const skills = readSkills(readKey(e, 'skills'));
+  const top = Math.max(skills[0], skills[1]);
+  return {
+    name: keepName(readKey(e, 'name'), i, used),
+    role,
+    skills,
+    potential: halfStar(readKey(e, 'potential'), top, top, 5),
+    mood: toInt(readKey(e, 'mood'), 0, 0, 1),
+    look: cleanLook(readKey(e, 'look'))
+  };
+}
+
+// X11.2: up to 3 walk-ins with their hired flags; an invalid entry drops the list to [].
+function readWalkins(arr) {
+  if (!Array.isArray(arr)) return [];
+  const out = [];
+  const used = new Set();
+  const n = Math.min(arr.length >>> 0, 3);
+  for (let i = 0; i < n; i++) {
+    let e;
+    try { e = arr[i]; } catch (x) { return []; }
+    const a = cleanApplicant(e, i, used);
+    if (a === null) return [];
+    a.hired = toBool(readKey(e, 'hired'));
+    out.push(a);
+  }
+  return out;
+}
+
+// X11.2: Hiring Day mid way: round 1 to 4, tryouts 0 to TRYOUTS and exactly 18 valid pool entries,
+// else null.
+function readHiring(h, year) {
+  if (!isPlainObject(h)) return null;
+  const y = readKey(h, 'year'), round = readKey(h, 'round'), tryouts = readKey(h, 'tryouts');
+  if (y !== year) return null;
+  if (!(typeof round === 'number' && Number.isInteger(round) && round >= 1 && round <= C.HIRE_ROUNDS + 1)) return null;
+  if (!(typeof tryouts === 'number' && Number.isInteger(tryouts) && tryouts >= 0 && tryouts <= C.TRYOUTS)) return null;
+  const pool = readKey(h, 'pool');
+  if (!Array.isArray(pool) || pool.length !== C.POOL_SIZE) return null;
+  const used = new Set();
+  const out = [];
+  for (let i = 0; i < C.POOL_SIZE; i++) {
+    let e;
+    try { e = pool[i]; } catch (x) { return null; }
+    const a = cleanApplicant(e, i, used);
+    if (a === null) return null;
+    const status = readKey(e, 'status');
+    if (status !== 'open' && status !== 'mine' && status !== 'taken') return null;
+    a.status = status;
+    a.tried = toBool(readKey(e, 'tried'));
+    out.push(a);
+  }
+  return { year: y, round, tryouts, pool: out };
+}
+
+// X11.3: v1 to v4 hires become cards, buddy first (a RUN card, 2.5 stars) then the fire tender (a
+// FIRE card, 3 stars). Names and looks are drawn from the season seed.
+function migrateHires(hires, seed) {
+  const rows = [];
+  if (hires.buddy) rows.push({ role: 'run', skills: [2.5, 2.5], wage: C.BUDDY_WAGE });
+  if (hires.tender) rows.push({ role: 'fire', skills: [3, 3], wage: C.TENDER_WAGE });
+  const names = STRINGS.names;
+  const used = new Set();
+  return rows.map((r, n) => {
+    let i = mix32(seed, 0x4E414D45, n) % names.length;
+    for (let k = 0; k < names.length && used.has(names[i]); k++) i = (i + 1) % names.length;
+    used.add(names[i]);
+    const lr = mulberry32(mix32(seed, 0x4C4F4F4B, n));
+    return {
+      id: n + 1, name: names[i], role: r.role, skills: r.skills.slice(), potential: 4,
+      xp: 0, banked: 0, mood: 0, wage: r.wage, contract: 1, seasons: 0, rookie: false, trait: null,
+      look: drawLook(lr), bring: true, raised: false, notice: false, worked: 1, bench: 0
+    };
+  });
+}
+
 function validateSave(obj) {
   try {
     if (!isPlainObject(obj)) return null;
     const v = readKey(obj, 'v');
-    if (v !== 1 && v !== 2 && v !== 3 && v !== 4) return null;
-    const out = { v: C.SAVE_VERSION };
-    out.day = toInt(readKey(obj, 'day'), 1, 1, C.MAX_DAY);
-    out.cash = toInt(readKey(obj, 'cash'), C.START_CASH, 0, C.MAX_CASH);
-    out.rep = toInt(readKey(obj, 'rep'), C.START_REP, 0, 100);
+    if (v !== 1 && v !== 2 && v !== 3 && v !== 4 && v !== 5) return null;
+    const day = toInt(readKey(obj, 'day'), 1, 1, C.MAX_DAY);
+    const cash = toInt(readKey(obj, 'cash'), C.START_CASH, 0, C.MAX_CASH);
+    const rep = toInt(readKey(obj, 'rep'), C.START_REP, 0, 100);
     const stockIn = readKey(obj, 'stock');
-    out.stock = {};
-    for (const m of MEAT_IDS) out.stock[m] = toInt(readKey(stockIn, m), 0, 0, C.STEPPER_MAX);
-    out.charcoal = toInt(readKey(obj, 'charcoal'), 0, 0, C.CHARCOAL_MAX);
-    out.wood = v === 4 ? toInt(readKey(obj, 'wood'), 0, 0, C.WOOD_MAX) : 0;
+    const stock = {};
+    for (const m of MEAT_IDS) stock[m] = toInt(readKey(stockIn, m), 0, 0, C.STEPPER_MAX);
+    const charcoal = toInt(readKey(obj, 'charcoal'), 0, 0, C.CHARCOAL_MAX);
+    const wood = v >= 4 ? toInt(readKey(obj, 'wood'), 0, 0, C.WOOD_MAX) : 0;
     const gearIn = readKey(obj, 'gear');
-    out.gear = {};
-    for (const g of GEAR_IDS) out.gear[g] = toBool(readKey(gearIn, g));
-    if (!out.gear.kettle2) out.gear.drum = false;
+    const gear = {};
+    for (const g of GEAR_IDS) gear[g] = toBool(readKey(gearIn, g));
+    if (!gear.kettle2) gear.drum = false;
     // A v1 save had no decor, so it migrates with none.
     const decorIn = v >= 2 ? readKey(obj, 'decor') : undefined;
-    out.decor = {};
-    for (const d of DECOR_IDS) out.decor[d] = toBool(readKey(decorIn, d));
-    if (!out.decor.chair1) out.decor.chair2 = false;
-    const hiresIn = readKey(obj, 'hires');
-    out.hires = {};
-    for (const h of HIRE_IDS) out.hires[h] = toBool(readKey(hiresIn, h));
-    if (!out.gear.drum) out.hires.tender = false;
-    if (!out.gear.drum) out.stock.brisket = 0;
+    const decor = {};
+    for (const d of DECOR_IDS) decor[d] = toBool(readKey(decorIn, d));
+    if (!decor.chair1) decor.chair2 = false;
+    // v1 to v4 hires (the legacy tender check of W13.3 first); X11.3 turns them into cards below.
+    const hiresIn = v <= 4 ? readKey(obj, 'hires') : undefined;
+    const hires = {};
+    for (const h of HIRE_IDS) hires[h] = toBool(readKey(hiresIn, h));
+    if (!gear.drum) hires.tender = false;
+    if (!gear.drum) stock.brisket = 0;
     const statsIn = readKey(obj, 'stats');
-    out.stats = {};
-    for (const s of STAT_IDS_V1) out.stats[s] = toInt(readKey(statsIn, s), 0, 0, C.MAX_STAT);
-    out.stats.seated = v >= 2 ? toInt(readKey(statsIn, 'seated'), 0, 0, C.MAX_STAT) : 0;
-    out.drivewayShown = toBool(readKey(obj, 'drivewayShown'));
-    // [T 2.8]: only a version 3 or 4 day 1 save can still owe the tutorial. v1 and v2 players have played.
+    const stats = {};
+    for (const s of STAT_IDS_V1) stats[s] = toInt(readKey(statsIn, s), 0, 0, C.MAX_STAT);
+    stats.seated = v >= 2 ? toInt(readKey(statsIn, 'seated'), 0, 0, C.MAX_STAT) : 0;
+    const drivewayShown = toBool(readKey(obj, 'drivewayShown'));
+    // [T 2.8]: only a version 3 or later day 1 save can still owe the tutorial. v1 and v2 players have played.
     const tutIn = v >= 3 ? readKey(obj, 'tutorial') : undefined;
-    const owed = isPlainObject(tutIn) && readKey(tutIn, 'done') === false && out.day === 1;
-    out.tutorial = { done: !owed };
+    const owed = isPlainObject(tutIn) && readKey(tutIn, 'done') === false && day === 1;
     // W13.3: the season. v1 to v3 start season 1 week 1.
-    const fallbackSeed = mix32(out.day, out.cash, out.stats.served);
-    const season = { year: 1, week: 1, seed: fallbackSeed, pick: null, addon: null, weekCash: out.cash, results: [] };
-    const seasonIn = v === 4 ? readKey(obj, 'season') : undefined;
+    const fallbackSeed = mix32(day, cash, stats.served);
+    const season = { year: 1, week: 1, seed: fallbackSeed, pick: null, addon: null, weekCash: cash, results: [] };
+    const seasonIn = v >= 4 ? readKey(obj, 'season') : undefined;
     if (isPlainObject(seasonIn)) {
       season.year = toInt(readKey(seasonIn, 'year'), 1, 1, C.YEAR_MAX);
       let seedN;
       try { seedN = Number(readKey(seasonIn, 'seed')); } catch (e) { seedN = NaN; }
       season.seed = Number.isFinite(seedN) ? (seedN >>> 0) : fallbackSeed;
-      season.weekCash = toInt(readKey(seasonIn, 'weekCash'), out.cash, 0, C.MAX_CASH);
+      season.weekCash = toInt(readKey(seasonIn, 'weekCash'), cash, 0, C.MAX_CASH);
       season.results = readResults(readKey(seasonIn, 'results'));
       let week = toInt(readKey(seasonIn, 'week'), 1, 1, C.SEASON_WEEKS);
       if (season.results.length >= C.SEASON_WEEKS) week = C.SEASON_WEEKS;
@@ -1379,26 +2182,46 @@ function validateSave(obj) {
       season.week = week;
       const complete = season.results.length >= C.SEASON_WEEKS;
       const pickIn = readKey(seasonIn, 'pick');
-      const pickOk = week === C.SEASON_WEEKS ? pickIn === 'finale' : (pickIn === 'birthday' || pickIn === 'picnic' || pickIn === 'yard');
+      const pickOk = week === C.SEASON_WEEKS ? pickIn === 'finale'
+        : (pickIn === 'birthday' || pickIn === 'picnic' || pickIn === 'yard' || pickIn === 'invite');   // X11.2: 'invite' in weeks 1 to 8
       season.pick = !complete && pickOk ? pickIn : null;
       const addonIn = readKey(seasonIn, 'addon');
-      season.addon = (typeof addonIn === 'string' && MEAT_IDS.includes(addonIn) && (!MEATS[addonIn].drumOnly || out.gear.drum)) ? addonIn : null;
+      season.addon = (typeof addonIn === 'string' && MEAT_IDS.includes(addonIn) && (!MEATS[addonIn].drumOnly || gear.drum)) ? addonIn : null;
     }
-    out.season = season;
     // W13.3 and W22.1: the save key player holds the creator data (state.profile).
-    const playerIn = v === 4 ? readKey(obj, 'player') : undefined;
-    out.player = isPlainObject(playerIn)
+    const playerIn = v >= 4 ? readKey(obj, 'player') : undefined;
+    let player = isPlainObject(playerIn)
       ? { name: cleanName(readKey(playerIn, 'name'), STRINGS.defaultName), look: cleanLook(readKey(playerIn, 'look')) }
       : null;
-    out.pitName = v === 4 ? cleanName(readKey(obj, 'pitName'), STRINGS.defaultPit) : STRINGS.defaultPit;
-    const lenIn = v === 4 ? readKey(readKey(obj, 'settings'), 'length') : undefined;
-    out.settings = { length: C.LENGTH_ORDER.includes(lenIn) ? lenIn : 'normal' };
+    const pitName = v >= 4 ? cleanName(readKey(obj, 'pitName'), STRINGS.defaultPit) : STRINGS.defaultPit;
+    const lenIn = v >= 4 ? readKey(readKey(obj, 'settings'), 'length') : undefined;
+    const settings = { length: C.LENGTH_ORDER.includes(lenIn) ? lenIn : 'normal' };
     if (owed) {
-      out.player = null;
+      player = null;
       season.results = [];
       season.week = 1;
     }
-    return out;
+    // X11.2 and X11.3: the crew, the next card id, Hiring Day and the three season keys.
+    const seasonV5 = v === 5 && isPlainObject(seasonIn) ? seasonIn : undefined;
+    const crew = v === 5 ? readCrew(readKey(obj, 'crew')) : migrateHires(hires, season.seed);
+    let maxId = 0;
+    for (const c of crew) maxId = Math.max(maxId, c.id);
+    const seqLo = Math.min(9999, maxId + 1);
+    const crewSeq = v === 5 ? clamp(toInt(readKey(obj, 'crewSeq'), seqLo, 1, 9999), seqLo, 9999) : seqLo;
+    const draftedIn = readKey(seasonV5, 'drafted');
+    season.drafted = typeof draftedIn === 'boolean' ? draftedIn : (season.results.length > 0 || crew.length > 0);
+    const trainedIn = readKey(seasonV5, 'trained');
+    season.trained = (typeof trainedIn === 'number' && Number.isInteger(trainedIn) && trainedIn >= 1 && trainedIn <= crewSeq - 1) ? trainedIn : null;
+    season.walkins = v === 5 ? readWalkins(readKey(seasonV5, 'walkins')) : [];
+    let hiring = null;
+    if (v === 5 && season.results.length === 0 && season.drafted === false && player !== null && !owed) {
+      hiring = readHiring(readKey(obj, 'hiring'), season.year);
+    }
+    return {
+      v: C.SAVE_VERSION, day, cash, rep, stock, charcoal, wood, gear, decor, stats, drivewayShown,
+      tutorial: { done: !owed },
+      season, crew, crewSeq, hiring, player, pitName, settings
+    };
   } catch (e) {
     return null;
   }
@@ -1467,6 +2290,13 @@ function createSim(saved, seed) {
   // R-4: gear and decor bought since the morning opened, and the cash it opened with (never saved).
   let morningBuys = [];
   let morningCash = 0;
+  // v3.1: signing fees and send-offs since the morning opened (X18.1 item 32, never saved), the
+  // booked guests' party index per schedule entry and the pull forward timer (X5.10, item 38), and
+  // whether today's fire was sampled from the gate on (X5.5, item 37).
+  let crewSpend = [];
+  let schedParty = [];
+  let pullT = 0;
+  let fireSampled = false;
 
   function emit(type, payload) {
     const e = { type };
@@ -1499,7 +2329,13 @@ function createSim(saved, seed) {
       booked: 0, pending: 0, fed: 0, missed: 0, waitSum: 0, offMenu: 0, addonServed: 0, addonBurnt: 0,
       deposit: 0,
       // playtest round 1: cold booked plates (P-2), raw meat thrown out (P-3), a sold out miss (P-6)
-      cold: 0, rawWaste: 0, soldOutMiss: false
+      cold: 0, rawWaste: 0, soldOutMiss: false,
+      // v3.1 (X4.4): one entry per lineup card, the fire from the gate on, the fan third at load up
+      crew: {},
+      fireGoodS: { kettle1: 0, kettle2: 0, drum: 0 },
+      fireDipped: { kettle1: false, kettle2: false, drum: false },
+      fireHotS: { kettle1: 0, kettle2: 0, drum: 0 },   // review 1: seconds after the gate at FIRE_HOT or above
+      third: 0
     };
   }
 
@@ -1534,8 +2370,10 @@ function createSim(saved, seed) {
     for (const d of DECOR_IDS) state.decor[d] = s && s.decor ? s.decor[d] === true : false;
     if (!state.decor.chair1) state.decor.chair2 = false;
     state.seats = emptySeats();
-    state.hires = {};
-    for (const h of HIRE_IDS) state.hires[h] = s ? s.hires[h] === true : false;
+    // v3.1 (X4.1): crew cards replace state.hires.
+    state.crew = s ? s.crew.map(copyCard) : [];
+    state.crewSeq = s ? s.crewSeq : 1;
+    state.hiring = null;
     state.stats = {};
     for (const k of STAT_IDS) {
       const v = s && s.stats ? Number(s.stats[k]) : 0;
@@ -1558,12 +2396,13 @@ function createSim(saved, seed) {
       kettle1: newCooker('kettle1'),
       kettle2: newCooker('kettle2'),
       drum: newCooker('drum'),
-      board: { stacks: [], slicing: null },
+      board: { stacks: [], slicing: null, waiting: [] },
       table: { spots: new Array(tableSpotCount()).fill(null) }
     };
     state.player = newPlayer();
     state.buddy = null;
     state.tender = null;
+    state.prep = null;
     state.customers = [];
     state.today = newToday();
     state.till = null;
@@ -1580,7 +2419,11 @@ function createSim(saved, seed) {
       offers: [],
       booking: null,
       addon: null,
-      results: ss ? ss.results.map((x) => ({ type: x.type, stars: x.stars })) : []
+      results: ss ? ss.results.map((x) => ({ type: x.type, stars: x.stars })) : [],
+      // v3.1 (X4.1): createSim() restores the saved trained pick and walk-ins after startWeek().
+      drafted: ss ? ss.drafted === true : false,
+      trained: null,
+      walkins: []
     };
     state.profile = s && s.player ? { name: s.player.name, look: cleanLook(s.player.look) } : null;
     state.pitName = s ? s.pitName : STRINGS.defaultPit;
@@ -1597,6 +2440,10 @@ function createSim(saved, seed) {
     schedule = [];
     schedIdx = 0;
     tickets = zeroByMeat();
+    crewSpend = [];
+    schedParty = [];
+    pullT = 0;
+    fireSampled = false;
   }
 
   // ---- grid and walkability ([V2.2.1]) ------------------------------------------------------
@@ -2083,14 +2930,20 @@ function createSim(saved, seed) {
     if (idx < 0) return false;
     const sp = spots[idx];
     const sliced = sp.times.shift();
+    const ranPlate = Array.isArray(sp.run) ? sp.run.shift() === true : false;   // X5.3
     if (sp.times.length === 0) spots[idx] = null;
+    c.runPlate = ranPlate;
     const m = MEATS[c.want];
     const t = state.today;
     const booked = c.booked === true;
     const price = booked ? 0 : m.price;   // W7.2: a booked guest pays no plate price
     const frac = Math.min(1, c.wait / c.patienceMax);
     const plateAge = state.clock - sliced;
-    const tip = Math.round(m.price * C.TIP_RATE * (1 - frac)) + (plateAge < C.HOT_PLATE_SECONDS ? C.HOT_PLATE_TIP : 0);
+    // Review 1 (contract X20.1): a plate the RUN card set down tips (1 + runTip) times the plate tip.
+    const runRec = ranPlate && state.buddy && state.buddy.vals ? state.today.crew[String(state.buddy.cardId)] || null : null;
+    const tipK = runRec !== null ? 1 + state.buddy.vals.runTip : 1;
+    const tip = Math.round(m.price * C.TIP_RATE * (1 - frac) * tipK) + (plateAge < C.HOT_PLATE_SECONDS ? C.HOT_PLATE_TIP : 0);
+    if (runRec !== null) runRec.tips += tip;
     const quick = c.wait < C.REP_QUICK_FRAC * c.patienceMax;
     state.cash += price + tip;
     t.revenue += price;
@@ -2139,16 +2992,19 @@ function createSim(saved, seed) {
 
   // Set down the plates in `hands` (a Carry of kind plates). Places what fits, serves anyone
   // waiting for that meat, repeats while plates remain and room opens. Returns plates placed.
-  function setDown(hands) {
+  // X5.3: `byRun` marks each plate the RUN card set down (spot.run runs beside spot.times).
+  function setDown(hands, byRun) {
     let placed = 0;
     const spots = state.stations.table.spots;
     while (hands.times.length > 0) {
       const idx = tableSpotIndexFor(hands.meat);
       if (idx < 0) break;
-      if (spots[idx] === null) spots[idx] = { meat: hands.meat, times: [] };
+      if (spots[idx] === null) spots[idx] = { meat: hands.meat, times: [], run: [] };
       const sp = spots[idx];
+      if (!Array.isArray(sp.run)) sp.run = sp.times.map(() => false);
       while (hands.times.length > 0 && sp.times.length < C.TABLE_STACK) {
         sp.times.push(hands.times.shift());
+        sp.run.push(byRun === true);
         placed += 1;
       }
       serveLine();
@@ -2318,10 +3174,21 @@ function createSim(saved, seed) {
       const board = state.stations.board;
       if (c !== null && c.kind === 'cooked') {
         const m = MEATS[c.meat];
+        // X5.3 and X18.1 item 39: with a PREP card on, leave the piece for them while the board holds
+        // fewer than PREP_WAIT and has room for it next to the pieces of that meat already waiting.
+        if (state.prep && board.waiting.length < C.PREP_WAIT && boardFits(c.meat, m.plates + waitingPlates(c.meat))) {
+          const name = prepName();
+          return act('Leave ' + m.label + ' for ' + name, true, stationId, () => {
+            board.waiting.push({ meat: m.id });
+            p.carrying = null;
+            emit('left_for_prep', { meat: m.id, name });
+          });
+        }
+        if (board.slicing !== null) return noop('Board is busy', stationId);
         if (!boardFits(c.meat, m.plates)) return noop('Board is full. Use the trash', stationId);   // R-2
         return act('Slice ' + m.label, true, stationId, () => {
           p.busy = { what: 'slice', meat: m.id, t: 0, total: m.slice };
-          board.slicing = { meat: m.id, t: 0, total: m.slice };
+          board.slicing = { meat: m.id, t: 0, total: m.slice, who: 'player' };
           p.carrying = null;
         });
       }
@@ -2467,6 +3334,7 @@ function createSim(saved, seed) {
     }
     const sl = state.stations.board.slicing;
     if (sl && allow(sl.meat)) cookW[sl.meat] += 1;
+    for (const w of state.stations.board.waiting) if (allow(w.meat)) cookW[w.meat] += 1;   // X18.1 item 39
     const cookAny = sumValues(cookW) > 0;
     if (tableAny) {
       if (rBranch < C.ORDER_FROM_TABLE || !cookAny) return weightedPick(tableW, rWeight);
@@ -2497,7 +3365,7 @@ function createSim(saved, seed) {
     return Object.assign(newMover(MAP.custSpawn.x, MAP.custSpawn.y, 'up'), {
       id: custSeq, body, want, patienceMax, patience: patienceMax, wait: 0,
       queueIndex: -1, mode: 'arriving', mood: 'neutral', reason: null, pause: 0, hop: 0,
-      seat: null, eat: 0, eatMax: 0, bonusPaid: false, booked: false
+      seat: null, eat: 0, eatMax: 0, bonusPaid: false, booked: false, runPlate: false
     });
   }
 
@@ -2537,6 +3405,7 @@ function createSim(saved, seed) {
   // its members PARTY_GAP_S apart.
   function buildSchedule(b, gateAt) {
     schedule = [];
+    schedParty = [];
     schedIdx = 0;
     const sizes = [];
     let left = b.headcount;
@@ -2549,7 +3418,7 @@ function createSim(saved, seed) {
     const P = sizes.length;
     for (let k = 0; k < P; k++) {
       const at = gateAt + C.ARRIVAL_SPAN * b.window * Math.pow((k + 0.5) / P, C.ARRIVAL_CURVE);
-      for (let j = 0; j < sizes[k]; j++) schedule.push(at + j * C.PARTY_GAP_S);
+      for (let j = 0; j < sizes[k]; j++) { schedule.push(at + j * C.PARTY_GAP_S); schedParty.push(k); }
     }
   }
 
@@ -2586,12 +3455,42 @@ function createSim(saved, seed) {
   function tickBookedSpawns() {
     const t = state.today;
     if (t.pending <= 0 || state.clock + 1e-9 >= t.endAt - C.LAST_CALL_GUARD) return;
+    // X5.10 and X18.1 item 38: after ARRIVAL_PULL_S with no booked guest arriving or waiting while
+    // food is in progress, the next party arrives now.
+    if (state.clock + 1e-9 >= t.gateAt) {
+      const busy = state.customers.some((c) => c.booked === true && (c.mode === 'arriving' || c.mode === 'waiting'));
+      pullT = busy ? 0 : pullT + C.TICK_SECONDS;
+      if (!busy && pullT + 1e-9 >= C.ARRIVAL_PULL_S && foodInProgress()) {
+        pullParty();
+        pullT = 0;
+      }
+    }
     let free = queueSpotCount() - state.customers.filter((c) => c.queueIndex >= 0).length;
     while (free > 0 && t.pending > 0 && schedIdx < schedule.length && state.clock + 1e-9 >= schedule[schedIdx]) {
       schedIdx += 1;
       spawnBookedGuest();
       free -= 1;
     }
+  }
+
+  // X5.10: an active cooker piece not burnt, a board stack, a piece left for the PREP card, a slice,
+  // or a plate on the table. Hands do not count (X18.1 item 38).
+  function foodInProgress() {
+    for (const id of COOKER_IDS) {
+      if (!stationActive(STATION_BY_ID[id])) continue;
+      if (state.stations[id].pieces.some((pc) => pc.state !== 'burnt')) return true;
+    }
+    const board = state.stations.board;
+    if (board.stacks.length > 0 || board.waiting.length > 0 || board.slicing !== null) return true;
+    return state.stations.table.spots.some((sp) => sp !== null && sp.times.length > 0);
+  }
+
+  // X5.10: the party starting at schedIdx moves to the clock, its members PARTY_GAP_S apart, when its
+  // time is later than the clock. Later parties keep their times. No rng() draw.
+  function pullParty() {
+    if (schedIdx >= schedule.length || !(schedule[schedIdx] > state.clock + 1e-9)) return;
+    const party = schedParty[schedIdx];
+    for (let i = schedIdx, j = 0; i < schedule.length && schedParty[i] === party; i++, j++) schedule[i] = state.clock + j * C.PARTY_GAP_S;
   }
 
   // Q-6: booked guests whose arrival time has come who wait off canvas for a line spot.
@@ -2667,8 +3566,16 @@ function createSim(saved, seed) {
   }
 
   // [V2.5] step 5: the seat tip, paid when eating ends or at the hard end.
+  // X5.3 as amended by review 1 (contract X20.1): a plate the RUN card set down adds
+  // round(2 * runSeatTip) coins to seatBonus() (0 at 3 stars and under, so v2's bonus there; 1 from
+  // 4 stars), so the perk shows at every charm level. v2's bonus when no RUN card works.
   function payBonus(c, atClose) {
-    const bonus = seatBonus();
+    const share = c.runPlate === true && state.buddy && state.buddy.vals ? state.buddy.vals.runSeatTip : null;
+    const bonus = seatBonus() + (share === null ? 0 : Math.round(2 * share));
+    if (share !== null) {
+      const rec = state.today.crew[String(state.buddy.cardId)];
+      if (rec) rec.tips += bonus;
+    }
     state.cash += bonus;
     state.today.seatTips += bonus;
     state.today.seated += 1;
@@ -2757,9 +3664,13 @@ function createSim(saved, seed) {
     return playerBfs(b.x, b.y, (tx, ty) => tx === x && ty === y);
   }
 
+  // X5.3: the RUN card. v2's route and tasks, with runSpeed for the walk and runHandle for every
+  // pause at the board and the table, read from the card's effective skills at load up.
   function tickBuddy(dt) {
     const b = state.buddy;
     if (!b) return;
+    const speed = b.vals ? b.vals.runSpeed : C.NPC_TILES_PER_S;   // a mover without vals plays v2's 3 star numbers
+    const handle = b.vals ? b.vals.runHandle : C.BUDDY_HANDLE;
     const boardUse = STATION_BY_ID.board.use[2];    // (5,5), facing up
     const tableUse = STATION_BY_ID.table.use[0];    // (6,5), facing down
     if (b.task === 'idle') {
@@ -2770,17 +3681,17 @@ function createSim(saved, seed) {
         buddyPick = stack.meat;
         b.task = 'pickup';
         b.path = path;
-        b.t = C.BUDDY_HANDLE;
+        b.t = handle;
         if (path.length === 0) b.face = boardUse.face;
       }
       return;
     }
     if (b.task === 'pickup') {
       if (b.next !== null || b.path.length > 0) {
-        advanceMover(b, C.NPC_TILES_PER_S, dt);
+        advanceMover(b, speed, dt);
         if (b.next === null && b.path.length === 0) {
           b.face = boardUse.face;
-          b.t = C.BUDDY_HANDLE;   // the handle runs only after he arrives
+          b.t = handle;   // the handle runs only after he arrives
         }
         return;
       }
@@ -2811,7 +3722,7 @@ function createSim(saved, seed) {
       return;
     }
     if (b.task === 'carry') {
-      advanceMover(b, C.NPC_TILES_PER_S, dt);
+      advanceMover(b, speed, dt);
       if (b.next === null && b.path.length === 0) {
         b.face = tableUse.face;
         b.task = 'wait';
@@ -2823,10 +3734,12 @@ function createSim(saved, seed) {
       if (b.carrying) {
         if (!tableFits(b.carrying.meat)) return;
         const meat = b.carrying.meat;
-        const n = setDown(b.carrying);
+        const n = setDown(b.carrying, true);
         if (n > 0) emit('set_down', { meat, n });
+        const rec = state.today.crew[String(b.cardId)];
+        if (rec) rec.plates += n;
         if (b.carrying.times.length === 0) b.carrying = null;
-        b.t = C.BUDDY_HANDLE;
+        b.t = handle;
         return;
       }
       b.t -= dt;
@@ -2836,7 +3749,7 @@ function createSim(saved, seed) {
       return;
     }
     if (b.task === 'return') {
-      advanceMover(b, C.NPC_TILES_PER_S, dt);
+      advanceMover(b, speed, dt);
       if (b.next === null && b.path.length === 0) {
         b.face = MAP.buddyIdle.face;
         b.task = 'idle';
@@ -2847,15 +3760,31 @@ function createSim(saved, seed) {
 
   // ---- 5.9 the fire tender ------------------------------------------------------------------
 
-  function cookerNeedingFire() {
+  // X5.3: the threshold is the FIRE card's fireSense (v2's TENDER_THRESHOLD at 3 stars).
+  function cookerNeedingFire(threshold) {
     let best = null;
     for (const id of COOKER_IDS) {
       const st = STATION_BY_ID[id];
       if (!stationActive(st)) continue;
       const ck = state.stations[id];
-      if (ck.fire < C.TENDER_THRESHOLD && (best === null || ck.fire < best.fire)) best = ck;
+      if (ck.fire < threshold && (best === null || ck.fire < best.fire)) best = ck;
     }
     return best;
+  }
+
+  // Review 1 (contract X20.2, overrides X18.1 item 40): the FIRE card walks at
+  // NPC_TILES_PER_S * TENDER_CYCLE / firePace, clamped to FIRE_WALK (v2's 4 tiles a second at 3 stars),
+  // so Pace shows in the yard too. Its grab and add pauses stay v2's.
+  function tenderSpeed(t) {
+    if (!t.vals) return C.NPC_TILES_PER_S;
+    return clamp(C.NPC_TILES_PER_S * C.TENDER_CYCLE / t.vals.firePace, C.FIRE_WALK[0], C.FIRE_WALK[1]);
+  }
+
+  // X5.3: a bag the FIRE card adds counts on its crew row.
+  function tenderAdd(t) {
+    addCharcoal(state.stations[t.cooker]);
+    const rec = state.today.crew[String(t.cardId)];
+    if (rec) rec.bags += 1;
   }
 
   function tickTender(dt) {
@@ -2864,13 +3793,13 @@ function createSim(saved, seed) {
     if (t.cooldown > 0) t.cooldown = Math.max(0, t.cooldown - dt);
     if (t.task === 'idle') {
       if (t.cooldown > 0 || state.charcoal <= 0) return;
-      const ck = cookerNeedingFire();
+      const ck = cookerNeedingFire(t.vals ? t.vals.fireSense : C.TENDER_THRESHOLD);
       if (!ck) return;
       state.charcoal -= 1;
       state.today.bags += 1;
       t.carrying = { kind: 'charcoal' };
       t.cooker = ck.id;
-      t.cooldown = C.TENDER_CYCLE;
+      t.cooldown = t.vals ? t.vals.firePace : C.TENDER_CYCLE;
       t.task = 'grab';
       t.t = C.BUDDY_HANDLE;
       return;
@@ -2882,7 +3811,7 @@ function createSim(saved, seed) {
       const uses = activeUseTiles(st);
       const path = playerBfs(t.x, t.y, (x, y) => uses.some((u) => u.x === x && u.y === y));
       if (path === null) {
-        addCharcoal(state.stations[t.cooker]);
+        tenderAdd(t);
         t.carrying = null;
         t.cooker = null;
         t.task = 'idle';
@@ -2893,7 +3822,7 @@ function createSim(saved, seed) {
       return;
     }
     if (t.task === 'walk') {
-      advanceMover(t, C.NPC_TILES_PER_S, dt);
+      advanceMover(t, tenderSpeed(t), dt);
       if (t.next === null && t.path.length === 0) {
         const st = STATION_BY_ID[t.cooker];
         const u = activeUseTiles(st).find((e) => e.x === t.x && e.y === t.y);
@@ -2906,7 +3835,7 @@ function createSim(saved, seed) {
     if (t.task === 'add') {
       t.t -= dt;
       if (t.t > 0) return;
-      if (t.cooker) addCharcoal(state.stations[t.cooker]);
+      if (t.cooker) tenderAdd(t);
       t.carrying = null;
       t.cooker = null;
       const home = MAP.tenderIdle;
@@ -2915,11 +3844,91 @@ function createSim(saved, seed) {
       return;
     }
     if (t.task === 'return') {
-      advanceMover(t, C.NPC_TILES_PER_S, dt);
+      advanceMover(t, tenderSpeed(t), dt);
       if (t.next === null && t.path.length === 0) {
         t.face = MAP.tenderIdle.face;
         t.task = 'idle';
         t.t = 0;
+      }
+    }
+  }
+
+  // ---- X5.3 the PREP card ---------------------------------------------------------------------
+
+  // Plates of the pieces of this meat already left on the board for the PREP card.
+  function waitingPlates(meat) {
+    let n = 0;
+    for (const w of state.stations.board.waiting) if (w.meat === meat) n += MEATS[meat].plates;
+    return n;
+  }
+
+  function prepName() {
+    const card = state.prep ? findCard(state.prep.cardId) : null;
+    return card ? card.name : STRINGS.roleName.prep;
+  }
+
+  // Slices the pieces left on the board, one at a time, at MAP.prepUse; walks at prepPace and cuts in
+  // MEATS[m].slice * prepKnife. Draws nothing from rng().
+  function tickPrep(dt) {
+    const pr = state.prep;
+    if (!pr) return;
+    const board = state.stations.board;
+    const use = MAP.prepUse;
+    const home = MAP.prepIdle;
+    const speed = pr.vals ? pr.vals.prepPace : C.NPC_TILES_PER_S;
+    const firstFits = () => board.waiting.length > 0 && board.slicing === null
+      && boardFits(board.waiting[0].meat, MEATS[board.waiting[0].meat].plates);
+    if (pr.task === 'idle') {
+      if (!firstFits()) return;
+      const path = playerBfs(pr.x, pr.y, (x, y) => x === use.x && y === use.y);
+      if (path === null) return;   // cannot reach the board: stay home
+      pr.path = path;
+      pr.task = 'walk';
+      if (path.length === 0) { pr.face = use.face; pr.task = 'wait'; }
+      return;
+    }
+    if (pr.task === 'walk') {
+      advanceMover(pr, speed, dt);
+      if (pr.next === null && pr.path.length === 0) { pr.face = use.face; pr.task = 'wait'; }
+      return;
+    }
+    if (pr.task === 'wait') {
+      if (board.waiting.length === 0) {
+        pr.path = playerBfs(pr.x, pr.y, (x, y) => x === home.x && y === home.y) || [];
+        pr.task = 'return';
+        return;
+      }
+      if (!firstFits()) return;
+      const w = board.waiting.shift();
+      const m = MEATS[w.meat];
+      board.slicing = { meat: m.id, t: 0, total: m.slice * (pr.vals ? pr.vals.prepKnife : 1), who: 'prep' };
+      pr.task = 'slice';
+      return;
+    }
+    if (pr.task === 'slice') {
+      const sl = board.slicing;
+      if (sl === null || sl.who !== 'prep') { pr.task = 'wait'; return; }
+      sl.t += dt;
+      if (sl.t + 1e-9 < sl.total) return;
+      const m = MEATS[sl.meat];
+      const times = [];
+      for (let i = 0; i < m.plates; i++) times.push(state.clock);
+      addToBoard(m.id, times);
+      board.slicing = null;
+      emit('slice_done', { meat: m.id, plates: m.plates, by: 'prep' });
+      const rec = state.today.crew[String(pr.cardId)];
+      // Review 1: the time saved counts the knife: your own slice time freed plus what the card's
+      // knife gains on you (2 - prepKnife times MEATS[m].slice; 1 times at 3 stars).
+      if (rec) { rec.cuts += 1; rec.savedS += m.slice * (2 - (pr.vals ? pr.vals.prepKnife : 1)); }
+      pr.task = 'wait';
+      return;
+    }
+    if (pr.task === 'return') {
+      advanceMover(pr, speed, dt);
+      if (pr.next === null && pr.path.length === 0) {
+        pr.face = home.face;
+        pr.task = 'idle';
+        pr.t = 0;
       }
     }
   }
@@ -2930,13 +3939,14 @@ function createSim(saved, seed) {
     const p = state.player;
     if (p.busy !== null) {
       p.busy.t += dt;
-      if (state.stations.board.slicing) state.stations.board.slicing.t = p.busy.t;
+      const bsl = state.stations.board.slicing;
+      if (bsl && bsl.who === 'player') bsl.t = p.busy.t;
       if (p.busy.t >= p.busy.total - 1e-9) {
         const m = MEATS[p.busy.meat];
         const times = [];
         for (let i = 0; i < m.plates; i++) times.push(state.clock);
         addToBoard(m.id, times);
-        emit('slice_done', { meat: m.id, plates: m.plates });
+        emit('slice_done', { meat: m.id, plates: m.plates, by: 'player' });
         p.busy = null;
         state.stations.board.slicing = null;
         // The first plate comes off the board into the free hands; the rest stay stacked.
@@ -3070,7 +4080,7 @@ function createSim(saved, seed) {
       if (state.stations[id].pieces.some((pc) => pc.state !== 'burnt')) return false;
     }
     const board = state.stations.board;
-    if (board.stacks.length > 0 || board.slicing !== null) return false;
+    if (board.stacks.length > 0 || board.slicing !== null || board.waiting.length > 0) return false;   // X5.3
     for (const sp of state.stations.table.spots) if (sp !== null) return false;
     const pc = state.player.carrying;
     if (pc !== null && pc.kind !== 'charcoal' && pc.kind !== 'burnt') return false;
@@ -3113,8 +4123,18 @@ function createSim(saved, seed) {
     tickPlayer(dt);
     tickBuddy(dt);
     tickTender(dt);
+    tickPrep(dt);
     moveCustomers(dt);
     tickFire(dt);
+    // X18.1 item 37: the fire sampled once a tick after tickFire, from the gate on.
+    if (state.clock + 1e-9 >= t.gateAt) {
+      fireSampled = true;
+      for (const id of COOKER_IDS) {
+        if (state.stations[id].fire >= C.FIRE_GOOD) t.fireGoodS[id] += dt;
+        else t.fireDipped[id] = true;
+        if (state.stations[id].fire >= C.FIRE_HOT) t.fireHotS[id] += dt;   // review 1: the hot band, for the FIRE line
+      }
+    }
     tickPieces(dt);
     customersStage(dt);
     if (state.clock + 1e-9 >= t.endAt) {
@@ -3176,7 +4196,13 @@ function createSim(saved, seed) {
       t.wastePlates += sp.times.length;
       t.wasteCost += plateWaste(sp.meat) * sp.times.length;
     }
-    t.wages = (state.buddy ? C.BUDDY_WAGE : 0) + (state.tender ? C.TENDER_WAGE : 0);
+    // X5.3: pieces left for the PREP card and a PREP slice in progress are thrown out.
+    const brd = state.stations.board;
+    for (const w of brd.waiting) { t.wastePlates += MEATS[w.meat].plates; t.wasteCost += MEATS[w.meat].unit; }
+    if (brd.slicing !== null && brd.slicing.who === 'prep') { t.wastePlates += MEATS[brd.slicing.meat].plates; t.wasteCost += MEATS[brd.slicing.meat].unit; }
+    // X5.4: wages for every lineup card, booking or Yard day.
+    t.wages = 0;
+    for (const c of state.crew) if (inLineupToday(c)) t.wages += c.wage;
     const maxToday = repMax();
     let rawDelta;
     let net;
@@ -3224,6 +4250,9 @@ function createSim(saved, seed) {
       }
     }
     const spoilReason = spoiledUnits === 0 ? 'none' : (cap === 0 ? 'nocooler' : 'full');
+    // X5.5 to X5.8: XP, mood, notice and moving on, from the moods as they stood at the end.
+    const crewOut = t.kind === 'tutorial' ? { rows: [], left: [], changes: [], levels: [], notices: [] }
+      : crewAfterEvent(isBooking, stars, forced !== undefined);
     // P-3: a booking's take is what the cook made after what it used, so the report's rows add up.
     if (isBooking) net -= t.foodCost + t.rawWaste + t.bags * C.CHARCOAL_PRICE + t.spoilCost;
     state.day += 1;
@@ -3268,6 +4297,13 @@ function createSim(saved, seed) {
     till.gearSpent = morningBuys.reduce((a, b) => a + b.price, 0);
     till.gearBought = morningBuys.map((b) => b.label);
     till.cashStart = t.kind === 'tutorial' ? morningCash : s.weekCash;
+    // X4.4: the crew rows, who moved on, signing fees and send-offs, and the fan thirds.
+    till.crew = crewOut.rows;
+    till.left = crewOut.left.map((c) => ({ id: c.id, name: c.name }));
+    till.crewSpent = crewSpend.reduce((a, b) => a + b.amount, 0);
+    till.crewPaid = crewSpend.map((b) => b.name);
+    till.third = t.third;
+    till.thirdTo = fanThird();
     state.till = till;
     state.seats = emptySeats();
     state.phase = 'evening';
@@ -3279,6 +4315,11 @@ function createSim(saved, seed) {
         pay: Math.round(fee * (C.PAY_BASE + C.PAY_PER_STAR * stars)), bonus: menuBonus });
     }
     if (spoiledUnits > 0) emit('spoiled', { units: spoiledUnits, meat: Object.assign({}, t.spoiled) });
+    // X9: crew_mood, level_ready (lineup id order), crew_notice, crew_left, then day_over.
+    if (crewOut.changes.length > 0) emit('crew_mood', { changes: crewOut.changes });
+    for (const e of crewOut.levels) emit('level_ready', e);
+    for (const e of crewOut.notices) emit('crew_notice', e);
+    for (const c of crewOut.left) emit('crew_left', { id: c.id, name: c.name });
     emit('day_over');
     emit('save_wanted', { reason: 'till' });
   }
@@ -3316,6 +4357,7 @@ function createSim(saved, seed) {
     state.paused = false;
     state.buddy = null;
     state.tender = null;
+    state.prep = null;
     state.customers = [];
     state.seats = emptySeats();
     state.player.busy = null;
@@ -3333,12 +4375,13 @@ function createSim(saved, seed) {
   function beginMorning(nextLoop) {
     clearYard();
     morningBuys = [];
+    crewSpend = [];
     morningCash = state.cash;
     const roll = rng();
     const raining = state.day >= C.RAIN_FROM_DAY && roll < C.RAIN_CHANCE;
     state.rain = raining;
     if (state.day >= C.RAIN_FROM_DAY) emit('rain', { raining });
-    if (nextLoop === 'week' || nextLoop === 'creator') {
+    if (nextLoop === 'week' || nextLoop === 'creator' || nextLoop === 'hiring') {   // X8: not on Hiring Day either
       state.broke = false;
     } else {
       state.broke = brokeTest();
@@ -3424,7 +4467,7 @@ function createSim(saved, seed) {
         emit('purchase', { id, label: rowDef.label, price: rowDef.price, kind: 'gear' });
         emit('save_wanted', { reason: 'gear' });
         updateComingNext(false);
-        if (state.loop === 'week') regenOffers(false);   // W22.11
+        if (state.loop === 'week') regenOffers(false, true);   // W22.11; review 1: the shown cards keep their sizes
       } else {
         state.decor[id] = true;
         emit('purchase', { id, label: rowDef.label, price: rowDef.price, kind: 'decor' });
@@ -3476,20 +4519,9 @@ function createSim(saved, seed) {
     }
   }
 
+  // X4.1: the v2 hire rows are gone ([S 6.10]); hire() stays as an inert stub that emits nothing.
   function hire(id) {
-    if (!HIRE_IDS.includes(id)) return { ok: false, hired: false, message: '' };
-    const inLoop = state.loop === 'tutorial' || state.loop === 'week';
-    if (!inLoop || state.phase !== 'morning') return { ok: false, hired: state.hires[id], message: '' };
-    const rowDef = CATALOG_BY_ID[id];
-    // W22.12 (deviation 30): the day 2 rule holds only on the tutorial day.
-    if (id === 'buddy' && state.loop === 'tutorial' && state.day < rowDef.needs.day) return { ok: false, hired: false, message: rowDef.needsText };
-    if (id === 'tender' && state.gear.drum !== true) return { ok: false, hired: false, message: rowDef.needsText };
-    state.hires[id] = !state.hires[id];
-    const hired = state.hires[id];
-    emit('hire', { id, label: STRINGS.hire[id], hired });
-    emit('save_wanted', { reason: 'hire' });
-    const message = hired ? 'Hired ' + STRINGS.hire[id] + '.' : 'Let ' + STRINGS.hire[id] + ' go.';
-    return { ok: true, hired, message };
+    return { ok: false, hired: false, message: '' };
   }
 
   function sellOne(id) {
@@ -3538,7 +4570,6 @@ function createSim(saved, seed) {
       s.price += each * brisket;
       state.stock.brisket = 0;
     }
-    state.hires.tender = false;
     state.cart.meat.brisket = 0;
     return s;
   }
@@ -3582,21 +4613,38 @@ function createSim(saved, seed) {
     state.customers = [];
     state.seats = emptySeats();
     for (const id of COOKER_IDS) { state.stations[id] = newCooker(id); decayAcc[id] = 0; }
-    state.stations.board = { stacks: [], slicing: null };
+    state.stations.board = { stacks: [], slicing: null, waiting: [] };
     state.stations.table = { spots: new Array(tableSpotCount()).fill(null) };
     state.player = newPlayer();
     state.today = newToday();
     state.today.kind = kind;
     state.today.repStart = state.rep;
     state.today.wageNames = [];
-    if (state.hires.buddy) {
-      state.buddy = Object.assign(newMover(MAP.buddyIdle.x, MAP.buddyIdle.y, MAP.buddyIdle.face), { carrying: null, task: 'idle', t: 0 });
-      state.today.wageNames.push(STRINGS.hireLabel.buddy);
-    } else state.buddy = null;
-    if (state.hires.tender && state.gear.drum) {
-      state.tender = Object.assign(newMover(MAP.tenderIdle.x, MAP.tenderIdle.y, MAP.tenderIdle.face), { carrying: null, task: 'idle', t: 0, cooker: null, cooldown: 0 });
-      state.today.wageNames.push(STRINGS.hireLabel.tender);
-    } else state.tender = null;
+    state.today.third = fanThird();
+    schedParty = [];
+    pullT = 0;
+    fireSampled = false;
+    // X7 and X18.1 item 41: the lineup's movers, each with its card id, effective skills and curve
+    // values fixed for the event (X5.2). The FIRE card works from the first kettle. None on the
+    // tutorial day.
+    state.buddy = null;
+    state.tender = null;
+    state.prep = null;
+    if (kind === 'tutorial') return;
+    for (const card of lineupCards()) {
+      const eff = effectiveSkills(card);
+      const vals = curveValues(card.role, eff);
+      state.today.crew[String(card.id)] = { role: card.role, plates: 0, cuts: 0, bags: 0, savedS: 0, tips: 0 };
+      state.today.wageNames.push(card.name);
+      const crewBits = { cardId: card.id, eff, vals };
+      if (card.role === 'run') {
+        state.buddy = Object.assign(newMover(MAP.buddyIdle.x, MAP.buddyIdle.y, MAP.buddyIdle.face), { carrying: null, task: 'idle', t: 0 }, crewBits);
+      } else if (card.role === 'fire') {
+        state.tender = Object.assign(newMover(MAP.tenderIdle.x, MAP.tenderIdle.y, MAP.tenderIdle.face), { carrying: null, task: 'idle', t: 0, cooker: null, cooldown: 0 }, crewBits);
+      } else {
+        state.prep = Object.assign(newMover(MAP.prepIdle.x, MAP.prepIdle.y, MAP.prepIdle.face), { carrying: null, task: 'idle', t: 0 }, crewBits);
+      }
+    }
   }
 
   // The tutorial day only (W5.2): v2.1 timings whatever the setting (W7.1).
@@ -3633,7 +4681,7 @@ function createSim(saved, seed) {
   function offerInput() {
     const s = state.season;
     return { seed: s.seed, year: s.year, week: s.week, rep: state.rep, cash: s.weekCash,
-      gear: Object.assign({}, state.gear), length: state.settings.length };
+      gear: Object.assign({}, state.gear), length: state.settings.length, avoid: avoidNames() };
   }
 
   function addonLegal(offer, meat) {
@@ -3660,16 +4708,36 @@ function createSim(saved, seed) {
     state.loop = 'week';
     state.phase = 'morning';
     state.cart = prefill();
+    // X6.3: this week's walk-ins and an open training pick; signing fees count from here (item 32).
+    s.walkins = genWalkins({ seed: s.seed, year: s.year, week: s.week, rep: state.rep, avoid: avoidNames() })
+      .map((a) => Object.assign(a, { hired: false }));
+    s.trained = null;
+    crewSpend = [];
     emitOffersReady();
     state.broke = brokeTest();
     if (state.broke) emit('broke');
   }
 
+  // Review 1 (contract X20.4): after a gear buy every card already on the hub keeps what it showed
+  // (headcount, menu, pay, deposit, host, tier); only its Needs line and Load up and go follow the
+  // gear. A card the buy adds (the top third's invite) comes in fresh.
+  function keepShown(next) {
+    const old = state.season.offers;
+    return next.map((o) => {
+      const was = old.find((x) => x.id === o.id && x.type === o.type) || null;
+      if (was === null || o.type === 'yard' || o.type === 'finale') return o;
+      const row = BOOKINGS[o.type];
+      const needs = needsFor(was.menu, state.gear) || capacityNeeds(row, was.rail, state.gear, was.window);
+      return Object.freeze(Object.assign({}, was, { needs, safe: needs === '' }));
+    });
+  }
+
   // W22.11 and setLength(): this week's offers again from the stored inputs. Without `force` they
   // are replaced only when the result differs. The pick keeps by id, the add-on when still legal.
-  function regenOffers(force) {
+  // `keep` (a gear buy) holds the shown cards' numbers (keepShown).
+  function regenOffers(force, keep) {
     const s = state.season;
-    const next = genOffers(offerInput());
+    const next = keep === true ? keepShown(genOffers(offerInput())) : genOffers(offerInput());
     if (!force && JSON.stringify(next) === JSON.stringify(s.offers)) return false;
     const pickId = s.booking !== null ? s.booking.id : null;
     s.offers = next;
@@ -3717,6 +4785,9 @@ function createSim(saved, seed) {
     const b = state.season.booking;
     if (b === null) return { ok: false, reason: STRINGS.ui.goPick };
     if (!b.safe) return { ok: false, reason: b.needs };
+    // X5.4: the lineup's wages against the payroll budget (Yard days too, X18.1 item 41).
+    const pr = payroll();
+    if (pr.now > pr.budget) return { ok: false, reason: fillText(STRINGS.ui.goPayroll, { p: pr.now, b: pr.budget }) };
     if (state.charcoal + state.cart.charcoal === 0) return { ok: false, reason: 'Buy at least one bag of charcoal.' };
     let units = 0;
     if (b.type === 'yard') units = totalStock() + sumValues(state.cart.meat);
@@ -3783,9 +4854,14 @@ function createSim(saved, seed) {
     if (state.phase !== 'evening') return;
     const s = state.season;
     if (state.loop === 'tutorial') {
+      floorAfterTutorial();
       if (state.profile === null) {
         beginMorning('creator');
         state.loop = 'creator';
+      } else if (hiringOwed()) {   // X8
+        beginMorning('hiring');
+        openHiring(false);
+        emit('save_wanted', { reason: 'hiring' });
       } else {
         beginMorning('week');
         emit('week_start', { year: s.year, week: s.week });
@@ -3826,7 +4902,12 @@ function createSim(saved, seed) {
       repFrom: state.rep,
       repTo: Math.max(C.SEASON_REP_FLOOR, Math.floor(state.rep * C.SEASON_CARRY_REP)),
       spoiled: Object.assign({}, state.stock),
-      charcoal: state.charcoal
+      charcoal: state.charcoal,
+      // X5.9: every card, and the wage it signs on again at when its contract runs out
+      crew: state.crew.map((c) => {
+        const renews = c.contract <= 1;
+        return { id: c.id, name: c.name, wageFrom: c.wage, wageTo: renews ? wageFor(cardStars(c.skills), c.role) : c.wage, renews };
+      })
     };
   }
 
@@ -3841,10 +4922,27 @@ function createSim(saved, seed) {
     s.year = Math.min(C.YEAR_MAX, s.year + 1);
     s.week = 1;
     s.results = [];
-    beginMorning('week');
+    // X5.9: the season roll for every card. Until v3.2's Offseason screen every contract renews
+    // for one season at the table wage for the card's stars (X18 item 11).
+    for (const c of state.crew) {
+      c.seasons = Math.min(99, c.seasons + 1);
+      c.rookie = false;
+      c.mood = c.mood > 0 ? c.mood - 1 : (c.mood < 0 ? c.mood + 1 : 0);
+      c.bench = 0;
+      c.notice = false;
+      c.contract -= 1;
+      if (c.contract <= 0) {
+        c.contract = 1;
+        c.wage = wageFor(cardStars(c.skills), c.role);
+        c.raised = false;
+      }
+    }
+    s.drafted = false;
+    s.trained = null;
+    s.walkins = [];
+    beginMorning('hiring');
     emit('season_start', { year: s.year });
-    emit('week_start', { year: s.year, week: 1 });
-    startWeek();
+    openHiring(false);
     emit('save_wanted', { reason: 'season' });
     return true;
   }
@@ -3858,8 +4956,11 @@ function createSim(saved, seed) {
     state.pitName = pit;
     emit('player_set', { name: nm, pitName: pit });
     if (state.loop === 'creator') {
-      emit('week_start', { year: state.season.year, week: state.season.week });
-      startWeek();
+      if (hiringOwed()) openHiring(false);   // X8: Hiring Day before week 1
+      else {
+        emit('week_start', { year: state.season.year, week: state.season.week });
+        startWeek();
+      }
     }
     emit('save_wanted', { reason: 'player' });
     return { ok: true, look: Object.assign({}, lk), name: nm, pitName: pit };
@@ -3981,7 +5082,16 @@ function createSim(saved, seed) {
     }
     // R-5: BAGS_PER_COOKER is a Normal cook's worth; a Short or Long cook scales it by its seconds.
     const secs = b !== null && b.type === 'finale' ? C.FINALE_SECONDS : lengthRow(state.settings.length).seconds;   // Q-2
-    const perCooker = Math.ceil(C.BAGS_PER_COOKER * secs / C.LENGTHS.normal.seconds - 1e-9);
+    let perCooker = Math.ceil(C.BAGS_PER_COOKER * secs / C.LENGTHS.normal.seconds - 1e-9);
+    // Review 1 (contract X20.2): a FIRE card whose fireSense sits above FIRE_MAX - FIRE_ADD adds a bag
+    // every (FIRE_MAX - fireSense) / KETTLE_DECAY seconds, so the cart buys that many a cooker when
+    // it is more (a 5 star card: 11 at Normal). Up to 4 stars the v3.0 count stands.
+    const fireCard = lineupCards().find((c) => c.role === 'fire') || null;
+    if (fireCard !== null && b !== null) {
+      const sense = skillValue('fireSense', effectiveSkills(fireCard)[0]);
+      const gap = Math.max(1, Math.min(C.FIRE_ADD, C.FIRE_MAX - sense));
+      perCooker = Math.max(perCooker, Math.ceil(secs * C.KETTLE_DECAY / gap - 1e-9));
+    }
     let bags = Math.max(0, perCooker * ownedCookers() - state.charcoal);
     if (state.charcoal === 0) bags = Math.max(bags, 1);
     bags = Math.min(bags, Math.max(0, C.CHARCOAL_MAX - state.charcoal));
@@ -4027,12 +5137,13 @@ function createSim(saved, seed) {
     state.customers = [];
     state.seats = emptySeats();
     for (const id of COOKER_IDS) state.stations[id].pieces = [];
-    state.stations.board = { stacks: [], slicing: null };
+    state.stations.board = { stacks: [], slicing: null, waiting: [] };
     state.stations.table = { spots: new Array(tableSpotCount()).fill(null) };
     const p = state.player;
     p.busy = null; p.carrying = null; p.queued = null; p.target = null; p.path = []; p.next = null; p.walking = false;
     if (state.buddy) { const bd = state.buddy; bd.carrying = null; bd.task = 'idle'; bd.t = 0; bd.path = []; bd.next = null; bd.walking = false; }
     if (state.tender) { const td = state.tender; td.carrying = null; td.cooker = null; td.task = 'idle'; td.t = 0; td.path = []; td.next = null; td.walking = false; }
+    if (state.prep) { const pp = state.prep; pp.carrying = null; pp.task = 'idle'; pp.t = 0; pp.path = []; pp.next = null; pp.walking = false; }
     buddyPick = null;
     state.spawnAt = Infinity;
     const score = [20, 40, 60, 75, 90][stars - 1];
@@ -4057,7 +5168,7 @@ function createSim(saved, seed) {
   function goal() {
     for (const id of GOAL_ORDER) {
       if (id === 'driveway' && C.DRIVEWAY_BUYABLE !== true) continue;   // Q-8
-      const owned = id === 'buddy' ? state.hires.buddy === true : (id === 'driveway' ? false : state.gear[id] === true);
+      const owned = id === 'driveway' ? false : state.gear[id] === true;
       if (!owned) {
         const rowDef = CATALOG_BY_ID[id];
         return { id, label: rowDef.label, price: rowDef.price };
@@ -4182,6 +5293,13 @@ function createSim(saved, seed) {
     emit('tutorial_step', { id, text: STRINGS.tutorial[id], target });
   }
 
+  // Review 1 (contract X20.9): the practice day never costs the season. When the tutorial day hands
+  // over, cash and word of mouth are floored at START_CASH and START_REP.
+  function floorAfterTutorial() {
+    state.cash = Math.max(state.cash, C.START_CASH);
+    state.rep = Math.max(state.rep, C.START_REP);
+  }
+
   function finishTutorial(skipped) {
     state.tutorial = { step: null, done: true };
     tutEndAt = null;
@@ -4262,7 +5380,9 @@ function createSim(saved, seed) {
     finishTutorial(true);
     if (state.phase === 'morning') {
       // W5.2, [S 19.2]: skipping goes straight to the creator (or the week, with a profile).
+      floorAfterTutorial();
       if (state.profile === null) state.loop = 'creator';
+      else if (hiringOwed()) openHiring(false);   // X8
       else {
         emit('week_start', { year: state.season.year, week: state.season.week });
         startWeek();
@@ -4289,7 +5409,450 @@ function createSim(saved, seed) {
     return out;
   }
 
-  // D9, K6 and W13.2: always version 4. Service state, state.seats, charm, the offers and the
+  // ---- v3.1 crew cards (X4 to X8) ----------------------------------------------------------------
+
+  function copyCard(c) {
+    return {
+      id: c.id, name: c.name, role: c.role, skills: [c.skills[0], c.skills[1]], potential: c.potential,
+      xp: c.xp, banked: c.banked, mood: c.mood, wage: c.wage, contract: c.contract, seasons: c.seasons,
+      rookie: c.rookie === true, trait: null, look: cleanLook(c.look), bring: c.bring === true,
+      raised: c.raised === true, notice: c.notice === true, worked: c.worked, bench: c.bench
+    };
+  }
+
+  function findCard(id) {
+    if (!(typeof id === 'number' && Number.isInteger(id))) return null;
+    return state.crew.find((c) => c.id === id) || null;
+  }
+
+  function byId(a, b) { return a.id - b.id; }
+
+  // The lineup: the cards with bring, at most one a role, in id order (X1, X5.4).
+  function lineupCards() {
+    const seenRoles = new Set();
+    const out = [];
+    for (const c of state.crew.slice().sort(byId)) {
+      if (!c.bring || seenRoles.has(c.role)) continue;
+      seenRoles.add(c.role);
+      out.push(c);
+    }
+    return out;
+  }
+
+  function inLineupToday(c) {
+    return Object.prototype.hasOwnProperty.call(state.today.crew, String(c.id));
+  }
+
+  // X5.4: v3.1 is always the backyard rung, index 0.
+  function payroll() {
+    let now = 0;
+    for (const c of lineupCards()) now += c.wage;
+    return { now, budget: C.PAYROLL[0], slots: C.ROSTER_SLOTS[0], count: state.crew.length };
+  }
+
+  function crewLoop() {
+    return (state.loop === 'week' || state.loop === 'hiring') && state.phase === 'morning';
+  }
+
+  function inHiring() {
+    return state.loop === 'hiring' && state.phase === 'morning' && state.hiring !== null;
+  }
+
+  function hiringOwed() {
+    return state.season.drafted !== true && state.season.results.length === 0;
+  }
+
+  function crewNames() {
+    return state.crew.map((c) => c.name);
+  }
+
+  // Review 1: names an applicant, a walk-in or a host never take: the crew's and the pitmaster's.
+  function avoidNames() {
+    const out = crewNames();
+    if (state.profile && typeof state.profile.name === 'string') out.push(state.profile.name);
+    return out;
+  }
+
+  // A name nobody on the crew has yet (defensive: pool and walk-in lists already avoid the crew).
+  function freeCrewName(name) {
+    const used = new Set(crewNames());
+    if (!used.has(name)) return name;
+    return firstFreeName(STRINGS.names.indexOf(name) + 1, used);
+  }
+
+  // X6.2 and X6.3: a card from an applicant. It joins the lineup when its role is free and the
+  // payroll fits, else it starts resting (X5.4, X18 item 7).
+  function newCard(a, contract, rookie) {
+    const id = state.crewSeq;
+    state.crewSeq = Math.min(9999, id + 1);
+    const card = {
+      id, name: freeCrewName(a.name), role: a.role, skills: [a.skills[0], a.skills[1]], potential: a.potential,
+      xp: 0, banked: 0, mood: a.mood, wage: a.wage, contract, seasons: 0, rookie, trait: null,
+      look: cleanLook(a.look), bring: false, raised: false, notice: false, worked: 0, bench: 0
+    };
+    const pr = payroll();
+    if (!lineupCards().some((c) => c.role === card.role) && pr.now + card.wage <= pr.budget) card.bring = true;
+    state.crew.push(card);
+    state.crew.sort(byId);
+    return card;
+  }
+
+  // X5.5 and X18.1 item 43: XP banks a level at every LEVEL_XP, up to BANK_MAX (a level past the
+  // bank is lost); `sink` collects a level_ready payload for every level that banked.
+  function addXp(card, n, sink) {
+    card.xp += Math.max(0, Math.trunc(n));
+    while (card.xp >= C.LEVEL_XP) {
+      card.xp -= C.LEVEL_XP;
+      if (card.banked < C.BANK_MAX) {
+        card.banked += 1;
+        sink.push({ id: card.id, name: card.name, banked: card.banked });
+      }
+    }
+  }
+
+  // X18.1 item 37: the one line a crew row says.
+  function crewLine(card, rec, stat, settled) {
+    const S = STRINGS.crewSay;
+    const name = card.name;
+    if (rec === null) return fillText(S.rested, { name });
+    if (settled) return fillText(S.settled, { name });
+    if (card.role === 'run') {
+      if (stat.plates === 0) return fillText(S.idle, { name });
+      return fillText(stat.plates === 1 ? S.runOne : S.run, { name, n: stat.plates, t: stat.tips });
+    }
+    if (card.role === 'fire') {
+      if (stat.bags === 0) return fillText(S.idle, { name });
+      // Review 1: name the hot band when the fire ran in it (food cooks HOT_MULT faster there).
+      if (stat.hotS >= 1) return fillText(stat.bags === 1 ? S.fireHotOne : S.fireHot, { name, n: stat.bags, s: stat.hotS });
+      return fillText(stat.bags === 1 ? S.fireOne : S.fire, { name, n: stat.bags, p: stat.goodPct });
+    }
+    if (stat.cuts === 0) return fillText(S.idle, { name });
+    return fillText(stat.cuts === 1 ? S.prepOne : S.prep, { name, n: stat.cuts, s: stat.savedS });
+  }
+
+  // X5.5 to X5.8 at the end of a booking or a Yard day: XP, mood in its fixed order from the moods
+  // as they stood at the end, notice and moving on, the events worked and the till's crew rows.
+  function crewAfterEvent(isBooking, stars, settled) {
+    const t = state.today;
+    const s = state.season;
+    const cards = state.crew.slice().sort(byId);
+    const lineup = cards.filter(inLineupToday);
+    const resting = cards.filter((c) => !inLineupToday(c));
+    // The FIRE line's percent and the cookers held (X18.1 item 37).
+    let owned = 0, goodSum = 0, held = 0, hotSum = 0;
+    for (const id of COOKER_IDS) {
+      if (!stationActive(STATION_BY_ID[id])) continue;
+      owned += 1;
+      goodSum += t.fireGoodS[id];
+      hotSum += t.fireHotS[id];
+      if (fireSampled && t.fireDipped[id] === false) held += 1;
+    }
+    const span = Math.max(C.TICK_SECONDS, state.clock - t.gateAt);
+    const goodPct = fireSampled && owned > 0 ? clamp(Math.round(100 * goodSum / (owned * span)), 0, 100) : 0;
+    const hotS = fireSampled && owned > 0 ? Math.round(hotSum / owned) : 0;   // review 1: hot seconds a cooker
+    // XP (X5.5).
+    const gains = {};
+    const levels = [];
+    for (const c of lineup) {
+      const rec = t.crew[String(c.id)];
+      const gain = settled ? C.SETTLE_XP
+        : C.XP_RUN_PLATE * rec.plates + C.XP_PREP_CUT * rec.cuts + C.XP_FIRE_BAG * rec.bags + (c.role === 'fire' ? C.XP_FIRE_HOLD * held : 0);
+      gains[c.id] = gain;
+      addXp(c, gain, levels);
+    }
+    // Mood (X5.6): steps 1 to 3 add up from the end of event moods, then step 4 clamps.
+    // Review 1 (contract X20.5): Fired up is a burst you earn. Step 0: a lineup card that worked the
+    // event at Fired up eases one step. Step 1: a 5 or 4 star booking lifts only up to Happy, except
+    // a 5 star STRETCH booking, which lifts every lineup card a full step (up to Fired up). A raise
+    // and a rested Yard day still lift a step.
+    const from = {};
+    const delta = {};
+    for (const c of cards) { from[c.id] = c.mood; delta[c.id] = 0; }
+    for (const c of lineup) if (from[c.id] === 2) delta[c.id] -= 1;
+    const stretchDay = isBooking && t.booking !== null && t.booking.tier === 'stretch';
+    if (isBooking && lineup.length > 0) {
+      if (stars === 5) {
+        for (const c of lineup) if (stretchDay || from[c.id] < 1) delta[c.id] += 1;
+      } else if (stars === 4) {
+        let best = lineup[0];
+        for (const c of lineup) if (gains[c.id] > gains[best.id]) best = c;
+        if (from[best.id] < 1) delta[best.id] += 1;
+      } else if (stars <= 2) for (const c of lineup) delta[c.id] -= 1;
+    }
+    for (const c of resting) {
+      if (!isBooking) delta[c.id] += 1;
+      else {
+        c.bench += 1;
+        if (c.bench >= C.BENCH_STREAK) { delta[c.id] -= 1; c.bench = 0; }
+      }
+    }
+    for (const c of lineup) c.bench = 0;
+    const crewRng = mulberry32(mix32(s.seed ^ 0x43524557, s.year, s.week));
+    for (const c of lineup) {
+      if (from[c.id] !== -2) continue;
+      const others = lineup.filter((o) => o !== c);
+      if (others.length === 0) continue;
+      delta[others[Math.floor(crewRng() * others.length)].id] -= 1;
+    }
+    const changes = [];
+    for (const c of cards) {
+      c.mood = clamp(from[c.id] + delta[c.id], -2, 2);
+      if (c.mood !== from[c.id]) changes.push({ id: c.id, from: from[c.id], to: c.mood });
+    }
+    // Notice and moving on (X5.8).
+    const left = [];
+    const notices = [];
+    for (const c of cards) {
+      if (c.mood === -2) {
+        if (c.notice === true) left.push(c);
+        else { c.notice = true; notices.push({ id: c.id, name: c.name }); }
+      } else c.notice = false;
+    }
+    for (const c of lineup) c.worked = Math.min(9999, c.worked + 1);
+    // The till rows (X4.4): lineup first, then the rest, each in id order.
+    const rows = [];
+    for (const c of lineup.concat(resting)) {
+      const rec = inLineupToday(c) ? t.crew[String(c.id)] : null;
+      const stat = rec === null ? { plates: 0, cuts: 0, bags: 0, goodPct: 0, savedS: 0, tips: 0, hotS: 0 }
+        : { plates: rec.plates, cuts: rec.cuts, bags: rec.bags, goodPct, savedS: Math.round(rec.savedS), tips: rec.tips, hotS };
+      rows.push({
+        id: c.id, name: c.name, role: c.role, worked: rec !== null, xpGain: rec !== null ? gains[c.id] : 0,
+        xp: c.xp, banked: c.banked, moodFrom: from[c.id], moodTo: c.mood, notice: c.notice,
+        line: crewLine(c, rec, stat, settled), stat
+      });
+    }
+    if (left.length > 0) state.crew = state.crew.filter((c) => !left.includes(c));
+    return { rows, left, changes, levels, notices };
+  }
+
+  // X6.2 (internal): Hiring Day opens on this morning, with a fresh pool of 18 or `restore` (a
+  // validated save's hiring). `silent` (a load, X8) emits nothing.
+  function openHiring(silent, restore) {
+    const s = state.season;
+    state.loop = 'hiring';
+    state.phase = 'morning';
+    s.offers = [];
+    s.booking = null;
+    s.addon = null;
+    state.cart = { meat: zeroByMeat(), charcoal: 0 };
+    const pool = restore
+      ? restore.pool.map((e, idx) => {
+        const stars = cardStars(e.skills);
+        return { name: e.name, role: e.role, skills: e.skills.slice(), potential: e.potential, mood: e.mood, look: cleanLook(e.look),
+          stars, wage: wageFor(stars, e.role), idx, status: e.status, tried: e.tried };
+      })
+      : genPool({ seed: s.seed, year: s.year, avoid: avoidNames() }).map((a) => Object.assign(a, { status: 'open', tried: false }));
+    state.hiring = { year: s.year, round: restore ? restore.round : 1, tryouts: restore ? restore.tryouts : C.TRYOUTS, pool };
+    if (!silent) emit('hiring_open', { year: s.year, n: pool.length });
+  }
+
+  // X6.2: the end of a round. Other outfits take TAKEN_PER_ROUND of the TAKEN_SHORTLIST best open
+  // cards (stars + potential, then idx) by a seeded draw; then the next round.
+  function endRound() {
+    const h = state.hiring;
+    const ro = mulberry32(mix32((state.season.seed ^ 0x52495641) >>> 0, h.year, h.round));
+    const list = h.pool.filter((e) => e.status === 'open')
+      .sort((a, b) => (b.stars + b.potential) - (a.stars + a.potential) || a.idx - b.idx)
+      .slice(0, C.TAKEN_SHORTLIST);
+    const taken = [];
+    for (let k = 0; k < C.TAKEN_PER_ROUND && list.length > 0; k++) {
+      const e = list.splice(Math.floor(ro() * list.length), 1)[0];
+      e.status = 'taken';
+      taken.push(e);
+    }
+    const ended = h.round;
+    h.round += 1;
+    emit('round_done', { round: ended, taken: taken.map((e) => e.idx), names: taken.map((e) => e.name) });
+    emit('save_wanted', { reason: 'hiring' });
+  }
+
+  function poolEntry(idx) {
+    if (!(typeof idx === 'number' && Number.isInteger(idx)) || state.hiring === null) return null;
+    return state.hiring.pool.find((e) => e.idx === idx) || null;
+  }
+
+  function tryout(idx) {
+    const no = (message) => ({ ok: false, message: message || '', potential: null });
+    if (!inHiring()) return no();
+    const h = state.hiring;
+    const e = poolEntry(idx);
+    if (e === null || e.status !== 'open' || e.tried) return no();
+    if (h.tryouts <= 0) return no(STRINGS.ui.tryoutNone);
+    e.tried = true;
+    h.tryouts -= 1;
+    emit('tryout', { idx: e.idx, name: e.name, potential: e.potential });
+    return { ok: true, message: '', potential: e.potential };
+  }
+
+  function hireApplicant(idx) {
+    const no = (message) => ({ ok: false, message: message || '', id: null });
+    if (!inHiring() || state.hiring.round > C.HIRE_ROUNDS) return no();
+    const e = poolEntry(idx);
+    if (e === null || e.status !== 'open') return no();
+    if (state.crew.length >= C.CREW_MAX) return no(STRINGS.ui.crewFull);   // X18.1 item 45
+    const card = newCard(e, 2, true);   // Hiring Day: no signing fee, two seasons, NEW
+    e.status = 'mine';
+    emit('crew_hired', { id: card.id, name: card.name, role: card.role, from: 'draft', fee: 0 });
+    endRound();
+    return { ok: true, message: '', id: card.id };
+  }
+
+  function passRound() {
+    if (!inHiring() || state.hiring.round > C.HIRE_ROUNDS) return { ok: false, message: '' };
+    endRound();
+    return { ok: true, message: '' };
+  }
+
+  function finishHiring() {
+    if (!inHiring() || state.hiring.round !== C.HIRE_ROUNDS + 1) return { ok: false, message: '' };
+    const slots = payroll().slots;
+    if (state.crew.length > slots) return { ok: false, message: fillText(STRINGS.ui.tooMany, { s: slots }) };
+    const s = state.season;
+    state.hiring = null;
+    s.drafted = true;
+    emit('hiring_done', { year: s.year });
+    emit('week_start', { year: s.year, week: s.week });
+    startWeek();   // no rain roll: the morning already rolled (X8)
+    emit('save_wanted', { reason: 'hiring' });
+    return { ok: true, message: '' };
+  }
+
+  function hireWalkin(i) {
+    const no = (message) => ({ ok: false, message: message || '', id: null });
+    if (!inWeek() || !(typeof i === 'number' && Number.isInteger(i))) return no();
+    const s = state.season;
+    const w = s.walkins[i];
+    if (!w || w.hired) return no();
+    if (state.crew.length >= payroll().slots || state.crew.length >= C.CREW_MAX) return no(STRINGS.ui.crewFull);
+    const fee = w.wage;
+    const dep = s.booking !== null ? s.booking.deposit : 0;
+    if (fee > state.cash || state.cash + dep - cartTotal() < fee) return no('Not enough cash');   // the R-1 rule
+    state.cash -= fee;
+    crewSpend.push({ name: w.name, amount: fee });
+    const card = newCard(w, 1, false);   // walk-ins come trained: one season, not NEW
+    w.hired = true;
+    emit('crew_hired', { id: card.id, name: card.name, role: card.role, from: 'walkin', fee });
+    emit('save_wanted', { reason: 'crew' });
+    return { ok: true, message: '', id: card.id };
+  }
+
+  function setBring(id, on) {
+    const no = () => ({ ok: false, message: '', swapped: null });
+    if (!crewLoop()) return no();
+    const c = findCard(id);
+    if (c === null) return no();
+    let swapped = null;
+    let message = '';
+    if (on === true) {
+      const other = state.crew.find((x) => x !== c && x.bring && x.role === c.role) || null;
+      if (other !== null) {
+        other.bring = false;
+        swapped = other.id;
+        message = fillText(STRINGS.ui.oneRole, { role: STRINGS.roleName[c.role].toLowerCase(), name: other.name });
+      }
+      c.bring = true;
+    } else c.bring = false;
+    emit('bring_set', { id: c.id, bring: c.bring, swapped });
+    emit('save_wanted', { reason: 'crew' });
+    return { ok: true, message, swapped };
+  }
+
+  function train(id) {
+    if (!inWeek()) return { ok: false, message: '' };
+    const c = findCard(id);
+    if (c === null) return { ok: false, message: '' };
+    if (state.season.trained !== null) return { ok: false, message: STRINGS.ui.trainDone };
+    const levels = [];
+    addXp(c, C.TRAIN_XP, levels);
+    for (const e of levels) emit('level_ready', e);
+    state.season.trained = c.id;
+    emit('trained', { id: c.id, name: c.name, xp: C.TRAIN_XP });
+    emit('save_wanted', { reason: 'crew' });
+    return { ok: true, message: '' };
+  }
+
+  function levelUp(id, skill) {
+    const no = (message) => ({ ok: false, message: message || '', value: null });
+    const okLoop = crewLoop() || (state.loop === 'report' && state.phase === 'evening');
+    if (!okLoop) return no();
+    const c = findCard(id);
+    if (c === null || !(c.banked > 0)) return no();
+    if (c.skills[0] >= c.potential && c.skills[1] >= c.potential) {
+      // Both skills at potential: the level lifts the mood instead (the skill argument is ignored).
+      c.banked -= 1;
+      c.mood = Math.min(2, c.mood + 1);
+      if (c.mood > -2) c.notice = false;
+      emit('level_up', { id: c.id, name: c.name, skill: -1, value: c.mood, mood: c.mood });
+      emit('save_wanted', { reason: 'crew' });
+      return { ok: true, message: '', value: c.mood };
+    }
+    if (skill !== 0 && skill !== 1) return no();
+    if (c.skills[skill] >= c.potential) return no(STRINGS.ui.atPotential);
+    c.skills[skill] = Math.min(c.potential, c.skills[skill] + 0.5);
+    c.banked -= 1;
+    emit('level_up', { id: c.id, name: c.name, skill, value: c.skills[skill], mood: c.mood });
+    emit('save_wanted', { reason: 'crew' });
+    return { ok: true, message: '', value: c.skills[skill] };
+  }
+
+  function giveRaise(id) {
+    if (!inWeek()) return { ok: false, message: '', wage: 0 };
+    const c = findCard(id);
+    if (c === null) return { ok: false, message: '', wage: 0 };
+    if (c.raised) return { ok: false, message: STRINGS.ui.raiseDone, wage: c.wage };
+    c.wage = Math.min(999, Math.round(c.wage * (1 + C.RAISE_FRAC)));
+    c.mood = Math.min(2, c.mood + 1);
+    if (c.mood > -2) c.notice = false;
+    c.raised = true;
+    emit('raise', { id: c.id, name: c.name, wage: c.wage });
+    emit('save_wanted', { reason: 'crew' });
+    return { ok: true, message: '', wage: c.wage };
+  }
+
+  function letGo(id) {
+    const no = (message) => ({ ok: false, message: message || '', sendoff: 0 });
+    if (!crewLoop()) return no();
+    const c = findCard(id);
+    if (c === null) return no();
+    const sendoff = c.worked > 0 ? c.wage : 0;   // free before their first event ([S 6.6])
+    if (sendoff > state.cash) return no(STRINGS.ui.sendOffCash);
+    state.crew = state.crew.filter((x) => x !== c);
+    state.cash -= sendoff;
+    if (sendoff > 0) crewSpend.push({ name: c.name, amount: sendoff });
+    if (state.hiring !== null) {
+      // X18.1 item 33: a card drafted this Hiring Day signs with another outfit.
+      const e = state.hiring.pool.find((x) => x.status === 'mine' && x.name === c.name);
+      if (e) e.status = 'taken';
+    }
+    emit('crew_let_go', { id: c.id, name: c.name, sendoff });
+    emit('save_wanted', { reason: 'crew' });
+    return { ok: true, message: '', sendoff };
+  }
+
+  function cardView(c) {
+    const eff = effectiveSkills(c);
+    return Object.assign(copyCard(c), { stars: cardStars(c.skills), eff, values: curveValues(c.role, eff), levelNeed: C.LEVEL_XP });
+  }
+
+  function crewView(id) {
+    if (id === undefined) return state.crew.slice().sort(byId).map(cardView);
+    const c = findCard(id);
+    return c === null ? null : cardView(c);
+  }
+
+  function hiringView() {
+    if (state.loop !== 'hiring' || state.hiring === null) return null;
+    const h = state.hiring;
+    return {
+      year: h.year, round: h.round, tryouts: h.tryouts, picksLeft: Math.max(0, C.HIRE_ROUNDS + 1 - h.round),
+      pool: h.pool.map((e) => ({
+        name: e.name, role: e.role, skills: e.skills.slice(), potential: e.tried ? e.potential : null, mood: e.mood,
+        look: cleanLook(e.look), stars: e.stars, wage: e.wage, idx: e.idx, status: e.status, tried: e.tried
+      }))
+    };
+  }
+
+  // D9, K6, W13.2 and X11.1: always version 5. Service state, state.seats, charm, the offers and the
   // tutorial step are never saved. The season written is the one the next load should open.
   function serialize() {
     const out = { v: C.SAVE_VERSION };
@@ -4309,9 +5872,6 @@ function createSim(saved, seed) {
     out.decor = {};
     for (const d of DECOR_IDS) out.decor[d] = state.decor[d] === true;
     if (!out.decor.chair1) out.decor.chair2 = false;
-    out.hires = {};
-    for (const h of HIRE_IDS) out.hires[h] = state.hires[h] === true;
-    if (!out.gear.drum) out.hires.tender = false;
     if (!out.gear.drum) out.stock.brisket = 0;
     out.stats = {};
     for (const k of STAT_IDS) out.stats[k] = clamp(Math.trunc(state.stats[k]), 0, C.MAX_STAT);
@@ -4329,7 +5889,20 @@ function createSim(saved, seed) {
       pick: live && s.booking !== null ? s.booking.id : null,
       addon: live ? s.addon : null,
       weekCash: clamp(Math.trunc(state.loop === 'report' ? state.cash : s.weekCash), 0, C.MAX_CASH),
-      results
+      results,
+      // X11.1 and X18.1 item 31: walk-ins and the training pick only while the week is live.
+      drafted: s.drafted === true,
+      trained: live ? s.trained : null,
+      walkins: live ? s.walkins.map((w) => ({ name: w.name, role: w.role, skills: w.skills.slice(), potential: w.potential, mood: w.mood,
+        look: cleanLook(w.look), hired: w.hired === true })) : []
+    };
+    out.crew = state.crew.slice().sort(byId).map(copyCard);
+    out.crewSeq = clamp(Math.trunc(state.crewSeq), 1, 9999);
+    const h = state.loop === 'hiring' ? state.hiring : null;
+    out.hiring = h === null ? null : {
+      year: h.year, round: h.round, tryouts: h.tryouts,
+      pool: h.pool.map((e) => ({ name: e.name, role: e.role, skills: e.skills.slice(), potential: e.potential, mood: e.mood,
+        look: cleanLook(e.look), status: e.status, tried: e.tried === true }))
     };
     out.player = state.profile !== null
       ? { name: cleanName(state.profile.name, STRINGS.defaultName), look: cleanLook(state.profile.look) }
@@ -4341,8 +5914,8 @@ function createSim(saved, seed) {
 
   // ---- assemble -----------------------------------------------------------------------------
 
-  // W13.3: the loop comes from the validated save (deviation 37). The morning roll runs for the
-  // tutorial, the creator and the week; the season end card opens with no roll.
+  // W13.3 and X8: the loop comes from the validated save (deviation 37). The morning roll runs for
+  // the tutorial, the creator, Hiring Day and the week; the season end card opens with no roll.
   const save = saved !== null && typeof saved === 'object' ? validateSave(saved) : null;
   fillState(save);
   if (state.tutorial.done === false) {
@@ -4352,6 +5925,12 @@ function createSim(saved, seed) {
   } else if (state.profile === null) {
     state.loop = 'creator';
     beginMorning('creator');
+  } else if ((save !== null && save.hiring !== null) || hiringOwed()) {
+    // X8: a saved Hiring Day reopens with its pool; an owed one opens fresh. A load emits nothing.
+    const mark = events.length;
+    beginMorning('hiring');
+    openHiring(true, save !== null && save.hiring !== null ? save.hiring : null);
+    events.length = mark;
   } else if (state.season.results.length >= C.SEASON_WEEKS) {
     state.loop = 'seasonEnd';
     state.phase = 'morning';
@@ -4368,6 +5947,17 @@ function createSim(saved, seed) {
       s.addon = save.season.addon !== null && addonLegal(offer, save.season.addon) ? save.season.addon : null;
       state.cart = prefill();
     }
+    // X6.3 and X18.1 item 31: the saved walk-ins (hired flags kept) and the training pick come back
+    // silently, so a reload never offers a hired walk-in again or reopens the pick.
+    const savedWalkins = save.season.walkins;
+    if (Array.isArray(savedWalkins) && savedWalkins.length > 0) {
+      s.walkins = savedWalkins.map((w) => {
+        const stars = cardStars(w.skills);
+        return { name: w.name, role: w.role, skills: w.skills.slice(), potential: w.potential, mood: w.mood, look: cleanLook(w.look),
+          stars, wage: wageFor(stars, w.role), hired: w.hired === true };
+      });
+    }
+    s.trained = save.season.trained;
   }
 
   const sim = {
@@ -4383,7 +5973,10 @@ function createSim(saved, seed) {
     bookOffer, setAddon, railFor, canLoadUp, loadUp, finishReport, startSeason, seasonEndPreview,
     setPlayer, randomLook, look, setLength, fanThird, offerSlots, coolerCap, inventory, meatRoom,
     prefill, settle,
-    gateWaiting   // Q-6
+    gateWaiting,   // Q-6
+    // v3.1 (X7)
+    crewView, payroll, hiringView, tryout, hireApplicant, passRound, finishHiring, hireWalkin,
+    setBring, train, levelUp, giveRaise, letGo
   };
   return sim;
 }
@@ -4414,5 +6007,12 @@ PitSim.genOffers = genOffers;
 PitSim.scoreEvent = scoreEvent;
 PitSim.cleanName = cleanName;
 PitSim.filterName = filterName;
+// v3.1 (X1): the six new top level names
+PitSim.ROLE_IDS = ROLE_IDS;
+PitSim.genPool = genPool;
+PitSim.genWalkins = genWalkins;
+PitSim.cardStars = cardStars;
+PitSim.wageFor = wageFor;
+PitSim.skillValue = skillValue;
 
 })();
