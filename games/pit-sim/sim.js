@@ -2795,14 +2795,57 @@ function createSim(saved, seed) {
     return null;
   }
 
+  // [S 19.6] Spot indexes nearest first to a point (sim px): the counter used end to end.
+  function spotsNearest(x) {
+    const spots = state.stations.table.spots;
+    const spx = STATION_BY_ID.table.spotPx;
+    const order = [];
+    for (let i = 0; i < spots.length; i++) order.push(i);
+    order.sort((a, b) => {
+      const da = spx[a] ? Math.abs(spx[a].x - x) : 1e9;
+      const db = spx[b] ? Math.abs(spx[b].x - x) : 1e9;
+      return da - db || a - b;
+    });
+    return order;
+  }
+
+  // The end of the counter nearest the line: the first queue spot's centre.
+  function lineEndX() { return MAP.queue[0].x * 16 + 8; }
+
+  // [S 19.6] Each set-down fills the next free spot from the end nearest the line outward;
+  // only with no spot free does a plate stack on a spot of its meat with room (TABLE_STACK).
+  // Other meats that will want a spot of their own soon: asked for in the line, on the board or
+  // its knife, or in someone's hands, and not already on the counter.
+  function otherMeatsDue(meat) {
+    const due = new Set();
+    for (const c of waitingCustomers()) if (c.want) due.add(c.want);
+    const brd = state.stations.board;
+    for (const st of brd.stacks) if (st.times.length > 0) due.add(st.meat);
+    if (brd.slicing) due.add(brd.slicing.meat);
+    for (const who of [state.player, state.buddy]) {
+      const h = who && who.carrying;
+      if (h && (h.kind === 'plates' || h.kind === 'cooked')) due.add(h.meat);
+    }
+    due.delete(meat);
+    for (const sp of state.stations.table.spots) if (sp) due.delete(sp.meat);
+    return due.size;
+  }
+
+  // [S 19.6] Each set-down fills the next free spot from the end nearest the line outward. It
+  // stacks on a spot of its meat with room (TABLE_STACK) instead only when no spot is free, or when
+  // a free spot is all that is left for another meat that is due, so the counter never holds less
+  // than the old one meat a spot rule did.
   function tableSpotIndexFor(meat) {
     const spots = state.stations.table.spots;
-    for (let i = 0; i < spots.length; i++) {
+    const order = spotsNearest(lineEndX());
+    let free = -1, freeN = 0, stack = -1;
+    for (const i of order) {
       const sp = spots[i];
-      if (sp && sp.meat === meat && sp.times.length < C.TABLE_STACK) return i;
+      if (sp === null) { freeN += 1; if (free < 0) free = i; }
+      else if (stack < 0 && sp.meat === meat && sp.times.length < C.TABLE_STACK) stack = i;
     }
-    for (let i = 0; i < spots.length; i++) if (spots[i] === null) return i;
-    return -1;
+    if (free >= 0 && (stack < 0 || freeN - 1 >= otherMeatsDue(meat))) return free;
+    return stack >= 0 ? stack : free;
   }
 
   function tableFits(meat) { return tableSpotIndexFor(meat) >= 0; }
@@ -2923,8 +2966,11 @@ function createSim(saved, seed) {
   // Serve one customer from the table stack of their meat. Returns true when served.
   function serveFromTable(c) {
     const spots = state.stations.table.spots;
+    // [S 19.6] The plate in front of the guest, else the nearest one with their meat.
+    const qs = c.queueIndex >= 0 ? MAP.queue[c.queueIndex] : null;
+    const gx = (qs ? qs.x : c.x) * 16 + 8;
     let idx = -1;
-    for (let i = 0; i < spots.length; i++) {
+    for (const i of spotsNearest(gx)) {
       if (spots[i] && spots[i].meat === c.want && spots[i].times.length > 0) { idx = i; break; }
     }
     if (idx < 0) return false;
@@ -3002,11 +3048,10 @@ function createSim(saved, seed) {
       if (spots[idx] === null) spots[idx] = { meat: hands.meat, times: [], run: [] };
       const sp = spots[idx];
       if (!Array.isArray(sp.run)) sp.run = sp.times.map(() => false);
-      while (hands.times.length > 0 && sp.times.length < C.TABLE_STACK) {
-        sp.times.push(hands.times.shift());
-        sp.run.push(byRun === true);
-        placed += 1;
-      }
+      // [S 19.6] One plate per pass, so the next plate looks for the next free spot.
+      sp.times.push(hands.times.shift());
+      sp.run.push(byRun === true);
+      placed += 1;
       serveLine();
     }
     return placed;

@@ -504,6 +504,10 @@ const dogAI = { path: [], next: null, wait: 0, anim: 0 };
 
 // Draw records for captureFrame (D14).
 let capturing = false;
+// v3.4: the art3 bridge (art3/bridge.js); the off canvas is the 352 by 384 render px yard, drawn
+// with a 2x transform so every sim px position and step in this file scales with it.
+let B3 = null;
+const RS = 2;
 let recs = [];
 const SIZE = Object.create(null);
 
@@ -771,6 +775,7 @@ function copyLook(l) {
 }
 function applyLook(look) {
   if (art && typeof art.setLook === 'function') { try { art.setLook(look); } catch (e) { console.error(e); } }
+  if (B3) B3.setPlayer(copyLook(look));
 }
 function lookLabel(key, idx) { const l = STRINGS.look && STRINGS.look[key]; return l && l[idx] !== undefined ? l[idx] : String(idx); }
 function rowWord(labelKey) { return U(labelKey).toLowerCase(); }
@@ -854,6 +859,7 @@ function lookKeyOf(look) {
 }
 // Deviation 54: dresses the role's in-yard sprites in this look unless they already wear it.
 function ensureCrewLook(role, look) {
+  if (B3 && look) B3.setCrew(role, copyLook(look));
   if (!art || typeof art.setCrewLook !== 'function' || !look) return '';
   const want = role + ':' + lookKeyOf(look);
   let have = '';
@@ -933,7 +939,10 @@ function moodEl(mood, scale) {
 // The portrait bust (X12.2 art.portrait), or the role's in-yard down frame before sprites.js has it.
 function portraitEl(look, role, scale) {
   let c = null;
-  if (art && typeof art.portrait === 'function') {
+  if (B3) {
+    try { c = bustEl(B3.portrait(copyLook(look), 'crew', role), scale); } catch (e) { console.error(e); c = null; }
+  }
+  if (!c && art && typeof art.portrait === 'function') {
     try { c = art.portrait(copyLook(look), role, { scale: scale, dpr: dpr() }); } catch (e) { c = null; }
   }
   if (!c) {
@@ -943,6 +952,21 @@ function portraitEl(look, role, scale) {
   if (c) { c.setAttribute('aria-hidden', 'true'); c.classList.add('bust'); }
   return c;
 }
+// v3.4: an art3 bust (32 render px) as a crisp canvas at the v2 portrait's CSS size (16 px x scale).
+function bustEl(src, scale) {
+  if (!src) return null;
+  const d = dpr(), css = Math.max(1, 16 * (scale || 2));
+  const k = Math.max(1, Math.round(css * d / src.width));
+  const c = document.createElement('canvas');
+  c.width = src.width * k; c.height = src.height * k;
+  const g = c.getContext('2d');
+  g.imageSmoothingEnabled = false;
+  g.drawImage(src, 0, 0, c.width, c.height);
+  c.style.width = (c.width / d) + 'px'; c.style.height = (c.height / d) + 'px';
+  c.style.imageRendering = 'pixelated';
+  return c;
+}
+
 // The role badge: white UI letters on an ink box (X13.4).
 function roleBadge(role, cls) {
   const b = mk('span', { cls: 'rbadge' + (cls ? ' ' + cls : '') });
@@ -1058,6 +1082,7 @@ function boot() {
     return;
   }
   art = PitSim.art;
+  B3 = PitSim.bridge3 && PitSim.bridge3.boot() ? PitSim.bridge3 : null;
   try {
     art.build();
   } catch (e) {
@@ -1133,6 +1158,11 @@ function readSeed() {
 
 function exposeGame() {
   PitSim.game = {
+    // v3.4: the client x, y of tile (tx, ty)'s centre on the yard canvas, for the harness taps.
+    tileToClient: function (tx, ty) {
+      const r = el.cv.getBoundingClientRect();
+      return { x: r.left + (tx + 0.5) * TILE / VW * r.width, y: r.top + (ty + 0.5) * TILE / VH * r.height };
+    },
     version: VERSION,
     sim: sim,
     el: el,
@@ -1212,8 +1242,9 @@ function listenMq(mq, fn) {
 
 function setupCanvas() {
   off = document.createElement('canvas');
-  off.width = VW; off.height = VH;
+  off.width = VW * RS; off.height = VH * RS;
   octx = off.getContext('2d');
+  octx.setTransform(RS, 0, 0, RS, 0, 0);
   vctx = el.cv.getContext('2d');
   resize();
   window.addEventListener('resize', resize);
@@ -1228,16 +1259,19 @@ function resize() {
   const vw = document.documentElement.clientWidth || window.innerWidth || 375;
   const vh = window.innerHeight || 0;
   const dpr = window.devicePixelRatio || 1;
+  // v3.4 (design 12.3): integer k device px per render px on the 352 by 384 yard, 4 CSS px gutters.
+  const RW = VW * RS, RH = VH * RS;
   let target;
-  if (vw >= 900 && vh - 44 - 16 - CONTROLS_H >= VH * 3) target = 3;
-  else if (vw - 16 >= VW * 2) target = 2;
-  else target = Math.max(0.25, (vw - 16) / VW);
+  // Phones fit the width; laptops take 2 CSS px per render px when the yard and controls fit the
+  // height, else 1 (the yard never grows past the column the panels and controls share).
+  target = Math.max(0.25, (vw - 8) / RW);
+  if (vw >= 900) target = Math.min(target, vh - 44 - 16 - CONTROLS_H >= RH * 2 ? 2 : 1);
   kpx = Math.max(1, Math.floor(target * dpr + 1e-6));
   const css = kpx / dpr;
-  el.cv.width = VW * kpx;
-  el.cv.height = VH * kpx;
-  el.cv.style.width = (VW * css) + 'px';
-  el.cv.style.height = (VH * css) + 'px';
+  el.cv.width = RW * kpx;
+  el.cv.height = RH * kpx;
+  el.cv.style.width = (RW * css) + 'px';
+  el.cv.style.height = (RH * css) + 'px';
   snapCanvas(dpr);
   vctx.imageSmoothingEnabled = false;
   octx.imageSmoothingEnabled = false;
@@ -4762,14 +4796,21 @@ function drawCreatorScene() {
   const dy = phone ? -10 : 0;                                 // the crop starts 10 px down the patch
   const px0 = phone ? Math.round(W * 0.42) - 8 : 8;           // the pitmaster's left
   const kx = phone ? Math.min(W - 12, px0 + 30) : 40;         // the kettle's left
+  // v3.4: the preview is art3 at 2 render px per sim px, through the bridge (v2 art if art3 lacks one).
   if (!crOff) crOff = document.createElement('canvas');
-  if (crOff.width !== W || crOff.height !== H) { crOff.width = W; crOff.height = H; }
+  if (crOff.width !== W * RS || crOff.height !== H * RS) { crOff.width = W * RS; crOff.height = H * RS; }
   const g = crOff.getContext('2d');
+  g.setTransform(RS, 0, 0, RS, 0, 0);
   g.imageSmoothingEnabled = false;
   g.globalAlpha = 1;
   g.fillStyle = COLOR.K;
   g.fillRect(0, 0, W, H);
-  const draw = function (name, x, y, f) { if (art.has(name)) art.draw(g, name, x, y, Math.max(0, Math.min(art.frames(name) - 1, f | 0)), false); };
+  const draw = function (name, x, y, f) {
+    if (!art.has(name)) return;
+    const ff = Math.max(0, Math.min(art.frames(name) - 1, f | 0)), sz = size(name);
+    if (B3 && B3.draw(g, name, x, y, sz[0], sz[1], ff, false)) return;
+    art.draw(g, name, x, y, ff, false);
+  };
   for (let x = 0; x < Math.ceil(W / TILE); x++) {
     draw('fence_back', x * TILE, dy, 0);
     draw('lawn_a', x * TILE, TILE + dy, (x * 5 + 3) % 3 === 0 ? 1 : 0);
@@ -4786,13 +4827,14 @@ function drawCreatorScene() {
   draw('shadow', px0 + 2, 49 + dy, 0);
   draw('player_down', px0, 28 + dy, 0);
   const d = dpr();
-  const k = Math.max(1, Math.floor(css * d + 1e-6));
-  if (cv.width !== W * k || cv.height !== H * k) { cv.width = W * k; cv.height = H * k; }
-  cv.style.width = (W * k / d) + 'px';
-  cv.style.height = (H * k / d) + 'px';
+  const k = Math.max(1, Math.floor(css * d / RS + 1e-6));
+  const RWc = W * RS, RHc = H * RS;
+  if (cv.width !== RWc * k || cv.height !== RHc * k) { cv.width = RWc * k; cv.height = RHc * k; }
+  cv.style.width = (RWc * k / d) + 'px';
+  cv.style.height = (RHc * k / d) + 'px';
   const vg = cv.getContext('2d');
   vg.imageSmoothingEnabled = false;
-  vg.drawImage(crOff, 0, 0, W, H, 0, 0, W * k, H * k);
+  vg.drawImage(crOff, 0, 0, RWc, RHc, 0, 0, RWc * k, RHc * k);
   // R-14 and Q-6: focused rows scroll clear of the sticky preview and the sticky Fire it up.
   const foot = document.getElementById('cr-foot');
   if (el.creator) {
@@ -5408,14 +5450,14 @@ function D(name, x, y, frame, flip) {
   const sz = size(name);
   if (!inView(name, x, y, sz[0], sz[1])) return;
   const f = normFrame(frame, sz[2]);
-  art.draw(octx, name, x, y, f, flip === true);
+  if (!(B3 && B3.draw(octx, name, x, y, sz[0], sz[1], f, flip === true))) art.draw(octx, name, x, y, f, flip === true);
   if (capturing) recs.push({ name: name, frame: f, x: x, y: y, w: sz[0], h: sz[1] });
 }
 
 function DS(name, x, y, w, h, frame, flip) {
   if (!inView(name, x, y, w, h)) return;
   const f = normFrame(frame, size(name)[2]);
-  art.drawScaled(octx, name, x, y, w, h, f, flip === true);
+  if (!(B3 && B3.draw(octx, name, x, y, w, h, f, flip === true))) art.drawScaled(octx, name, x, y, w, h, f, flip === true);
   if (capturing) recs.push({ name: name, frame: f, x: x, y: y, w: w, h: h });
 }
 
@@ -5624,6 +5666,12 @@ function drawGround(s) {
     if (s.decor[spot.id] === true) continue;
     for (let j = 0; j < spot.tiles.length; j++) clover.add(spot.tiles[j].x + ',' + spot.tiles[j].y);
   }
+  if (B3) {
+    const path = [], cl = [];
+    PATH_TILES.forEach(function (k) { const p = k.split(','); path.push({ x: +p[0], y: +p[1] }); });
+    clover.forEach(function (k) { const p = k.split(','); cl.push({ x: +p[0], y: +p[1] }); });
+    if (B3.ground(octx, MAP, path, cl)) return;
+  }
   for (let y = 0; y < MAP.H; y++) {
     for (let x = 0; x < MAP.W; x++) {
       const t = MAP.at(x, y);
@@ -5808,12 +5856,15 @@ function drawMover(kind, m, s) {
   // Facing up, a hand item hides behind the back; the charcoal scoop instead rides over the head
   // (round 1) so picking it up at the pile shows, 1 px clear of the hair (round 2).
   const overHead = hand === 'hand_charcoal' && m.face === 'up';
+  const who3 = function () { if (B3) B3.person(isCust ? m.id : null, !!hand && !overHead); };
   if (hand && m.face === 'up' && !overHead) D(hand, bx + 4, by - 1 + yo);
   const sq = (kind === 'player' && squashAt >= 0 && !reduced) ? tAnim - squashAt : -1;
   if (sq >= 0 && sq < FX.SQUASH_S) {
+    who3();
     if (sq < FX.SQUASH_S / 2) DS(body[0], bx - 1, feet - 22, 18, 22, body[1], body[2]);
     else DS(body[0], bx + 1, feet - 26, 14, 26, body[1], body[2]);
   } else {
+    who3();
     D(body[0], bx, feet - bh + yo, body[1], body[2]);
   }
   if (hand && m.face !== 'up') D(hand, bx + 4, by + 4 + yo);
@@ -5823,6 +5874,7 @@ function drawMover(kind, m, s) {
 function drawSeated(c, seat) {
   const sx = seat.x * TILE, sy = seat.y * TILE;
   const f = c.eat > 0 ? (reduced ? 0 : Math.floor(tAnim / FX.EAT_FRAME_S) % 2) : 2;
+  if (B3) B3.person(c.id, false);
   D('cust' + (((c.body | 0) % 4 + 4) % 4) + '_sit', sx, sy - 6, f);
 }
 
@@ -6302,7 +6354,7 @@ function render() {
   vctx.fillRect(0, 0, el.cv.width, el.cv.height);
   let ox = 0;
   if (!reduced && shakeUntil > nowMs) ox = (Math.floor(nowMs / 16) % 2 === 0 ? 1 : -1) * kpx;
-  vctx.drawImage(off, 0, 0, VW, VH, ox, 0, VW * kpx, VH * kpx);
+  vctx.drawImage(off, 0, 0, VW * RS, VH * RS, ox, 0, VW * RS * kpx, VH * RS * kpx);
 }
 
 // ---------------------------------------------------------------- DOM per frame

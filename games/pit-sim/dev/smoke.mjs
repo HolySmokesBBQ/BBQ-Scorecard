@@ -253,7 +253,9 @@ const FILES = {
   sim: path.join(GAME_DIR, 'sim.js'),
   game: path.join(GAME_DIR, 'game.js')
 };
-const EXPECTED_REQUEST_FILES = ['index.html', 'sprites.js', 'sim.js', 'game.js'];
+const EXPECTED_REQUEST_FILES = ['index.html', 'sprites.js', 'sim.js', 'game.js',
+  // v3.4 (design 12): the art3 library and its adapter.
+  'art3/palette.js', 'art3/proj.js', 'art3/people.js', 'art3/kit.js', 'art3/yard.js', 'art3/fx.js', 'art3/index.js', 'art3/bridge.js'];
 
 const DEFAULT_SEED = 1;
 const SAVE_KEY = 'hs.pitsim.save';
@@ -268,7 +270,11 @@ const SURFACE_COUNTS = { tiles: 132, stations: 8, seats: 6, decor: 6, props: 19,
 const MAP_SIZE = { w: 11, h: 12 };
 const TILE_PX = 16;
 const VIRTUAL = { w: MAP_SIZE.w * TILE_PX, h: MAP_SIZE.h * TILE_PX };   // 176 by 192
-const CSS_SCALE = { phone: 2, desktop: 3 };                              // contract D13
+// v3.4 (design 12.1 to 12.3): the yard renders at 2 render px per sim px (352 by 384), with an
+// integer k device px per render px. CSS_SCALE is CSS px per render px at the run sizes: 375@2 is
+// k 2 (352 CSS), 1024x820@1 is k 1 (the 768 tall k 2 yard and controls do not fit 820).
+const RENDER = { w: VIRTUAL.w * 2, h: VIRTUAL.h * 2 };                  // 352 by 384
+const CSS_SCALE = { phone: 1, desktop: 1 };                              // contract D13, v3.4
 // Review round 2, contract D13: sizes where the old rule left the device scale fractional.
 // controls: the action button and the meat chips must end inside the viewport.
 const DEVICE_SIZES = [
@@ -1520,6 +1526,47 @@ async function nodeChecks() {
   await step('felt difference, headless', () => feltHeadless(globalThis[GLOBAL_NAME]), { fatal: true });
   await step('thirds and offers, headless', () => thirdsHeadless(globalThis[GLOBAL_NAME]));
   await step('v2.1 and v3.0 saves migrate to cards, headless', () => migrateHeadless(globalThis[GLOBAL_NAME]));
+  await step('four plates set down land in four counter spots, headless', () => countersHeadless(globalThis[GLOBAL_NAME]));
+}
+
+// [S 19.6] The counter used end to end: with the bigger table, four plates set down one at a time
+// fill four different spots, starting at the end nearest the line (queue spot 1) and working out,
+// and each spot has its own draw point. Drives sim.interact() at the table's use tile.
+function countersHeadless(P) {
+  const h = headless(P, null, 19);
+  const sim = h.sim, s = h.st();
+  sim[SIM_METHODS.skipTutorial]();
+  h.drain();
+  s.gear.bigtable = true;
+  s.phase = PHASE.service; s.paused = false;
+  s.customers = [];
+  const spots = s.stations.table.spots;
+  while (spots.length < P.C.TABLE_SPOTS_BIG) spots.push(null);
+  spots.fill(null);
+  const use = P.MAP.station('table').use[0];
+  s.player.x = use.x; s.player.y = use.y; s.player.face = use.face; s.player.busy = null;
+  s.player.path = []; s.player.next = null; s.player.walking = false;
+  const meats = ['chicken', 'ribs', 'chicken', 'sausage'];
+  const landed = [];
+  for (const meat of meats) {
+    s.player.carrying = { kind: 'plates', meat, times: [s.clock] };
+    const before = spots.map((sp) => (sp ? sp.times.length : 0));
+    const r = sim[SIM_METHODS.interact]();
+    h.drain();
+    assert(r && r.ok === true, 'set down ' + meat + ' refused: ' + describe(r));
+    assert(s.player.carrying === null, 'hands still hold ' + describe(s.player.carrying) + ' after the set down');
+    const grew = spots.map((sp, i) => (sp ? sp.times.length : 0) - before[i]).map((d, i) => (d > 0 ? i : -1)).filter((i) => i >= 0);
+    assert(grew.length === 1, 'plate ' + (landed.length + 1) + ' changed spots ' + describe(grew));
+    landed.push(grew[0]);
+  }
+  assert(new Set(landed).size === 4, 'four plates landed in ' + describe(landed) + ', wanted four different spots');
+  const qx = P.MAP.queue[0].x * 16 + 8;
+  const px = P.MAP.station('table').spotPx;
+  const dist = landed.map((i) => Math.abs(px[i].x - qx));
+  for (let k = 1; k < dist.length; k++) assert(dist[k] >= dist[k - 1], 'spot ' + landed[k] + ' is nearer the line than ' + landed[k - 1] + ': ' + describe(landed));
+  const pts = landed.map((i) => px[i].x + ',' + px[i].y);
+  assert(new Set(pts).size === 4, 'two spots share a draw point: ' + describe(pts));
+  return 'spots ' + landed.join(', ') + ' from the line end';
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -4502,7 +4549,14 @@ async function probeMetrics() {
 let taps = 0;        // canvas taps, action button clicks and walkTo fallbacks during service
 const tapNotes = [];
 
+// [S 19.6] Every canvas tap asks the renderer where a tile sits on screen,
+// PitSim.game.tileToClient(tx, ty) -> { x, y } in client px (the oblique v3 yard is not a flat
+// grid). Until the swap builder lands it, fall back to the flat grid math so the harness runs.
+let tileToClientSeen = null;   // true once the renderer answered, false once we fell back
 async function canvasPoint(tx, ty) {
+  const live = await ev('(() => { const g = window.PitSim && window.PitSim.game; if (!g || typeof g.tileToClient !== "function") return null; const p = g.tileToClient(' + Number(tx) + ', ' + Number(ty) + '); if (!p) return null; const x = Array.isArray(p) ? p[0] : p.x, y = Array.isArray(p) ? p[1] : p.y; return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null; })()');
+  if (live) { tileToClientSeen = true; return live; }
+  tileToClientSeen = false;
   const r = await ev('(() => { const b = $(' + JSON.stringify(ID.cv) + ').getBoundingClientRect(); return { l: b.left, t: b.top, w: b.width, h: b.height }; })()');
   return { x: r.l + (tx + 0.5) * r.w / MAP_SIZE.w, y: r.t + (ty + 0.5) * r.h / MAP_SIZE.h };
 }
@@ -4693,9 +4747,9 @@ async function canvasScale() {
 }
 function checkScale(r, css, label) {
   const k = Math.max(1, Math.round(css * r.dpr));
-  assert(r.w === VIRTUAL.w * css && r.h === VIRTUAL.h * css, label + ': #cv rect ' + r.w + ' by ' + r.h + ', wanted ' + (VIRTUAL.w * css) + ' by ' + (VIRTUAL.h * css) + ' (viewport ' + r.vw + ' by ' + r.vh + ')');
-  assert(r.bw === VIRTUAL.w * k && r.bh === VIRTUAL.h * k, label + ': backing store ' + r.bw + ' by ' + r.bh + ', wanted k ' + k);
-  assert(Number.isInteger(r.w / VIRTUAL.w), label + ': ' + r.w + ' / ' + VIRTUAL.w + ' is not an integer');
+  assert(r.w === RENDER.w * css && r.h === RENDER.h * css, label + ': #cv rect ' + r.w + ' by ' + r.h + ', wanted ' + (RENDER.w * css) + ' by ' + (RENDER.h * css) + ' (viewport ' + r.vw + ' by ' + r.vh + ')');
+  assert(r.bw === RENDER.w * k && r.bh === RENDER.h * k, label + ': backing store ' + r.bw + ' by ' + r.bh + ', wanted k ' + k);
+  assert(Number.isInteger(r.w / RENDER.w), label + ': ' + r.w + ' / ' + RENDER.w + ' is not an integer');
   return label + ' ' + r.w + 'x' + r.h + ' k ' + k;
 }
 // Ghost records (unowned previews) never count as the real draw.
@@ -5717,7 +5771,7 @@ async function browserChecks() {
       await advance(0);
     }
     const back = await canvasScale();
-    assert(back.w === VIRTUAL.w * CSS_SCALE[own], 'after restoring ' + own + ' the canvas is ' + back.w + ' wide');
+    assert(back.w === RENDER.w * CSS_SCALE[own], 'after restoring ' + own + ' the canvas is ' + back.w + ' wide');
     return notes.join('; ');
   });
 
@@ -5730,9 +5784,9 @@ async function browserChecks() {
         await sleep(TIMEOUT_MS.resize);
         await advance(0);
         const r = await canvasScale();
-        const k = r.bw / VIRTUAL.w;
-        assert(Number.isInteger(k) && k >= 1, label + ': backing store ' + r.bw + ' is not a whole multiple of ' + VIRTUAL.w);
-        assert(r.bh === VIRTUAL.h * k, label + ': backing store ' + r.bw + ' by ' + r.bh + ' is not k ' + k + ' on both axes');
+        const k = r.bw / RENDER.w;
+        assert(Number.isInteger(k) && k >= 1, label + ': backing store ' + r.bw + ' is not a whole multiple of ' + RENDER.w);
+        assert(r.bh === RENDER.h * k, label + ': backing store ' + r.bw + ' by ' + r.bh + ' is not k ' + k + ' on both axes');
         assert(Math.abs(r.w * r.dpr - r.bw) < 0.1 && Math.abs(r.h * r.dpr - r.bh) < 0.1,
           label + ': rect ' + r.w + ' by ' + r.h + ' at dpr ' + r.dpr + ' is ' + (r.w * r.dpr) + ' device px, backing store ' + r.bw);
         const fx = Math.abs(r.left * r.dpr - Math.round(r.left * r.dpr)), fy = Math.abs(r.top * r.dpr - Math.round(r.top * r.dpr));
@@ -5748,7 +5802,7 @@ async function browserChecks() {
       await advance(0);
     }
     const back = await canvasScale();
-    assert(back.w === VIRTUAL.w * CSS_SCALE[DESKTOP_MODE ? 'desktop' : 'phone'], 'after restoring the run size the canvas is ' + back.w + ' wide');
+    assert(back.w === RENDER.w * CSS_SCALE[DESKTOP_MODE ? 'desktop' : 'phone'], 'after restoring the run size the canvas is ' + back.w + ' wide');
     return notes.join('; ');
   });
 
@@ -6607,7 +6661,7 @@ async function browserChecks() {
       const small = await ev(SMALL_BUTTONS);
       assert(small.length === 0, 'buttons under ' + MIN_CONTROL_PX + ' px in service: ' + describe(small.slice(0, 5)));
       const sc = await canvasScale();
-      assert(sc.w === VIRTUAL.w * CSS_SCALE.phone && sc.h === VIRTUAL.h * CSS_SCALE.phone, '#cv ' + sc.w + ' by ' + sc.h);
+      assert(sc.w === RENDER.w * CSS_SCALE.phone && sc.h === RENDER.h * CSS_SCALE.phone, '#cv ' + sc.w + ' by ' + sc.h);
       notes.push('service ok, #cv ' + sc.w + 'x' + sc.h);
       await reloadFresh();   // deviation 19
       notes.push(await ensureTutorialMorning());
@@ -7001,6 +7055,7 @@ async function browserChecks() {
     taps,
     tapsPerPlate: served ? Math.round((taps / served) * 100) / 100 : null,
     tapFallbacks: tapNotes,
+    tapPoints: tileToClientSeen === true ? 'PitSim.game.tileToClient' : tileToClientSeen === false ? 'flat grid fallback' : 'no canvas taps',
     boredomSeconds: Math.round(before.bored * 100) / 100,
     boredomPrepSeconds: Math.round(before.boredPrep * 100) / 100,
     serviceSeconds: Math.round(daySecondsOfService * 100) / 100,

@@ -126,6 +126,12 @@ const MANIFEST = Object.freeze([
   ['birdbath', 'yard', 32, 48, 2, 16, 44, 0],
   ['mailbox', 'yard', 32, 56, 2, 16, 50, 0],
   ['dog', 'yard', 32, 24, 7, 16, 22, 0],
+  ['shed', 'yard', 96, 84, 1, 48, 82, 0],
+  ['tools', 'yard', 32, 48, 1, 16, 46, 0],
+  ['shelf', 'yard', 32, 48, 1, 16, 46, 0],
+  ['hose', 'yard', 32, 32, 1, 16, 30, 0],
+  ['picnic_small', 'yard', 68, 56, 1, 34, 54, 0],
+  ['bench_small', 'yard', 68, 20, 1, 34, 18, 0],
   // fx
   ['bubble', 'fx', 34, 33, 1, 17, 33, 0],
   ['bubble_body', 'fx', 34, 33, 1, 17, 33, 0],

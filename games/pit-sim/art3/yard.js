@@ -993,6 +993,96 @@ def('birdbath', 32, 48, 0, 16, 16, 28, 2, function (f) {
   endObj(OL);
 });
 
+/* ================================================================ v3.4 back corner props */
+// The game's fixed back corner props (sim.js MAP.props) in the art3 look: the shed (3 x 2 tiles),
+// the tool rack, the shelf and the hose reel (1 tile each). Anchors at the footprint's bottom centre.
+def('shed', 96, 84, 0, 0, 48, 82, 1, function () {
+  const B = R.barn, F = R.roof, W = R.woodD, GL = R.glass;
+  shadowEll(48, 80, 46, 5, AL.shadowWide);
+  beginObj();
+  rect(6, 30, 84, 52, B.base);
+  for (let x = 12; x < 90; x += 8) vline(x, 30, 52, B.shade);
+  vline(6, 30, 52, B.hi); vline(7, 30, 52, B.hi); rect(86, 30, 4, 52, B.shade);
+  hline(6, 81, 84, B.dark);
+  for (let r = 0; r < 4; r++) rect(2 + r * 2, 8 + r * 6, 92 - r * 4, 6, r & 1 ? F.shade : F.base);
+  hline(2, 8, 92, F.hi); hline(0, 30, 96, F.dark); rect(0, 28, 96, 2, F.shade);
+  rect(36, 44, 24, 38, W.base); vline(48, 44, 38, W.dark); hline(36, 44, 24, W.hi);
+  line(37, 46, 47, 80, W.shade); line(49, 46, 59, 80, W.shade);
+  px(45, 63, R.coin.base); px(51, 63, R.coin.base);
+  rect(66, 42, 14, 12, GL.base); hline(66, 42, 14, GL.hi); vline(73, 42, 12, W.base); hline(66, 48, 14, W.base);
+  rect(14, 42, 14, 12, GL.base); hline(14, 42, 14, GL.hi); vline(21, 42, 12, W.base); hline(14, 48, 14, W.base);
+  endObj(OL);
+});
+def('tools', 32, 48, 0, 0, 16, 46, 1, function () {
+  const W = R.woodM, S = R.steel, D = R.woodD;
+  shadowEll(16, 45, 12, 3, AL.shadowProp);
+  beginObj();
+  rect(4, 12, 24, 4, D.base); hline(4, 12, 24, D.hi);
+  rect(6, 16, 2, 30, D.shade); rect(24, 16, 2, 30, D.shade);
+  vline(10, 4, 40, W.base); vline(11, 4, 40, W.shade);
+  rect(7, 38, 8, 6, S.base); hline(7, 38, 8, S.hi); hline(7, 43, 8, S.dark);
+  vline(20, 2, 34, W.base); vline(21, 2, 34, W.shade);
+  hline(15, 36, 12, S.base); for (let x = 15; x < 27; x += 2) vline(x, 37, 4, S.shade);
+  vline(15, 10, 28, W.hi); rect(13, 8, 5, 3, S.hi);
+  endObj(OL);
+});
+def('shelf', 32, 48, 0, 0, 16, 46, 1, function () {
+  const W = R.woodL, D = R.woodD;
+  shadowEll(16, 45, 13, 3, AL.shadowProp);
+  beginObj();
+  rect(3, 6, 26, 40, D.shade);
+  vline(3, 6, 40, W.base); vline(28, 6, 40, W.shade);
+  [6, 19, 32, 44].forEach(function (yy) { rect(3, yy, 26, 2, W.base); hline(3, yy, 26, W.hi); });
+  rect(6, 12, 5, 7, R.clay.base); hline(6, 12, 5, R.clay.hi);
+  rect(13, 13, 5, 6, R.glass.base); hline(13, 13, 5, R.glass.hi);
+  rect(20, 11, 6, 8, R.coolerRed.base); hline(20, 11, 6, R.coolerRed.hi);
+  rect(6, 26, 8, 6, R.charcoal.base); hline(6, 26, 8, R.charcoal.hi);
+  rect(17, 25, 4, 7, R.steel.base); rect(22, 25, 4, 7, R.steel.shade);
+  rect(8, 38, 14, 6, R.board.base); hline(8, 38, 14, R.board.hi);
+  endObj(OL);
+});
+def('hose', 32, 32, 0, 0, 16, 30, 1, function () {
+  const G = R.hedge, S = R.steel;
+  shadowEll(16, 29, 12, 3, AL.shadowProp);
+  beginObj();
+  rect(6, 10, 3, 19, S.shade); rect(23, 10, 3, 19, S.shade);
+  ellipse(16, 17, 10, 10, G.shade);
+  ellipse(16, 17, 8, 8, G.base);
+  ellipse(16, 17, 5, 5, G.shade);
+  ellipse(16, 17, 3, 3, S.base); px(15, 16, S.hi);
+  line(10, 11, 14, 9, G.hi); line(9, 14, 10, 12, G.hi);
+  line(25, 22, 30, 28, G.base);
+  rect(4, 28, 24, 2, S.dark);
+  endObj(OL);
+});
+
+/* ================================================================ v3.4 two tile picnic table */
+// The game's picnic tables are 2 x 1 tile footprints (sim.js picnic1, picnic2): a short table with
+// its near bench, and the far bench on its own so the far side guests sit between the two.
+def('picnic_small', 68, 56, 0, 0, 34, 54, 1, function () {
+  const L = R.woodL, M = R.woodM, D = R.woodD;
+  shadowEll(34, 50, 32, 5, AL.shadowWide);
+  beginObj();
+  line(10, 28, 5, 50, D.base); line(11, 28, 6, 50, D.shade);
+  line(57, 28, 62, 50, D.base); line(58, 28, 63, 50, D.shade);
+  rect(2, 12, 64, 14, L.base); hline(2, 12, 64, L.hi); hline(2, 13, 64, L.hi);
+  [18, 34, 50].forEach(function (x) { vline(x, 13, 13, L.shade); });
+  rect(2, 26, 64, 4, M.shade); hline(2, 29, 64, M.dark);
+  rect(0, 38, 68, 5, L.base); hline(0, 38, 68, L.hi);
+  rect(0, 43, 68, 3, M.shade);
+  rect(5, 46, 3, 8, D.base); rect(60, 46, 3, 8, D.base);
+  endObj(OL);
+});
+def('bench_small', 68, 20, 0, 0, 34, 18, 1, function () {
+  const L = R.woodL, M = R.woodM, D = R.woodD;
+  shadowEll(34, 17, 30, 2, AL.shadowWide);
+  beginObj();
+  rect(0, 4, 68, 5, L.base); hline(0, 4, 68, L.hi);
+  rect(0, 9, 68, 3, M.shade);
+  rect(5, 12, 3, 6, D.base); rect(60, 12, 3, 6, D.base);
+  endObj(OL);
+});
+
 /* ================================================================ mailbox */
 // 0 flag down, 1 flag up. Ground line at tile y 26 (in front of the front fence run).
 def('mailbox', 32, 56, 0, 24, 16, 26, 2, function (f) {
