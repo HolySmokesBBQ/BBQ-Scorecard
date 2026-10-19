@@ -1,0 +1,93 @@
+# Everything in public/ ships inside EVERY app bundle.
+# New files require a deliberate edit here (same commit). See check-public-manifest.mjs.
+.well-known/assetlinks.json
+404.html
+BBQ Board/BBQ BOARD.192.png
+BBQ Board/BBQ BOARD.512.png
+BBQ Board/BBQ BOARD@1x.png
+BBQ Board/BBQ BOARD@2x.png
+BBQ Calculator/BBQ Calculator.192.png
+BBQ Calculator/BBQ Calculator.512.png
+BBQ Calculator/BBQ Calculator@1x.png
+BBQ Calculator/BBQ Calculator@2x.png
+BBQ Notebook App Logo/BBQ Notebook.192.png
+BBQ Notebook App Logo/BBQ Notebook.512.png
+BBQ Notebook App Logo/BBQ Notebook@1x.png
+BBQ Notebook App Logo/BBQ Notebook@2x.png
+BBQ Scorecard App Logo/BBQ Scorecard@2x.png
+BBQ Scorecard App Logo/BBQ_Scorecard.192.png
+BBQ Scorecard App Logo/BBQ_Scorecard.512.png
+BBQ Scorecard App Logo/BBQ_Scorecard.png
+CNAME
+Holy Smokes Logo/Holy Smokes Colored.192.png
+Holy Smokes Logo/Holy Smokes Colored.512.png
+Holy Smokes Logo/Holy Smokes Colored@1x.png
+Holy Smokes Logo/Holy Smokes Colored@2x.png
+accessibility.html
+bbq-board-logo-180.png
+bbq-board-logo.png
+bbq-board-logo@2x.png
+bbq-calculator-logo-144.png
+bbq-calculator-logo.png
+bbq-notebook-logo.png
+bbq-scorecard-logo.png
+board-icon-192.png
+board-icon-512.png
+calc-icon-192.png
+calc-icon-512.png
+changelog-notebook.html
+changelog.html
+delete-account-board.html
+delete-account-notebook.html
+delete-account.html
+favicon.ico
+fonts/burnt-ends-inline.woff2
+fonts/burnt-ends-solid.woff2
+fonts/inter-latin.woff2
+fonts/oswald-latin.woff2
+googleb5ed7e361153ee65.html
+gtm-init.js
+holy-smokes-logo.avif
+holy-smokes-logo.png
+holy-smokes-logo.webp
+holy-smokes-logo@2x.avif
+holy-smokes-logo@2x.webp
+icon-192.png
+icon-512.png
+lightbox.js
+privacy-board.html
+privacy-notebook.html
+privacy.html
+published-reviews.json
+robots.txt
+site-fx.js
+site.css
+sitemap.xml
+striker/striker-dry-avatar-48.png
+striker/striker-dry-avatar-96.png
+striker/striker-dry-avatar.svg
+striker/striker-dry-figure.svg
+striker/striker-fired-figure.svg
+striker/striker-out-closeup.svg
+striker/striker-pleased-avatar.svg
+support.html
+tesseract/eng.traineddata
+tesseract/tesseract-core-lstm.js
+tesseract/tesseract-core-lstm.wasm
+tesseract/tesseract-core-lstm.wasm.js
+tesseract/tesseract-core-relaxedsimd-lstm.js
+tesseract/tesseract-core-relaxedsimd-lstm.wasm
+tesseract/tesseract-core-relaxedsimd-lstm.wasm.js
+tesseract/tesseract-core-relaxedsimd.js
+tesseract/tesseract-core-relaxedsimd.wasm
+tesseract/tesseract-core-relaxedsimd.wasm.js
+tesseract/tesseract-core-simd-lstm.js
+tesseract/tesseract-core-simd-lstm.wasm
+tesseract/tesseract-core-simd-lstm.wasm.js
+tesseract/tesseract-core-simd.js
+tesseract/tesseract-core-simd.wasm
+tesseract/tesseract-core-simd.wasm.js
+tesseract/tesseract-core.js
+tesseract/tesseract-core.wasm
+tesseract/tesseract-core.wasm.js
+tesseract/worker.min.js
