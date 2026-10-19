@@ -92,3 +92,16 @@ as soon as he's done that.
   local data, (c) outgoing friend requests.
 - **AAB folder cleaned up** per its README: superseded builds filed into
   v3.6 and v4.1 through v4.4, nothing deleted.
+
+## Update 2026-10-18 (send_message undelivered again)
+
+- **pit-game.js:** not in any Scorecard build. 4.4.2 (4402) was built
+  10-15 08:10, before 1512892 (10-17 23:12), and `unzip -l` shows 0
+  pit-game entries. Website's f9a53be has since removed the file.
+- **4.4.2 ladder:** Internal went live 10-15 and Closed was approved 10-15
+  14:30. My miss: it then sat on Closed for 3 days without promotion.
+  Production (100%) and Open went out today in one submission, now "Changes
+  in review". 0 devices lost.
+- **Unchanged:** deletion is built (900b61a) but unwired until the rules in
+  `docs/handoffs/deletion-rules-change-2026-10-15.md` are published. iOS
+  4.4.x is held for it. The photo proof waits on Joel's old-phone restart.
