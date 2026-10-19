@@ -18,7 +18,7 @@ const require = createRequire(import.meta.url);
 const axeSource = readFileSync(require.resolve('axe-core/axe.min.js'), 'utf8');
 const ROOT = resolve(__dirname, '../..');
 
-const LANDING = ['index.html', 'pit.html', 'episodes.html', 'about.html', 'game.html'].map(f => resolve(ROOT, 'website/public-landing', f));
+const LANDING = ['index.html', 'pit.html', 'episodes.html', 'about.html'].map(f => resolve(ROOT, 'website/public-landing', f));
 const COMPLIANCE = ['privacy.html', 'privacy-notebook.html', 'privacy-board.html', 'delete-account.html', 'delete-account-notebook.html', 'delete-account-board.html', 'changelog.html', 'changelog-notebook.html', 'support.html', 'accessibility.html', '404.html'].map(f => resolve(ROOT, 'public', f));
 const SEO = ['board-cities', 'calculator-guests'].flatMap(d => readdirSync(resolve(ROOT, 'website/public-landing', d)).filter(f => f.endsWith('.html') && !f.startsWith('_')).map(f => resolve(ROOT, 'website/public-landing', d, f)));
 

@@ -35,14 +35,10 @@ console.log('Assembling dist/...');
 mkdirSync(DIST, { recursive: true });
 const landed = copyIfExists(join(ROOT, 'website', 'public-landing', 'index.html'), join(DIST, 'index.html'));
 console.log(landed ? '  + brand landing' : '  ! website/public-landing/index.html missing');
-// 1b. Inner brand pages (served at /pit, /episodes, /about, /game via Netlify
+// 1b. Inner brand pages (served at /pit, /episodes, /about via Netlify
 //     pretty URLs). Same allowlist trap as everything else here: a page not
 //     named below never deploys.
-// Hold 225 (/game) is back in design (Joel, 2026-10-18: not fun on his phone).
-// SHIP_GAME=1 in the environment ships game.html + pit-game.js; without it a
-// deploy carries neither, so an unrelated deploy cannot leak the page.
-const SHIP_GAME = process.env.SHIP_GAME === '1';
-for (const page of ['pit.html', 'episodes.html', 'about.html', ...(SHIP_GAME ? ['game.html'] : [])]) {
+for (const page of ['pit.html', 'episodes.html', 'about.html']) {
   const ok = copyIfExists(join(ROOT, 'website', 'public-landing', page), join(DIST, page));
   console.log(ok ? `  + ${page}` : `  ! website/public-landing/${page} missing`);
 }
@@ -87,7 +83,6 @@ const sharedAssets = [
   'gtm-init.js',
   'site.css',      // shared stylesheet for /, /pit, /episodes, /about; *.css is immutable, so bump ?v= on change
   'lightbox.js',   // /pit gallery dialog; external because CSP script-src has no 'unsafe-inline'; bump ?v= on change
-  ...(process.env.SHIP_GAME === '1' ? ['pit-game.js'] : []), // /game Hold 225 widget; only with SHIP_GAME=1 (see 1b)
   // SEO / verification files
   'googleb5ed7e361153ee65.html',
   // Android trusted-web-activity assetlinks

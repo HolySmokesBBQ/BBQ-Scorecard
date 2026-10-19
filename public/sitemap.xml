@@ -30,7 +30,6 @@
     <changefreq>yearly</changefreq>
     <priority>0.7</priority>
   </url>
-  <!-- /game (Hold 225) entry removed 2026-10-18: back in design; restore with the SHIP_GAME deploy -->
   <url>
     <loc>https://holysmokesbbqco.com/scorecard/</loc>
     <lastmod>2026-07-01</lastmod>
