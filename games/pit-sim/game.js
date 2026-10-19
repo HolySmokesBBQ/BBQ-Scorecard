@@ -1,8 +1,36 @@
 // game.js: input, canvas rendering, DOM panels, aria-live, save hooks, pause, feedback, the dog.
-// Contract: docs/superpowers/specs/2026-10-18-pit-sim-contract.md, v2 delta D11 (calls only), D12, D13, D14.
-// Design:   docs/superpowers/specs/2026-10-18-pit-sim-design.md, v2 section [V2.9], [V2.12], [V2.13], [V2.16].
+// Contract: docs/superpowers/specs/2026-10-18-pit-sim-contract.md, v2.1 section K7 sentences, K8, K9 (calls
+//           only), K10; v2 delta D11 (calls only), D12, D13, D14.
+// Design:   docs/superpowers/specs/2026-10-18-pit-sim-v2-1-tutorial.md [T 2.6], [T 3.4];
+//           docs/superpowers/specs/2026-10-18-pit-sim-design.md, v2 section [V2.9], [V2.12], [V2.13], [V2.16].
 //
-// Deviations (nothing added to the shared surface; PitSim.game is exactly D14):
+// v2.1 deviations (PitSim.game is exactly D14 plus the K10 members version '0.4.0' and banner):
+// 19. Banner placement. The banner sits at the top left (2, 2) as [T 2.6] says, except that while the
+//     tutorial target is a station whose drawn box starts in the top third of the canvas (draw y under
+//     VH / 3: the pile, both kettles, the cooler) it moves to the bottom edge, (2, VH - 2 - h), so it
+//     never sits over the station, its flames or its chimney (the build brief's rule). A step with no
+//     target keeps the last placement, so the cook step does not jump while the ring fills. The box,
+//     the colors, the wrap, the text inset (3 px in from the box's top left plus 8 px a line) and the
+//     arrow placement of K10 are unchanged. PitSim.game.banner carries no position.
+// 20. PitSim.game.banner is a getter worked out from the state each read (the lines and target that
+//     render pass 8 draws now), so a read right after an action never sees a stale frame.
+// 21. Warning puffs: each chimney puff remembers its cooker, and a puff of a cooker that has a warning
+//     piece draws as smoke_dark from the moment the warning starts, not only puffs spawned after it.
+//     burn_warning also starts that cooker's next puff at once.
+// 22. The Controls card focuses back on the button that opened it (#howto-btn or #pause-controls).
+//     #pause-skip, once used, is removed and focus moves to #resume.
+// 23. The tutorial step last spoken is forgotten on tutorial_done and on a new game, so a new
+//     tutorial speaks its first step again.
+// 24. Charcoal: game.js still draws pile frames 0 to 3 by bags and hand_charcoal for carried
+//     charcoal, so the new art shows with no game change. There is no charcoal icon (K9), so the
+//     charcoal shop row stays without one.
+// Review round 2 (contract K14, [T 2.6], [T 4]): a tap on the drawn arrow is a tap on its station
+// (arrowBox, onPointer); the arrow hides when its center falls on the player's body, above or below
+// the station (replacing round 1's below and in reach rule); facing up, the charcoal draws at
+// feet - body height - 9, clear of the hair; the pile shows full from 5 bags, half at 3 or 4; a two
+// line banner is 21 tall.
+//
+// Deviations (v2, kept):
 //  1. Cooking arcs are a 12 by 12 one pixel ring around each grate piece, filled clockwise
 //     from the top (v1 deviation 3, kept). Orange while cooking, green for the done window,
 //     near black when burnt.
@@ -89,7 +117,7 @@
 'use strict';
 const PitSim = globalThis.PitSim || (globalThis.PitSim = {});
 
-const VERSION = '0.3.0';
+const VERSION = '0.4.0';
 
 const FALLBACK_COLOR = {
   K: '#1b1714', U: '#2a2015', C: '#E6D8B8', O: '#D06129', outline: '#3b2417', woodD: '#7a4a26', woodM: '#a8693a',
@@ -133,6 +161,9 @@ const STAGGER_WINDOW_S = 0.5;
 const STAGGER_MAX = 3;
 const PATH_TILES = new Set(['9,10', '9,9', '9,8', '9,7', '8,7', '7,7']);   // customer route, drawn as pavers
 const SMOKE_HALF_W = 4;                                    // chimney puffs are centered on the vent
+const BANNER_W = 172;                                      // tutorial banner box ([T 2.6])
+const BANNER_TEXT_W = 164;                                 // widest line, art.textWidth
+const BANNER_MAX_LINES = 2;
 
 // Perimeter of a 12 by 12 ring, clockwise from the top center (44 pixels).
 const RING = (function () {
@@ -166,7 +197,7 @@ let extTile = null; // the table tile that comes with the Bigger table
 const nums = [];       // { kind, str, x, y, color, coin, at }   x, y is the text position at rest
 const sparkles = [];   // { x, y, at }
 const hearts = [];     // { x, y, at }
-const puffs = [];      // { x0, y0, vx, rise, life, at, dark, sway }
+const puffs = [];      // { x0, y0, vx, rise, life, at, dark, sway, src }   src: the chimney's cooker id
 const rings = [];      // { x, y, at, ok }
 const markX = new Map();   // customer id -> tAnim when the mark ends
 const sweatAt = new Map(); // customer id -> tAnim when the sweat started
@@ -202,6 +233,13 @@ const chipSig = {};
 const lastHud = { day: '', cash: '', rep: '' };
 let lastAct = null, lastActDis = null, lastStatus = null, lastPhase = '', lastPaused = null, lastHow = null;
 let clip = null;
+
+// Tutorial (v2.1).
+let lastSpokenStep = null;      // id of the last tutorial_step whose text went to #live
+let bannerBottom = false;       // deviation 19: the banner's placement, kept while a step has no target
+let pulsed = [];                // elements carrying tut-pulse right now
+let howtoOpener = null;         // id of the button that opened the Controls card
+const warnOn = Object.create(null);   // cooker id -> its warning bubble showed at the last observe
 
 // ---------------------------------------------------------------- helpers
 
@@ -271,6 +309,74 @@ function custById(id) {
 function byId(a, b) { return a.id - b.id; }
 function isChairSeat(seat) { return seat.decor === 'chair1' || seat.decor === 'chair2'; }
 function easeOut(t) { const u = 1 - Math.max(0, Math.min(1, t)); return 1 - u * u; }
+
+// ---------------------------------------------------------------- tutorial helpers (v2.1)
+
+function tutRunning() {
+  const t = sim ? sim.state.tutorial : null;
+  return !!(t && t.done === false);
+}
+function tutStep() {
+  if (!sim || typeof sim.tutorialStep !== 'function') return null;
+  return sim.tutorialStep() || null;
+}
+// The owned station a tutorial target names, or null (a DOM id or no target).
+function targetStation(target) {
+  if (typeof target !== 'string' || !target) return null;
+  const st = MAP.station(target);
+  return st && st.draw && owned(st) ? st : null;
+}
+// Greedy wrap on spaces, each line at most BANNER_TEXT_W wide in the pixel font ([T 2.6]).
+function wrapBanner(text) {
+  const words = String(text).toUpperCase().split(/\s+/).filter(Boolean);
+  const lines = [];
+  let cur = '';
+  for (let i = 0; i < words.length; i++) {
+    const next = cur ? cur + ' ' + words[i] : words[i];
+    if (!cur || art.textWidth(next) <= BANNER_TEXT_W) cur = next;
+    else { lines.push(cur); cur = words[i]; }
+  }
+  if (cur) lines.push(cur);
+  return lines.slice(0, BANNER_MAX_LINES);
+}
+// The banner as render pass 8 draws it now: service only, while the tutorial runs.
+function bannerNow() {
+  if (!sim || sim.state.phase !== 'service') return null;
+  const t = tutStep();
+  if (!t) return null;
+  return { lines: wrapBanner(t.text), target: t.target === undefined ? null : t.target };
+}
+function cookerWarns(ck) {
+  if (!ck || !ck.pieces) return false;
+  for (let i = 0; i < ck.pieces.length; i++) {
+    const p = ck.pieces[i];
+    if (p.state === 'done' && p.warn === true) return true;
+  }
+  return false;
+}
+// Left of the chimney vent (round 1), so the dark warning puffs rise clear of the bubble.
+function warnBubblePos(st) { return { x: st.draw.x - 2, y: st.draw.y - 11 }; }
+
+// tut-pulse on the DOM target, and on #act when the target station is in reach and usable ([T 2.6]).
+function syncPulse(verb) {
+  const want = [];
+  const t = tutStep();
+  if (t && t.target) {
+    const st = targetStation(t.target);
+    if (st) {
+      if (sim.state.phase === 'service' && sim.reach() === t.target) {
+        const v = verb || sim.verbAt();
+        if (v && v.enabled) want.push(el.act);
+      }
+    } else if (!MAP.station(t.target)) {
+      const e = document.getElementById(t.target);
+      if (e) want.push(e);
+    }
+  }
+  for (let i = 0; i < pulsed.length; i++) if (want.indexOf(pulsed[i]) === -1) pulsed[i].classList.remove('tut-pulse');
+  for (let i = 0; i < want.length; i++) if (!want[i].classList.contains('tut-pulse')) want[i].classList.add('tut-pulse');
+  pulsed = want;
+}
 
 // ---------------------------------------------------------------- boot
 
@@ -366,7 +472,8 @@ function exposeGame() {
     get saveOff() { return saveOff; },
     dog: dog,
     fxLog: fxLog,
-    captureFrame: captureFrame
+    captureFrame: captureFrame,
+    get banner() { return bannerNow(); }
   };
 }
 
@@ -513,7 +620,7 @@ function onEvent(ev) {
   const K = ev.cooker && STRINGS.cooker[ev.cooker] ? STRINGS.cooker[ev.cooker] : '';
   switch (ev.type) {
     case 'yard_open':
-      announce('Yard open. Gate opens in ' + C.GATE_OPENS + ' seconds.');
+      if (!tutRunning()) announce('Yard open. Gate opens in ' + C.GATE_OPENS + ' seconds.');
       pastSoldOut = 0;
       clearFx();
       dogReset(3);
@@ -577,6 +684,19 @@ function onEvent(ev) {
     case 'save_wanted': writeSave(); break;
     case 'save_clear': clearSave(); break;
     case 'blocked': blockedUntil = nowMs + 1500; break;
+    case 'tutorial_step':
+      if (ev.id !== lastSpokenStep) {
+        lastSpokenStep = ev.id;
+        if (ev.text) announce(String(ev.text));
+      }
+      break;
+    case 'tutorial_done': lastSpokenStep = null; break;
+    case 'burn_warning': {
+      const W = STRINGS.burnWarn && STRINGS.burnWarn[ev.meat];
+      announce(W || ('The ' + (L ? L.toLowerCase() : 'meat') + ' is about to burn.'));
+      if (ev.station) puffT[ev.station] = 0;
+      break;
+    }
     default: break;
   }
 }
@@ -698,6 +818,7 @@ function noteSaveOff() {
 
 function openPanel(name, focusId) {
   howtoOpen = false; howtoFrom = null;
+  if (name === 'pause') buildPauseBody();
   for (let i = 0; i < PANEL_IDS.length; i++) el[PANEL_IDS[i]].hidden = PANEL_IDS[i] !== name;
   currentPanel = name;
   syncPanels();
@@ -730,7 +851,7 @@ function setInert(on) {
 
 function wantHowto() {
   const desktop = !!(mqDesktop && mqDesktop.matches);
-  return howtoOpen || currentPanel === 'pause' || (!currentPanel && desktop && sim.state.phase === 'service');
+  return howtoOpen || (!currentPanel && desktop && sim.state.phase === 'service');
 }
 
 function syncPanels() {
@@ -743,8 +864,9 @@ function syncPanels() {
 }
 
 // The Controls card in place of the open panel (phones never see the desktop side column).
-function openHowto() {
+function openHowto(openerId) {
   if (howtoOpen) return;
+  howtoOpener = typeof openerId === 'string' ? openerId : null;
   howtoOpen = true;
   howtoFrom = currentPanel;
   if (howtoFrom) el[howtoFrom].hidden = true;
@@ -761,9 +883,10 @@ function closeHowto() {
   if (restore) el[back].hidden = false;
   syncPanels();
   if (restore) {
-    const b = document.getElementById('howto-btn');
+    const b = document.getElementById(howtoOpener || 'howto-btn');
     if (b && !b.disabled) b.focus(); else el[back + '-h'].focus();
   }
+  howtoOpener = null;
 }
 
 function showMorning() {
@@ -805,6 +928,7 @@ function confirmYes() {
   clearFx();
   fxLog.length = 0;
   returnPanel = null;
+  lastSpokenStep = null;
   sim.reset();
   sim.setPaused(false);
   dogReset(2);
@@ -833,9 +957,7 @@ function buildStatic() {
   }
 
   el['pause-h'].textContent = 'Paused';
-  clear(el['pause-body']);
-  el['pause-body'].appendChild(btn('resume', 'Keep playing', 'primary', resumeFromPause));
-  el['pause-body'].appendChild(btn('pause-new', 'New game', 'alt', function () { openConfirm('pause'); }));
+  buildPauseBody();
 
   el['howto-h'].textContent = 'Controls';
   el['howto-h'].setAttribute('tabindex', '-1');
@@ -854,6 +976,32 @@ function buildStatic() {
   clear(el['newgame-body']);
   el['newgame-body'].appendChild(btn('confirm-no', 'Keep playing', 'primary', confirmNo));
   el['newgame-body'].appendChild(btn('confirm-yes', 'Start over', 'alt', confirmYes));
+}
+
+// Pause panel, in order: Keep playing, Controls, Skip tutorial (while it runs), New game ([T 2.6]).
+function buildPauseBody() {
+  const b = el['pause-body'];
+  clear(b);
+  b.appendChild(btn('resume', 'Keep playing', 'primary', resumeFromPause));
+  b.appendChild(btn('pause-controls', 'Controls', 'alt', function () { openHowto('pause-controls'); }));
+  if (tutRunning()) b.appendChild(btn('pause-skip', 'Skip tutorial', 'alt', onPauseSkip));
+  b.appendChild(btn('pause-new', 'New game', 'alt', function () { openConfirm('pause'); }));
+}
+
+function onPauseSkip() {
+  if (typeof sim.skipTutorial === 'function') sim.skipTutorial();
+  pump();
+  buildPauseBody();
+  const r = document.getElementById('resume');
+  if (r && currentPanel === 'pause') r.focus();
+  updateDom();
+}
+
+function onClipSkip() {
+  if (typeof sim.skipTutorial === 'function') sim.skipTutorial();
+  pump();
+  rebuildClipboardKeepFocus();
+  updateDom();
 }
 
 // ---------------------------------------------------------------- clipboard
@@ -886,8 +1034,13 @@ function buildClipboard() {
   clip.headText = document.createTextNode(headLine(s));
   const head = mk('p', null, [clip.headText, ' ', mk('span', { cls: 'stars', text: stars(s.rep), attrs: { 'aria-hidden': 'true' } })]);
   el['clip-top'].appendChild(head);
-  if (s.day === 1) {
-    el['clip-top'].appendChild(mk('p', { cls: 'muted', text: 'Tap the charcoal pile, then tap the kettle to light it. A second bag keeps the fire good through the first cook. Tap the cooler for meat and tap the kettle to put it on. When the check mark shows, pull it and slice it at the board. Plates go on the table.' }));
+  const ts = tutStep();
+  if (ts && ts.id === 'open') {
+    el['clip-top'].appendChild(mk('p', { id: 'tut-clip', cls: 'card', text: ts.text }));
+  }
+  if (tutRunning()) el['clip-top'].appendChild(btn('tut-skip', 'Skip tutorial', 'alt', onClipSkip));
+  if (s.day === 1 && !tutRunning()) {
+    el['clip-top'].appendChild(mk('p', { cls: 'muted', text: 'Tap the charcoal pile, then tap the kettle to light it. A second bag keeps the fire good through the first cook. Tap the cooler for meat and tap the kettle to put it on. When the box around it turns green, pull it and slice it at the board. Plates go on the table.' }));
   }
   if (s.day >= C.RAIN_FROM_DAY) {
     const w = s.rain
@@ -950,7 +1103,7 @@ function buildClipboard() {
   el['clip-foot'].appendChild(clip.cart);
   el['clip-foot'].appendChild(clip.open);
   el['clip-foot'].appendChild(clip.why);
-  const how = btn('howto-btn', 'How to play', 'alt', openHowto);
+  const how = btn('howto-btn', 'Controls', 'alt', function () { openHowto('howto-btn'); });
   const fresh = btn('clip-new', 'New game', 'alt', function () { openConfirm('clipboard'); });
   how.style.flex = '1 1 0';
   fresh.style.flex = '1 1 0';
@@ -974,6 +1127,7 @@ function refreshClipboard() {
   const co = sim.canOpen();
   clip.open.disabled = !co.ok;
   clip.why.textContent = co.ok ? '' : co.reason;
+  syncPulse(null);
 }
 
 function nameCell(item, withIcon) {
@@ -1289,7 +1443,11 @@ function onPointer(e) {
   if (!(r.width > 0 && r.height > 0)) return;
   const vx = (e.clientX - r.left) / r.width * VW;
   const vy = (e.clientY - r.top) / r.height * VH;
-  const hit = stationAt(vx, vy);
+  // Round 2: a tap on the drawn tutorial arrow counts as a tap on its station, since the arrow sits
+  // on a use tile or a tile above the station and tapping it is the natural first move.
+  const ab = arrowBox();
+  const onArrow = ab && vx >= ab.x - 2 && vx < ab.x + 10 && vy >= ab.y && vy < ab.y + 12;
+  const hit = onArrow ? ab.st : stationAt(vx, vy);
   let tx, ty;
   if (hit) { tx = hit.tiles[0].x; ty = hit.tiles[0].y; }
   else { tx = Math.floor(vx / TILE); ty = Math.floor(vy / TILE); }
@@ -1403,6 +1561,7 @@ function clearFx() {
   markX.clear(); sweatAt.clear(); columnT.clear();
   for (const k in puffT) delete puffT[k];
   for (const k in puffOn) delete puffOn[k];
+  for (const k in warnOn) delete warnOn[k];
   rainDrops = null;
   squashAt = -1;
   zzzSince = null; zzzAt = -1;
@@ -1443,9 +1602,9 @@ function puffDrift(st) {
   return away === 0 ? r * 2 - 1 : away * r;
 }
 
-function spawnPuff(x, y, vx, rise, life, dark, sway) {
+function spawnPuff(x, y, vx, rise, life, dark, sway, src) {
   if (puffs.length >= 60) puffs.shift();
-  puffs.push({ x0: x, y0: y, vx: vx, rise: rise, life: life, at: tAnim, dark: dark, sway: sway });
+  puffs.push({ x0: x, y0: y, vx: vx, rise: rise, life: life, at: tAnim, dark: dark, sway: sway, src: src || null });
 }
 
 // Watches the sim for the cues that have no event: the buddy's zzz, sweat drops, and the dog
@@ -1453,6 +1612,14 @@ function spawnPuff(x, y, vx, rise, life, dark, sway) {
 function observe() {
   const s = sim.state;
   const service = s.phase === 'service';
+  // A cooker's warning bubble starting logs one 'warn' at the bubble (K10).
+  for (let i = 0; i < MAP.stations.length; i++) {
+    const st = MAP.stations[i];
+    if (st.type !== 'cooker') continue;
+    const on = service && owned(st) && cookerWarns(s.stations[st.id]);
+    if (on && !warnOn[st.id]) { const bp = warnBubblePos(st); log('warn', bp.x, bp.y); }
+    warnOn[st.id] = on;
+  }
   if (!service || reduced) {
     const h = MAP.dogHome;
     if (dog.x !== h.x || dog.y !== h.y || dog.px !== h.x * TILE || dog.py !== h.y * TILE || dog.frame !== 2 || dogAI.next) dogReset(2);
@@ -1513,7 +1680,7 @@ function updateFx(dt) {
           puffT[st.id] = every;
           const vent = st.sprite === 'drum' ? { x: tx + 7, y: ty - 4 } : { x: tx + 11, y: ty - 10 };
           const life = FX.PUFF_LIFE_MIN + (FX.PUFF_LIFE_MAX - FX.PUFF_LIFE_MIN) * crng();
-          spawnPuff(vent.x - SMOKE_HALF_W, vent.y, puffDrift(st) * FX.PUFF_DRIFT_PX_S, FX.PUFF_RISE_PX_S, life, false, false);
+          spawnPuff(vent.x - SMOKE_HALF_W, vent.y, puffDrift(st) * FX.PUFF_DRIFT_PX_S, FX.PUFF_RISE_PX_S, life, cookerWarns(ck), false, st.id);
           if (!puffOn[st.id]) { puffOn[st.id] = true; log('puff', vent.x, vent.y); }
         }
       }
@@ -1737,6 +1904,7 @@ function glyphFrame(ch) {
   if (c >= 65 && c <= 90) return 10 + (c - 65);
   if (ch === '+') return 36;
   if (ch === ':') return 37;
+  if ((ch === '.' || ch === ',') && size('font')[2] >= 40) return ch === '.' ? 38 : 39;
   return -1;
 }
 
@@ -1845,7 +2013,7 @@ function gateOpen(s) {
 
 function pieceFrame(p) {
   if (p.state === 'burnt') return 3;
-  if (p.state === 'done') return 2;
+  if (p.state === 'done') return (p.warn === true && size('piece_' + p.meat)[2] >= 5) ? 4 : 2;
   const cook = MEATS[p.meat] ? MEATS[p.meat].cook : 1;
   return p.prog < cook / 2 ? 0 : 1;
 }
@@ -1864,15 +2032,26 @@ function drawStation(st, s) {
     D(st.sprite, st.draw.x, st.draw.y, BAND_FRAME[band] || 0);
     if (!ck) return;
     drawGauge(st, ck);
-    for (let i = 0; i < ck.pieces.length; i++) {
-      const p = ck.pieces[i];
-      const pos = piecePos(st, p);
-      D('piece_' + p.meat, pos.x, pos.y, pieceFrame(p));
-      const m = MEATS[p.meat];
-      if (!m) continue;
-      if (p.state === 'cooking') drawRing(pos.x - 1, pos.y - 1, Math.min(1, p.prog / m.cook), COLOR.O);
-      else if (p.state === 'done') drawRing(pos.x - 1, pos.y - 1, Math.max(0, 1 - (p.prog - m.cook) / m.window), COLOR.lawnA);
-      else drawRing(pos.x - 1, pos.y - 1, 1, COLOR.K);
+    // The flame sits under the grate (round 1): drawn before the pieces so it never covers a
+    // piece's charred warning edges or the top run of its ring.
+    if (band === 'good' || band === 'hot') {
+      D('fire', st.draw.x + 4, st.draw.y - 4, reduced ? 0 : Math.floor(tAnim * FX.FIRE_FPS) % 3);
+    }
+    // Kettle slots overlap by 4 px, so a piece about to burn draws after the others on its
+    // cooker (round 1): its charred frame and red ring stay on top.
+    for (let pass = 0; pass < 2; pass++) {
+      for (let i = 0; i < ck.pieces.length; i++) {
+        const p = ck.pieces[i];
+        const late = p.state === 'done' && p.warn === true;
+        if (late !== (pass === 1)) continue;
+        const pos = piecePos(st, p);
+        D('piece_' + p.meat, pos.x, pos.y, pieceFrame(p));
+        const m = MEATS[p.meat];
+        if (!m) continue;
+        if (p.state === 'cooking') drawRing(pos.x - 1, pos.y - 1, Math.min(1, p.prog / m.cook), COLOR.O);
+        else if (p.state === 'done') drawRing(pos.x - 1, pos.y - 1, Math.max(0, 1 - (p.prog - m.cook) / m.window), late ? COLOR.red : COLOR.lawnA);
+        else drawRing(pos.x - 1, pos.y - 1, 1, COLOR.K);
+      }
     }
   } else if (st.type === 'board') {
     const b = s.stations.board;
@@ -1900,7 +2079,8 @@ function drawStation(st, s) {
     }
   } else if (st.type === 'pile') {
     const n = s.charcoal | 0;
-    D('pile', st.draw.x, st.draw.y, n > 6 ? 0 : n >= 3 ? 1 : n >= 1 ? 2 : 3);
+    // Round 2: full at 5 bags or more (day 1's cart), half at 3 or 4, low at 1 or 2.
+    D('pile', st.draw.x, st.draw.y, n >= 5 ? 0 : n >= 3 ? 1 : n >= 1 ? 2 : 3);
   } else if (st.type === 'trash') {
     D('trash', st.draw.x, st.draw.y);
   } else {
@@ -1975,7 +2155,10 @@ function drawMover(kind, m, s) {
   const bh = size(body[0])[1];
   const feet = by + TILE;
   D('shadow', bx + 2, by + 13);
-  if (hand && m.face === 'up') D(hand, bx + 4, by - 1 + yo);
+  // Facing up, a hand item hides behind the back; the charcoal scoop instead rides over the head
+  // (round 1) so picking it up at the pile shows, 1 px clear of the hair (round 2).
+  const overHead = hand === 'hand_charcoal' && m.face === 'up';
+  if (hand && m.face === 'up' && !overHead) D(hand, bx + 4, by - 1 + yo);
   const sq = (kind === 'player' && squashAt >= 0 && !reduced) ? tAnim - squashAt : -1;
   if (sq >= 0 && sq < FX.SQUASH_S) {
     if (sq < FX.SQUASH_S / 2) DS(body[0], bx - 1, feet - 22, 18, 22, body[1], body[2]);
@@ -1984,6 +2167,7 @@ function drawMover(kind, m, s) {
     D(body[0], bx, feet - bh + yo, body[1], body[2]);
   }
   if (hand && m.face !== 'up') D(hand, bx + 4, by + 4 + yo);
+  if (overHead) D(hand, bx + 4, feet - bh - 9 + yo);
 }
 
 function drawSeated(c, seat) {
@@ -2164,6 +2348,11 @@ function drawOverhead(s) {
 }
 
 function drawSmokeAndFire(s) {
+  const warnSet = Object.create(null);
+  for (let i = 0; i < MAP.stations.length; i++) {
+    const st = MAP.stations[i];
+    if (st.type === 'cooker' && cookerWarns(s.stations[st.id])) warnSet[st.id] = true;
+  }
   for (let i = 0; i < puffs.length; i++) {
     const p = puffs[i];
     const age = tAnim - p.at;
@@ -2171,18 +2360,10 @@ function drawSmokeAndFire(s) {
     let x = p.x0 + p.vx * age;
     if (p.sway) x += Math.sin(age * 2 * Math.PI / p.life) * FX.BURNT_COLUMN_SWAY_PX;
     const y = p.y0 - p.rise * age;
-    D(p.dark ? 'smoke_dark' : 'smoke', Math.round(x), Math.round(y), Math.min(2, Math.floor(3 * age / p.life)));
+    const dark = p.dark || (p.src !== null && warnSet[p.src] === true);
+    D(dark ? 'smoke_dark' : 'smoke', Math.round(x), Math.round(y), Math.min(2, Math.floor(3 * age / p.life)));
   }
-  for (let i = 0; i < MAP.stations.length; i++) {
-    const st = MAP.stations[i];
-    if (st.type !== 'cooker' || !owned(st)) continue;
-    const ck = s.stations[st.id];
-    if (!ck) continue;
-    const band = PitSim.fireBand(ck.fire);
-    if (band === 'good' || band === 'hot') {
-      D('fire', st.draw.x + 4, st.draw.y - 4, reduced ? 0 : Math.floor(tAnim * FX.FIRE_FPS) % 3);
-    }
-  }
+  // Flames draw with their cooker in pass 2, under the grate pieces (round 1).
 }
 
 function bandColor(band) {
@@ -2235,6 +2416,16 @@ function drawCues(s, custs) {
       const sx = seat ? seat.x * TILE : px, sy = seat ? seat.y * TILE : Math.round(c.py);
       D('bubble', sx, sy - 21);
       D('plate_' + c.want, sx + 4, sy - 18);
+    }
+  }
+  // "!" bubbles over cookers with a piece about to burn ([T 3.4]); one per cooker.
+  if (art.has('bubble_warn')) {
+    const blink = FX.WARN_BLINK_S > 0 ? FX.WARN_BLINK_S : 0.25;
+    for (let i = 0; i < MAP.stations.length; i++) {
+      const st = MAP.stations[i];
+      if (st.type !== 'cooker' || !owned(st) || !cookerWarns(s.stations[st.id])) continue;
+      const bp = warnBubblePos(st);
+      D('bubble_warn', bp.x, bp.y, reduced ? 0 : Math.floor(tAnim / blink) % 2);
     }
   }
   // Patience bars.
@@ -2354,6 +2545,52 @@ function drawTop(s) {
       }
     }
   }
+  drawArrow();
+}
+
+// Where the tutorial arrow draws this frame (K10 placement), or null when it does not draw. Round 2:
+// it hides while the center of its 8x12 box falls on the player's drawn 16x24 body (it would sit on
+// him; the pulse on #act carries the step then), above or below the station alike. A corner that only
+// grazes his feet keeps it, so a step whose station is out of reach always has a pointer.
+function arrowBox() {
+  if (!art.has('arrow')) return null;
+  const t = tutStep();
+  const st = t ? targetStation(t.target) : null;
+  if (!st) return null;
+  const r = stationRects(st)[0];
+  const x = r.x + Math.floor(r.w / 2) - 4;
+  const above = r.y - 12 >= 22;
+  const y = above ? r.y - 12 : r.y + r.h;
+  if (sim.state.phase === 'service') {
+    const p = sim.state.player;
+    const px = Math.round(p.px), py = Math.round(p.py);
+    const cx = x + 4, cy = y + 6;
+    if (cx >= px && cx < px + TILE && cy >= py - 8 && cy < py + TILE) return null;
+  }
+  return { st: st, x: x, y: y, above: above };
+}
+
+// The tutorial arrow over (or under) the target station, last in pass 6 (K10). A tap on it is a tap
+// on the station (round 2, onPointer).
+function drawArrow() {
+  const a = arrowBox();
+  if (!a) return;
+  const base = a.above ? 0 : 2;
+  const bob = FX.ARROW_BOB_S > 0 ? FX.ARROW_BOB_S : 0.3;
+  D('arrow', a.x, a.y, reduced ? base : base + (Math.floor(tAnim / bob) % 2));
+}
+
+// The tutorial banner, last before the blit so nothing covers it ([T 2.6], deviation 19).
+function drawBanner(b) {
+  const st = targetStation(b.target);
+  if (st) bannerBottom = st.draw.y < VH / 3;
+  const h = b.lines.length > 1 ? 21 : 11;
+  const y = bannerBottom ? VH - 2 - h : 2;
+  octx.fillStyle = COLOR.C;
+  octx.fillRect(2, y, BANNER_W, h);
+  octx.fillStyle = COLOR.K;
+  octx.fillRect(3, y + 1, BANNER_W - 2, h - 2);
+  for (let i = 0; i < b.lines.length; i++) T(b.lines[i], 5, y + 3 + 8 * i);
 }
 
 function drawRain() {
@@ -2385,12 +2622,19 @@ function render() {
   drawTop(s);                         // 6. slice bar, numbers, coins, sparkles, tap rings
   if (inService && s.rain) drawRain(); // 7. rain
 
-  // 8. Canvas text in umber boxes.
+  // 8. The tutorial banner in place of the clock and GATE OPENS IN, else canvas text in umber boxes.
   if (inService) {
-    const rem = Math.max(0, Math.ceil(C.DAY_SECONDS - s.clock));
-    boxText(String(rem), 2, 2, null);
-    if (s.clock < C.GATE_OPENS) boxText('GATE OPENS IN ' + Math.ceil(C.GATE_OPENS - s.clock), 2, 183, 'yellow');
-    else if (lastCallUntil > nowMs) boxText('LAST CALL', 2, 183, 'yellow');
+    const banner = bannerNow();
+    if (banner) {
+      drawBanner(banner);
+    } else {
+      const rem = Math.max(0, Math.ceil(C.DAY_SECONDS - s.clock));
+      boxText(String(rem), 2, 2, null);
+      if (s.clock < C.GATE_OPENS) boxText('GATE OPENS IN ' + Math.ceil(C.GATE_OPENS - s.clock), 2, 183, 'yellow');
+      else if (lastCallUntil > nowMs) boxText('LAST CALL', 2, 183, 'yellow');
+    }
+  } else {
+    bannerBottom = false;
   }
 
   // 9. Blit at the D13 scale, with the burnt shake.
@@ -2408,7 +2652,7 @@ function statusText(s) {
   if (saveOffUntil > nowMs) return 'Saving is off in this browser.';
   if (noticeUntil > nowMs) return 'Your save was updated for the new yard.';
   if (blockedUntil > nowMs) return STRINGS.cantGetThere;
-  if (s.phase === 'service' && s.clock < C.GATE_OPENS) return STRINGS.gateOpensIn + Math.ceil(C.GATE_OPENS - s.clock);
+  if (s.phase === 'service' && s.clock < C.GATE_OPENS && !tutRunning()) return STRINGS.gateOpensIn + Math.ceil(C.GATE_OPENS - s.clock);
   if (lastCallUntil > nowMs) return STRINGS.lastCall;
   return sim.holding();
 }
@@ -2446,6 +2690,7 @@ function updateDom() {
   if (v.label !== lastAct) { lastAct = v.label; el.act.textContent = v.label; }
   const dis = !v.enabled;
   if (dis !== lastActDis) { lastActDis = dis; el.act.disabled = dis; }
+  syncPulse(v);
 
   for (let i = 0; i < MEAT_IDS.length; i++) {
     const id = MEAT_IDS[i];

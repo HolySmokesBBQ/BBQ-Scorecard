@@ -1,0 +1,820 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Post-Event Report</title>
+<style>
+  :root { --bg: #1b1714; }
+  html, body { margin: 0; padding: 0; background: var(--bg); }
+  body { display: flex; justify-content: center; }
+  canvas { display: block; width: 390px; height: 844px; image-rendering: pixelated; image-rendering: crisp-edges; }
+</style>
+</head>
+<body>
+<canvas id="c" aria-label="Your Pit post-event report mock: Church picnic done, grade B+"></canvas>
+<script>
+// Mock only: "Your Pit" v3, screen 4, post-event report. Deterministic drawing, no game logic.
+const W = 390, H = 844;
+const DPR = Math.max(1, Math.round(window.devicePixelRatio || 1));
+const cv = document.getElementById('c');
+cv.width = W * DPR; cv.height = H * DPR;
+const g = cv.getContext('2d');
+g.scale(DPR, DPR);
+g.imageSmoothingEnabled = false;
+
+// ---------- palette ----------
+const C = {
+  ink: '#1b1714', umber: '#2a2015', umber2: '#33281b', cream: '#E6D8B8', creamDim: '#b9a888',
+  orange: '#D06129', orangeHi: '#ec8550', orangeLo: '#7c3412', gold: '#F3CF6D', goldLo: '#b8862e',
+  green: '#7ed957', greenLo: '#3f8a2c', red: '#ff7262', blue: '#5ec8f0', shadow: '#0d0a08',
+  starOff: '#4a3a28', barBg: '#120e0b'
+};
+
+function px(x, y, w, h, c) { g.fillStyle = c; g.fillRect(x, y, w, h); }
+
+// seeded rng
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const rnd = mulberry32(4207);
+
+// ---------- bitmap font (thin 5x7 glyphs, drawn with a 1px horizontal smear for a bold look) ----------
+const F = {
+  'A':[".###.","#...#","#...#","#####","#...#","#...#","#...#"],
+  'B':["####.","#...#","#...#","####.","#...#","#...#","####."],
+  'C':[".###.","#...#","#....","#....","#....","#...#",".###."],
+  'D':["####.","#...#","#...#","#...#","#...#","#...#","####."],
+  'E':["#####","#....","#....","####.","#....","#....","#####"],
+  'F':["#####","#....","#....","####.","#....","#....","#...."],
+  'G':[".###.","#...#","#....","#.###","#...#","#...#",".####"],
+  'H':["#...#","#...#","#...#","#####","#...#","#...#","#...#"],
+  'I':["###",".#.",".#.",".#.",".#.",".#.","###"],
+  'J':["..###","...#.","...#.","...#.","#..#.","#..#.",".##.."],
+  'K':["#...#","#..#.","#.#..","##...","#.#..","#..#.","#...#"],
+  'L':["#....","#....","#....","#....","#....","#....","#####"],
+  'M':["#.....#","##...##","#.#.#.#","#..#..#","#.....#","#.....#","#.....#"],
+  'N':["#...#","##..#","#.#.#","#..##","#...#","#...#","#...#"],
+  'O':[".###.","#...#","#...#","#...#","#...#","#...#",".###."],
+  'P':["####.","#...#","#...#","####.","#....","#....","#...."],
+  'Q':[".###.","#...#","#...#","#...#","#.#.#","#..#.",".##.#"],
+  'R':["####.","#...#","#...#","####.","#.#..","#..#.","#...#"],
+  'S':[".####","#....","#....",".###.","....#","....#","####."],
+  'T':["#####","..#..","..#..","..#..","..#..","..#..","..#.."],
+  'U':["#...#","#...#","#...#","#...#","#...#","#...#",".###."],
+  'V':["#...#","#...#","#...#","#...#","#...#",".#.#.","..#.."],
+  'W':["#.....#","#.....#","#.....#","#..#..#","#.#.#.#","##...##","#.....#"],
+  'X':["#...#","#...#",".#.#.","..#..",".#.#.","#...#","#...#"],
+  'Y':["#...#","#...#",".#.#.","..#..","..#..","..#..","..#.."],
+  'Z':["#####","....#","...#.","..#..",".#...","#....","#####"],
+  'a':[".....",".....",".###.","....#",".####","#...#",".####"],
+  'b':["#....","#....","####.","#...#","#...#","#...#","####."],
+  'c':["....","....",".###","#...","#...","#...",".###"],
+  'd':["....#","....#",".####","#...#","#...#","#...#",".####"],
+  'e':[".....",".....",".###.","#...#","#####","#....",".###."],
+  'f':["..##",".#..",".#..","###.",".#..",".#..",".#.."],
+  'g':[".....",".....",".####","#...#","#...#","#...#",".####","....#",".###."],
+  'h':["#....","#....","####.","#...#","#...#","#...#","#...#"],
+  'i':["#",".","#","#","#","#","#"],
+  'j':["..#","...","..#","..#","..#","..#","..#","#.#",".#."],
+  'k':["#...","#...","#..#","#.#.","##..","#.#.","#..#"],
+  'l':["#.","#.","#.","#.","#.","#.",".#"],
+  'm':[".......",".......","###.##.","#..#..#","#..#..#","#..#..#","#..#..#"],
+  'n':[".....",".....","####.","#...#","#...#","#...#","#...#"],
+  'o':[".....",".....",".###.","#...#","#...#","#...#",".###."],
+  'p':[".....",".....","####.","#...#","#...#","#...#","####.","#....","#...."],
+  'q':[".....",".....",".####","#...#","#...#","#...#",".####","....#","....#"],
+  'r':["....","....","#.##","##..","#...","#...","#..."],
+  's':[".....",".....",".####","#....",".###.","....#","####."],
+  't':[".#..",".#..","###.",".#..",".#..",".#..","..##"],
+  'u':[".....",".....","#...#","#...#","#...#","#...#",".####"],
+  'v':[".....",".....","#...#","#...#","#...#",".#.#.","..#.."],
+  'w':[".......",".......","#.....#","#.....#","#..#..#","#.#.#.#",".#...#."],
+  'x':[".....",".....","#...#",".#.#.","..#..",".#.#.","#...#"],
+  'y':[".....",".....","#...#","#...#","#...#","#...#",".####","....#",".###."],
+  'z':[".....",".....","#####","...#.","..#..",".#...","#####"],
+  '0':[".###.","#...#","#...#","#...#","#...#","#...#",".###."],
+  '1':["..#..",".##..","..#..","..#..","..#..","..#..",".###."],
+  '2':[".###.","#...#","....#","...#.","..#..",".#...","#####"],
+  '3':["####.","....#","....#",".###.","....#","....#","####."],
+  '4':["...#.","..##.",".#.#.","#..#.","#####","...#.","...#."],
+  '5':["#####","#....","####.","....#","....#","#...#",".###."],
+  '6':[".###.","#....","#....","####.","#...#","#...#",".###."],
+  '7':["#####","....#","...#.","..#..","..#..","..#..","..#.."],
+  '8':[".###.","#...#","#...#",".###.","#...#","#...#",".###."],
+  '9':[".###.","#...#","#...#",".####","....#","....#",".###."],
+  '.':[".",".",".",".",".",".","#"],
+  ',':[".",".",".",".",".",".","#","#"],
+  ':':[".",".","#",".",".",".","#"],
+  '!':["#","#","#","#","#",".","#"],
+  '?':[".###.","#...#","....#","..##.","..#..",".....","..#.."],
+  '+':[".....","..#..","..#..","#####","..#..","..#..","....."],
+  '-':["....","....","....","####","....","....","...."],
+  '/':["....#","....#","...#.","..#..",".#...","#....","#...."],
+  "'":["#","#",".",".",".",".","."],
+  ' ':["...","...","...","...","...","...","..."]
+};
+function gw(ch) { const gl = F[ch] || F['?']; return gl[0].length; }
+function textW(str, s) { let w = 0; for (const ch of str) w += (gw(ch) + 2) * s; return w - s; }
+function drawGlyphs(str, x, y, s, col) {
+  g.fillStyle = col;
+  let cx = x;
+  for (const ch of str) {
+    const gl = F[ch] || F['?'];
+    for (let r = 0; r < gl.length; r++) for (let c = 0; c < gl[r].length; c++) if (gl[r][c] === '#') g.fillRect(cx + c * s, y + r * s, 2 * s, s);
+    cx += (gl[0].length + 2) * s;
+  }
+}
+// opts: shadow (drop below), outline (8-way)
+function text(str, x, y, s, col, o = {}) {
+  if (o.align === 'center') x = Math.round(x - textW(str, s) / 2);
+  if (o.align === 'right') x = x - textW(str, s);
+  const u = o.u || (s >= 4 ? s / 2 : 2);
+  if (o.outline) for (const [dx, dy] of [[-1,-1],[0,-1],[1,-1],[-1,0],[1,0],[-1,1],[0,1],[1,1],[0,2],[1,2],[-1,2]]) drawGlyphs(str, x + dx * u, y + dy * u, s, o.outline);
+  if (o.shadow) drawGlyphs(str, x, y + u, s, o.shadow);
+  drawGlyphs(str, x, y, s, col);
+  return x;
+}
+
+// ---------- sprite helper ----------
+function spr(map, pal, x, y, s) {
+  for (let r = 0; r < map.length; r++) for (let c = 0; c < map[r].length; c++) {
+    const k = map[r][c]; if (k === '.' || k === ' ') continue;
+    g.fillStyle = pal[k]; g.fillRect(x + c * s, y + r * s, s, s);
+  }
+}
+
+// ---------- icons ----------
+const STAR = [
+  "....k....",
+  "...kyk...",
+  "...kyk...",
+  "kkkkyykkk",
+  "kyyyyyyHk",
+  ".kyyyyyk.",
+  "..kyyyk..",
+  ".kyykyyk.",
+  "kyk...kyk",
+  "kk.....kk"
+];
+function star(x, y, s, fill) { // fill: 1 full, 0.5 half, 0 empty
+  const on = { k: C.shadow, y: C.gold, H: '#fff3c4' };
+  const off = { k: C.shadow, y: C.starOff, H: C.starOff };
+  if (fill >= 1) spr(STAR, on, x, y, s);
+  else if (fill <= 0) spr(STAR, off, x, y, s);
+  else {
+    spr(STAR, off, x, y, s);
+    const half = STAR.map(r => r.slice(0, 5) + '.'.repeat(r.length - 5));
+    spr(half, on, x, y, s);
+    // keep the right outline intact
+  }
+}
+function stars(x, y, s, n, total = 5, gap = 2) { for (let i = 0; i < total; i++) star(x + i * (10 * s + gap), y, s, Math.max(0, Math.min(1, n - i))); }
+
+const ICON = {
+  rib: { map: [
+    "......kk",
+    ".....kwk",
+    "...kkkk.",
+    "..kMMmk.",
+    ".kMmmmk.",
+    ".kmmmdk.",
+    "kwkmdk..",
+    "kwkkk...",
+  ], pal: { k: C.shadow, w: '#f6ecd2', m: '#b5552a', M: '#e58848', d: '#7a3214' } },
+  bolt: { map: [
+    "...kkkk.",
+    "..kyyyk.",
+    "..kyyk..",
+    ".kyyykkk",
+    ".kkkyyyk",
+    "...kyyk.",
+    "...kyk..",
+    "..kkk...",
+  ], pal: { k: C.shadow, y: '#ffe05a' } },
+  tray: { map: [
+    "...kk...",
+    "..kwwk..",
+    ".kwwwHk.",
+    "kwwwwwHk",
+    "kwwwwwwk",
+    "kkkkkkkk",
+    "kssssssk",
+    ".kkkkkk.",
+  ], pal: { k: C.shadow, w: '#c9d4dc', H: '#ffffff', s: '#8a96a0' } },
+  coin: { map: [
+    "..kkkk..",
+    ".kyyyyk.",
+    "kyHyyyyk",
+    "kyHyddyk",
+    "kyyyddyk",
+    "kyyyyyyk",
+    ".kyyyyk.",
+    "..kkkk..",
+  ], pal: { k: C.shadow, y: C.gold, H: '#fff3c4', d: C.goldLo } },
+  heart: { map: [
+    ".kkk.kkk.",
+    "kRRRkrrrk",
+    "kRHRrrrrk",
+    "kRRrrrrrk",
+    ".krrrrrk.",
+    "..krrrk..",
+    "...krk...",
+    "....k....",
+  ], pal: { k: C.shadow, r: '#e8404a', R: '#ff6e74', H: '#ffd0d0' } },
+  up: { map: [
+    "...kk...",
+    "..kggk..",
+    ".kggggk.",
+    "kggggggk",
+    "kkkggkkk",
+    "...ggk..",
+    "...ggk..",
+    "...kkk..",
+  ], pal: { k: C.shadow, g: C.green } },
+  arrow: { map: [
+    "....kk....",
+    "....kwk...",
+    "kkkkkwwk..",
+    "kwwwwwwwk.",
+    "kwwwwwwwwk",
+    "kwwwwwwwk.",
+    "kkkkkwwk..",
+    "....kwk...",
+    "....kk....",
+  ], pal: { k: C.ink, w: C.cream } },
+  smallArrow: { map: [
+    "..k...",
+    "..kk..",
+    "kkkgk.",
+    "kggggk",
+    "kkkgk.",
+    "..kk..",
+    "..k...",
+  ], pal: { k: C.shadow, g: C.green } }
+};
+function icon(name, x, y, s) { spr(ICON[name].map, ICON[name].pal, x, y, s); }
+
+// ---------- panels (Retro Bowl style frame, warm site tones) ----------
+function panel(x, y, w, h, label, o = {}) {
+  const fill = o.fill || C.umber, line = o.line || C.cream;
+  px(x + 2, y + h, w - 2, 4, C.shadow);            // drop shadow
+  px(x + 2, y, w - 4, h, fill); px(x, y + 2, w, h - 4, fill);
+  // 2px frame, inset 4px, pixel-rounded corners
+  const i = 5, fx = x + i, fy = y + i, fw = w - 2 * i, fh = h - 2 * i;
+  px(fx + 2, fy, fw - 4, 2, line); px(fx + 2, fy + fh - 2, fw - 4, 2, line);
+  px(fx, fy + 2, 2, fh - 4, line); px(fx + fw - 2, fy + 2, 2, fh - 4, line);
+  if (label) {
+    const s = 2, tw = textW(label, s) + (o.labelIcon ? 22 : 0);
+    const lx = Math.round(x + (o.labelLeft ? 18 : (w - tw) / 2));
+    px(lx - 6, fy - 2, tw + 12, 6, fill);
+    let tx = lx;
+    if (o.labelIcon) { icon(o.labelIcon, lx, fy - 7, 2); tx += 22; }
+    text(label, tx, fy - 6, s, C.gold);
+  }
+}
+
+function portrait(x, y, face, bg, o = {}) {
+  // 18x18 art frame at 2x = 36 css
+  const s = 2;
+  px(x, y, 36, 36, C.shadow);
+  px(x + 2, y + 2, 32, 32, bg);
+  px(x + 2, y + 24, 32, 10, shade(bg));
+  spr(face.map, face.pal, x + 4, y + 4, s);
+  if (o.badge) { // position badge, like the draft card
+    px(x - 2, y - 2, textW(o.badge, 1) + 8, 11, C.shadow);
+    px(x, y, textW(o.badge, 1) + 4, 7, C.orange);
+  }
+}
+function shade(hex) { // darker tint for portrait lower band
+  const n = parseInt(hex.slice(1), 16); const r = (n >> 16) * 0.78 | 0, gg = ((n >> 8) & 255) * 0.78 | 0, b = (n & 255) * 0.78 | 0;
+  return '#' + ((1 << 24) | (r << 16) | (gg << 8) | b).toString(16).slice(1);
+}
+
+// faces 14x15 art px
+const FACES = {
+  bea: { map: [
+    "....kkkkkk....",
+    "...kggggggk...",
+    "..kgGggggggk..",
+    "..kggggggggk..",
+    ".kgssssssssgk.",
+    ".kgsssssssssk.",
+    ".ksooossooosk.",
+    ".ksoeossoeosk.",
+    ".ksooossooosk.",
+    ".kssssssssssk.",
+    "..ksspssspsk..",
+    "..kssrrrrssk..",
+    "...kssssssk...",
+    "..kkpkkkkpkk..",
+    ".kPPPPPPPPPPk.",
+  ], pal: { k: C.shadow, g: '#d8d4d8', G: '#ffffff', s: '#f2c49a', o: '#a07850', e: '#2a1a10', w: '#ffffff', r: '#c4454a', p: '#e8a080', P: '#9a6cc8' } },
+  marcus: { map: [
+    "...kkkkkkkk...",
+    "..kbbbbbbbbk..",
+    ".kbBbbbbbbbbk.",
+    ".kbbbbbbbbbbbkk",
+    "kkkkkkkkkkbbbbk",
+    ".kssssssssssk..",
+    ".kssssssssssk..",
+    ".ksskksskkssk..",
+    ".ksswkssswksk..",
+    ".kssssssssssk..",
+    ".kssssddsssskk.",
+    "..kskrrrrkssk..",
+    "...kssrrssk....",
+    "..kkkkkkkkkk...",
+    ".kgggggggggggk.",
+  ], pal: { k: C.shadow, b: '#2f7ad8', B: '#7ab8ff', s: '#8a5634', d: '#6a3e22', w: '#ffffff', r: '#e8e0d0', g: '#3fae5a' } },
+  rosa: { map: [
+    "...kkkkkkkk...",
+    "..kooooooook..",
+    ".koOooooooook.",
+    ".khkkkkkkkkhk.",
+    "khhsssssssshhk",
+    "khssssssssssshk",
+    "khskksssskkshk",
+    "khswksssswkshk",
+    "khssssssssssshk",
+    ".hssssddssssh.",
+    ".hsskrrrrksh..",
+    "..kssrwwrssk..",
+    "...kssssssk...",
+    "..kkkkkkkkkk..",
+    ".kaaawwwwaaak.",
+  ], pal: { k: C.shadow, o: '#e8693a', O: '#ffa070', h: '#3a2018', s: '#d9a070', d: '#b07848', w: '#ffffff', r: '#a83a3a', a: '#f2eadc' } }
+};
+
+// ---------- background ----------
+px(0, 0, W, H, C.ink);
+for (let y = 0; y < H; y += 8) for (let x = (y / 8) % 2 ? 4 : 0; x < W; x += 16) px(x, y, 2, 2, '#211c18');
+
+// ---------- top HUD ----------
+px(0, 0, W, 30, '#120f0d');
+px(0, 30, W, 2, C.shadow);
+text('WEEK 3', 16, 8, 2, C.cream);
+{
+  const cash = '1,240';
+  const tw = textW(cash, 2);
+  icon('coin', W - 16 - tw - 22, 6, 2);
+  text(cash, W - 16, 8, 2, C.gold, { align: 'right' });
+  text('YOUR PIT', W / 2, 8, 2, C.creamDim, { align: 'center' });
+}
+
+// ---------- people (chibi, 14x13 art px heads: the same face scale as the portrait cards) ----------
+const HEAD = {
+  short: [
+    "....kkkkkk....",
+    "..kkhhhhhhkk..",
+    ".khhHHhhhhhhk.",
+    ".khHhhhhhhhhk.",
+    "khhhhhhhhhhhhk",
+    "khhssshhssshhk",
+    "khsssssssssshk",
+    "khsewssssewshk",
+    "ksseesssseessk",
+    "ksccsmssmsccsk",
+    ".kssssmmssssk.",
+    "..kssssssssk..",
+    "...kkkkkkkk...",
+  ],
+  long: [
+    "....kkkkkk....",
+    "..kkhhhhhhkk..",
+    ".khhHHhhhhhhk.",
+    ".khHhhhhhhhhk.",
+    "khhhhhhhhhhhhk",
+    "khhssshhssshhk",
+    "khsssssssssshk",
+    "khsewssssewshk",
+    "khseesssseeshk",
+    "khccsmssmscchk",
+    "khssssmmsssshk",
+    "khhkssssssKhhk".replace('K', 'k'),
+    ".khhkkkkkkhhk.",
+    "..kk......kk..",
+  ],
+  oldman: [
+    "....kkkkkk....",
+    "..kksHsssskk..",
+    ".kssHsssssssk.",
+    ".kssssssssssk.",
+    "khsssssssssshk",
+    "khhsssssssshhk",
+    "khshhsssshhshk",
+    "khsewssssewshk",
+    "ksseesssseessk",
+    "kscchhhhhhccsk",
+    ".ksssmmmmsssk.",
+    "..kssssssssk..",
+    "...kkkkkkkk...",
+  ],
+  cap: [
+    "....kkkkkk....",
+    "..kkOOOOOOkk..",
+    ".kOOHHOOOOOOk.",
+    ".kOOOOOOOOOOk.",
+    "kooooooooooook",
+    "khhsssssssshhk",
+    "khsssssssssshk",
+    "khsewssssewshk",
+    "ksseesssseessk",
+    "ksccsmssmsccsk",
+    ".kssssmmssssk.",
+    "..kssssssssk..",
+    "...kkkkkkkk...",
+  ],
+  bandana: [
+    "....kkkkkk....",
+    "..kkOOOOOOkk..",
+    ".kOOHHOOOOOOk.",
+    ".kOOOOOOOOOOkk",
+    "khhhhhhhhhhhhk",
+    "khhssshhssshhk",
+    "khsssssssssshk",
+    "khsewssssewshk",
+    "khseesssseeshk",
+    "khccsmssmscchk",
+    "khssssmmsssshk",
+    "khhkssssssKhhk".replace('K', 'k'),
+    ".khhkkkkkkhhk.",
+    "..kk......kk..",
+  ],
+  kid: [
+    "...kkkkkk...",
+    ".kkhhHhhhkk.",
+    "khhHhhhhhhhk",
+    "khhhhhhhhhhk",
+    "khhsshhsshhk",
+    "khsssssssshk",
+    "ksewssssewsk",
+    "kseesssseesk",
+    "kccsmssmscck",
+    ".ksssmmsssk.",
+    "..kkkkkkkk..",
+  ],
+};
+function glasses(map) { const m = map.slice(); m[7] = "khgewggggewghk"; m[8] = "ksgeegssgeegsk"; return m; }
+const BODY = {
+  adult: [
+    "...kttttttk...",
+    "..kTttttttTk..",
+    ".kTTttttttTTk.",
+    ".kTTttttttTTk.",
+    ".ksTttttttTsk.",
+    ".kkppppppppkk.",
+    "..kppkkkkppk..",
+    "..kppk..kppk..",
+    "..kKKk..kKKk..",
+    "..kkkk..kkkk..",
+  ],
+  apron: [
+    "...ktaaaatk...",
+    "..kTtaaaatTk..",
+    ".kTTaaaaaaTTk.",
+    ".kTTaaaaaaTTk.",
+    ".ksTaaaaaaTsk.",
+    ".kkpaaaaaapkk.",
+    "..kppkkkkppk..",
+    "..kppk..kppk..",
+    "..kKKk..kKKk..",
+    "..kkkk..kkkk..",
+  ],
+  kid: [
+    "..kttttttk..",
+    ".kTttttttTk.",
+    ".ksttttttsk.",
+    "..kppppppk..",
+    "..kpk..kpk..",
+    "..kkk..kkk..",
+  ],
+};
+// sanity: every row of a map must be the same width
+let mapErr = 0;
+for (const set of [HEAD, BODY]) for (const k in set) { const w0 = set[k][0].length; set[k].forEach((r, i) => { if (r.length !== w0) { mapErr++; console.warn('map width', k, i, r.length, w0); } }); }
+
+function pal(o) {
+  const p = Object.assign({ k: C.shadow, e: '#2a1a10', w: '#ffffff', m: '#8a2a2a', K: '#3a2a20', g: '#3a2a20', a: '#f2eadc' }, o);
+  if (!p.T && p.t) p.T = shade(p.t);
+  if (!p.H && p.h) p.H = tint(p.h);
+  return p;
+}
+function tint(hex) { const n = parseInt(hex.slice(1), 16); const f = v => Math.min(255, (v + (255 - v) * 0.35) | 0); return '#' + ((1 << 24) | (f(n >> 16) << 16) | (f((n >> 8) & 255) << 8) | f(n & 255)).toString(16).slice(1); }
+
+// ---------- hero scene (art grid 195 x 92 at 2x) ----------
+const HY = 32, A = 2, CROP = 4, HERO_H = 88; // scene drawn 4 art rows higher, clipped
+const SY = HY - CROP * A;
+function a(x, y, w, h, c) { px(x * A, SY + y * A, w * A, h * A, c); }
+function aspr(map, p, x, y) { spr(map, p, x * A, SY + y * A, A); }
+function person(x, y, head, body, p, headH) {
+  const hh = headH || (head.length > 13 ? 13 : head.length);
+  if (body) aspr(body, p, x + ((head[0].length - body[0].length) >> 1), y + hh);
+  aspr(head, p, x, y);
+}
+const SMALL_HEART = [".rr.rr.", "rHrrrrr", "rrrrrrr", ".rrrrr.", "..rrr..", "...r..."];
+const SMILEY = ["..yyy..", ".yyyyy.", "yykykyy", "yyyyyyy", "ykyyyky", ".ykkky.", "..yyy.."];
+function thought(x, y, art, p) { // small white pop bubble with tail, art inside (7 px wide)
+  a(x + 1, y, 11, 1, C.shadow); a(x + 1, y + 10, 11, 1, C.shadow); a(x, y + 1, 1, 9, C.shadow); a(x + 12, y + 1, 1, 9, C.shadow);
+  a(x + 1, y + 1, 11, 9, '#ffffff'); a(x + 1, y + 9, 11, 1, '#d8dce4');
+  a(x + 5, y + 11, 3, 1, '#ffffff'); a(x + 4, y + 11, 1, 1, C.shadow); a(x + 8, y + 11, 1, 1, C.shadow);
+  a(x + 6, y + 12, 1, 1, '#ffffff'); a(x + 5, y + 12, 1, 1, C.shadow); a(x + 7, y + 12, 1, 1, C.shadow); a(x + 6, y + 13, 1, 1, C.shadow);
+  aspr(art, p, x + 3, y + 2);
+}
+
+g.save(); g.beginPath(); g.rect(0, HY, W, HERO_H * A); g.clip();
+(function hero() {
+  const HH = 92, GR = 60; // GR: horizon row
+  // sunset sky bands with checker dithering
+  const bands = ['#33407e', '#4a4c96', '#6e56a2', '#a45c9a', '#d86a86', '#ef8a6a', '#f6ab62', '#fbcb78'];
+  const bh = 7.5;
+  for (let i = 0; i < bands.length; i++) {
+    const by = Math.round(i * bh);
+    a(0, by, 195, 8, bands[i]);
+    if (i > 0) for (let x = 0; x < 195; x++) { if (x % 2 === 0) a(x, by, 1, 1, bands[i - 1]); if (x % 4 === 1) a(x, by + 1, 1, 1, bands[i - 1]); }
+  }
+  // sun on the horizon behind the smoker side
+  const sx = 150, sy = GR - 1;
+  for (let y = -11; y <= 0; y++) for (let x = -11; x <= 11; x++) { const d = x * x + y * y; if (d <= 121) a(sx + x, sy + y, 1, 1, d > 90 ? '#ffd36b' : '#fff1b8'); }
+  // pink clouds, kept clear of the title
+  function cloud(x, y, w) {
+    a(x + 3, y, w - 6, 2, '#f7b0b8'); a(x, y + 2, w, 3, '#f3a0aa'); a(x + 2, y + 5, w - 4, 1, '#c8708a');
+    a(x + 4, y - 1, 6, 1, '#ffd0d4');
+  }
+  cloud(152, 22, 24); cloud(170, 36, 20); cloud(4, 18, 18);
+  // stars in the high sky
+  for (let i = 0; i < 14; i++) { const x = Math.floor(rnd() * 195), y = Math.floor(rnd() * 16); a(x, y, 1, 1, '#c8c8ff'); }
+  // distant tree line
+  for (let x = 0; x < 195; x++) {
+    const h = 5 + Math.round(2 * Math.sin(x * 0.35) + 1.5 * Math.sin(x * 0.11 + 1));
+    a(x, GR - h, 1, h, '#4f5e5a');
+    if (x % 3 === 0) a(x, GR - h, 1, 1, '#61716b');
+  }
+  // church (left)
+  const cx = 4, cy = 36;
+  a(cx + 22, cy - 4, 8, 6, '#f2ead8');                       // tower
+  a(cx + 22, cy - 4, 1, 6, '#c9bfa8');
+  for (let i = 0; i < 6; i++) a(cx + 21 + i, cy - 5 - i, 10 - 2 * i, 1, '#a5432f'); // spire
+  a(cx + 25, cy - 16, 2, 6, C.gold); a(cx + 23, cy - 14, 6, 2, C.gold);              // cross
+  a(cx + 25, cy - 2, 2, 3, '#4a2a1e');                        // belfry
+  for (let i = 0; i < 8; i++) a(cx + 7 - i, cy + 2 + i, 18 + 2 * i, 1, i % 3 === 0 ? '#8a3424' : '#a5432f');
+  a(cx - 1, cy + 10, 34, 14, '#f2ead8');
+  a(cx - 1, cy + 10, 34, 1, '#c9bfa8');
+  a(cx + 31, cy + 10, 2, 14, '#c9bfa8');
+  for (const wx of [cx + 2, cx + 8, cx + 22, cx + 27]) { a(wx, cy + 14, 3, 5, '#ffd36b'); a(wx + 1, cy + 13, 1, 1, '#ffd36b'); a(wx, cy + 19, 3, 1, '#c9bfa8'); }
+  a(cx + 14, cy + 15, 5, 9, '#7a4426'); a(cx + 15, cy + 14, 3, 1, '#7a4426'); a(cx + 16, cy + 15, 1, 9, '#5a3018');
+  // grass
+  a(0, GR, 195, HH - GR, '#69b84a');
+  for (let y = GR; y < HH; y += 2) for (let x = 0; x < 195; x++) { const v = rnd(); if (v < 0.07) a(x, y, 1, 1, '#83cf5c'); else if (v < 0.12) a(x, y, 1, 1, '#58a23c'); }
+  a(0, GR, 195, 1, '#83cf5c');
+  // path straight down from the church door
+  for (let y = GR; y < HH; y++) { const w = 7 + ((y - GR) >> 2); a(cx + 16 - (w >> 1) - ((y - GR) >> 3), y, w, 1, y % 3 ? '#e8c890' : '#d8b478'); }
+  // cooler by the church corner
+  a(2, 80, 11, 8, '#e04848'); a(2, 80, 11, 2, '#f6efe0'); a(6, 83, 3, 1, '#f6efe0'); a(2, 88, 11, 1, '#8a2828'); a(1, 80, 1, 9, C.shadow); a(13, 80, 1, 9, C.shadow);
+
+  // string lights: poles start below the DONE baseline, wire hangs low and clear of the title
+  const p1 = 59, p2 = 193, wy = 46;
+  a(p1, wy, 1, 41, '#6a4a30'); a(p2, wy - 1, 1, 42, '#6a4a30');
+  for (let x = p1 + 1; x < p2; x++) {
+    const t = (x - p1) / (p2 - p1); const y = Math.round(wy + Math.sin(t * Math.PI) * 2);
+    a(x, y, 1, 1, '#3a2a20');
+    if ((x - p1) % 8 === 4) { a(x, y + 1, 1, 2, ['#ffe27a', '#ff9a6a', '#fff4c8', '#9fe0ff'][((x - p1) / 8 | 0) % 4]); }
+  }
+
+  // ---- older couple on blue folding chairs (left) ----
+  function chairBack(x, y) { a(x + 1, y, 1, 22, '#2a6a88'); a(x + 14, y, 1, 22, '#2a6a88'); a(x + 1, y + 1, 14, 3, '#3fa0c8'); a(x + 1, y + 1, 14, 1, '#7fd0f0'); }
+  function chairSeat(x, y) { a(x - 1, y, 18, 3, '#3fa0c8'); a(x - 1, y, 18, 1, '#7fd0f0'); a(x - 1, y + 3, 18, 1, '#2a6a88'); a(x, y + 4, 1, 4, '#2a6a88'); a(x + 15, y + 4, 1, 4, '#2a6a88'); }
+  const cy0 = 64;
+  chairBack(29, cy0 + 9); chairBack(45, cy0 + 9);
+  // grandma: gray bun, glasses, lilac cardigan
+  a(35, cy0 - 4, 4, 1, C.shadow); a(34, cy0 - 3, 1, 3, C.shadow); a(39, cy0 - 3, 1, 3, C.shadow); a(35, cy0 - 3, 4, 3, '#d8d4d8'); a(35, cy0 - 3, 2, 1, '#ffffff');
+  person(30, cy0, glasses(HEAD.short), BODY.adult, pal({ h: '#d8d4d8', H: '#ffffff', s: '#f2c49a', c: '#f09a8a', t: '#9a6cc8', p: '#5a4a7a', g: '#6a4a30' }));
+  // grandpa: bald with gray mustache, plaid red shirt
+  person(46, cy0, HEAD.oldman, BODY.adult, pal({ h: '#c8c8cc', H: '#ffe2c4', s: '#e6b088', c: '#e08a7a', t: '#c84a3a', p: '#4a4a5a' }));
+  chairSeat(30, cy0 + 19); chairSeat(46, cy0 + 19);
+  // they hold hands between the chairs
+  a(43, cy0 + 17, 3, 2, '#e6b088'); a(43, cy0 + 16, 3, 1, C.shadow);
+
+  // ---- four guests seated behind the long gingham table ----
+  const tx = 76, tw = 70, ty = 74;
+  const GY = ty - 15;
+  person(79, GY, HEAD.long, BODY.adult, pal({ h: '#7a4a24', s: '#f2c49a', c: '#f09a8a', t: '#2fb3a0', p: '#2a4a6a' }));
+  person(95, GY, HEAD.short, BODY.adult, pal({ h: '#1a1414', H: '#4a4040', s: '#8a5634', c: '#b8604e', t: '#d94848', p: '#2a2a3a' }));
+  person(111, GY, HEAD.long, BODY.adult, pal({ h: '#f0c850', s: '#f6d0b0', c: '#f4a090', t: '#f08ab0', p: '#3a4a7a' }));
+  // a kid kneeling on the bench, so the head sits lower
+  person(128, GY + 3, HEAD.kid, BODY.kid, pal({ h: '#d8602a', s: '#f2c49a', c: '#f09a8a', t: '#3f7ad8', p: '#2a3a5a' }));
+  // the blonde guest holds her plate up high: sleeve, hand, plate with a rib
+  a(125, GY + 6, 2, 11, '#f08ab0'); a(127, GY + 6, 1, 11, C.shadow); a(124, GY + 6, 1, 11, C.shadow);
+  a(124, GY + 3, 3, 3, '#f6d0b0'); a(124, GY + 2, 3, 1, C.shadow);
+  a(120, GY, 11, 2, '#ffffff'); a(119, GY + 1, 1, 1, C.shadow); a(131, GY + 1, 1, 1, C.shadow); a(120, GY + 2, 11, 1, '#c8ccd4');
+  a(122, GY - 1, 7, 1, '#b5552a'); a(123, GY - 2, 5, 1, '#e58848'); a(128, GY - 2, 2, 1, '#f6ecd2');
+
+  // table: top surface, skirt, legs, bench
+  a(tx, ty, tw, 4, '#f6efe0');
+  for (let r = 0; r < 4; r += 2) for (let i = (r / 2) % 2 ? 2 : 0; i < tw; i += 4) a(tx + i, ty + r, 2, 2, '#e05656');
+  a(tx, ty + 4, tw, 4, '#f6efe0');
+  for (let r = 0; r < 4; r += 2) for (let i = (r / 2) % 2 ? 0 : 2; i < tw; i += 4) a(tx + i, ty + 4 + r, 2, 2, '#c84040');
+  a(tx, ty + 8, tw, 1, '#8a2828'); a(tx - 1, ty, 1, 9, C.shadow); a(tx + tw, ty, 1, 9, C.shadow);
+  a(tx + 4, ty + 9, 2, 6, '#6a4a30'); a(tx + tw - 6, ty + 9, 2, 6, '#6a4a30');
+  a(tx - 3, ty + 11, tw + 6, 2, '#b07a48'); a(tx - 3, ty + 11, tw + 6, 1, '#c89060'); a(tx - 3, ty + 13, tw + 6, 1, '#6a4a30');
+  a(tx, ty + 14, 2, 3, '#6a4a30'); a(tx + tw - 2, ty + 14, 2, 3, '#6a4a30');
+  // licked-clean plates with bones, cups between them
+  for (const p of [80, 96]) { a(p + 2, ty, 9, 3, '#ffffff'); a(p + 3, ty + 3, 7, 1, '#c8ccd4'); a(p + 4, ty + 1, 5, 1, '#f6ecd2'); a(p + 8, ty, 1, 1, '#f6ecd2'); }
+  a(114, ty, 9, 3, '#ffffff'); a(115, ty + 3, 7, 1, '#c8ccd4'); a(116, ty + 1, 3, 1, '#f6ecd2');
+  a(131, ty, 7, 3, '#ffffff'); a(132, ty + 1, 4, 1, '#b5552a');
+  a(92, ty - 3, 3, 5, '#e8404a'); a(92, ty - 3, 3, 1, '#ffffff');
+  a(108, ty - 3, 3, 5, '#2f7ad8'); a(108, ty - 3, 3, 1, '#ffffff');
+  a(141, ty - 1, 4, 3, '#d8a050'); a(141, ty - 2, 4, 1, '#e8b868');
+
+  // ---- kid at the table end, little girl with pigtails ----
+  const kx = 62, ky = 72;
+  a(kx - 2, ky + 3, 2, 4, '#3a2018'); a(kx + 12, ky + 3, 2, 4, '#3a2018'); a(kx - 2, ky + 3, 2, 1, '#ff6e9a'); a(kx + 12, ky + 3, 2, 1, '#ff6e9a');
+  person(kx, ky, HEAD.kid, BODY.kid, pal({ h: '#3a2018', s: '#c68a5a', c: '#d87060', t: '#f3cf6d', p: '#d06129' }));
+
+  // ---- Rosa serving with a tray (crew) ----
+  const rx = 148, ry = 65;
+  person(rx, ry, HEAD.bandana, BODY.apron, pal({ O: '#3fae5a', h: '#3a2018', s: '#d9a070', c: '#d0786a', t: '#3fae5a', p: '#4a3a6a' }));
+  a(rx + 13, ry + 3, 2, 2, '#3fae5a'); a(rx + 13, ry + 5, 1, 2, '#2a8a40');  // bandana knot
+  a(rx - 2, ry + 17, 18, 2, '#c9d4dc'); a(rx - 2, ry + 17, 18, 1, '#ffffff'); a(rx - 2, ry + 19, 18, 1, '#8a96a0');
+  a(rx + 1, ry + 15, 5, 2, '#b5552a'); a(rx + 2, ry + 15, 3, 1, '#e58848'); a(rx + 8, ry + 15, 5, 2, '#b5552a'); a(rx + 9, ry + 15, 3, 1, '#e58848');
+
+  // ---- the pitmaster, waving, next to the drum smoker ----
+  const mx = 164, my = 65;
+  person(mx, my, HEAD.cap, BODY.apron, pal({ O: '#e8693a', o: '#b04a1c', h: '#6a3a1a', s: '#f2b888', c: '#f09a8a', t: '#f6efe0', a: '#d06129', p: '#3a5aa8' }));
+  a(mx + 14, my + 5, 2, 10, '#f6efe0'); a(mx + 16, my + 5, 1, 10, C.shadow);   // raised sleeve
+  a(mx + 14, my + 2, 3, 3, '#f2b888'); a(mx + 14, my + 1, 3, 1, C.shadow); a(mx + 17, my + 2, 1, 3, C.shadow);
+  a(mx + 13, my + 1, 1, 1, '#ffffff'); a(mx + 12, my, 1, 1, '#ffffff'); a(mx + 18, my + 0, 1, 1, '#ffffff'); a(mx + 19, my - 1, 1, 1, '#ffffff'); // wave ticks
+
+  // drum smoker
+  const dx = 180, dy = 67;
+  a(dx + 1, dy, 12, 2, '#3a3a40'); a(dx + 3, dy - 1, 8, 1, '#4a4a52'); a(dx + 6, dy - 2, 2, 1, '#6a6a72');
+  a(dx, dy + 2, 14, 16, '#26262c');
+  a(dx + 2, dy + 2, 2, 16, '#4a4a54'); a(dx + 11, dy + 2, 1, 16, '#18181c');
+  a(dx, dy + 7, 14, 1, '#6a6a72'); a(dx, dy + 13, 14, 1, '#6a6a72');
+  a(dx + 9, dy + 4, 3, 1, '#b8b8c0');
+  a(dx + 5, dy + 15, 4, 2, '#ff9a3a'); a(dx + 6, dy + 15, 2, 1, '#ffe27a');
+  a(dx + 1, dy + 18, 2, 3, '#18181c'); a(dx + 11, dy + 18, 2, 3, '#18181c');
+  const smoke = [[6, -4, 3], [5, -7, 4], [6, -10, 3], [4, -13, 4], [3, -17, 4], [1, -20, 3]];
+  for (const [x, y, w] of smoke) { a(dx + x, dy + y, w, 2, 'rgba(240,236,240,0.75)'); a(dx + x + 1, dy + y - 1, w - 1, 1, 'rgba(255,255,255,0.55)'); }
+
+  // flowers in the foreground
+  for (let i = 0; i < 22; i++) { const x = Math.floor(rnd() * 195), y = 86 + Math.floor(rnd() * 6); if ((x > 26 && x < 64) || (x > 60 && x < 196 && y < 90)) continue; a(x, y, 1, 1, ['#ffffff', '#ffe27a', '#ff8ab0'][i % 3]); }
+
+  // happy bubbles: hearts over the couple, a smile over the kid
+  thought(38, 49, SMALL_HEART, { r: '#e8404a', H: '#ffb0b8' });
+  thought(61, 57, SMILEY, { y: '#ffd84a', k: C.shadow });
+})();
+g.restore();
+// hero bottom edge
+px(0, HY + HERO_H * A, W, 4, C.shadow);
+
+// title over the sky: smaller lead-in line, DONE sits above the string lights
+text('Church picnic:', W / 2, HY + 5, 3, C.cream, { align: 'center', outline: C.ink, u: 2 });
+text('DONE', W / 2, HY + 30, 6, C.gold, { align: 'center', outline: C.ink, u: 3 });
+// floating fan pop, just over the seated guests' heads
+{
+  const fx = 166, fy = 124;
+  text('+6', fx, fy, 2, C.green, { outline: C.shadow, u: 2 });
+  icon('heart', fx + textW('+6', 2) + 6, fy - 1, 2);
+}
+if (mapErr) text('MAP ERR ' + mapErr, 8, 40, 2, '#ff0000');
+
+// ---------- final grade (the warm, gold-framed landing card) ----------
+const GAP = 10;
+let y = HY + HERO_H * A + 4 + GAP;
+panel(16, y, W - 32, 60, null, { fill: '#3e2b13', line: C.gold });
+{
+  // soft gold inner glow under the frame
+  px(23, y + 7, W - 46, 2, '#5a4220');
+  const bx = 30, by = y + 7, bw = 72, bh = 46;
+  px(bx + 2, by, bw - 4, bh, C.shadow); px(bx, by + 2, bw, bh - 4, C.shadow);
+  px(bx + 4, by + 2, bw - 8, bh - 4, C.orange); px(bx + 2, by + 4, bw - 4, bh - 8, C.orange);
+  px(bx + 4, by + 2, bw - 8, 4, C.orangeHi);
+  px(bx + 2, by + bh - 10, bw - 4, 6, C.orangeLo);
+  px(bx + 4, by + bh - 6, bw - 8, 4, C.orangeLo);
+  text('B+', bx + bw / 2, by + 8, 4, C.cream, { align: 'center', outline: C.ink, u: 2 });
+  text('Final grade', 120, y + 12, 2, C.gold);
+  stars(120, y + 31, 2, 4, 5, 4);
+  text('4 of 5', W - 30, y + 35, 2, C.cream, { align: 'right' });
+}
+
+// ---------- categories ----------
+y += 60 + GAP;
+panel(16, y, W - 32, 90, 'How it went');
+{
+  const rows = [
+    { ic: 'rib', label: 'Food', n: 4.5, col: '#ff8a4a' },
+    { ic: 'bolt', label: 'Speed', n: 4, col: C.blue },
+    { ic: 'tray', label: 'Service', n: 3.5, col: C.green },
+  ];
+  rows.forEach((r, i) => {
+    const ry = y + 15 + i * 24;
+    icon(r.ic, 30, ry, 2);
+    text(r.label, 54, ry + 1, 2, C.cream);
+    const bx = 152, bw = 92, segs = 10;
+    px(bx - 2, ry, bw + 4, 16, C.shadow);
+    px(bx, ry + 2, bw, 12, C.barBg);
+    const filled = Math.round(r.n / 5 * segs);
+    for (let s2 = 0; s2 < segs; s2++) {
+      const sx = bx + 2 + s2 * 9;
+      if (s2 < filled) { px(sx, ry + 4, 7, 8, r.col); px(sx, ry + 4, 7, 2, '#ffffff55'); }
+      else px(sx, ry + 4, 7, 8, '#2a221a');
+    }
+    stars(256, ry - 1, 2, r.n, 5, 0);
+  });
+}
+
+// ---------- money + fans ----------
+y += 90 + GAP;
+const MW = 250, MH = 166;
+panel(16, y, MW, MH, 'Money', { labelIcon: 'coin', labelLeft: true });
+{
+  const rows = [
+    ['Pay', '+420', C.green], ['Tips', '+64', C.green], ['Meat cost', '-150', C.red],
+    ['Charcoal', '-18', C.red], ['Wages', '-160', C.red],
+  ];
+  const lx = 30, rx = 16 + MW - 16, RS = 22;
+  rows.forEach(([l, v, c], i) => {
+    const ry = y + 17 + i * RS;
+    text(l, lx, ry, 2, C.cream);
+    const lw = textW(l, 2), vw = textW(v, 2);
+    for (let dxl = lx + lw + 6; dxl < rx - vw - 6; dxl += 6) px(dxl, ry + 12, 2, 2, '#5a4a36');
+    text(v, rx, ry, 2, c, { align: 'right' });
+  });
+  // net row on a warm gold band so it reads second, after the grade
+  const ny = y + 17 + 5 * RS - 1;
+  px(lx - 3, ny, rx - lx + 8, 2, C.gold);
+  px(lx - 3, ny + 2, rx - lx + 8, 28, '#3e2b13');
+  text('Net', lx, ny + 11, 2, C.gold);
+  text('+156', rx, ny + 6, 3, C.gold, { align: 'right', shadow: C.shadow, u: 2 });
+  window.__netBottom = [ny + 6 + 21 + 2, y + MH - 7];
+}
+{
+  const fx = 16 + MW + 10, fw = W - 16 - fx;
+  panel(fx, y, fw, MH, 'Fans');
+  const cxF = fx + fw / 2;
+  icon('heart', Math.round(cxF - 18), y + 24, 4);
+  text('+6', cxF, y + 66, 4, C.green, { align: 'center', shadow: C.shadow, u: 2 });
+  text('212', cxF, y + 108, 2, C.cream, { align: 'center' });
+  text('fans', cxF, y + 126, 2, C.creamDim, { align: 'center' });
+}
+
+// ---------- what they said ----------
+y += MH + GAP;
+function bubble(x, y, w, h, tail) {
+  px(x + 2, y + h, w - 2, 2, C.shadow);
+  px(x + 2, y, w - 4, h, C.cream); px(x, y + 2, w, h - 4, C.cream);
+  px(x + 2, y + h - 2, w - 4, 2, '#cbbb98');
+  if (tail === 'left') { px(x - 4, y + 10, 4, 6, C.cream); px(x - 8, y + 14, 4, 4, C.cream); }
+  else { px(x + w, y + 10, 4, 6, C.cream); px(x + w + 4, y + 14, 4, 4, C.cream); }
+}
+const QH = 126;
+panel(16, y, W - 32, QH, 'What they said');
+{
+  portrait(28, y + 16, FACES.bea, '#8fd0ff');
+  const q1 = ['Best ribs at any', 'church picnic I have', 'been to.'];
+  const b1w = Math.max(...q1.map(l => textW(l, 2))) + 22;
+  bubble(76, y + 16, b1w, 10 + q1.length * 18, 'left');
+  q1.forEach((l, i) => text(l, 87, y + 22 + i * 18, 2, C.ink));
+  const q2 = 'Line moved fast.';
+  const b2w = textW(q2, 2) + 22, px2 = W - 28 - 36;
+  portrait(px2, y + 80, FACES.marcus, '#ff8a8a');
+  bubble(px2 - 10 - b2w, y + 84, b2w, 28, 'right');
+  text(q2, px2 - 10 - b2w + 11, y + 90, 2, C.ink);
+}
+
+// ---------- crew ----------
+y += QH + GAP;
+panel(16, y, W - 32, 62, 'Crew');
+{
+  portrait(28, y + 16, FACES.rosa, '#f3cf6d');
+  spr([
+    ".kkkk.",
+    "kyyyyk",
+    "kykkyk",
+    "kyyyyk",
+    "kkyykk",
+    ".kkkk.",
+  ], { k: C.shadow, y: '#ffd84a' }, 28 + 28, y + 12, 2);
+  text('Rosa got faster.', 76, y + 16, 2, C.cream);
+  text('Prep stars 3 to 3.5.', 76, y + 36, 2, C.creamDim);
+  icon('up', W - 72, y + 16, 2);
+  text('UP', W - 30, y + 17, 2, C.green, { align: 'right' });
+}
+
+// ---------- continue ----------
+y += 62 + GAP;
+{
+  const bx = 16, bw = W - 32, bh = 48;
+  px(bx + 2, y, bw - 4, bh + 6, C.ink); px(bx, y + 2, bw, bh + 2, C.ink);
+  px(bx + 4, y + 2, bw - 8, bh + 2, C.orangeLo); px(bx + 2, y + 4, bw - 4, bh - 2, C.orangeLo);
+  px(bx + 4, y + 2, bw - 8, bh - 6, C.orange); px(bx + 2, y + 4, bw - 4, bh - 10, C.orange);
+  px(bx + 6, y + 4, bw - 12, 2, C.orangeHi);
+  const label = 'CONTINUE';
+  const tw = textW(label, 4);
+  text(label, W / 2 - 14, y + 9, 4, C.cream, { align: 'center', shadow: C.orangeLo, u: 2 });
+  icon('arrow', W / 2 - 14 + tw / 2 + 12, y + 10, 3);
+  if (y + bh + 6 > H) console.warn('overflow', y + bh + 6);
+  window.__bottom = y + bh + 6;
+}
+</script>
+</body>
+</html>

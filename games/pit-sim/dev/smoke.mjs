@@ -1,27 +1,35 @@
 #!/usr/bin/env node
 // games/pit-sim/dev/smoke.mjs
-// Headless smoke test for the pit sim backyard prototype, v2 (dense yard, seating, feedback).
-// Never shipped, never linked.
+// Headless smoke test for the pit sim backyard prototype, v2.1 (guided tutorial, gentler burn with
+// a warning, new charcoal art) on top of v2 (dense yard, seating, feedback). Never shipped, never linked.
 //
 // Run from the repo root:
 //   node games/pit-sim/dev/smoke.mjs [--out <dir>] [--desktop] [--seed <n>] [--dir <folder>]
 //
-// What it does, in order (contract D15, the 36 step list, plus one step listed under Deviations):
+// What it does, in order (contract K11, the 45 step list: the 38 v2 steps with seven inserted):
 //   1. Node checks with no browser: files present, node --check on the three scripts, sim.js loaded
-//      under vm with the v2 surface and counts, validateSave rejects, clamps and migrates v1 to v2,
-//      and a customer BFS on sim.custWalkable reaches every owned seat for all 64 decor sets.
+//      under vm with the v2.1 surface and counts, validateSave rejects, clamps and migrates v1 and v2
+//      to v3, a customer BFS on sim.custWalkable reaches every owned seat for all 64 decor sets, then
+//      three headless sims: the whole tutorial by walkTo and ticks, skipTutorial in the morning and in
+//      service, and the burn warning on a hot and a good fire.
 //   2. Launches Chrome headless with a fresh profile, connects over CDP with the global WebSocket,
 //      collects every console message, exception, log entry and network request, emulates a phone
 //      (375 by 812, dpr 2, mobile, touch) unless --desktop is passed (1024 by 820, dpr 1), and opens
 //      index.html?seed=<n>.
-//   3. Checks the sprite list and palette, the integer canvas scale on phone and desktop, then plays
-//      day 1 through the DOM ids and PitSim.game.sim: a served customer sits, eats and fires a heart.
-//      Reloads into seeded saves for the decor purchase and the v1 migration, checks pause, that no
-//      draw record leaves the canvas, that the dog never stands on a station use tile, layout and
-//      keyboard at 375 by 740, and reduced motion.
-//   4. Writes <out>/report.json and five screenshots (clipboard, mid-service, seated, decor, till),
-//      prints one summary line, exits 1 on any failed step, and always kills Chrome and removes the
-//      profile.
+//   3. Checks the sprite list, palette and the v2.1 charcoal, piece, arrow and bubble grids, the
+//      integer canvas scale on phone and desktop, then plays day 1 through the DOM ids and
+//      PitSim.game.sim. Day 1 is the tutorial day: the v2 day 1 flow now RUNS THROUGH the tutorial
+//      (it is not skipped first). Every tap of the v2 flow is the tap the tutorial asks for, so each
+//      v2 step keeps its assertions and gains the tutorial's (target before the tap, step after it),
+//      and step 28 asserts the whole walk in order. The one change to the v2 flow: only one sausage
+//      goes on while the tutorial runs, the second goes on in step 29. Skip is tested on fresh games
+//      in step 38, and the burn warning on that skipped day in step 39. Reloads into seeded saves for
+//      the decor purchase, the v1 and v2 migrations, checks pause and Controls, that no draw record
+//      leaves the canvas, that the dog never stands on a station use tile, layout and keyboard at 375
+//      by 740, and reduced motion.
+//   4. Writes <out>/report.json and the screenshots (clipboard, tutorial (step b), tutorial-cook
+//      (step f), tutorial-customer (step i), mid-service, seated, till, decor, warning), prints one
+//      summary line, exits 1 on any failed step, and always kills Chrome and removes the profile.
 //
 // Every DOM read comes right after PitSim.game.advance (contract D14), which updates the DOM and
 // draws one frame, never after a guessed frame delay.
@@ -29,17 +37,38 @@
 // Every selector, sim field path, tile, key and number the script depends on lives in the
 // constants block below, so a contract change is one edit here.
 //
-// Deviations from contract D15:
-//   1. Step 12 checks the integer scale in both modes in one run: it checks the run's own mode,
+// Deviations from contract D15 (kept from v2, step numbers are now K11's):
+//   1. Step 15 checks the integer scale in both modes in one run: it checks the run's own mode,
 //      switches the emulation to the other mode (phone 375 by 812 dpr 2, desktop 1024 by 820 dpr 1),
 //      checks again, then restores the run's mode.
-//   2. One step added after step 33, "dog never on a station use tile": 60 s of service sampled
-//      tick by tick through advance; PitSim.game.dog never stands on (or centers over) any use tile
-//      of any station, owned or not. The dog is timed in real seconds (V2.9), so if it never moves
-//      under advance the step also polls it in real time for up to 15 s and notes that.
-//   3. Step 34 checks the 44 px buttons before the reload (service) and again after it (morning).
-//   4. Seeded saves (steps 30, 31) are written with Page.addScriptToEvaluateOnNewDocument before the
-//      reload and the script is removed after, so the page cannot overwrite them on unload.
+//   2. Step 42 "dog never on a station use tile": 60 s of service sampled tick by tick through
+//      advance; PitSim.game.dog never stands on (or centers over) any use tile of any station, owned
+//      or not. The dog is timed in real seconds (V2.9), so if it never moves under advance the step
+//      also polls it in real time for up to 15 s and notes that.
+//   3. Step 43 checks the 44 px buttons before the reload (service) and again after it (morning).
+//   4. Seeded saves (steps 35, 36, 37) are written with Page.addScriptToEvaluateOnNewDocument before
+//      the reload and the script is removed after, so the page cannot overwrite them on unload.
+// Deviations from contract K11 (v2.1):
+//   5. Browser clocks are compared within 0.1 s, not exactly (step 26 set down and gate open, step 38
+//      gate_soon and gate_open). The page's own animation loop also ticks the sim between harness
+//      calls and the probe stamps each event with the clock at drain time. The exact rules
+//      (clock === GATE_OPENS on the plate tick, gate at 20 and 30) are asserted headless in steps 8
+//      and 9, where every tick is the harness's own.
+//   6. Step 8 reads "fire 60" after the light within 1 of C.FIRE_LIGHT: the light lands inside a tick
+//      whose fire stage has already decayed it, so the first value a harness can read is just under 60.
+//   7. The #live record starts when the probe is installed (after each page load), not at step 28:
+//      a MutationObserver on #live plus a read after every advance the probe makes. Step 28 and 39 read
+//      the same record the contract describes, only longer.
+//   8. The page's live queue speaks one message a second in real time and holds 8. The harness steps
+//      the sim far faster than real time, so steps 20 to 27 pause 1.2 s of real time after each
+//      tutorial step change, and step 28 (and 39) poll real time for up to 12 s for a missing text.
+//   9. Three screenshots beyond K11's two: tutorial.png is step b (charcoal), tutorial-cook.png is
+//      step f (the cook banner once the box turns green) and tutorial-customer.png is step i (the
+//      first customer walking in). warning.png is step 39 as K11 says.
+//  10. Headless walks (steps 8 to 10) call walkTo and tick; if the arrival auto action did not do the
+//      expected thing once the walk settled, they call interact() once and say so in the step note.
+//  11. Step 39 feeds the fire once more right after piece_done when kettle 1 is under FIRE_GOOD + 15,
+//      so a low band does not stretch the warning past the 0.6 * 14 + 2 s wait.
 
 import fs from 'node:fs';
 import os from 'node:os';
@@ -69,7 +98,7 @@ const EXPECTED_REQUEST_FILES = ['index.html', 'sprites.js', 'sim.js', 'game.js']
 const DEFAULT_SEED = 1;
 const SAVE_KEY = 'hs.pitsim.save';
 const GLOBAL_NAME = 'PitSim';
-const GAME_VERSION = '0.3.0';
+const GAME_VERSION = '0.4.0';
 const SIM_SURFACE = ['C', 'MEATS', 'MEAT_IDS', 'MAP', 'CATALOG', 'STRINGS', 'createSim', 'validateSave', 'fireBand', 'fireMult', 'tileOwned', 'SAVE_KEY'];
 const SURFACE_COUNTS = { tiles: 132, stations: 8, seats: 6, decor: 6, props: 19, catalog: 21 };
 const MAP_SIZE = { w: 11, h: 12 };
@@ -87,7 +116,7 @@ const DEVICE_SIZES = [
 ];
 
 // Contract D2 and D3.
-const C_EXPECT = { WALK_TILES_PER_S: 6, SAVE_VERSION: 2, PATIENCE_MID_FRAC: 0.5, GEAR_RESERVE: 30, QUEUE_SPOTS: 3, QUEUE_SPOTS_BIG: 5, TABLE_SPOTS: 3, TABLE_SPOTS_BIG: 5 };
+const C_EXPECT = { WALK_TILES_PER_S: 6, SAVE_VERSION: 3, PATIENCE_MID_FRAC: 0.5, GEAR_RESERVE: 30, QUEUE_SPOTS: 3, QUEUE_SPOTS_BIG: 5, TABLE_SPOTS: 3, TABLE_SPOTS_BIG: 5 };
 const C_NEW_KEYS = ['EAT_MIN', 'EAT_MAX', 'HEART_SECONDS', 'SEAT_BONUS_BASE', 'SEAT_BONUS_MAX', 'CHARM_STEP', 'CHARM_MAX', 'REP_TOGO_QUICK', 'SWEAT_FRAC', 'ZZZ_AFTER', 'FX', 'PATIENCE_MID_FRAC', 'GEAR_RESERVE'];
 const FX_KEYS = ['NUMBER_S', 'NUMBER_RISE_PX', 'NUMBER_FADE_AT', 'TIP_GAP_PX', 'SPARKLE_S', 'SPARKLE_FRAME_S', 'SPARKLE_STAGGER_S',
   'HEART_S', 'HEART_FRAME_S', 'HEART_RISE_PX', 'HEART_FADE_S', 'EAT_FRAME_S', 'PUFF_EVERY_LOW', 'PUFF_EVERY_GOOD', 'PUFF_EVERY_HOT',
@@ -95,14 +124,54 @@ const FX_KEYS = ['NUMBER_S', 'NUMBER_RISE_PX', 'NUMBER_FADE_AT', 'TIP_GAP_PX', '
   'BURNT_COLUMN_EVERY', 'BURNT_COLUMN_LIFE', 'BURNT_COLUMN_RISE_PX_S', 'BURNT_COLUMN_SWAY_PX', 'SWEAT_EVERY', 'SWEAT_SLIDE_S',
   'SWEAT_SLIDE_PX', 'SWEAT_SPLASH_S', 'ZZZ_FRAME_S', 'ZZZ_DRIFT_PX', 'SQUASH_S', 'WALKOUT_MARK_S', 'TAP_RING_S', 'FIRE_FPS',
   'TWINKLE_S', 'BIRD_SHOW_S', 'BIRD_GAP_MIN', 'BIRD_GAP_MAX', 'DOG_TILES_PER_S', 'DOG_WAIT_MIN', 'DOG_WAIT_SPREAD', 'NOTICE_S'];
-const MEAT_COOK = { sausage: 14, chicken: 22 };
+const MEAT_COOK = { sausage: 14, chicken: 22, ribs: 32, butt: 40, brisket: 50 };   // unchanged in v2.1
+// Contract K2 and [T 5].
+const C_V21 = { WARN_FRAC: 0.4, HOT_BURN_MULT: 1, TUTORIAL_FIRE_FLOOR: 30, TUTORIAL_END_S: 6 };
+const FX_V21 = { ARROW_BOB_S: 0.3, WARN_BLINK_S: 0.25 };
+const MEAT_WINDOW = { sausage: 14, chicken: 16, ribs: 18, butt: 22, brisket: 26 };
+// Contract K1 and K8.
+const TUTORIAL_ORDER = ['open', 'charcoal', 'light', 'meat', 'puton', 'cook', 'slice', 'plate', 'customer', 'seated', 'end'];
+const TUTORIAL_TEXT = {
+  open: 'This is your morning. The cart is already filled. Tap Open the yard.',
+  charcoal: 'Grab charcoal from the pile.',
+  light: 'Tap the kettle to light it.',
+  meat: 'Grab meat from the cooler.',
+  puton: 'Put it on the kettle.',
+  cook: 'Watch the box fill. Pull it when it turns green.',
+  slice: 'Slice it at the board.',
+  plate: 'Set the plate on the counter.',
+  customer: 'Here comes your first customer.',
+  seated: 'Served. They will sit and eat, then tip a little more.',
+  end: 'You have the hang of it. Keep the fire fed and keep them happy.'
+};
+const PULL_NOW = 'Pull it now';
+const BURN_WARN = {
+  sausage: 'The sausage is about to burn.',
+  chicken: 'The chicken is about to burn.',
+  ribs: 'The ribs are about to burn.',
+  butt: 'The pork butt is about to burn.',
+  brisket: 'The brisket is about to burn.'
+};
+// [T 2.6] and K10: banner lines, arrow and bubble positions on this map.
+const BANNER_CHARCOAL = ['GRAB CHARCOAL FROM THE PILE.'];
+const ARROW_AT = {
+  pile: { x: 68, y: 48, frames: [2, 3] }, kettle1: { x: 84, y: 48, frames: [2, 3] }, cooler: { x: 100, y: 32, frames: [2, 3] },
+  board: { x: 84, y: 52, frames: [0, 1] }, table: { x: 108, y: 76, frames: [0, 1] }
+};
+const WARN_DRAW = {
+  piece: { name: 'piece_sausage', frame: 4, x: 80, y: 25 },
+  bubble: { name: 'bubble_warn', x: 78, y: 13 },   // round 1: draw.x - 2, left of the vent
+  smoke: { name: 'smoke_dark', xMin: 80, xMax: 100, yMax: 24 }
+};
+const PULSE = 'tut-pulse';
+const DAY1_HINT = 'Tap the charcoal pile';
 const MEAT_IDS = ['sausage', 'chicken', 'ribs', 'butt', 'brisket'];
 const GEAR_IDS = ['kettle2', 'cooler', 'bigtable', 'tray', 'canopy', 'drum'];
 const DECOR_IDS = ['chair1', 'chair2', 'flowers', 'birdbath', 'lights', 'picnic2'];
 const SEAT_IDS = ['pt1b', 'pt1a', 'chair1', 'chair2', 'pt2b', 'pt2a'];
 const DOG_HOME = { x: 4, y: 7, px: 64, py: 112, frame: 2 };
 
-// Contract D11, copied verbatim.
+// Contract K9, copied verbatim (replaces the D11 literal).
 const REQUIRED_SPRITES = [   // [name, w, h, frames]
   ['player_down', 16, 24, 3], ['player_up', 16, 24, 3], ['player_side', 16, 24, 3], ['player_slice', 16, 24, 2],
   ['buddy_down', 16, 24, 3], ['buddy_up', 16, 24, 3], ['buddy_side', 16, 24, 3], ['tender_down', 16, 24, 3],
@@ -119,8 +188,8 @@ const REQUIRED_SPRITES = [   // [name, w, h, frames]
   ['hand_tray_butt', 8, 8, 1], ['hand_tray_brisket', 8, 8, 1], ['hand_tray', 8, 8, 1], ['hand_togo', 8, 8, 1],
   ['icon_sausage', 8, 8, 1], ['icon_chicken', 8, 8, 1], ['icon_ribs', 8, 8, 1], ['icon_butt', 8, 8, 1],
   ['icon_brisket', 8, 8, 1], ['plate_sausage', 8, 6, 1], ['plate_chicken', 8, 6, 1], ['plate_ribs', 8, 6, 1],
-  ['plate_butt', 8, 6, 1], ['plate_brisket', 8, 6, 1], ['piece_sausage', 10, 10, 4], ['piece_chicken', 10, 10, 4],
-  ['piece_ribs', 10, 10, 4], ['piece_butt', 10, 10, 4], ['piece_brisket', 10, 10, 4], ['mark_x', 8, 8, 1],
+  ['plate_butt', 8, 6, 1], ['plate_brisket', 8, 6, 1], ['piece_sausage', 10, 10, 5], ['piece_chicken', 10, 10, 5],
+  ['piece_ribs', 10, 10, 5], ['piece_butt', 10, 10, 5], ['piece_brisket', 10, 10, 5], ['mark_x', 8, 8, 1],
   ['kettle', 16, 24, 4], ['drum', 16, 32, 4], ['cooler', 16, 16, 3], ['board', 16, 16, 2],
   ['counter', 32, 24, 2], ['counter_ext', 16, 24, 1], ['pile', 16, 16, 4], ['trash', 16, 16, 1],
   ['paver', 16, 16, 2], ['lawn_a', 16, 16, 2], ['lawn_b', 16, 16, 2], ['fence_h', 16, 24, 1],
@@ -131,9 +200,10 @@ const REQUIRED_SPRITES = [   // [name, w, h, frames]
   ['chair', 16, 24, 1], ['lights_post', 16, 32, 1], ['lights_string', 66, 10, 2], ['birdbath', 16, 24, 2],
   ['canopy', 40, 32, 1], ['bubble', 16, 12, 1], ['heart', 8, 8, 2], ['sparkle', 7, 7, 3],
   ['smoke', 8, 8, 3], ['smoke_dark', 8, 8, 3], ['fire', 8, 8, 3], ['coin', 8, 8, 2],
-  ['sweat', 4, 6, 2], ['zzz', 8, 8, 3], ['font', 4, 6, 38]
+  ['sweat', 4, 6, 2], ['zzz', 8, 8, 3], ['font', 4, 6, 40],
+  ['arrow', 8, 12, 4], ['bubble_warn', 8, 10, 2]
 ];
-const SPRITE_COUNT = 113;
+const SPRITE_COUNT = 115;
 const PALETTE_LEN = 32;
 const COLOR_KEYS = 'K U C O outline woodD woodM woodL paver paverD lawnA lawnB leafD leafL cloth clothD white pink magenta yellow skinL skinM skinD red raw cooking done steelL steelD smokeL smokeD'.split(' ');
 
@@ -144,6 +214,8 @@ const ID = {
   seats: 'seats',
   till: 'till', tillH: 'till-h', tillBody: 'till-body', next: 'next',
   pause: 'pause', resume: 'resume', howto: 'howto', newgame: 'newgame', broke: 'broke',
+  clipTop: 'clip-top', howtoBtn: 'howto-btn', tutClip: 'tut-clip', tutSkip: 'tut-skip',
+  pauseControls: 'pause-controls', pauseSkip: 'pause-skip', pauseNew: 'pause-new', confirmYes: 'confirm-yes',
   hireBuddy: 'hire-buddy',
   qty: (id) => 'qty-' + id,
   inc: (id) => 'inc-' + id,
@@ -159,6 +231,9 @@ const TEXT = {
   gateOpensIn: 'Gate opens in',
   walk: 'Walk',
   notice: 'Your save was updated for the new yard.',
+  controls: 'Controls',
+  skipTutorial: 'Skip tutorial',
+  handsEmpty: 'Hands empty',
   seatTipsRow: 'Seat tips',
   tillHeading: (day) => 'Day ' + day + ' till',
   cartLine: (total, after) => 'Total ' + total + '. Cash after ' + after + '.',
@@ -195,17 +270,21 @@ const REASON = { seated: 'seated' };
 const EVENT = {
   yardOpen: 'yard_open', gateOpen: 'gate_open', pieceDone: 'piece_done', sliceDone: 'slice_done',
   setDown: 'set_down', served: 'served', walkOut: 'walk_out', dayOver: 'day_over', saveWanted: 'save_wanted',
-  seatTaken: 'seat_taken', toGo: 'to_go', seatDone: 'seat_done', purchase: 'purchase', customerArrived: 'customer_arrived'
+  seatTaken: 'seat_taken', toGo: 'to_go', seatDone: 'seat_done', purchase: 'purchase', customerArrived: 'customer_arrived',
+  tutorialStep: 'tutorial_step', tutorialDone: 'tutorial_done', burnWarning: 'burn_warning', gateSoon: 'gate_soon',
+  pieceBurnt: 'piece_burnt', fireLow: 'fire_low', fireOut: 'fire_out'
 };
-const FX_KIND = { cash: 'cash', seatTip: 'seatTip', heart: 'heart', ring: 'ring', squash: 'squash' };
+const FX_KIND = { cash: 'cash', seatTip: 'seatTip', heart: 'heart', ring: 'ring', squash: 'squash', warn: 'warn' };
 const OUTLINE = '#outline';
 const C_NAMES = {
   gateOpens: 'GATE_OPENS', daySeconds: 'DAY_SECONDS', fireLight: 'FIRE_LIGHT', fireGood: 'FIRE_GOOD', fireLowWarn: 'FIRE_LOW_WARN',
   tick: 'TICK_SECONDS', repQuick: 'REP_QUICK', repOk: 'REP_OK', repTogoQuick: 'REP_TOGO_QUICK', repDayMin: 'REP_DAY_MIN',
-  startCash: 'START_CASH', startRep: 'START_REP', dailyCosts: 'DAILY_COSTS', eatMax: 'EAT_MAX', heartSeconds: 'HEART_SECONDS'
+  startCash: 'START_CASH', startRep: 'START_REP', dailyCosts: 'DAILY_COSTS', eatMax: 'EAT_MAX', heartSeconds: 'HEART_SECONDS',
+  fireMax: 'FIRE_MAX', coldUnder: 'COLD_UNDER', fireFloor: 'TUTORIAL_FIRE_FLOOR', tutorialEnd: 'TUTORIAL_END_S',
+  warnFrac: 'WARN_FRAC', hotMult: 'HOT_MULT'
 };
-const SIM_METHODS = { walkTo: 'walkTo', interact: 'interact', drainEvents: 'drainEvents', serialize: 'serialize' };
-const GAME_FIELDS = { version: 'version', advance: 'advance', reduced: 'reduced', sim: 'sim', dog: 'dog', fxLog: 'fxLog', captureFrame: 'captureFrame' };
+const SIM_METHODS = { walkTo: 'walkTo', interact: 'interact', drainEvents: 'drainEvents', serialize: 'serialize', skipTutorial: 'skipTutorial', tutorialStep: 'tutorialStep' };
+const GAME_FIELDS = { version: 'version', advance: 'advance', reduced: 'reduced', sim: 'sim', dog: 'dog', fxLog: 'fxLog', captureFrame: 'captureFrame', banner: 'banner' };
 const ART_FIELDS = { built: 'built' };
 
 // Tiles the player taps (contract D15; tapping a station walks to its use tile).
@@ -256,7 +335,7 @@ const SAVE_V1_SAMPLE = {
   drivewayShown: false
 };
 const SAVE_DIRTY = { v: 1, day: 'abc', cash: -50, rep: 400, stock: { sausage: 200, bogus: 1 }, gear: { drum: true, kettle2: false }, hires: { tender: true }, extra: 1 };
-const INVALID_SAVES = [null, 'x', [], {}, undefined, 42, { v: 3 }, { v: 0 }];
+const INVALID_SAVES = [null, 'x', [], {}, undefined, 42, { v: 4 }, { v: 0 }, { v: '3' }];
 
 // The shopping list for day 1 and later days. Two sausage units give four plates, so later
 // customers walk out and the walk out step has something to assert.
@@ -278,10 +357,17 @@ const TIMEOUT_MS = { launch: 20000, load: 20000, cdp: 90000, resize: 400 };
 // Simulated seconds the harness will advance while waiting for a condition.
 const WAIT_S = {
   walk: 10, settle: 0.15, fire: 45, cook: 70, slice: 15, serve: 75, serveRetry: 25, day: 170, afterOpen: 0.2,
-  toEating: 15, eatSlack: 3, toLeaving: 3, service: 45, dogSample: 60, arrow: 0.5
+  toEating: 15, eatSlack: 3, toLeaving: 3, service: 45, dogSample: 60, arrow: 0.5,
+  headlessStep: 5, headlessDone: 20, headlessServe: 15, headlessSeat: 20, holdTicks: 1200, idleTicks: 800,
+  burnPage: 0.6 * 14 + 2, liveAfterWarn: 6, liveStep: 0.5
 };
+const LIVE_BREATH_MS = 1200;   // deviation 8: real time for the one a second live queue after a step change
+const LIVE_POLL_MS = 12000;
 const DOG_REALTIME_MS = 15000;
-const SCREENSHOTS = { clipboard: 'clipboard.png', midService: 'mid-service.png', seated: 'seated.png', decor: 'decor.png', till: 'till.png' };
+const SCREENSHOTS = {
+  clipboard: 'clipboard.png', tutorial: 'tutorial.png', tutorialCook: 'tutorial-cook.png', tutorialCustomer: 'tutorial-customer.png',
+  midService: 'mid-service.png', seated: 'seated.png', decor: 'decor.png', till: 'till.png', warning: 'warning.png'
+};
 
 // ---------------------------------------------------------------------------------------------
 // Arguments and report
@@ -337,8 +423,18 @@ function describe(v) {
   try { return JSON.stringify(v); } catch (_e) { return String(v); }
 }
 function sameJSON(a, b) { return describe(a) === describe(b); }
+// Key order free deep equality (validateSave and serialize may build keys in different orders).
+function canon(v) {
+  if (Array.isArray(v)) return v.map(canon);
+  if (v && typeof v === 'object') { const o = {}; for (const k of Object.keys(v).sort()) o[k] = canon(v[k]); return o; }
+  return v;
+}
+function deepEq(a, b) { return JSON.stringify(canon(a)) === JSON.stringify(canon(b)); }
+// Collapse consecutive repeats: [a, a, b] gives [a, b].
+function distinctRuns(list) { return list.filter((x, i) => i === 0 || x !== list[i - 1]); }
+const nearly = (a, b, tol) => typeof a === 'number' && Math.abs(a - b) <= tol;
 
-// A complete v2 save with defaults, for the Node BFS step and the seeded decor save.
+// A complete v2 save with defaults, for the Node BFS step and the seeded decor and v2 saves.
 function saveV2(over = {}, startRep = 20) {
   const s = {
     v: 2, day: 1, cash: 80, rep: startRep,
@@ -401,7 +497,24 @@ async function nodeChecks() {
     assert(missingFx.length === 0, 'C.FX missing ' + missingFx.join(', '));
     for (const [m, s] of Object.entries(MEAT_COOK)) assert(P.MEATS[m].cook === s, 'MEATS.' + m + '.cook is ' + P.MEATS[m].cook);
     assert(M.dogHome && M.dogHome.x === DOG_HOME.x && M.dogHome.y === DOG_HOME.y, 'MAP.dogHome is ' + describe(M.dogHome));
-    return SIM_SURFACE.length + ' names, ' + C_NEW_KEYS.length + ' new C keys, ' + FX_KEYS.length + ' FX keys';
+    // v2.1 (K11 step 5): constants, windows, strings, the two new methods.
+    for (const [k, v] of Object.entries(C_V21)) assert(P.C[k] === v, 'C.' + k + ' is ' + describe(P.C[k]) + ', wanted ' + v);
+    for (const [k, v] of Object.entries(FX_V21)) assert(P.C.FX[k] === v, 'C.FX.' + k + ' is ' + describe(P.C.FX[k]) + ', wanted ' + v);
+    assert(sameJSON(P.MEAT_IDS, MEAT_IDS), 'MEAT_IDS ' + describe(P.MEAT_IDS));
+    const windows = P.MEAT_IDS.map((m) => P.MEATS[m].window);
+    assert(sameJSON(windows, MEAT_IDS.map((m) => MEAT_WINDOW[m])), 'windows ' + describe(windows) + ', wanted ' + describe(MEAT_IDS.map((m) => MEAT_WINDOW[m])));
+    const S = P.STRINGS;
+    assert(S.tutorial && typeof S.tutorial === 'object', 'STRINGS.tutorial missing');
+    assert(sameJSON(Object.keys(S.tutorial).sort(), Object.keys(TUTORIAL_TEXT).sort()), 'STRINGS.tutorial ids ' + describe(Object.keys(S.tutorial)));
+    for (const [id, t] of Object.entries(TUTORIAL_TEXT)) assert(S.tutorial[id] === t, 'STRINGS.tutorial.' + id + ' is ' + describe(S.tutorial[id]));
+    assert(sameJSON(S.tutorialOrder, TUTORIAL_ORDER), 'STRINGS.tutorialOrder ' + describe(S.tutorialOrder));
+    assert(S.pullNow === PULL_NOW, 'STRINGS.pullNow ' + describe(S.pullNow));
+    assert(S.burnWarn && sameJSON(Object.keys(S.burnWarn).sort(), Object.keys(BURN_WARN).sort()), 'STRINGS.burnWarn keys ' + describe(S.burnWarn && Object.keys(S.burnWarn)));
+    for (const [m, t] of Object.entries(BURN_WARN)) assert(S.burnWarn[m] === t, 'STRINGS.burnWarn.' + m + ' is ' + describe(S.burnWarn[m]));
+    const fresh = P.createSim(null, 1);
+    assert(typeof fresh[SIM_METHODS.skipTutorial] === 'function', 'sim.skipTutorial is not a function');
+    assert(typeof fresh[SIM_METHODS.tutorialStep] === 'function', 'sim.tutorialStep is not a function');
+    return SIM_SURFACE.length + ' names, ' + C_NEW_KEYS.length + ' new C keys, ' + FX_KEYS.length + ' FX keys, v2.1 windows ' + windows.join(' ');
   });
 
   await step('validateSave rejects, clamps and migrates', () => {
@@ -414,7 +527,7 @@ async function nodeChecks() {
     }
     const allFalse = (o) => o && DECOR_IDS.every((d) => o[d] === false) && Object.keys(o).length === DECOR_IDS.length;
     const v = P.validateSave(JSON.parse(JSON.stringify(SAVE_DIRTY)));
-    assert(v && v.v === 2, 'dirty v1 sample returned v ' + describe(v && v.v));
+    assert(v && v.v === 3, 'dirty v1 sample returned v ' + describe(v && v.v));
     assert(v.day === 1, 'day ' + describe(v.day));
     assert(v.cash === 0, 'cash ' + v.cash);
     assert(v.rep === 100, 'rep ' + v.rep);
@@ -426,7 +539,8 @@ async function nodeChecks() {
     assert(allFalse(v.decor), 'dirty sample decor ' + describe(v.decor));
     assert(v.stats && v.stats.seated === 0, 'dirty sample stats.seated ' + describe(v.stats && v.stats.seated));
     const s = P.validateSave(JSON.parse(JSON.stringify(SAVE_V1_SAMPLE)));
-    assert(s && s.v === 2, 'v1 sample returned v ' + describe(s && s.v));
+    assert(s && s.v === 3, 'v1 sample returned v ' + describe(s && s.v));
+    assert(s.tutorial && s.tutorial.done === true, 'v1 sample tutorial ' + describe(s.tutorial));
     for (const k of ['day', 'cash', 'rep', 'stock', 'charcoal', 'gear', 'hires', 'drivewayShown']) {
       assert(sameJSON(s[k], SAVE_V1_SAMPLE[k]), 'v1 sample ' + k + ' is ' + describe(s[k]) + ', wanted ' + describe(SAVE_V1_SAMPLE[k]));
     }
@@ -434,14 +548,29 @@ async function nodeChecks() {
     assert(s.stats.seated === 0, 'v1 sample stats.seated ' + s.stats.seated);
     assert(allFalse(s.decor), 'v1 sample decor ' + describe(s.decor));
     const d = P.validateSave({ v: 2, decor: { chair2: true, bogus: true } });
-    assert(d && d.v === 2, 'v2 decor sample returned ' + describe(d));
+    assert(d && d.v === 3, 'v2 decor sample returned ' + describe(d));
     assert(d.decor.chair2 === false, 'decor.chair2 not forced false without chair1');
     assert(!('bogus' in d.decor), 'decor.bogus kept');
     const cyclic = { v: 1 }; cyclic.self = cyclic; cyclic.decor = cyclic;
     let threw = null;
     try { P.validateSave(cyclic); } catch (e) { threw = e; }
     assert(!threw, 'cyclic threw: ' + (threw && threw.message));
-    return INVALID_SAVES.length + ' rejected, v1 to v2 migrated, chair2 forced, cyclic safe';
+    // v2.1 (K6, K11 step 6).
+    const v2 = P.validateSave(saveV2({}, P.C.START_REP));
+    assert(v2 && v2.v === 3 && v2.tutorial && v2.tutorial.done === true, 'v2 day 1 sample returned ' + describe(v2 && { v: v2.v, tutorial: v2.tutorial }));
+    const t1 = P.validateSave({ v: 3, day: 1, tutorial: { done: false, bogus: 1 } });
+    assert(t1 && t1.v === 3 && t1.tutorial && t1.tutorial.done === false, 'v3 day 1 done false returned ' + describe(t1 && t1.tutorial));
+    assert(!('bogus' in t1.tutorial), 'tutorial.bogus kept');
+    const t3 = P.validateSave({ v: 3, day: 3, tutorial: { done: false, bogus: 1 } });
+    assert(t3 && t3.tutorial && t3.tutorial.done === true, 'v3 day 3 done false returned ' + describe(t3 && t3.tutorial));
+    const t0 = P.validateSave({ v: 3 });
+    assert(t0 && t0.v === 3 && t0.tutorial && t0.tutorial.done === true, '{ v: 3 } returned ' + describe(t0 && t0.tutorial));
+    const ser = P.createSim(null, 1)[SIM_METHODS.serialize]();
+    assert(ser && ser.v === 3, 'serialize() v ' + describe(ser && ser.v));
+    assert(ser.tutorial && ser.tutorial.done === false, 'serialize() tutorial ' + describe(ser.tutorial));
+    const back = P.validateSave(JSON.parse(JSON.stringify(ser)));
+    assert(deepEq(back, ser), 'serialize() does not round trip: ' + describe(ser) + ' became ' + describe(back));
+    return INVALID_SAVES.length + ' rejected, v1 and v2 to v3 migrated with the tutorial done, v3 tutorial rules, chair2 forced, cyclic safe, serialize round trips';
   });
 
   await step('seat reachability', () => {
@@ -493,6 +622,311 @@ async function nodeChecks() {
     assert(fails.length === 0, fails.length + ' unreachable, first ' + fails.slice(0, 3).join('; '));
     return checks + ' routes over 128 yards';
   });
+
+  await step('tutorial rules, headless', () => tutorialHeadless(globalThis[GLOBAL_NAME]));
+  await step('skipTutorial, headless', () => skipHeadless(globalThis[GLOBAL_NAME]));
+  await step('burn warning at hot fire, headless', () => burnHeadless(globalThis[GLOBAL_NAME]));
+}
+
+// ---------------------------------------------------------------------------------------------
+// Headless sims (steps 8 to 10). The harness owns every tick here; events are stamped with the
+// clock, the tick count and a drain batch number right after each drain.
+// ---------------------------------------------------------------------------------------------
+
+function headless(P, saved, seed) {
+  const sim = P.createSim(saved, seed);
+  const h = { sim, P, C: P.C, log: [], batch: 0, ticks: 0, fixture: null, notes: [] };
+  h.st = () => sim.state;
+  h.drain = () => {
+    const out = sim[SIM_METHODS.drainEvents]();
+    h.batch += 1;
+    for (const e of out) h.log.push(Object.assign({}, e, { _at: sim.state.clock, _b: h.batch, _t: h.ticks }));
+    return out;
+  };
+  h.drain();   // creation events (the morning, then tutorial_step open)
+  h.tick = () => {
+    if (h.fixture) h.fixture(sim.state);
+    sim.tick();
+    h.ticks += 1;
+    h.drain();
+  };
+  h.ticksFor = (sec) => Math.ceil(sec / P.C.TICK_SECONDS - 1e-9);
+  h.until = (pred, maxSec) => {
+    const n = h.ticksFor(maxSec);
+    for (let i = 0; i < n; i++) { if (pred()) return true; h.tick(); }
+    return !!pred();
+  };
+  h.settled = () => { const pl = sim.state.player; return !pl.walking && pl.next === null && pl.path.length === 0; };
+  // Walk to a station by walkTo and ticks; interact() once if the arrival did not do it (deviation 10).
+  h.go = (name, pred, maxSec = WAIT_S.headlessStep) => {
+    const t = TILE[name];
+    sim[SIM_METHODS.walkTo](t.x, t.y);
+    h.drain();
+    if (h.until(pred, maxSec)) return true;
+    if (h.settled()) {
+      sim[SIM_METHODS.interact]();
+      h.drain();
+      h.notes.push(name + ' via interact');
+      if (h.until(pred, 1)) return true;
+    }
+    return false;
+  };
+  h.goSettled = (name, pred, maxSec = WAIT_S.headlessStep) => {
+    // Like go, but waits for the walk to settle first so an arrival effect has its tick.
+    const t = TILE[name];
+    sim[SIM_METHODS.walkTo](t.x, t.y);
+    h.drain();
+    h.until(() => pred() || h.settled(), maxSec);
+    if (pred()) return true;
+    h.until(pred, WAIT_S.settle);
+    if (pred()) return true;
+    if (h.settled()) {
+      sim[SIM_METHODS.interact]();
+      h.drain();
+      h.notes.push(name + ' via interact');
+      return h.until(pred, 1);
+    }
+    return false;
+  };
+  h.step = () => { const t = sim[SIM_METHODS.tutorialStep](); return t ? { id: t.id, text: t.text, target: t.target } : null; };
+  h.stepIs = (id, target) => { const t = h.step(); return !!t && t.id === id && (target === undefined || t.target === target); };
+  h.idx = (type, from = 0, pred = () => true) => { for (let i = from; i < h.log.length; i++) if (h.log[i].type === type && pred(h.log[i])) return i; return -1; };
+  h.of = (type, from = 0) => h.log.slice(from).filter((e) => e.type === type);
+  h.has = (type, from = 0) => h.idx(type, from) >= 0;
+  return h;
+}
+const strip = (e) => { const o = {}; for (const k of Object.keys(e)) if (k[0] !== '_') o[k] = e[k]; return o; };
+const carryIs = (h, kind, meat) => { const c = h.st().player.carrying; return !!c && c.kind === kind && (meat === undefined || c.meat === meat); };
+
+function tutorialHeadless(P) {
+  const C = P.C;
+  const h = headless(P, null, 1);
+  const st = h.st;
+  const k1 = () => st().stations.kettle1;
+  const s0 = h.step();
+  assert(s0 && s0.id === 'open' && s0.target === 'open', 'new game tutorialStep() ' + describe(s0));
+  const o = h.sim.openGate();
+  h.drain();
+  assert(o && o.ok, 'openGate with the default cart: ' + describe(o));
+  for (let i = 0; i < WAIT_S.idleTicks; i++) h.tick();
+  assert(st().clock === 0, 'clock ' + st().clock + ' after ' + WAIT_S.idleTicks + ' idle ticks, wanted 0');
+  assert(h.stepIs('charcoal'), 'step after the idle ticks ' + describe(h.step()));
+  for (const t of [EVENT.gateSoon, EVENT.gateOpen, EVENT.customerArrived]) assert(!h.has(t), t + ' fired with the clock held');
+  assert(k1().fire === 0, 'kettle1.fire ' + k1().fire + ' with no input');
+
+  assert(h.goSettled('pile', () => h.stepIs('light')), 'pile did not give step light: ' + describe(h.step()) + ', carrying ' + describe(st().player.carrying));
+  assert(h.goSettled('kettle1', () => h.stepIs('meat')), 'kettle 1 did not give step meat: ' + describe(h.step()) + ', fire ' + k1().fire);
+  assert(nearly(k1().fire, C.FIRE_LIGHT, 1), 'fire after the light ' + k1().fire + ', wanted ' + C.FIRE_LIGHT + ' (deviation 6)');
+  assert(h.goSettled('cooler', () => h.stepIs('puton')), 'cooler did not give step puton: ' + describe(h.step()));
+  assert(h.goSettled('kettle1', () => h.stepIs('cook', null)), 'kettle 1 did not give step cook with target null: ' + describe(h.step()));
+  const putIdx = h.log.length;
+  assert(h.until(() => h.has(EVENT.pieceDone, putIdx), WAIT_S.headlessDone), 'no piece_done within ' + WAIT_S.headlessDone + ' s; pieces ' + describe(k1().pieces));
+  const doneIdx = h.idx(EVENT.pieceDone, putIdx);
+  h.until(() => h.has(EVENT.tutorialStep, doneIdx), 1);
+  const nextStep = h.log[h.idx(EVENT.tutorialStep, doneIdx)];
+  assert(nextStep && nextStep.id === 'cook' && nextStep.target === 'kettle1', 'the tutorial_step after piece_done is ' + describe(nextStep && strip(nextStep)));
+  const piece = k1().pieces[0];
+  const prog0 = piece.prog;
+  const holdIdx = h.log.length;
+  for (let i = 0; i < WAIT_S.holdTicks; i++) h.tick();
+  const p1 = k1().pieces[0];
+  assert(p1 && p1.state === PIECE_STATE.done, 'held piece is ' + describe(p1));
+  assert(p1.prog === prog0, 'held piece prog moved from ' + prog0 + ' to ' + p1.prog);
+  assert(p1.warn === false, 'held piece warn ' + describe(p1.warn));
+  for (const t of [EVENT.burnWarning, EVENT.pieceBurnt, EVENT.fireLow, EVENT.fireOut]) assert(!h.has(t, holdIdx), t + ' fired during the hold');
+  assert(k1().fire === C.TUTORIAL_FIRE_FLOOR, 'kettle1.fire ' + k1().fire + ' after the hold, wanted the floor ' + C.TUTORIAL_FIRE_FLOOR);
+
+  assert(h.goSettled('kettle1', () => h.stepIs('slice') && carryIs(h, CARRY_KIND.cooked, MEAT)), 'the pull did not give step slice with cooked sausage: ' + describe(h.step()) + ', carrying ' + describe(st().player.carrying));
+  const sliceIdx = h.log.length;
+  assert(h.go('board', () => h.has(EVENT.sliceDone, sliceIdx) && h.stepIs('plate'), 10), 'board: no slice_done and step plate; step ' + describe(h.step()));
+  assert(h.stepIs('plate', 'table'), 'after slice_done the step is ' + describe(h.step()) + ', wanted plate with target table');
+
+  const tableIdx = h.log.length;
+  assert(h.go('table', () => h.has(EVENT.setDown, tableIdx)), 'table: no set_down; carrying ' + describe(st().player.carrying));
+  const setDown = h.log[h.idx(EVENT.setDown, tableIdx)];
+  const batch = h.log.filter((e) => e._b === setDown._b);
+  const order = [EVENT.setDown, EVENT.tutorialStep, EVENT.gateOpen, EVENT.customerArrived];
+  const at = order.map((t) => batch.findIndex((e) => e.type === t && (t !== EVENT.tutorialStep || e.id === 'customer')));
+  assert(at.every((i) => i >= 0) && at.every((i, j) => j === 0 || i > at[j - 1]), 'the set down drain is ' + describe(batch.map((e) => e.type + (e.id !== undefined ? ':' + e.id : ''))) + ', wanted ' + order.join(', ') + ' in order');
+  const arrived = batch[at[3]];
+  assert(arrived.id === 1 && arrived.meat === MEAT, 'scripted customer_arrived ' + describe(strip(arrived)));
+  assert(st().clock === C.GATE_OPENS, 'clock after the plate ' + st().clock + ', wanted ' + C.GATE_OPENS);
+
+  const servedIdx0 = h.log.length;
+  assert(h.until(() => h.has(EVENT.served, servedIdx0), WAIT_S.headlessServe), 'no served within ' + WAIT_S.headlessServe + ' s');
+  const servedIdx = h.idx(EVENT.served, servedIdx0);
+  assert(h.idx(EVENT.tutorialStep, servedIdx, (e) => e.id === 'seated') > servedIdx, 'no tutorial_step seated after served');
+  assert(h.until(() => h.has(EVENT.seatDone, servedIdx), WAIT_S.headlessSeat), 'no seat_done within ' + WAIT_S.headlessSeat + ' s');
+  const seatDoneIdx = h.idx(EVENT.seatDone, servedIdx);
+  h.until(() => h.has(EVENT.tutorialStep, seatDoneIdx), 1);
+  const endIdx = h.idx(EVENT.tutorialStep, seatDoneIdx, (e) => e.id === 'end');
+  assert(endIdx > seatDoneIdx, 'no tutorial_step end after seat_done');
+  const endEv = h.log[endIdx];
+  const arrivals = h.log.slice(0, endIdx).filter((e) => e.type === EVENT.customerArrived);
+  assert(arrivals.length === 1, arrivals.length + ' customer_arrived before step end, wanted the scripted one only');
+  const tick0 = h.ticks;
+  h.until(() => h.has(EVENT.customerArrived, endIdx), 2 * C.TICK_SECONDS);
+  const nextArr = h.log[h.idx(EVENT.customerArrived, endIdx)];
+  assert(nextArr && nextArr._t - endEv._t <= 2, 'no customer_arrived within 2 ticks of step end (ticks waited ' + (h.ticks - tick0) + ')');
+  const cust = () => st().customers.find((c) => c.id === nextArr.id);
+  let frozen = true;
+  const doneOk = h.until(() => {
+    const c = cust();
+    if (c && c.patience !== c.patienceMax) frozen = false;
+    return h.has(EVENT.tutorialDone, endIdx);
+  }, C.TUTORIAL_END_S + 0.5);
+  assert(doneOk, 'no tutorial_done within ' + (C.TUTORIAL_END_S + 0.5) + ' s of step end');
+  assert(frozen, 'customer ' + nextArr.id + ' lost patience while the tutorial ran');
+  const done = h.log[h.idx(EVENT.tutorialDone, endIdx)];
+  assert(done.skipped === false, 'tutorial_done skipped ' + describe(done.skipped));
+  assert(done._at - endEv._at <= C.TUTORIAL_END_S + 0.1 + 1e-9, 'tutorial_done ' + (done._at - endEv._at) + ' s after step end');
+  assert(deepEq(st().tutorial, { step: null, done: true }), 'state.tutorial ' + describe(st().tutorial));
+  assert(h.step() === null, 'tutorialStep() ' + describe(h.step()) + ' after the end');
+  let how = 'waiting at tutorial_done';
+  if (!st().customers.some((c) => c.mode === 'waiting')) {
+    how = 'after waiting for a customer to stand in line';
+    h.until(() => st().customers.some((c) => c.mode === 'waiting'), 10);
+  }
+  const w = st().customers.find((c) => c.mode === 'waiting');
+  assert(w, 'no waiting customer after the tutorial');
+  const pBefore = w.patience;
+  h.tick();
+  const w2 = st().customers.find((c) => c.id === w.id);
+  assert(w2 && w2.patience < pBefore, 'customer ' + w.id + ' patience ' + pBefore + ' did not drop on the next tick (' + (w2 && w2.patience) + ')');
+  const ids = distinctRuns(h.log.filter((e) => e.type === EVENT.tutorialStep).map((e) => e.id));
+  assert(sameJSON(ids, TUTORIAL_ORDER) || sameJSON(ids, TUTORIAL_ORDER.slice(1)), 'tutorial_step ids ' + describe(ids));
+  for (const e of h.log.filter((x) => x.type === EVENT.tutorialStep)) assert(e.text === TUTORIAL_TEXT[e.id], 'tutorial_step ' + e.id + ' text ' + describe(e.text));
+  assert(!h.has(EVENT.gateSoon), 'gate_soon fired on the tutorial day');
+  return 'steps ' + ids.join(' ') + '; end to done ' + Math.round((done._at - endEv._at) * 100) / 100 + ' s; patience ' + how + (h.notes.length ? '; ' + h.notes.join(', ') : '');
+}
+
+function skipHeadless(P) {
+  const C = P.C;
+  const notes = [];
+  // (a) skip in the morning
+  const a = headless(P, null, 2);
+  const n0 = a.log.length;
+  assert(a.sim[SIM_METHODS.skipTutorial]() === true, '(a) skipTutorial() did not return true');
+  a.drain();
+  const doneA = a.of(EVENT.tutorialDone, n0);
+  assert(doneA.length === 1 && doneA[0].skipped === true, '(a) tutorial_done events ' + describe(doneA.map(strip)));
+  const saveA = a.of(EVENT.saveWanted, n0);
+  assert(saveA.some((e) => e.reason === 'tutorial'), '(a) no save_wanted tutorial; got ' + describe(saveA.map(strip)));
+  assert(deepEq(a.st().tutorial, { step: null, done: true }), '(a) state.tutorial ' + describe(a.st().tutorial));
+  assert(a.sim[SIM_METHODS.serialize]().tutorial.done === true, '(a) serialize().tutorial ' + describe(a.sim[SIM_METHODS.serialize]().tutorial));
+  const n1 = a.log.length;
+  assert(a.sim[SIM_METHODS.skipTutorial]() === false, '(a) a second skipTutorial() did not return false');
+  a.drain();
+  assert(a.log.length === n1, '(a) the second skip emitted ' + describe(a.log.slice(n1).map(strip)));
+  const og = a.sim.openGate();
+  a.drain();
+  assert(og && og.ok, '(a) openGate ' + describe(og));
+  assert(a.st().spawnAt === C.GATE_OPENS, '(a) spawnAt ' + a.st().spawnAt);
+  const n2 = a.log.length;
+  a.until(() => a.has(EVENT.customerArrived, n2), C.GATE_OPENS + 2);
+  const soon = a.of(EVENT.gateSoon, n2)[0], open = a.of(EVENT.gateOpen, n2)[0], arr = a.of(EVENT.customerArrived, n2)[0];
+  const tick = C.TICK_SECONDS + 1e-6;
+  assert(soon && nearly(soon._at, C.GATE_OPENS - 10, tick), '(a) gate_soon at ' + (soon && soon._at));
+  assert(open && nearly(open._at, C.GATE_OPENS, tick), '(a) gate_open at ' + (open && open._at));
+  assert(arr && nearly(arr._at, C.GATE_OPENS, tick), '(a) first customer_arrived at ' + (arr && arr._at));
+  notes.push('(a) gate_soon ' + soon._at + ', gate_open ' + open._at);
+  // (b) skip in service before the plate
+  const b = headless(P, null, 3);
+  const ogb = b.sim.openGate();
+  b.drain();
+  assert(ogb && ogb.ok, '(b) openGate ' + describe(ogb));
+  for (let i = 0; i < 100; i++) b.tick();
+  assert(b.st().clock === 0, '(b) clock ' + b.st().clock + ' after 100 ticks');
+  const m0 = b.log.length;
+  assert(b.sim[SIM_METHODS.skipTutorial]() === true, '(b) skipTutorial() in service did not return true');
+  b.drain();
+  assert(b.of(EVENT.tutorialDone, m0).some((e) => e.skipped === true), '(b) no tutorial_done skipped');
+  assert(b.of(EVENT.saveWanted, m0).length === 0, '(b) save_wanted in service: ' + describe(b.of(EVENT.saveWanted, m0).map(strip)));
+  assert(b.st().spawnAt === C.GATE_OPENS, '(b) spawnAt ' + b.st().spawnAt);
+  b.tick();
+  assert(nearly(b.st().clock, C.TICK_SECONDS, 1e-9), '(b) clock after one tick ' + b.st().clock);
+  b.until(() => b.has(EVENT.gateOpen, m0), C.GATE_OPENS + 1);
+  const openB = b.of(EVENT.gateOpen, m0)[0];
+  assert(openB && nearly(openB._at, C.GATE_OPENS, tick), '(b) gate_open at ' + (openB && openB._at));
+  notes.push('(b) gate_open ' + openB._at);
+  // (c) reset starts it again
+  const r0 = b.log.length;
+  b.sim.reset();
+  b.drain();
+  assert(deepEq(b.st().tutorial, { step: 'open', done: false }), '(c) state.tutorial after reset ' + describe(b.st().tutorial));
+  assert(b.of(EVENT.tutorialStep, r0).some((e) => e.id === 'open'), '(c) no tutorial_step open after reset; got ' + describe(b.log.slice(r0).map((e) => e.type)));
+  // (d) a v3 save with done false runs it
+  const d = headless(P, P.validateSave({ v: 3, day: 1, tutorial: { done: false } }), 4);
+  assert(d.stepIs('open'), '(d) tutorialStep() ' + describe(d.step()));
+  assert(deepEq(d.st().tutorial, { step: 'open', done: false }), '(d) state.tutorial ' + describe(d.st().tutorial));
+  return notes.join('; ') + '; (c) reset restarts at open; (d) v3 save with done false starts at open';
+}
+
+function burnRun(P, fire, seed) {
+  const C = P.C;
+  const h = headless(P, null, seed);
+  assert(h.sim[SIM_METHODS.skipTutorial]() === true, 'skipTutorial() did not return true');
+  h.drain();
+  const og = h.sim.openGate();
+  h.drain();
+  assert(og && og.ok, 'openGate ' + describe(og));
+  const k1 = () => h.st().stations.kettle1;
+  assert(h.goSettled('pile', () => carryIs(h, CARRY_KIND.charcoal)), 'pile: carrying ' + describe(h.st().player.carrying));
+  assert(h.goSettled('kettle1', () => k1().fire >= C.FIRE_LIGHT - 1), 'kettle 1 not lit: ' + k1().fire);
+  assert(h.goSettled('cooler', () => carryIs(h, CARRY_KIND.raw, MEAT)), 'cooler: carrying ' + describe(h.st().player.carrying));
+  assert(h.goSettled('kettle1', () => k1().pieces.length >= 1), 'kettle 1 has no piece');
+  const piece0 = k1().pieces.find((p) => p.slot === 0) || k1().pieces[0];
+  const putOn = piece0.putOn;
+  h.fixture = (state) => { state.stations.kettle1.fire = fire; };
+  assert(h.sim.reach() === 'kettle1', 'reach() after the put on is ' + describe(h.sim.reach()));
+  const n0 = h.log.length;
+  const labels = [];   // verbAt().label after each tick, with the tick's warning flag
+  let warnLost = false;
+  let doneAt = null, warnAt = null, burntAt = null;
+  const total = h.ticksFor(MEAT_COOK[MEAT] + MEAT_WINDOW[MEAT] + 6);
+  for (let i = 0; i < total && burntAt === null; i++) {
+    const before = h.log.length;
+    h.tick();
+    const fresh = h.log.slice(before);
+    if (doneAt === null && fresh.some((e) => e.type === EVENT.pieceDone && e.cooker === 'kettle1')) doneAt = h.st().clock;
+    const warned = fresh.some((e) => e.type === EVENT.burnWarning);
+    if (warned && warnAt === null) warnAt = h.st().clock;
+    if (fresh.some((e) => e.type === EVENT.pieceBurnt && e.cooker === 'kettle1')) burntAt = h.st().clock;
+    const p = k1().pieces.find((x) => x.id === piece0.id);
+    if (warnAt !== null && p && !warned && p.warn !== true) warnLost = true;
+    labels.push({ warned, label: h.sim.verbAt().label });
+  }
+  return { h, n0, putOn, doneAt, warnAt, burntAt, labels, warnLost };
+}
+
+function burnHeadless(P) {
+  const C = P.C;
+  const tol = 0.1 + 1e-6;
+  const hot = burnRun(P, C.FIRE_MAX, 5);
+  assert(hot.doneAt !== null, 'no piece_done at hot fire');
+  const cookTime = hot.doneAt - hot.putOn;
+  assert(nearly(cookTime, MEAT_COOK[MEAT] / C.HOT_MULT, tol), 'hot cook took ' + cookTime + ' s, wanted ' + (MEAT_COOK[MEAT] / C.HOT_MULT));
+  const warns = hot.h.of(EVENT.burnWarning, hot.n0);
+  assert(warns.length === 1, warns.length + ' burn_warning events, wanted 1');
+  assert(deepEq(strip(warns[0]), { type: EVENT.burnWarning, station: 'kettle1', slot: 0, meat: MEAT }), 'burn_warning ' + describe(strip(warns[0])));
+  const warnAfter = MEAT_WINDOW[MEAT] * (1 - C.WARN_FRAC);
+  assert(nearly(hot.warnAt - hot.doneAt, warnAfter, tol), 'warning ' + (hot.warnAt - hot.doneAt) + ' s after done, wanted ' + warnAfter);
+  assert(!hot.warnLost, 'warn did not stay true after the warning');
+  assert(hot.burntAt !== null, 'the piece never burnt at hot fire');
+  const burnSpan = hot.burntAt - hot.doneAt;
+  assert(burnSpan >= MEAT_WINDOW[MEAT] - tol && burnSpan <= MEAT_WINDOW[MEAT] + tol, 'burnt ' + burnSpan + ' s after done, wanted ' + MEAT_WINDOW[MEAT]);
+  assert(hot.warnAt < hot.burntAt, 'burn_warning did not come before piece_burnt');
+  const wi = hot.labels.findIndex((l) => l.warned);
+  assert(wi >= 1, 'no label record around the warning');
+  const meatLabel = P.MEATS[MEAT].label;
+  assert(hot.labels[wi - 1].label === 'Pull ' + meatLabel, 'label one tick before the warning ' + describe(hot.labels[wi - 1].label));
+  assert(hot.labels[wi].label === PULL_NOW && (!hot.labels[wi + 1] || hot.labels[wi + 1].label === PULL_NOW), 'label after the warning ' + describe(hot.labels.slice(wi, wi + 2).map((l) => l.label)));
+  const good = burnRun(P, 70, 5);
+  assert(good.doneAt !== null && good.burntAt !== null, 'good fire run: done ' + good.doneAt + ', burnt ' + good.burntAt);
+  const goodSpan = good.burntAt - good.doneAt;
+  assert(nearly(goodSpan, MEAT_WINDOW[MEAT], tol), 'good fire burnt ' + goodSpan + ' s after done, wanted ' + MEAT_WINDOW[MEAT]);
+  const r2 = (x) => Math.round(x * 100) / 100;
+  return 'hot: cook ' + r2(cookTime) + ' s, warn +' + r2(hot.warnAt - hot.doneAt) + ' s, burnt +' + r2(burnSpan) + ' s; good: burnt +' + r2(goodSpan) + ' s' + (hot.h.notes.length ? '; ' + hot.h.notes.join(', ') : '');
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -685,7 +1119,7 @@ const click = (id) => ev('click(' + JSON.stringify(id) + ')');
 const text = (id) => ev('txt(' + JSON.stringify(id) + ')');
 const visible = (id) => ev('vis(' + JSON.stringify(id) + ')');
 // advance(s) steps the sim, pumps events, refreshes the DOM and draws one frame (D14).
-const advance = (s) => ev('(g.' + GAME_FIELDS.advance + '(' + s + '), true)');
+const advance = (s) => ev('(g.' + GAME_FIELDS.advance + '(' + s + '), globalThis.__smoke && globalThis.__smoke.rec(), true)');
 const captureFrame = () => ev('g.' + GAME_FIELDS.captureFrame + '()');
 const fxLog = () => ev('JSON.parse(JSON.stringify(g.' + GAME_FIELDS.fxLog + '))');
 
@@ -693,7 +1127,17 @@ const fxLog = () => ev('JSON.parse(JSON.stringify(g.' + GAME_FIELDS.fxLog + '))'
 // clock between advances for the boredom metric. Reinstalled after a reload; totals are carried.
 const PROBE = `
   if (globalThis.__smoke) return 'present';
-  const P = { events: [], bored: 0, boredPrep: 0, service: 0, lastClock: S().clock, lastDay: S().day };
+  const P = { events: [], live: [], bored: 0, boredPrep: 0, service: 0, lastClock: S().clock, lastDay: S().day };
+  // Deviation 7: every new #live text, from a MutationObserver and from a read after each advance.
+  const liveEl = document.getElementById('${ID.live}');
+  P.rec = function () {
+    if (!liveEl) return;
+    const t = (liveEl.textContent || '').trim();
+    const last = P.live.length ? P.live[P.live.length - 1].text : null;
+    if (t && t !== last) P.live.push({ text: t, at: Math.round(S().clock * 100) / 100, day: S().day, ms: Date.now() });
+  };
+  if (liveEl) new MutationObserver(P.rec).observe(liveEl, { childList: true, characterData: true, subtree: true });
+  P.rec();
   const orig = sim.${SIM_METHODS.drainEvents};
   sim.${SIM_METHODS.drainEvents} = function () {
     const out = orig.apply(sim, arguments);
@@ -722,6 +1166,7 @@ const PROBE = `
       g.${GAME_FIELDS.advance}(dt);
       t += dt;
       P.sample();
+      P.rec();
     }
     return { ok: !!pred(), t: Math.round(t * 100) / 100 };
   };
@@ -742,6 +1187,37 @@ async function eventCount() {
 }
 async function eventsSince(n, type) {
   return run('return globalThis.__smoke.events.slice(' + n + ').filter((e) => e.type === ' + JSON.stringify(type) + ');');
+}
+async function eventsFrom(n) {
+  return run('return globalThis.__smoke.events.slice(' + n + ');');
+}
+async function allEvents() {
+  return run('return globalThis.__smoke.events;');
+}
+async function liveTexts() {
+  return run('return globalThis.__smoke.live.map((l) => l.text);');
+}
+// v2.1 page reads.
+const tut = () => ev('(() => { const t = sim.' + SIM_METHODS.tutorialStep + '(); return t ? { id: t.id, text: t.text, target: t.target } : null; })()');
+const banner = () => ev('g.' + GAME_FIELDS.banner + ' ? JSON.parse(JSON.stringify(g.' + GAME_FIELDS.banner + ')) : null');
+const hasPulse = (id) => ev('!!$(' + JSON.stringify(id) + ') && $(' + JSON.stringify(id) + ').classList.contains(' + JSON.stringify(PULSE) + ')');
+const anyPulse = () => ev('document.querySelectorAll(".' + PULSE + '").length');
+const present = (id) => ev('!!$(' + JSON.stringify(id) + ')');
+const hintShown = () => ev('!!$(' + JSON.stringify(ID.clipTop) + ') && $(' + JSON.stringify(ID.clipTop) + ').textContent.includes(' + JSON.stringify(DAY1_HINT) + ')');
+const arrows = (frame) => frame.filter((d) => d.name === 'arrow');
+// Deviation 8: let the one a second live queue speak after a tutorial step change.
+const liveBreath = () => sleep(LIVE_BREATH_MS);
+async function expectStep(id, target, label) {
+  const t = await tut();
+  assert(t && t.id === id && (target === undefined || t.target === target),
+    (label || 'tutorial') + ': step is ' + describe(t) + ', wanted ' + id + (target === undefined ? '' : ' with target ' + describe(target)));
+  return t;
+}
+async function newGame(fromId) {
+  await click(fromId);
+  await advance(0);
+  await click(ID.confirmYes);
+  await advance(0);
 }
 async function probeMetrics() {
   return run('const P = globalThis.__smoke; return { bored: P.bored, boredPrep: P.boredPrep, service: P.service, events: P.events.length };');
@@ -921,6 +1397,59 @@ const SMALL_BUTTONS = '[...document.querySelectorAll("button")].filter((b) => !b
 // 3. The browser run: steps 9 onward
 // ---------------------------------------------------------------------------------------------
 
+// K11 step 14, from the art.SPRITES grids. '0' and '.' are both transparent.
+function checkGrids(G) {
+  const bad = [];
+  const cnt = (rows, ch) => rows.join('').split(ch).length - 1;
+  const clear = (row) => /^[0.]*$/.test(row);
+  const pile = G.pile;
+  if (!pile || pile.length !== 4) return ['pile has ' + (pile && pile.length) + ' frames'];
+  for (let i = 0; i < 4; i++) {
+    const f = pile[i];
+    if (cnt(f, '8') < 1) bad.push('pile frame ' + i + ' has no 8 (the sack)');
+    if (!f[15] || !f[15].includes('a')) bad.push('pile frame ' + i + ' row 15 has no a (the shadow)');
+    if (i <= 2) {
+      if (cnt(f, 's') > 0) bad.push('pile frame ' + i + ' has ' + cnt(f, 's') + ' s');
+      if (cnt(f, 'u') > 3) bad.push('pile frame ' + i + ' has ' + cnt(f, 'u') + ' u');
+      const dark = cnt(f, '1') + cnt(f, 't'), light = cnt(f, 'v') + cnt(f, 's') + cnt(f, 'u');
+      if (dark < 4 * light) bad.push('pile frame ' + i + ': 1 + t is ' + dark + ', under 4 times v + s + u (' + light + ')');
+    }
+    if (i <= 1) {
+      const e = cnt(f, '4');
+      if (e < 1 || e > 3) bad.push('pile frame ' + i + ' has ' + e + ' ember (4) pixels, wanted 1 to 3');
+    }
+    if (i === 3) for (const ch of ['t', 'v', 'u', '4', 'k']) if (cnt(f, ch) > 0) bad.push('pile frame 3 (empty) has ' + ch);
+  }
+  const hc = G.hand_charcoal && G.hand_charcoal[0];
+  if (!hc) bad.push('hand_charcoal missing');
+  else {
+    if (cnt(hc, '1') < 6) bad.push('hand_charcoal has ' + cnt(hc, '1') + ' 1 pixels, wanted 6 or more');
+    const dark = cnt(hc, '1') + cnt(hc, 't'), light = cnt(hc, 'v') + cnt(hc, 's') + cnt(hc, 'u');
+    if (dark < 2 * light) bad.push('hand_charcoal: 1 + t is ' + dark + ', under twice v + s + u (' + light + ')');
+  }
+  for (const m of MEAT_IDS) {
+    const f = G['piece_' + m];
+    if (!f || f.length < 5) { bad.push('piece_' + m + ' has ' + (f && f.length) + ' frames'); continue; }
+    if (sameJSON(f[4], f[2])) bad.push('piece_' + m + ' frame 4 equals frame 2');
+    if (cnt(f[4], '1') < cnt(f[2], '1') + 4) bad.push('piece_' + m + ' frame 4 has ' + cnt(f[4], '1') + ' 1 pixels, frame 2 ' + cnt(f[2], '1') + ' (wanted 4 more)');
+  }
+  const ar = G.arrow;
+  if (!ar || ar.length !== 4) bad.push('arrow has ' + (ar && ar.length) + ' frames');
+  else {
+    const h = ar[0].length;
+    const shifted = ar[1].every((row, r) => (r < 2 ? clear(row) : row === ar[0][r - 2])) && ar[0].slice(h - 2).every(clear);
+    if (!shifted) bad.push('arrow frame 1 is not frame 0 shifted down 2 rows');
+    if (!sameJSON(ar[2], ar[0].slice().reverse())) bad.push('arrow frame 2 is not frame 0 in reversed row order');
+    if (!sameJSON(ar[3], ar[1].slice().reverse())) bad.push('arrow frame 3 is not frame 1 in reversed row order');
+    const stray = [...new Set(ar.flat().join('').split(''))].filter((ch) => !'0.5kh'.includes(ch));
+    if (stray.length) bad.push('arrow uses ' + stray.join(' ') + ' (only 0 5 k h allowed)');
+  }
+  const bw = G.bubble_warn && G.bubble_warn[0];
+  if (!bw) bad.push('bubble_warn missing');
+  else if (cnt(bw, 'o') < 1 || cnt(bw, '3') < 1) bad.push('bubble_warn frame 0 lacks o or 3');
+  return bad;
+}
+
 async function browserChecks() {
   const url = pathToFileURL(FILES.index).href + '?seed=' + SEED;
   const captures = {};
@@ -937,8 +1466,8 @@ async function browserChecks() {
     assert(art, 'art.built is not true');
     const ver = await ev('g.' + GAME_FIELDS.version);
     assert(ver === GAME_VERSION, 'game.version is ' + describe(ver) + ', wanted ' + GAME_VERSION);
-    const hooks = await ev('({ dog: !!g.' + GAME_FIELDS.dog + ', fxLog: Array.isArray(g.' + GAME_FIELDS.fxLog + '), captureFrame: typeof g.' + GAME_FIELDS.captureFrame + ' === "function", advance: typeof g.' + GAME_FIELDS.advance + ' === "function" })');
-    assert(hooks.dog && hooks.fxLog && hooks.captureFrame && hooks.advance, 'PitSim.game hooks ' + describe(hooks));
+    const hooks = await ev('({ dog: !!g.' + GAME_FIELDS.dog + ', fxLog: Array.isArray(g.' + GAME_FIELDS.fxLog + '), captureFrame: typeof g.' + GAME_FIELDS.captureFrame + ' === "function", advance: typeof g.' + GAME_FIELDS.advance + ' === "function", banner: ' + JSON.stringify(GAME_FIELDS.banner) + ' in g })');
+    assert(hooks.dog && hooks.fxLog && hooks.captureFrame && hooks.advance && hooks.banner, 'PitSim.game hooks ' + describe(hooks));
     await installProbe();
     await advance(0);
     return 'version ' + ver;
@@ -964,7 +1493,14 @@ async function browserChecks() {
     const missing = COLOR_KEYS.filter((k) => !r.colorKeys.includes(k));
     const extra = r.colorKeys.filter((k) => !COLOR_KEYS.includes(k));
     assert(missing.length === 0 && extra.length === 0, 'COLOR missing ' + missing.join(' ') + ', extra ' + extra.join(' '));
-    return REQUIRED_SPRITES.length + ' sprites, ' + r.pal + ' colors, ' + COLOR_KEYS.length + ' keys';
+    // v2.1 (K11 step 14): the charcoal, piece, arrow and bubble grids, and the two font glyphs.
+    const grids = await run('const A = globalThis.' + GLOBAL_NAME + '.art; const names = ["pile", "hand_charcoal", "arrow", "bubble_warn"].concat(' + describe(MEAT_IDS) + '.map((m) => "piece_" + m));'
+      + ' const out = {}; for (const n of names) out[n] = A.SPRITES[n] ? A.SPRITES[n].frames.map((f) => f.slice()) : null;'
+      + ' return { grids: out, dots: A.textWidth(".,") };');
+    const problems = checkGrids(grids.grids);
+    assert(problems.length === 0, problems.length + ' grid rule(s) broken, first ' + problems.slice(0, 4).join('; '));
+    assert(grids.dots === 9, 'art.textWidth(".,") is ' + grids.dots + ', wanted 9');
+    return REQUIRED_SPRITES.length + ' sprites, ' + r.pal + ' colors, ' + COLOR_KEYS.length + ' keys; charcoal, piece frame 4, arrow and bubble grids pass';
   });
 
   await step('canvas scale is an integer', async () => {
@@ -1028,6 +1564,21 @@ async function browserChecks() {
     assert(await visible(ID.clipboard), '#clipboard hidden');
     const seats = await text(ID.seats);
     assert(seats === TEXT.seats(2, 0, 1), '#seats is ' + describe(seats));
+    // v2.1: the tutorial's morning, checked before the cart is emptied.
+    await expectStep('open', 'open', 'morning');
+    assert(await present(ID.tutClip), '#tut-clip missing');
+    const tc = await text(ID.tutClip);
+    assert(tc === TUTORIAL_TEXT.open, '#tut-clip is ' + describe(tc));
+    assert(await visible(ID.tutSkip), '#tut-skip not visible');
+    const sk = await text(ID.tutSkip);
+    assert(sk === TEXT.skipTutorial, '#tut-skip is ' + describe(sk));
+    assert(await hasPulse(ID.open), '#open has no ' + PULSE);
+    const hb = await text(ID.howtoBtn);
+    assert(hb === TEXT.controls, '#howto-btn is ' + describe(hb));
+    assert(!(await visible(ID.howto)), '#howto visible on its own');
+    assert(!(await hintShown()), 'the day 1 hint shows while the tutorial runs');
+    const bn = await banner();
+    assert(bn === null, 'PitSim.game.banner in the morning is ' + describe(bn));
     await screenshot(SCREENSHOTS.clipboard);
     const frame = await captureFrame();
     captures.morning = frame;
@@ -1046,19 +1597,19 @@ async function browserChecks() {
     assert(await ev('$(' + JSON.stringify(ID.open) + ').disabled === true'), '#open should be disabled with an empty cart');
     const why = await text(ID.openWhy);
     assert(why === TEXT.needCharcoal, '#open-why is ' + describe(why));
-    return frame.length + ' draw records; ' + (prefillTotal > 0 ? 'prefilled ' + describe(prefilled) + ' (total ' + prefillTotal + '), emptied in ' + emptied + ' clicks' : 'cart started empty');
+    return frame.length + ' draw records; tutorial at open; ' + (prefillTotal > 0 ? 'prefilled ' + describe(prefilled) + ' (total ' + prefillTotal + '), emptied in ' + emptied + ' clicks' : 'cart started empty');
   }, { fatal: true });
 
-  await step('how to', async () => {
-    const found = await ev('(' + describe(ID.howtoButtons) + ').find((id) => $(id) && !$(id).hidden) || null');
-    if (!found) return 'no how to button; #howto is checked with the pause panel';
-    await click(found);
+  await step('controls', async () => {
+    assert(!(await visible(ID.howto)), '#howto visible before #howto-btn');
+    await click(ID.howtoBtn);
     await advance(0);
-    assert(await visible(ID.howto), '#howto not visible after clicking #' + found);
+    assert(await visible(ID.howto), '#howto not visible after clicking #' + ID.howtoBtn);
     await keyPress(KEYS.escape);
     await advance(0);
     assert(await visible(ID.clipboard), '#clipboard did not come back after Escape on #howto');
-    return 'clicked #' + found + ', Escape returned to the clipboard';
+    assert(!(await visible(ID.howto)), '#howto still visible after Escape');
+    return 'clicked #' + ID.howtoBtn + ' (Controls), Escape returned to the clipboard';
   });
 
   let cartTotal = 0;
@@ -1086,55 +1637,113 @@ async function browserChecks() {
     assert(s.cash === before - cartTotal, 'cash ' + s.cash + ', wanted ' + (before - cartTotal));
     assert(!(await visible(ID.clipboard)), '#clipboard still visible');
     const status = await text(ID.status);
-    assert(status.startsWith(TEXT.gateOpensIn), '#status is ' + describe(status));
+    assert(!status.startsWith(TEXT.gateOpensIn), '#status shows the gate countdown during the tutorial: ' + describe(status));
+    assert(status === TEXT.handsEmpty, '#status is ' + describe(status) + ', wanted ' + describe(TEXT.handsEmpty));
     const act = await text(ID.act);
     assert(act === TEXT.walk, '#act is ' + describe(act));
     const opened = await eventsOfType(EVENT.yardOpen);
     assert(opened.length === 1, EVENT.yardOpen + ' events: ' + opened.length);
-    return 'cash ' + s.cash;
+    // v2.1 step b: banner and arrow at the pile, clock held.
+    await expectStep('charcoal', 'pile', 'after Open the yard');
+    const bn = await banner();
+    assert(bn && sameJSON(bn.lines, BANNER_CHARCOAL), 'banner ' + describe(bn) + ', wanted lines ' + describe(BANNER_CHARCOAL));
+    const frame = await captureFrame();
+    const ar = arrows(frame);
+    const want = ARROW_AT.pile;
+    assert(ar.some((d) => d.x === want.x && d.y === want.y && want.frames.includes(d.frame)), 'no arrow at (' + want.x + ',' + want.y + ') frame 2 or 3; arrows ' + describe(ar));
+    captures.tutorial = frame;
+    await screenshot(SCREENSHOTS.tutorial);
+    const n0 = await eventCount();
+    await advance(25);
+    const clock = await ev(F.clock);
+    assert(clock === 0, 'clock ' + clock + ' after advance(25), wanted 0');
+    assert((await eventsSince(n0, EVENT.gateSoon)).length === 0, EVENT.gateSoon + ' fired with the clock held');
+    await liveBreath();
+    return 'cash ' + s.cash + ', status ' + describe(status) + ', banner ' + describe(bn.lines) + ', clock held at 0';
   }, { fatal: true });
 
   await step('fire raised', async () => {
+    await expectStep('charcoal', 'pile', 'before the pile');
     const a = await goto('pile', hasKind(CARRY_KIND.charcoal));
     assert(a.ok, 'not carrying charcoal after the pile; carrying ' + describe(await ev(F.carrying)));
-    const b = await goto('kettle1', F.fire('kettle1') + ' >= C.' + C_NAMES.fireLight);
+    await advance(0);
+    await expectStep('light', 'kettle1', 'before the light');
+    await liveBreath();
+    const b = await goto('kettle1', F.fire('kettle1') + ' >= C.' + C_NAMES.fireLight + ' - 1');
     const fire = await ev(F.fire('kettle1'));
     assert(b.ok, 'kettle 1 fire is ' + fire);
-    return 'fire ' + fire + ' (' + a.how + ', ' + b.how + ')';
+    await advance(0);
+    await expectStep('meat', undefined, 'after the light');
+    await liveBreath();
+    return 'fire ' + Math.round(fire) + ' (' + a.how + ', ' + b.how + ')';
   }, { fatal: true });
 
   await step('meat on', async () => {
+    await expectStep('meat', 'cooler', 'before the cooler');
     const a = await goto('cooler', hasKind(CARRY_KIND.raw) + ' && ' + F.carrying + '.meat === ' + JSON.stringify(MEAT));
     assert(a.ok, 'not carrying raw ' + MEAT + '; carrying ' + describe(await ev(F.carrying)));
+    await advance(0);
+    await expectStep('puton', 'kettle1', 'before the put on');
+    await liveBreath();
     const b = await goto('kettle1', F.pieces('kettle1') + '.length >= 1');
     assert(b.ok, 'kettle 1 has no piece');
-    // Second unit on the other grate slot, when stock allows.
-    if (await ev(F.stock + '.' + MEAT + ' > 0')) {
+    await advance(0);
+    // v2.1: one unit only while the tutorial runs; the second goes on in step 29.
+    if ((await tut()) === null && (await ev(F.stock + '.' + MEAT + ' > 0'))) {
       const c = await goto('cooler', hasKind(CARRY_KIND.raw));
       if (c.ok) await goto('kettle1', F.pieces('kettle1') + '.length >= 2');
+    } else {
+      await expectStep('cook', null, 'after the put on');
     }
-    return (await ev(F.pieces('kettle1') + '.length')) + ' piece(s) on kettle 1';
+    await liveBreath();
+    return (await ev(F.pieces('kettle1') + '.length')) + ' piece(s) on kettle 1, step cook with no target';
   }, { fatal: true });
 
   await step('piece done', async () => {
-    const ok = await waitForDone();
+    let ok;
+    if (await tut()) {
+      // The tutorial floor keeps the fire at 30 or more, so no feeding (feeding would walk the
+      // tutorial back to the light step and break the in order check of step 28).
+      const r = await until(anyPiece(PIECE_STATE.done), WAIT_S.cook);
+      ok = r.ok;
+    } else ok = await waitForDone();
     const states = await ev(F.pieces('kettle1') + '.map((p) => p.state + "@" + Math.round(p.prog))');
     assert(ok, 'no piece reached done; pieces ' + describe(states) + ', fire ' + (await ev(F.fire('kettle1'))));
     const done = await eventsOfType(EVENT.pieceDone);
     assert(done.length >= 1, 'no ' + EVENT.pieceDone + ' event');
-    return 'at clock ' + Math.round(await ev(F.clock)) + 's, fire ' + Math.round(await ev(F.fire('kettle1')));
+    await advance(0);
+    await expectStep('cook', 'kettle1', 'at done');
+    await screenshot(SCREENSHOTS.tutorialCook);
+    const n0 = await eventCount();
+    await advance(20);
+    const p = await ev(F.pieces('kettle1') + '.map((x) => ({ state: x.state, warn: x.warn }))');
+    assert(p.length >= 1 && p.every((x) => x.state === PIECE_STATE.done && x.warn === false), 'after advance(20) the pieces are ' + describe(p));
+    assert((await eventsSince(n0, EVENT.burnWarning)).length === 0, EVENT.burnWarning + ' fired during the tutorial');
+    const fire = await ev(F.fire('kettle1'));
+    const floor = await ev('C.' + C_NAMES.fireFloor);
+    assert(fire >= floor, 'kettle1.fire ' + fire + ' under the tutorial floor ' + floor);
+    await liveBreath();
+    return 'done, held 20 s, fire ' + Math.round(fire) + ', clock ' + (await ev(F.clock));
   }, { fatal: true });
 
   await step('sliced', async () => {
+    const t0 = await tut();
+    if (t0) assert(t0.target === 'kettle1', 'the pull target is ' + describe(t0.target));
     const a = await goto('kettle1', hasKind(CARRY_KIND.cooked));
     assert(a.ok, 'did not pull the done piece; carrying ' + describe(await ev(F.carrying)));
-    const b = await goto('board', F.busy + ' !== null || ' + boardHasPlates);
+    await advance(0);
+    if (t0) await expectStep('slice', 'board', 'after the pull');
+    await liveBreath();
+    const b = await goto('board', F.busy + ' !== null || ' + boardHasPlates + ' || ' + hasKind(CARRY_KIND.plates));
     assert(b.ok, 'slice did not start at the board');
-    const r = await until(boardHasPlates + ' && ' + F.busy + ' === null', WAIT_S.slice);
+    const r = await until('(' + boardHasPlates + ' || ' + hasKind(CARRY_KIND.plates) + ') && ' + F.busy + ' === null', WAIT_S.slice);
     assert(r.ok, 'slice did not finish within ' + WAIT_S.slice + 's');
     const sliced = await eventsOfType(EVENT.sliceDone);
     assert(sliced.length >= 1, 'no ' + EVENT.sliceDone + ' event');
-    return (await ev(F.boardStacks + '[0].times.length')) + ' plates on the board';
+    await advance(0);
+    if (t0) await expectStep('plate', 'table', 'after slice_done');
+    await liveBreath();
+    return sliced[0].plates + ' plates sliced; board ' + (await ev(F.boardStacks + '.reduce((a, st) => a + st.times.length, 0)')) + ', in hand ' + (await ev(F.carrying + ' ? ' + F.carrying + '.times.length : 0'));
   }, { fatal: true });
 
   await step('carried', async () => {
@@ -1144,10 +1753,37 @@ async function browserChecks() {
   }, { fatal: true });
 
   await step('served with cash up and a served event', async () => {
+    const t0 = await tut();
+    if (t0) assert(t0.id === 'plate' && t0.target === 'table', 'the plate target is ' + describe(t0));
+    const nSet = await eventCount();
     const a = await goto('table', tableHas(MEAT));
     assert(a.ok, 'plate did not land on the table');
     const setDown = await eventsOfType(EVENT.setDown);
     assert(setDown.length >= 1, 'no ' + EVENT.setDown + ' event');
+    let custId = null, tnote = '';
+    if (t0) {
+      // v2.1 step i: right after the set down, the gate opens on the plate and customer 1 walks in.
+      const evs = await eventsFrom(nSet);
+      const iSet = evs.findIndex((e) => e.type === EVENT.setDown);
+      const iStep = evs.findIndex((e) => e.type === EVENT.tutorialStep && e.id === 'customer');
+      const iGate = evs.findIndex((e) => e.type === EVENT.gateOpen);
+      const iArr = evs.findIndex((e) => e.type === EVENT.customerArrived);
+      assert(iSet >= 0 && iStep > iSet && iGate > iStep && iArr > iGate, 'events after the set down ' + describe(evs.map((e) => e.type + (e.id !== undefined ? ':' + e.id : ''))));
+      const gateOpens = await ev('C.' + C_NAMES.gateOpens);
+      assert(nearly(evs[iGate].at, gateOpens, 0.1), EVENT.gateOpen + ' at clock ' + evs[iGate].at + ', wanted ' + gateOpens + ' (deviation 5)');
+      assert(await ev(F.clock + ' >= C.' + C_NAMES.gateOpens), 'clock ' + (await ev(F.clock)) + ' under GATE_OPENS after the plate');
+      const opens = await eventsOfType(EVENT.gateOpen);
+      assert(opens.length === 1, opens.length + ' ' + EVENT.gateOpen + ' events on day 1');
+      const arr = evs[iArr];
+      assert(arr.id === 1 && arr.meat === MEAT, 'first customer_arrived ' + describe(arr));
+      custId = arr.id;
+      await advance(0);
+      const t1 = await tut();
+      assert(t1 && (t1.id === 'customer' || t1.id === 'seated'), 'step after the set down ' + describe(t1));
+      await screenshot(SCREENSHOTS.tutorialCustomer);
+      tnote = '; gate open at ' + evs[iGate].at + ', banner ' + describe((await banner()) && (await banner()).lines);
+      await liveBreath();
+    }
     // Carry any plate still on the board while the first one waits for a customer.
     for (let i = 0; i < 3 && (await ev(boardHasPlates)); i++) {
       const p = await goto('board', hasKind(CARRY_KIND.plates));
@@ -1155,6 +1791,7 @@ async function browserChecks() {
       await goto('table', F.carrying + ' === null');
     }
     const cashBefore = await ev(F.cash);
+    const servedBefore = await ev(F.today + '.served');
     let r = await until(F.today + '.served >= 1 || !(' + inService + ')', WAIT_S.serve);
     if (!(await ev(F.today + '.served >= 1'))) {
       // Serving may need the player at the table; try once more from there.
@@ -1165,8 +1802,9 @@ async function browserChecks() {
     const served = await eventsOfType(EVENT.served);
     const cash = await ev(F.cash);
     assert(served.length >= 1, 'no ' + EVENT.served + ' event after ' + r.t + 's; customers ' + describe(await ev(F.customers + '.map((c) => c.want + ":" + c.mode)')));
-    assert(cash > cashBefore, 'cash ' + cash + ' not above ' + cashBefore);
+    assert(cash > cashBefore || servedBefore >= 1, 'cash ' + cash + ' not above ' + cashBefore);
     const e = served[0];
+    if (custId !== null) assert(e.id === custId, 'the first served event is for customer ' + e.id + ', wanted ' + custId);
     const spots = await ev('MAP.station("table").spotPx');
     assert(Array.isArray(spots) && spots.some((sp) => sp.x === e.x && sp.y === e.y), 'served at (' + e.x + ',' + e.y + ') is not a spotPx ' + describe(spots));
     const fx = await fxLog();
@@ -1176,9 +1814,10 @@ async function browserChecks() {
     assert(cashFx, 'fxLog has no ' + FX_KIND.cash + ' over a queue spot (py - ' + CASH_ABOVE + '); cash entries ' + describe(fx.filter((f) => f.kind === FX_KIND.cash)));
     captures.midService = await captureFrame();
     await screenshot(SCREENSHOTS.midService);
-    return 'cash ' + cashBefore + ' to ' + cash + ', tip ' + e.tip + ', plate spot (' + e.x + ',' + e.y + ')';
+    return 'cash ' + cashBefore + ' to ' + cash + ', tip ' + e.tip + ', plate spot (' + e.x + ',' + e.y + ')' + tnote;
   }, { fatal: true });
 
+  let tutorialRan = false;
   await step('a served customer sits and a heart fires', async () => {
     const first = (await eventsOfType(EVENT.served))[0];
     assert(first, 'no served event to follow');
@@ -1206,13 +1845,69 @@ async function browserChecks() {
     const heart = fx.find((f) => f.kind === FX_KIND.heart && f.x === FIRST_SEAT.heart.x && f.y === FIRST_SEAT.heart.y);
     assert(heart, 'fxLog has no heart at (' + FIRST_SEAT.heart.x + ',' + FIRST_SEAT.heart.y + '); hearts ' + describe(fx.filter((f) => f.kind === FX_KIND.heart)));
     assert(fx.some((f) => f.kind === FX_KIND.seatTip), 'fxLog has no ' + FX_KIND.seatTip);
+    // v2.1: step seated after served, step end after seat_done.
+    const all = await allEvents();
+    const iServed = all.findIndex((x) => x.type === EVENT.served && x.id === cid);
+    const iSeated = all.findIndex((x) => x.type === EVENT.tutorialStep && x.id === 'seated');
+    const iSeatDone = all.findIndex((x) => x.type === EVENT.seatDone && x.id === cid);
+    const iEnd = all.findIndex((x) => x.type === EVENT.tutorialStep && x.id === 'end');
+    tutorialRan = all.some((x) => x.type === EVENT.tutorialStep);
+    if (tutorialRan) {
+      assert(iSeated > iServed, 'tutorial_step seated at ' + iSeated + ', served at ' + iServed);
+      assert(iEnd > iSeatDone, 'tutorial_step end at ' + iEnd + ', seat_done at ' + iSeatDone);
+    }
     const lv = await until(cust('c.mode === ' + JSON.stringify(MODE.leaving) + ' && c.reason === ' + JSON.stringify(REASON.seated)) + ' && ' + F.seats + '.' + FIRST_SEAT.id + ' === null', WAIT_S.toLeaving);
     assert(lv.ok, 'customer ' + cid + ' not leaving seated with the seat freed within ' + WAIT_S.toLeaving + 's; seats ' + describe(await ev(F.seats)));
-    return 'customer ' + cid + ' sat ' + eat.t + 's after the serve, ate ' + d.t + 's, left ' + lv.t + 's later';
+    return 'customer ' + cid + ' sat ' + eat.t + 's after the serve, ate ' + d.t + 's, left ' + lv.t + 's later' + (tutorialRan ? '; steps seated and end in place' : '');
+  });
+
+  await step('tutorial walked in order', async () => {
+    const endS = await ev('C.' + C_NAMES.tutorialEnd);
+    const r = await until('globalThis.__smoke.events.some((e) => e.type === ' + JSON.stringify(EVENT.tutorialDone) + ')', endS + 1);
+    assert(r.ok, 'no ' + EVENT.tutorialDone + ' within ' + (endS + 1) + ' s');
+    await advance(0);
+    const all = await allEvents();
+    const iDone = all.findIndex((e) => e.type === EVENT.tutorialDone);
+    assert(all[iDone].skipped === false, 'tutorial_done skipped ' + describe(all[iDone].skipped));
+    const steps = all.filter((e) => e.type === EVENT.tutorialStep);
+    const ids = distinctRuns(steps.map((e) => e.id));
+    assert(sameJSON(ids, TUTORIAL_ORDER) || sameJSON(ids, TUTORIAL_ORDER.slice(1)), 'tutorial_step ids ' + describe(ids));
+    const cookTargets = steps.filter((e) => e.id === 'cook').map((e) => e.target);
+    assert(sameJSON(cookTargets, [null, 'kettle1']), 'cook targets ' + describe(cookTargets));
+    for (const e of steps) assert(e.text === TUTORIAL_TEXT[e.id], 'tutorial_step ' + e.id + ' text ' + describe(e.text));
+    const bn = await banner();
+    assert(bn === null, 'banner after the tutorial ' + describe(bn));
+    const ar = arrows(await captureFrame());
+    assert(ar.length === 0, 'arrow drawn after the tutorial: ' + describe(ar));
+    const before = all.slice(0, iDone).filter((e) => e.day === 1 && [EVENT.burnWarning, EVENT.walkOut, EVENT.fireLow].includes(e.type));
+    assert(before.length === 0, 'during the tutorial: ' + describe(before.map((e) => e.type)));
+    // #live spoke every step from charcoal on (deviation 8: poll real time for the queue).
+    const want = TUTORIAL_ORDER.slice(1).map((id) => TUTORIAL_TEXT[id]);
+    let missing = want;
+    const deadline = Date.now() + LIVE_POLL_MS;
+    while (Date.now() < deadline) {
+      await advance(0);
+      const spoken = await liveTexts();
+      missing = want.filter((t) => !spoken.includes(t));
+      if (missing.length === 0) break;
+      await sleep(500);
+    }
+    assert(missing.length === 0, '#live never said ' + describe(missing) + '; it said ' + describe((await liveTexts()).slice(0, 30)));
+    return 'steps ' + ids.join(' ') + '; cook targets ' + describe(cookTargets) + '; #live spoke all ' + want.length;
   });
 
   await step('rest of the day cooked and carried', async () => {
     let cycles = 0;
+    let loaded = 0;
+    // v2.1: the tutorial put one unit on (step 22); the second goes on here.
+    if ((await ev(inService)) && (await ev(F.stock + '.' + MEAT + ' > 0')) && (await ev(F.carrying + ' === null'))) {
+      await feedFireIfLow();
+      const c = await goto('cooler', hasKind(CARRY_KIND.raw));
+      if (c.ok) {
+        const k = await goto('kettle1', F.carrying + ' === null');
+        if (k.ok) loaded += 1;
+      }
+    }
     for (let i = 0; i < PLATE_CYCLES_MAX + 2; i++) {
       if (!(await ev(inService))) break;
       const hasDone = await ev(anyPiece(PIECE_STATE.done));
@@ -1221,7 +1916,8 @@ async function browserChecks() {
         const a = await goto('kettle1', hasKind(CARRY_KIND.cooked));
         if (!a.ok) break;
         await goto('board', F.busy + ' !== null || ' + boardHasPlates);
-        await until(boardHasPlates + ' && ' + F.busy + ' === null', WAIT_S.slice);
+        await until('(' + boardHasPlates + ' || ' + hasKind(CARRY_KIND.plates) + ') && ' + F.busy + ' === null', WAIT_S.slice);
+        if (await ev(hasKind(CARRY_KIND.plates))) await goto('table', F.carrying + ' === null');
         for (let j = 0; j < 3 && (await ev(boardHasPlates)); j++) {
           const p = await goto('board', hasKind(CARRY_KIND.plates));
           if (!p.ok) break;
@@ -1232,7 +1928,7 @@ async function browserChecks() {
         await waitForDone();
       } else break;
     }
-    return cycles + ' extra plate cycle(s)';
+    return loaded + ' unit(s) put on, ' + cycles + ' extra plate cycle(s)';
   });
 
   await step('day over', async () => {
@@ -1293,11 +1989,12 @@ async function browserChecks() {
     assert(r.v, 'validateSave returned null');
     assert(r.v.day === 2 && r.day === 2, 'save day ' + r.v.day + ', state day ' + r.day);
     assert(r.v.cash === r.cash, 'save cash ' + r.v.cash + ', state cash ' + r.cash);
-    assert(r.parsed.v === 2, 'raw save v is ' + describe(r.parsed.v));
+    assert(r.parsed.v === 3, 'raw save v is ' + describe(r.parsed.v));
+    assert(r.parsed.tutorial && r.parsed.tutorial.done === true, 'raw save tutorial is ' + describe(r.parsed.tutorial));
     assert(r.parsed.decor && typeof r.parsed.decor === 'object', 'raw save has no decor');
     assert(r.parsed.stats && r.parsed.stats.seated >= 1, 'raw save stats.seated is ' + describe(r.parsed.stats && r.parsed.stats.seated));
     savedCash = r.cash;
-    return 'day ' + r.v.day + ', cash ' + r.v.cash + ', seated ' + r.parsed.stats.seated;
+    return 'day ' + r.v.day + ', cash ' + r.v.cash + ', seated ' + r.parsed.stats.seated + ', v 3, tutorial done';
   });
 
   const before = await probeMetrics().catch(() => ({ bored: 0, boredPrep: 0, service: 0, events: 0 }));
@@ -1305,13 +2002,15 @@ async function browserChecks() {
 
   await step('reload persists', async () => {
     await reload();
-    const s = await ev('({ phase: ' + F.phase + ', day: ' + F.day + ', cash: ' + F.cash + ' })');
+    const s = await ev('({ phase: ' + F.phase + ', day: ' + F.day + ', cash: ' + F.cash + ', tutorial: S().tutorial })');
     assert(s.phase === PHASE.morning, 'phase ' + s.phase);
     assert(s.day === 2, 'day ' + s.day);
     assert(savedCash === null || s.cash === savedCash, 'cash ' + s.cash + ', saved ' + savedCash);
     assert(await visible(ID.clipboard), '#clipboard hidden on day 2');
     assert(await ev('!!$(' + JSON.stringify(ID.hireBuddy) + ') && !$(' + JSON.stringify(ID.hireBuddy) + ').disabled'), '#hire-buddy missing or disabled on day 2');
-    return 'day 2, cash ' + s.cash;
+    assert(s.tutorial && s.tutorial.done === true, 'state.tutorial on day 2 ' + describe(s.tutorial));
+    assert(!(await present(ID.tutClip)), '#tut-clip present on day 2');
+    return 'day 2, cash ' + s.cash + ', tutorial done';
   }, { fatal: true });
 
   await step('decor purchase shows the sprite', async () => {
@@ -1332,10 +2031,12 @@ async function browserChecks() {
     const frame = await captureFrame();
     assert(hasRecord(frame, DECOR_BUY.draw), 'captureFrame has no ' + describe(DECOR_BUY.draw));
     assert(!outlineAt(frame, DECOR_BUY.outlineGone), 'the ' + OUTLINE + ' at ' + describe(DECOR_BUY.outlineGone) + ' is still drawn');
-    const stored = await run('try { return ' + GLOBAL_NAME + '.validateSave(JSON.parse(localStorage.getItem(' + JSON.stringify(SAVE_KEY) + '))); } catch (e) { return { error: String(e) }; }');
-    assert(stored && stored.decor && stored.decor[DECOR_BUY.id] === true, 'stored save decor ' + describe(stored && (stored.decor || stored.error)));
+    const stored = await run('try { const raw = JSON.parse(localStorage.getItem(' + JSON.stringify(SAVE_KEY) + ')); return { raw: raw && raw.v, v: ' + GLOBAL_NAME + '.validateSave(raw) }; } catch (e) { return { error: String(e) }; }');
+    assert(stored && stored.v && stored.v.decor && stored.v.decor[DECOR_BUY.id] === true, 'stored save decor ' + describe(stored && ((stored.v && stored.v.decor) || stored.error)));
+    assert(stored.v.v === 3, 'stored save validates as v ' + describe(stored.v.v));
+    assert(stored.raw === 3, 'stored raw save v ' + describe(stored.raw));
     await screenshotYard(SCREENSHOTS.decor);
-    return seats + ' cash ' + (await ev(F.cash));
+    return seats + ' cash ' + (await ev(F.cash)) + ', stored v 3';
   });
 
   await step('v1 save migrates', async () => {
@@ -1350,18 +2051,168 @@ async function browserChecks() {
     const status = await text(ID.status);
     assert(status === TEXT.notice, '#status is ' + describe(status) + ', wanted ' + describe(TEXT.notice));
     const raw = await run('try { return JSON.parse(localStorage.getItem(' + JSON.stringify(SAVE_KEY) + ')); } catch (e) { return null; }');
-    assert(raw && raw.v === 2, 'stored save v is ' + describe(raw && raw.v));
-    return 'day ' + s.day + ', cash ' + s.cash + ', rep ' + s.rep + ', stored v ' + raw.v;
+    assert(raw && raw.v === 3, 'stored save v is ' + describe(raw && raw.v));
+    assert(raw.tutorial && raw.tutorial.done === true, 'stored save tutorial ' + describe(raw.tutorial));
+    return 'day ' + s.day + ', cash ' + s.cash + ', rep ' + s.rep + ', stored v ' + raw.v + ', tutorial done';
+  });
+
+  await step('v2 save loads with the tutorial done', async () => {
+    const startRep = await ev('C.' + C_NAMES.startRep);
+    await reload(saveV2({ day: 1, cash: 80, charcoal: 5, stock: { sausage: 3 } }, startRep));
+    await advance(0);
+    const s = await ev('({ phase: ' + F.phase + ', day: ' + F.day + ', tutorial: S().tutorial })');
+    assert(s.phase === PHASE.morning && s.day === 1, 'loaded as ' + describe(s));
+    assert(deepEq(s.tutorial, { step: null, done: true }), 'state.tutorial ' + describe(s.tutorial));
+    assert((await tut()) === null, 'tutorialStep() ' + describe(await tut()));
+    for (const id of [ID.tutClip, ID.tutSkip]) assert(!(await present(id)), '#' + id + ' present after a v2 save');
+    assert((await anyPulse()) === 0, PULSE + ' on ' + (await anyPulse()) + ' element(s)');
+    assert(await hintShown(), 'the day 1 hint is missing with the tutorial done');
+    const status = await text(ID.status);
+    assert(status !== TEXT.notice, '#status shows the v1 notice for a v2 save');
+    if (await ev('$(' + JSON.stringify(ID.open) + ').disabled')) await shop(BUY_LATER);
+    await click(ID.open);
+    await until('false', WAIT_S.afterOpen);
+    await advance(0);
+    assert(await ev(inService), 'the yard did not open; phase ' + (await ev(F.phase)));
+    const st2 = await text(ID.status);
+    assert(st2.startsWith(TEXT.gateOpensIn), '#status is ' + describe(st2) + ', wanted the gate countdown');
+    assert((await banner()) === null, 'banner ' + describe(await banner()));
+    const ar = arrows(await captureFrame());
+    assert(ar.length === 0, 'arrow drawn with the tutorial done: ' + describe(ar));
+    const ser = await ev('sim.' + SIM_METHODS.serialize + '()');
+    assert(ser.v === 3 && ser.tutorial && ser.tutorial.done === true, 'serialize() ' + describe({ v: ser.v, tutorial: ser.tutorial }));
+    return 'v2 day 1 save: no tutorial, hint shown, ' + describe(st2);
+  });
+
+  await step('skip tutorial', async () => {
+    // Step 37 left the yard open.
+    await keyPress(KEYS.escape);
+    await advance(0);
+    assert(await visible(ID.pause), '#pause not visible after Escape');
+    await newGame(ID.pauseNew);
+    const s = await ev('({ phase: ' + F.phase + ', day: ' + F.day + ' })');
+    assert(s.phase === PHASE.morning && s.day === 1, 'new game is ' + describe(s));
+    await expectStep('open', 'open', 'new game');
+    assert(await visible(ID.tutSkip), '#tut-skip not visible on a new game');
+    const n0 = await eventCount();
+    await click(ID.tutSkip);
+    await advance(0);
+    const dn = await eventsSince(n0, EVENT.tutorialDone);
+    assert(dn.length === 1 && dn[0].skipped === true, 'tutorial_done after #tut-skip ' + describe(dn));
+    for (const id of [ID.tutSkip, ID.tutClip]) assert(!(await visible(id)), '#' + id + ' still shown after the skip');
+    assert(!(await hasPulse(ID.open)), '#open still has ' + PULSE);
+    assert(await hintShown(), 'the day 1 hint is missing after the skip');
+    const stored = await run('try { return ' + GLOBAL_NAME + '.validateSave(JSON.parse(localStorage.getItem(' + JSON.stringify(SAVE_KEY) + '))); } catch (e) { return null; }');
+    assert(stored && stored.tutorial && stored.tutorial.done === true, 'stored save after the skip ' + describe(stored && stored.tutorial));
+    // Skip from the pause panel in service.
+    await newGame(ID.clipNew);
+    await expectStep('open', 'open', 'second new game');
+    if (await ev('$(' + JSON.stringify(ID.open) + ').disabled')) await shop(BUY_DAY1);
+    await click(ID.open);
+    await until('false', WAIT_S.afterOpen);
+    await advance(0);
+    assert(await ev(inService), 'the yard did not open; phase ' + (await ev(F.phase)));
+    await keyPress(KEYS.escape);
+    await advance(0);
+    assert(await visible(ID.pause), '#pause not visible after Escape');
+    assert(await visible(ID.pauseSkip), '#pause-skip not visible while the tutorial runs');
+    assert(!(await visible(ID.howto)), '#howto visible beside the pause panel');
+    const n1 = await eventCount();
+    await click(ID.pauseSkip);
+    await advance(0);
+    const dn2 = await eventsSince(n1, EVENT.tutorialDone);
+    assert(dn2.length === 1 && dn2[0].skipped === true, 'tutorial_done after #pause-skip ' + describe(dn2));
+    assert(!(await visible(ID.pauseSkip)), '#pause-skip still shown after the skip');
+    assert(await visible(ID.pause) && (await ev(F.paused + ' === true')), 'not paused after #pause-skip');
+    await click(ID.resume);
+    await advance(0);
+    assert(await ev(F.paused + ' === false'), 'still paused after #resume');
+    const n2 = await eventCount();
+    await until('false', 31);
+    const soon = (await eventsSince(n2, EVENT.gateSoon))[0];
+    const open = (await eventsSince(n2, EVENT.gateOpen))[0];
+    const go = await ev('C.' + C_NAMES.gateOpens);
+    assert(soon && nearly(soon.at, go - 10, 0.1), EVENT.gateSoon + ' at ' + (soon && soon.at) + ', wanted ' + (go - 10) + ' (deviation 5)');
+    assert(open && nearly(open.at, go, 0.1), EVENT.gateOpen + ' at ' + (open && open.at) + ', wanted ' + go + ' (deviation 5)');
+    assert((await banner()) === null, 'banner after the pause skip ' + describe(await banner()));
+    return 'clipboard skip and pause skip; gate_soon ' + soon.at + ', gate_open ' + open.at;
+  });
+
+  await step('burn warning in the page', async () => {
+    assert(await ev(inService), 'not in service; phase ' + (await ev(F.phase)));
+    assert((await tut()) === null, 'the tutorial is running on the skipped day');
+    const a = await goto('pile', hasKind(CARRY_KIND.charcoal));
+    assert(a.ok, 'pile: carrying ' + describe(await ev(F.carrying)));
+    const b = await goto('kettle1', F.fire('kettle1') + ' >= C.' + C_NAMES.fireLight + ' - 1');
+    assert(b.ok, 'kettle 1 fire ' + (await ev(F.fire('kettle1'))));
+    assert(await ev(F.stock + '.' + MEAT + ' > 0'), 'no ' + MEAT + ' in stock on the skipped day: ' + describe(await ev(F.stock)));
+    const c = await goto('cooler', hasKind(CARRY_KIND.raw) + ' && ' + F.carrying + '.meat === ' + JSON.stringify(MEAT));
+    assert(c.ok, 'cooler: carrying ' + describe(await ev(F.carrying)));
+    const d = await goto('kettle1', F.pieces('kettle1') + '.length >= 1');
+    assert(d.ok, 'kettle 1 has no piece');
+    const nDone = await eventCount();
+    assert(await waitForDone(), 'no piece_done; pieces ' + describe(await ev(F.pieces('kettle1'))));
+    const good = await ev('C.' + C_NAMES.fireGood);
+    if ((await ev(F.fire('kettle1'))) < good + 15 && (await ev(F.carrying + ' === null && ' + F.charcoal + ' > 0'))) {   // deviation 11
+      await goto('pile', hasKind(CARRY_KIND.charcoal));
+      await goto('kettle1', F.carrying + ' === null');
+    }
+    const w = await until('globalThis.__smoke.events.slice(' + nDone + ').some((e) => e.type === ' + JSON.stringify(EVENT.burnWarning) + ')', WAIT_S.burnPage);
+    assert(w.ok, 'no ' + EVENT.burnWarning + ' within ' + WAIT_S.burnPage + ' s; pieces ' + describe(await ev(F.pieces('kettle1'))) + ', fire ' + (await ev(F.fire('kettle1'))));
+    const warnEv = (await eventsSince(nDone, EVENT.burnWarning))[0];
+    if ((await ev('sim.reach()')) !== 'kettle1') {
+      await ev('sim.' + SIM_METHODS.walkTo + '(5, 3)');
+      await settle();
+      await ev('sim.move("up")');
+    }
+    await advance(0);
+    const act = await text(ID.act);
+    assert(act === PULL_NOW, '#act is ' + describe(act) + ', wanted ' + describe(PULL_NOW));
+    const frame = await captureFrame();
+    captures.warning = frame;
+    assert(hasRecord(frame, WARN_DRAW.piece), 'no ' + describe(WARN_DRAW.piece) + '; pieces drawn ' + describe(frame.filter((x) => x.name.startsWith('piece_'))));
+    assert(hasRecord(frame, WARN_DRAW.bubble), 'no ' + describe(WARN_DRAW.bubble) + '; bubbles drawn ' + describe(frame.filter((x) => x.name === 'bubble_warn')));
+    await advance(1);
+    const frame2 = await captureFrame();
+    const sm = WARN_DRAW.smoke;
+    assert(frame2.some((x) => x.name === sm.name && x.x >= sm.xMin && x.x <= sm.xMax && x.y <= sm.yMax), 'no ' + sm.name + ' over kettle 1; dark smoke ' + describe(frame2.filter((x) => x.name === sm.name)));
+    const fx = await fxLog();
+    assert(fx.some((f) => f.kind === FX_KIND.warn && f.x === WARN_DRAW.bubble.x && f.y === WARN_DRAW.bubble.y), 'fxLog has no warn at (' + WARN_DRAW.bubble.x + ',' + WARN_DRAW.bubble.y + '); warn entries ' + describe(fx.filter((f) => f.kind === FX_KIND.warn)));
+    await screenshot(SCREENSHOTS.warning);
+    const nPull = await eventCount();
+    const p = await goto('kettle1', hasKind(CARRY_KIND.cooked) + ' && ' + F.carrying + '.meat === ' + JSON.stringify(MEAT));
+    assert(p.ok, 'the pull in the warning stage gave ' + describe(await ev(F.carrying)));
+    const burnt = await eventsSince(nDone, EVENT.pieceBurnt);
+    assert(burnt.length === 0, 'a piece burnt: ' + describe(burnt));
+    // #live: the warning sentence within 6 s (deviation 8: real time for the queue too).
+    let heard = false;
+    for (let t = 0; t <= WAIT_S.liveAfterWarn && !heard; t += WAIT_S.liveStep) {
+      heard = (await liveTexts()).includes(BURN_WARN[MEAT]);
+      if (heard) break;
+      await advance(WAIT_S.liveStep);
+      await sleep(550);
+    }
+    assert(heard, '#live never said ' + describe(BURN_WARN[MEAT]) + '; it said ' + describe((await liveTexts()).slice(-12)));
+    return 'warning at clock ' + warnEv.at + ', #act ' + describe(act) + ', pulled in time (' + (await eventsSince(nPull, EVENT.pieceBurnt)).length + ' burnt), #live heard it';
   });
 
   await step('pause and resume', async () => {
-    await openYard(BUY_LATER);
+    if (!(await ev(inService))) await openYard(BUY_LATER);
     await keyPress(KEYS.escape);
     await advance(0);
     assert(await visible(ID.pause), '#pause not visible after Escape');
     assert(await ev(F.paused + ' === true'), 'state.paused is not true');
     assert(await ev('$(' + JSON.stringify(ID.root) + ').dataset.paused === "1"'), '#root data-paused is not 1');
-    const howto = await visible(ID.howto);
+    assert(!(await visible(ID.howto)), '#howto visible beside the pause panel');
+    assert(!(await visible(ID.pauseSkip)), '#pause-skip visible with the tutorial done');
+    await click(ID.pauseControls);
+    await advance(0);
+    assert(await visible(ID.howto), '#howto not visible after #pause-controls');
+    assert(!(await visible(ID.pause)), '#pause still visible with the Controls card open');
+    await keyPress(KEYS.escape);
+    await advance(0);
+    assert(await visible(ID.pause), '#pause did not come back after Escape on the Controls card');
+    assert(await ev(F.paused + ' === true'), 'not paused after closing the Controls card');
     await keyPress(KEYS.escape);
     await advance(0);
     assert(!(await visible(ID.pause)), '#pause still visible after the second Escape');
@@ -1374,7 +2225,7 @@ async function browserChecks() {
     await advance(0);
     assert(!(await visible(ID.pause)), '#pause still visible after the second P');
     assert(await ev(F.paused + ' === false'), 'state.paused still true after the second P');
-    return (howto ? 'Controls panel shown with pause' : 'resumed (#howto was not visible with #pause)') + '; P pauses and resumes';
+    return 'Controls from the pause panel and back; P pauses and resumes';
   });
 
   await step('no sprite drawn outside the canvas', async () => {
@@ -1448,6 +2299,18 @@ async function browserChecks() {
     return note;
   });
 
+  // Steps 43 and 44 measure and test with the tutorial running: a new game when a reload has none.
+  async function ensureTutorialMorning() {
+    if ((await tut()) !== null && (await ev(F.phase + ' === ' + JSON.stringify(PHASE.morning)))) return 'reloaded into a running tutorial';
+    if (!(await ev(F.phase + ' === ' + JSON.stringify(PHASE.morning)))) {
+      await keyPress(KEYS.escape);
+      await advance(0);
+      if (await visible(ID.pause)) { await newGame(ID.pauseNew); return 'new game from the pause panel'; }
+    }
+    if (await present(ID.clipNew)) { await newGame(ID.clipNew); return 'new game from the clipboard'; }
+    return 'no way to start a new game';
+  }
+
   await step('layout and keyboard at 375 by 740', async () => {
     const notes = [];
     try {
@@ -1462,6 +2325,9 @@ async function browserChecks() {
       assert(sc.w === VIRTUAL.w * CSS_SCALE.phone && sc.h === VIRTUAL.h * CSS_SCALE.phone, '#cv ' + sc.w + ' by ' + sc.h);
       notes.push('service ok, #cv ' + sc.w + 'x' + sc.h);
       await reload();
+      notes.push(await ensureTutorialMorning());
+      await expectStep('open', 'open', 'layout morning');
+      assert(await visible(ID.tutSkip), '#tut-skip not visible for the morning measure');
       const lay2 = await ev('({ sw: document.documentElement.scrollWidth, iw: window.innerWidth })');
       assert(lay2.sw <= lay2.iw, 'morning scrollWidth ' + lay2.sw + ' over innerWidth ' + lay2.iw);
       const small2 = await ev(SMALL_BUTTONS);
@@ -1475,6 +2341,17 @@ async function browserChecks() {
       const x = await ev(F.playerX);
       assert(x === ARROW_LEFT_X, 'after ArrowLeft player.x is ' + x);
       notes.push('ArrowLeft to x ' + x);
+      // One pause in service with the tutorial running: #pause-controls and #pause-skip.
+      await keyPress(KEYS.escape);
+      await advance(0);
+      assert(await visible(ID.pause), '#pause not visible for the pause measure');
+      const sizes = await ev('[' + JSON.stringify(ID.pauseControls) + ', ' + JSON.stringify(ID.pauseSkip) + '].map((id) => { const e = $(id); if (!e || !vis(id)) return { id, missing: true }; const r = e.getBoundingClientRect(); return { id, w: Math.round(r.width), h: Math.round(r.height) }; })');
+      for (const z of sizes) assert(!z.missing && z.w >= MIN_CONTROL_PX && z.h >= MIN_CONTROL_PX, '#' + z.id + ' ' + describe(z));
+      const small3 = await ev(SMALL_BUTTONS);
+      assert(small3.length === 0, 'buttons under ' + MIN_CONTROL_PX + ' px on the pause panel: ' + describe(small3.slice(0, 5)));
+      notes.push('pause ' + sizes.map((z) => z.id + ' ' + z.w + 'x' + z.h).join(', '));
+      await keyPress(KEYS.escape);
+      await advance(0);
     } finally {
       await emulate(RUN_METRICS);
       await sleep(TIMEOUT_MS.resize);
@@ -1485,12 +2362,23 @@ async function browserChecks() {
   await step('reduced motion', async () => {
     await cdp.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
     await reload();
+    const how = await ensureTutorialMorning();
     assert(await ev('g.' + GAME_FIELDS.reduced + ' === true'), 'game.reduced is not true');
     const frame = await captureFrame();
     const dogWant = { name: 'dog', x: DOG_HOME.px, y: DOG_HOME.py, frame: DOG_HOME.frame };
     assert(hasRecord(frame, dogWant), 'no ' + describe(dogWant) + '; dog records ' + describe(frame.filter((d) => d.name === 'dog')));
-    if (await ev(F.phase + ' === ' + JSON.stringify(PHASE.morning))) await openYard(BUY_LATER);
+    await expectStep('open', 'open', 'reduced morning');
+    assert(await hasPulse(ID.open), '#open has no ' + PULSE + ' in the reduced morning');
+    const anim = await ev('getComputedStyle($(' + JSON.stringify(ID.open) + ')).animationName');
+    assert(anim === 'none', '#open animationName ' + describe(anim) + ' under reduced motion');
+    await openYard(BUY_LATER);
     await advance(0);
+    const want = ARROW_AT.pile;
+    const a1 = arrows(await captureFrame());
+    assert(a1.some((d) => d.x === want.x && d.y === want.y && d.frame === 2), 'reduced arrow ' + describe(a1) + ', wanted frame 2 at (' + want.x + ',' + want.y + ')');
+    await advance(0.6);
+    const a2 = arrows(await captureFrame());
+    assert(a2.some((d) => d.x === want.x && d.y === want.y && d.frame === 2), 'reduced arrow after 0.6 s ' + describe(a2) + ', wanted frame 2 again');
     const n0 = (await fxLog()).length;
     const pt = await canvasPoint(TILE.pile.x, TILE.pile.y);
     await mouseTap(pt.x, pt.y);
@@ -1500,7 +2388,7 @@ async function browserChecks() {
     const fx = (await fxLog()).slice(n0);
     assert(fx.some((f) => f.kind === FX_KIND.ring), 'no ' + FX_KIND.ring + ' in fxLog after the tap; got ' + describe(fx.map((f) => f.kind)));
     assert(!fx.some((f) => f.kind === FX_KIND.squash), 'a ' + FX_KIND.squash + ' was logged under reduced motion');
-    return 'reduced, dog home in frame ' + DOG_HOME.frame + ', ring without squash';
+    return 'reduced (' + how + '), static pulse, arrow frame 2 twice, dog home in frame ' + DOG_HOME.frame + ', ring without squash';
   });
 
   await step('zero console errors across the run', () => {

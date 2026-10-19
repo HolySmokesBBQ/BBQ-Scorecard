@@ -3,11 +3,14 @@
 // no browser storage. Randomness only through the seeded generator on the sim object. Runs in
 // Node under vm.runInThisContext and in the browser as a classic deferred script.
 //
-// Contract: docs/superpowers/specs/2026-10-18-pit-sim-contract.md (the v2 delta D0 to D10, then
-//           section 2 read with v2 coordinates).
-// Rules:    docs/superpowers/specs/2026-10-18-pit-sim-design.md, top section "v2" first.
+// Contract: docs/superpowers/specs/2026-10-18-pit-sim-contract.md (the v2.1 section K0 to K12
+//           first, then the v2 delta D0 to D10, then section 2 read with v2 coordinates).
+// Rules:    docs/superpowers/specs/2026-10-18-pit-sim-v2-1-tutorial.md (sections 2, 3 and 5),
+//           then docs/superpowers/specs/2026-10-18-pit-sim-design.md, top section "v2" first.
 //
-// Version: v2 (2026-10-18). 11 by 12 yard, seats, decor and charm, save version 2.
+// Version: v2.1 (2026-10-18, late). Guided tutorial on day 1, wider done windows with a warning
+//          stage, a hot fire that no longer burns faster, save version 3. v2 underneath: 11 by 12
+//          yard, seats, decor and charm.
 //
 // Deviations
 // 1. (Now the contract rule, section 1 as corrected; kept so the numbers below stay stable.) The
@@ -75,6 +78,17 @@
 //    leaves MAP.dogRoam. C.FX.TIP_GAP_PX is -11, so the tip number stacks above the cash number.
 //    KETTLE_SLOT_PX is (0,-7) (6,-7): the two grate pieces stay inside the kettle's 16 px and
 //    overlap 4 px in the middle. Cosmetic only; no rule or economy number changed.
+// 24. v2.1: skipTutorial() in service on a latched step (customer, seated or end) sets
+//    spawnAt = min(spawnAt, clock) instead of plain clock. On customer and seated spawnAt is
+//    Infinity, so it is the contract's clock; on end it keeps the normal arrival already timed
+//    instead of spawning a second customer on the next tick.
+// 25. v2.1: createSim(saved) runs the tutorial from a save only when saved.tutorial.done is false
+//    and saved.day is 1, the same test validateSave applies, so an unvalidated object passed in
+//    by hand cannot start the tutorial on a later day.
+// 26. v2.1: the latched steps are checked in a loop, so if two latch conditions are met in the
+//    same check (a to go serve sets served and togo together) the sim emits tutorial_step for
+//    seated and then for end in that one call, never skipping an id.
+// 27. v2.1: no shop line names a done window ([T 3.5]), so CATALOG text is unchanged.
 
 (function () {
 'use strict';
@@ -96,6 +110,11 @@ const C = Object.freeze({
   FIRE_GOOD: 50, FIRE_HOT: 85, HOT_MULT: 1.2,
   FIRE_LOW_WARN: 30, TENDER_THRESHOLD: 55, TENDER_CYCLE: 4,
   CHARCOAL_PRICE: 2,
+  // v2.1 burn warning and tutorial ([T 5], contract K2)
+  WARN_FRAC: 0.4,                     // the warning stage is the last 40 percent of a done window
+  HOT_BURN_MULT: 1.0,                 // done pieces advance at this rate in the hot band (cooking keeps HOT_MULT)
+  TUTORIAL_FIRE_FLOOR: 30,            // decay stops here during the tutorial (FIRE_LOW_WARN)
+  TUTORIAL_END_S: 6,                  // sim seconds the last banner shows before the tutorial ends
   // customers
   SPAWN_MAX: 13, SPAWN_MIN: 5, SPAWN_JITTER_LO: 0.85, SPAWN_JITTER_HI: 1.15,
   PATIENCE_BASE: 45, PATIENCE_SPREAD: 10, PATIENCE_WARN_FRAC: 0.2, PATIENCE_MID_FRAC: 0.5,
@@ -114,7 +133,7 @@ const C = Object.freeze({
   // weather
   RAIN_FROM_DAY: 4, RAIN_CHANCE: 0.15, RAIN_ARRIVALS: 0.6,
   // save clamps
-  SAVE_VERSION: 2, MAX_DAY: 999, MAX_CASH: 999999, MAX_STAT: 9999999,
+  SAVE_VERSION: 3, MAX_DAY: 999, MAX_CASH: 999999, MAX_STAT: 9999999,
   // seating and charm [V2.5], [V2.6]
   EAT_MIN: 8, EAT_MAX: 12,            // seconds a seated customer eats: EAT_MIN + (EAT_MAX - EAT_MIN) * rng()
   HEART_SECONDS: 0.6,                 // seated pause after the bonus is paid, before standing up
@@ -139,7 +158,8 @@ const C = Object.freeze({
     WALKOUT_MARK_S: 0.6, TAP_RING_S: 0.35, FIRE_FPS: 6, TWINKLE_S: 0.5,
     BIRD_SHOW_S: 2, BIRD_GAP_MIN: 8, BIRD_GAP_MAX: 14,
     DOG_TILES_PER_S: 2, DOG_WAIT_MIN: 2, DOG_WAIT_SPREAD: 3,
-    NOTICE_S: 4
+    NOTICE_S: 4,
+    ARROW_BOB_S: 0.3, WARN_BLINK_S: 0.25
   })
 });
 
@@ -147,17 +167,17 @@ const SAVE_KEY = 'hs.pitsim.save';
 const SERVED_HOP = 0.3;
 
 // ---------------------------------------------------------------------------------------------
-// 2.2 Meats (sausage 14 and chicken 22, contract D2 and [V2.19] item 1)
+// 2.2 Meats (sausage 14 and chicken 22, contract D2 and [V2.19] item 1; v2.1 windows [T 3.1])
 // ---------------------------------------------------------------------------------------------
 
 const MEAT_IDS = Object.freeze(['sausage', 'chicken', 'ribs', 'butt', 'brisket']);
 
 const MEATS = Object.freeze({
-  sausage: Object.freeze({ id: 'sausage', label: 'Sausage', plateLabel: 'Sausage', unit: 4, plates: 2, cook: 14, window: 6, price: 5, slots: 1, slice: 3, drumOnly: false, key: '1' }),
-  chicken: Object.freeze({ id: 'chicken', label: 'Chicken thighs', plateLabel: 'Chicken thighs', unit: 6, plates: 2, cook: 22, window: 8, price: 8, slots: 1, slice: 4, drumOnly: false, key: '2' }),
-  ribs: Object.freeze({ id: 'ribs', label: 'Pork ribs', plateLabel: 'Pork ribs', unit: 12, plates: 3, cook: 32, window: 10, price: 11, slots: 1, slice: 5, drumOnly: false, key: '3' }),
-  butt: Object.freeze({ id: 'butt', label: 'Pork butt', plateLabel: 'Pulled pork', unit: 20, plates: 5, cook: 40, window: 14, price: 14, slots: 2, slice: 6, drumOnly: false, key: '4' }),
-  brisket: Object.freeze({ id: 'brisket', label: 'Brisket', plateLabel: 'Brisket', unit: 38, plates: 7, cook: 50, window: 18, price: 18, slots: 2, slice: 7, drumOnly: true, key: '5' })
+  sausage: Object.freeze({ id: 'sausage', label: 'Sausage', plateLabel: 'Sausage', unit: 4, plates: 2, cook: 14, window: 14, price: 5, slots: 1, slice: 3, drumOnly: false, key: '1' }),
+  chicken: Object.freeze({ id: 'chicken', label: 'Chicken thighs', plateLabel: 'Chicken thighs', unit: 6, plates: 2, cook: 22, window: 16, price: 8, slots: 1, slice: 4, drumOnly: false, key: '2' }),
+  ribs: Object.freeze({ id: 'ribs', label: 'Pork ribs', plateLabel: 'Pork ribs', unit: 12, plates: 3, cook: 32, window: 18, price: 11, slots: 1, slice: 5, drumOnly: false, key: '3' }),
+  butt: Object.freeze({ id: 'butt', label: 'Pork butt', plateLabel: 'Pulled pork', unit: 20, plates: 5, cook: 40, window: 22, price: 14, slots: 2, slice: 6, drumOnly: false, key: '4' }),
+  brisket: Object.freeze({ id: 'brisket', label: 'Brisket', plateLabel: 'Brisket', unit: 38, plates: 7, cook: 50, window: 26, price: 18, slots: 2, slice: 7, drumOnly: true, key: '5' })
 });
 
 const GEAR_IDS = Object.freeze(['kettle2', 'cooler', 'bigtable', 'tray', 'canopy', 'drum']);
@@ -436,7 +456,30 @@ const STRINGS = Object.freeze({
   decorLabel: Object.freeze({ chair1: 'Lawn chair', chair2: 'Second lawn chair', flowers: 'Flower bed', birdbath: 'Bird bath', lights: 'String lights', picnic2: 'Second picnic table' }),
   walk: 'Walk', handsFull: 'Hands full', nothing: 'Nothing to do here', slicing: 'Slicing',
   cantGetThere: "Can't get there", handsEmpty: 'Hands empty',
-  gateOpensIn: 'Gate opens in ', lastCall: 'Last call'
+  gateOpensIn: 'Gate opens in ', lastCall: 'Last call',
+  // v2.1 ([T 2.2], [T 3.3], contract K8)
+  tutorial: Object.freeze({
+    open: 'This is your morning. The cart is already filled. Tap Open the yard.',
+    charcoal: 'Grab charcoal from the pile.',
+    light: 'Tap the kettle to light it.',
+    meat: 'Grab meat from the cooler.',
+    puton: 'Put it on the kettle.',
+    cook: 'Watch the box fill. Pull it when it turns green.',
+    slice: 'Slice it at the board.',
+    plate: 'Set the plate on the counter.',
+    customer: 'Here comes your first customer.',
+    seated: 'Served. They will sit and eat, then tip a little more.',
+    end: 'You have the hang of it. Keep the fire fed and keep them happy.'
+  }),
+  tutorialOrder: Object.freeze(['open', 'charcoal', 'light', 'meat', 'puton', 'cook', 'slice', 'plate', 'customer', 'seated', 'end']),
+  pullNow: 'Pull it now',
+  burnWarn: Object.freeze({
+    sausage: 'The sausage is about to burn.',
+    chicken: 'The chicken is about to burn.',
+    ribs: 'The ribs are about to burn.',
+    butt: 'The pork butt is about to burn.',
+    brisket: 'The brisket is about to burn.'
+  })
 });
 
 // Hands full while carrying plates: name where they go instead (round 2 finding).
@@ -462,8 +505,13 @@ function fireMult(fire) {
   return C.HOT_MULT;
 }
 
+// [T 3.2]: the rate a done piece advances toward burnt. Hot no longer burns faster.
+function burnMult(fire) {
+  return fireBand(fire) === 'hot' ? C.HOT_BURN_MULT : fireMult(fire);
+}
+
 // ---------------------------------------------------------------------------------------------
-// D9 Save validation: accepts v 1 and v 2, always returns v 2
+// D9 and K6 Save validation: accepts v 1, 2 and 3, always returns v 3
 // ---------------------------------------------------------------------------------------------
 
 function isPlainObject(v) {
@@ -492,7 +540,7 @@ function validateSave(obj) {
   try {
     if (!isPlainObject(obj)) return null;
     const v = readKey(obj, 'v');
-    if (v !== 1 && v !== 2) return null;
+    if (v !== 1 && v !== 2 && v !== 3) return null;
     const out = { v: C.SAVE_VERSION };
     out.day = toInt(readKey(obj, 'day'), 1, 1, C.MAX_DAY);
     out.cash = toInt(readKey(obj, 'cash'), C.START_CASH, 0, C.MAX_CASH);
@@ -506,7 +554,7 @@ function validateSave(obj) {
     for (const g of GEAR_IDS) out.gear[g] = toBool(readKey(gearIn, g));
     if (!out.gear.kettle2) out.gear.drum = false;
     // A v1 save had no decor, so it migrates with none.
-    const decorIn = v === 2 ? readKey(obj, 'decor') : undefined;
+    const decorIn = v >= 2 ? readKey(obj, 'decor') : undefined;
     out.decor = {};
     for (const d of DECOR_IDS) out.decor[d] = toBool(readKey(decorIn, d));
     if (!out.decor.chair1) out.decor.chair2 = false;
@@ -518,8 +566,12 @@ function validateSave(obj) {
     const statsIn = readKey(obj, 'stats');
     out.stats = {};
     for (const s of STAT_IDS_V1) out.stats[s] = toInt(readKey(statsIn, s), 0, 0, C.MAX_STAT);
-    out.stats.seated = v === 2 ? toInt(readKey(statsIn, 'seated'), 0, 0, C.MAX_STAT) : 0;
+    out.stats.seated = v >= 2 ? toInt(readKey(statsIn, 'seated'), 0, 0, C.MAX_STAT) : 0;
     out.drivewayShown = toBool(readKey(obj, 'drivewayShown'));
+    // [T 2.8]: only a version 3 day 1 save can still owe the tutorial. v1 and v2 players have played.
+    const tutIn = v === 3 ? readKey(obj, 'tutorial') : undefined;
+    const owed = isPlainObject(tutIn) && readKey(tutIn, 'done') === false && out.day === 1;
+    out.tutorial = { done: !owed };
     return out;
   } catch (e) {
     return null;
@@ -577,6 +629,9 @@ function createSim(saved, seed) {
   let buddyPick = null;     // meat reserved by the buddy during his pickup
   let gateOpenFired = false;
   const decayAcc = { kettle1: 0, kettle2: 0, drum: 0 };   // seconds since each cooker's last whole second of decay
+  let tutEndAt = null;      // clock at which the end step runs out (K1: internal, never saved)
+  let tutLastId = null;     // last (id, target) pair emitted as tutorial_step
+  let tutLastTarget = null;
 
   function emit(type, payload) {
     const e = { type };
@@ -645,6 +700,9 @@ function createSim(saved, seed) {
       state.stats[k] = Number.isFinite(v) ? v : 0;
     }
     state.drivewayShown = s ? s.drivewayShown === true : false;
+    // [T 2.1]: a new game runs the tutorial; a save runs it only when it still owes it (deviation 25).
+    const owed = !s || (isPlainObject(s.tutorial) && s.tutorial.done === false && s.day === 1);
+    state.tutorial = owed ? { step: 'open', done: false } : { step: null, done: true };
     state.rain = false;
     state.comingNext = false;
     state.yesterday = null;
@@ -673,6 +731,9 @@ function createSim(saved, seed) {
     custSeq = 0;
     buddyPick = null;
     gateOpenFired = false;
+    tutEndAt = null;
+    tutLastId = null;
+    tutLastTarget = null;
   }
 
   // ---- grid and walkability ([V2.2.1]) ------------------------------------------------------
@@ -1336,7 +1397,7 @@ function createSim(saved, seed) {
         if (slot < 0) return noop('Grate is full', stationId);
         return act('Put ' + m.label + ' on', true, stationId, () => {
           pieceSeq += 1;
-          cooker.pieces.push({ id: pieceSeq, meat: m.id, slot, size: m.slots, prog: 0, state: 'cooking', putOn: state.clock, burntAt: null });
+          cooker.pieces.push({ id: pieceSeq, meat: m.id, slot, size: m.slots, prog: 0, state: 'cooking', putOn: state.clock, burntAt: null, warn: false });
           state.today.foodCost += m.unit;
           p.carrying = null;
         });
@@ -1344,7 +1405,8 @@ function createSim(saved, seed) {
       if (c === null) {
         const pick = pullCandidate(cooker);
         if (pick) {
-          return act('Pull ' + MEATS[pick.meat].label, true, stationId, () => {
+          const pullLabel = pick.state === 'done' && pick.warn === true ? STRINGS.pullNow : 'Pull ' + MEATS[pick.meat].label;
+          return act(pullLabel, true, stationId, () => {
             const i = cooker.pieces.indexOf(pick);
             if (i >= 0) cooker.pieces.splice(i, 1);
             p.carrying = { kind: pick.state === 'burnt' ? 'burnt' : 'cooked', meat: pick.meat };
@@ -1460,9 +1522,12 @@ function createSim(saved, seed) {
   }
 
   function interact() {
-    if (state.phase !== 'service' || state.paused) return { ok: false, verb: STRINGS.walk, message: STRINGS.walk };
-    if (state.player.busy !== null) return { ok: false, verb: STRINGS.slicing, message: STRINGS.slicing };
-    return performAction(false);
+    let r;
+    if (state.phase !== 'service' || state.paused) r = { ok: false, verb: STRINGS.walk, message: STRINGS.walk };
+    else if (state.player.busy !== null) r = { ok: false, verb: STRINGS.slicing, message: STRINGS.slicing };
+    else r = performAction(false);
+    checkTutorial();
+    return r;
   }
 
   // ---- customers: arrival, movement, patience, seats ----------------------------------------
@@ -1529,6 +1594,19 @@ function createSim(saved, seed) {
     return null;
   }
 
+  // A customer record at the spawn. Counts the arrival (custSeq, body, arrivals, today.customers).
+  function newCustomer(want, patienceMax) {
+    custSeq += 1;
+    const body = state.arrivals % 4;
+    state.arrivals += 1;
+    state.today.customers += 1;
+    return Object.assign(newMover(MAP.custSpawn.x, MAP.custSpawn.y, 'up'), {
+      id: custSeq, body, want, patienceMax, patience: patienceMax, wait: 0,
+      queueIndex: -1, mode: 'arriving', mood: 'neutral', reason: null, pause: 0, hop: 0,
+      seat: null, eat: 0, eatMax: 0, bonusPaid: false
+    });
+  }
+
   function spawnCustomer() {
     const rJitter = rng();
     const rPatience = rng();
@@ -1537,18 +1615,10 @@ function createSim(saved, seed) {
     const jitter = C.SPAWN_JITTER_LO + (C.SPAWN_JITTER_HI - C.SPAWN_JITTER_LO) * rJitter;
     state.spawnAt = state.clock + spawnInterval() * jitter;
 
-    custSeq += 1;
-    const body = state.arrivals % 4;
-    state.arrivals += 1;
-    state.today.customers += 1;
     const order = rollOrder(rBranch, rWeight);
     const want = order || 'sausage';
     const patienceMax = C.PATIENCE_BASE + (rPatience * 2 - 1) * C.PATIENCE_SPREAD;
-    const c = Object.assign(newMover(MAP.custSpawn.x, MAP.custSpawn.y, 'up'), {
-      id: custSeq, body, want, patienceMax, patience: patienceMax, wait: 0,
-      queueIndex: -1, mode: 'arriving', mood: 'neutral', reason: null, pause: 0, hop: 0,
-      seat: null, eat: 0, eatMax: 0, bonusPaid: false
-    });
+    const c = newCustomer(want, patienceMax);
     const inLine = state.customers.filter((o) => o.queueIndex >= 0).length;
     if (order === null || inLine >= queueSpotCount()) {
       // Nothing left to sell, or no room in line: look in from the gate and leave at no cost.
@@ -1636,7 +1706,9 @@ function createSim(saved, seed) {
   // Stage 5: serve checks, patience, walk-outs, then eating, the heart pause and standing up.
   function customersStage(dt) {
     serveLine();
-    for (const c of waitingCustomers()) {
+    // [T 2.4] D: patience, wait and mood hold while the tutorial runs.
+    const waiters = tutRunning() ? [] : waitingCustomers();
+    for (const c of waiters) {
       c.wait += dt;
       c.patience -= dt;
       if (c.patience <= 0) {
@@ -1929,7 +2001,10 @@ function createSim(saved, seed) {
       decayAcc[id] += dt;
       while (decayAcc[id] + 1e-9 >= 1) {
         decayAcc[id] -= 1;
+        const before = ck.fire;
         ck.fire = Math.max(0, ck.fire - STATION_BY_ID[id].decay);
+        // [T 2.4] G: a lit cooker never decays below the floor while the tutorial runs.
+        if (tutRunning() && before >= C.TUTORIAL_FIRE_FLOOR && ck.fire < C.TUTORIAL_FIRE_FLOOR) ck.fire = C.TUTORIAL_FIRE_FLOOR;
       }
       if (!ck.lowWarned && ck.fire < C.FIRE_LOW_WARN) {
         ck.lowWarned = true;
@@ -1948,13 +2023,25 @@ function createSim(saved, seed) {
       if (ck.pieces.length === 0) continue;
       const mult = fireMult(ck.fire);
       if (mult <= 0) continue;
+      const doneRate = burnMult(ck.fire);
+      const hold = tutRunning();
       for (const pc of ck.pieces) {
         if (pc.state === 'burnt') continue;
         const m = MEATS[pc.meat];
-        pc.prog += mult * dt;
+        if (pc.state === 'done') {
+          if (hold) continue;   // [T 2.4] E: a done piece holds at done while the tutorial runs
+          pc.prog += doneRate * dt;
+        } else {
+          pc.prog += mult * dt;   // the tick that crosses cook runs at fireMult for the whole tick
+        }
         if (pc.state === 'cooking' && pc.prog >= m.cook) {
           pc.state = 'done';
           emit('piece_done', { cooker: id, meat: pc.meat });
+        }
+        // [T 3.3]: the warning stage is the last WARN_FRAC of the window, announced once a piece.
+        if (pc.state === 'done' && pc.warn !== true && pc.prog >= m.cook + m.window * (1 - C.WARN_FRAC)) {
+          pc.warn = true;
+          emit('burn_warning', { station: id, slot: pc.slot, meat: pc.meat });
         }
         if (pc.state === 'done' && pc.prog >= m.cook + m.window) {
           pc.state = 'burnt';
@@ -2019,9 +2106,17 @@ function createSim(saved, seed) {
 
   function tick() {
     if (state.phase !== 'service' || state.paused) return;
+    tickStages();
+    checkTutorial();
+  }
+
+  function tickStages() {
     const dt = C.TICK_SECONDS;
-    tickCount += 1;
-    state.clock = tickCount * C.TICK_SECONDS;
+    // [T 2.4] A: the yard clock holds at its value until the first plate lands.
+    if (!tutClockHeld()) {
+      tickCount += 1;
+      state.clock = tickCount * C.TICK_SECONDS;
+    }
     tickClockEvents();
     tickPlayer(dt);
     tickBuddy(dt);
@@ -2064,6 +2159,8 @@ function createSim(saved, seed) {
   // ---- 2.7.5 day end ------------------------------------------------------------------------
 
   function endDay() {
+    // [T 2.4] H: the till never runs with the tutorial still running.
+    if (tutRunning()) finishTutorial(false);
     const t = state.today;
     const played = state.day;
     for (const id of COOKER_IDS) {
@@ -2343,7 +2440,7 @@ function createSim(saved, seed) {
     state.phase = 'service';
     state.paused = false;
     state.comingNext = false;
-    state.spawnAt = C.GATE_OPENS;
+    state.spawnAt = tutRunning() ? Infinity : C.GATE_OPENS;   // [T 2.4] C
     state.arrivals = 0;
     state.lastCallFired = false;
     state.gateSoonFired = false;
@@ -2367,6 +2464,7 @@ function createSim(saved, seed) {
     if (!(state.stock[state.selected] > 0)) autoSelect();
     emit('save_wanted', { reason: 'open' });
     emit('yard_open');
+    checkTutorial();
     return { ok: true, message: '' };
   }
 
@@ -2407,6 +2505,161 @@ function createSim(saved, seed) {
     fillState(null);
     emit('save_clear');
     beginMorning();
+    checkTutorial();
+  }
+
+  // ---- v2.1 guided tutorial ([T 2], contract K3 to K5) ---------------------------------------
+
+  const TUT_LATCHED = Object.freeze({ customer: true, seated: true, end: true });
+
+  function tutRunning() {
+    return state.tutorial.done === false;
+  }
+
+  // [T 2.4] A: held in service while the step is not yet latched.
+  function tutClockHeld() {
+    return tutRunning() && state.phase === 'service' && TUT_LATCHED[state.tutorial.step] !== true;
+  }
+
+  // [T 2.3] rows 1 to 11, for a step not yet latched. The first matching row wins.
+  function tutorialRow() {
+    if (state.phase === 'morning') return 'open';
+    if (state.stations.table.spots.some((sp) => sp !== null)) return 'customer';
+    const ck = state.stations.kettle1;
+    const h = state.player.carrying;
+    const kind = h === null ? null : h.kind;
+    const board = state.stations.board;
+    if (ck.fire < C.COLD_UNDER) {
+      if (kind === 'charcoal') return 'light';
+      if (kind === 'raw') return 'puton';
+      return 'charcoal';
+    }
+    if (kind === 'plates' || (board.stacks.length > 0 && board.slicing === null && h === null)) return 'plate';
+    if (kind === 'cooked' || board.slicing !== null) return 'slice';
+    if (ck.pieces.length > 0) return 'cook';
+    if (kind === 'raw') return 'puton';
+    if (kind === 'charcoal') return 'light';
+    return 'meat';
+  }
+
+  // [T 2.2] target column, for the current state.
+  function tutorialTarget(id) {
+    const h = state.player.carrying;
+    switch (id) {
+      case 'open': return 'open';
+      case 'charcoal': return 'pile';
+      case 'light': return 'kettle1';
+      case 'meat': return 'cooler';
+      case 'puton': return 'kettle1';
+      case 'cook':
+        return h === null && state.stations.kettle1.pieces.some((pc) => pc.state === 'done') ? 'kettle1' : null;
+      case 'slice': return 'board';
+      case 'plate': return h !== null && h.kind === 'plates' ? 'table' : 'board';
+      default: return null;
+    }
+  }
+
+  function emitTutorialStep() {
+    const id = state.tutorial.step;
+    const target = tutorialTarget(id);
+    if (id === tutLastId && target === tutLastTarget) return;
+    tutLastId = id;
+    tutLastTarget = target;
+    emit('tutorial_step', { id, text: STRINGS.tutorial[id], target });
+  }
+
+  function finishTutorial(skipped) {
+    state.tutorial = { step: null, done: true };
+    tutEndAt = null;
+    emit('tutorial_done', { skipped: skipped === true });
+  }
+
+  // Move every stored clock value by the same jump, so plate ages and pull order keep.
+  function shiftClocks(jump) {
+    const bump = (times) => { for (let i = 0; i < times.length; i++) times[i] += jump; };
+    for (const id of COOKER_IDS) {
+      for (const pc of state.stations[id].pieces) {
+        pc.putOn += jump;
+        if (pc.burntAt !== null) pc.burntAt += jump;
+      }
+    }
+    for (const who of [state.player, state.buddy, state.tender]) {
+      if (who && who.carrying && who.carrying.kind === 'plates') bump(who.carrying.times);
+    }
+    for (const st of state.stations.board.stacks) bump(st.times);
+    for (const sp of state.stations.table.spots) if (sp) bump(sp.times);
+  }
+
+  // [T 2.4] F: the scripted first customer, no rng draw, served on arrival.
+  function spawnScriptedCustomer() {
+    let want = 'sausage';
+    for (const sp of state.stations.table.spots) { if (sp !== null) { want = sp.meat; break; } }
+    const c = newCustomer(want, C.PATIENCE_BASE);
+    c.queueIndex = 0;
+    routeToSpot(c);
+    state.customers.push(c);
+    emit('customer_arrived', { id: c.id, meat: c.want });
+  }
+
+  // [T 2.4] B, run right after tutorial_step customer was emitted.
+  function gateOnPlate() {
+    const jump = C.GATE_OPENS - state.clock;
+    state.clock = C.GATE_OPENS;
+    tickCount = Math.round(C.GATE_OPENS / C.TICK_SECONDS);
+    if (jump !== 0) shiftClocks(jump);
+    state.gateSoonFired = true;
+    if (!gateOpenFired) {
+      gateOpenFired = true;
+      emit('gate_open');
+    }
+    spawnScriptedCustomer();
+  }
+
+  // [T 2.3]: checked at the end of tick, interact, openGate, skipTutorial, reset and createSim.
+  function checkTutorial() {
+    if (!tutRunning()) return;
+    for (let guard = 0; guard < 4; guard++) {
+      const cur = state.tutorial.step;
+      if (cur === 'end') {
+        if (tutEndAt !== null && state.clock + 1e-9 >= tutEndAt) finishTutorial(false);
+        return;
+      }
+      let next;
+      if (cur === 'customer') next = state.today.served >= 1 ? 'seated' : cur;
+      else if (cur === 'seated') next = state.today.seated + state.today.togo >= 1 ? 'end' : cur;
+      else next = tutorialRow();
+      if (next === cur) { emitTutorialStep(); return; }
+      state.tutorial.step = next;
+      emitTutorialStep();
+      if (next === 'customer') gateOnPlate();
+      else if (next === 'end') {
+        tutEndAt = state.clock + C.TUTORIAL_END_S;
+        state.spawnAt = state.clock;   // [T 2.4] C: normal arrivals start on the next stage 6
+      }
+      if (TUT_LATCHED[next] !== true) return;   // rows 1 to 11 settle in one pass
+    }
+  }
+
+  // [T 2.5] and contract K4.
+  function skipTutorial() {
+    if (!tutRunning()) return false;
+    const latched = TUT_LATCHED[state.tutorial.step] === true;
+    finishTutorial(true);
+    if (state.phase === 'morning') {
+      emit('save_wanted', { reason: 'tutorial' });
+    } else if (state.phase === 'service') {
+      if (!latched) state.spawnAt = state.clock < C.GATE_OPENS ? C.GATE_OPENS : state.clock;
+      else state.spawnAt = Math.min(state.spawnAt, state.clock);   // deviation 24
+    }
+    checkTutorial();
+    return true;
+  }
+
+  // Contract K4: null when done, else a fresh { id, text, target }.
+  function tutorialStep() {
+    if (!tutRunning()) return null;
+    const id = state.tutorial.step;
+    return { id, text: STRINGS.tutorial[id], target: tutorialTarget(id) };
   }
 
   function drainEvents() {
@@ -2415,7 +2668,7 @@ function createSim(saved, seed) {
     return out;
   }
 
-  // D9: always version 2. Service state, state.seats and charm are never saved.
+  // D9 and K6: always version 3. Service state, state.seats, charm and the tutorial step are never saved.
   function serialize() {
     const out = { v: C.SAVE_VERSION };
     out.day = clamp(Math.trunc(state.day), 1, C.MAX_DAY);
@@ -2437,6 +2690,7 @@ function createSim(saved, seed) {
     out.stats = {};
     for (const k of STAT_IDS) out.stats[k] = clamp(Math.trunc(state.stats[k]), 0, C.MAX_STAT);
     out.drivewayShown = state.drivewayShown === true;
+    out.tutorial = { done: state.tutorial.done === true };
     return out;
   }
 
@@ -2444,6 +2698,7 @@ function createSim(saved, seed) {
 
   fillState(saved && typeof saved === 'object' ? saved : null);
   beginMorning();
+  checkTutorial();
 
   const sim = {
     state,
@@ -2452,7 +2707,8 @@ function createSim(saved, seed) {
     selectMeat, cycleMeat, buy, hire, sell, cartTotal, canOpen, openGate,
     continueFromTill, continueFromBroke, dismissComingNext, goal, setPaused, reset,
     drainEvents, serialize, rng, expectedCrowd,
-    charm, seatBonus, seatCount, repMax, custWalkable
+    charm, seatBonus, seatCount, repMax, custWalkable,
+    skipTutorial, tutorialStep
   };
   return sim;
 }

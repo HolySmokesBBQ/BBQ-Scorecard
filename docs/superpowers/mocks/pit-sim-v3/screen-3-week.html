@@ -1,0 +1,525 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Your Pit week hub</title>
+<style>
+  html, body { margin: 0; padding: 0; background: #2f66e8; }
+  body { width: 390px; height: 844px; overflow: hidden; }
+  canvas { display: block; width: 390px; height: 844px; image-rendering: pixelated; image-rendering: crisp-edges; }
+</style>
+</head>
+<body>
+<canvas id="c" width="195" height="422" aria-label="Your Pit week hub mock"></canvas>
+<script>
+// Mock only. Every art pixel is 2 CSS px (4 device px at 2x). Deterministic, no game logic.
+const cv = document.getElementById('c');
+const g = cv.getContext('2d');
+g.imageSmoothingEnabled = false;
+
+// ---------- palette ----------
+const C = {
+  k: '#1b1714', w: '#ffffff', c: '#E6D8B8', cl: '#f4ead2', o: '#D06129', oh: '#ee8a4c', od: '#8a3a14',
+  gd: '#F3CF6D', gdd: '#c4952c', y: '#ffd23f', ys: '#e0a21c',
+  bg: '#2f66e8', bgd: '#1f48b9', navy: '#16308c', navyd: '#0f2266', sky: '#9ad6ff',
+  r: '#d8352a', rh: '#f0614f', rd: '#8f1f1a', umb: '#2a2015',
+  grass: '#6cc644', grassd: '#3f9a3a', grassl: '#9be064',
+  wood: '#b57a3e', woodd: '#7a4a22', woodl: '#d89c5a', woodx: '#5a3412',
+  m: '#c3cbd4', M: '#7d8794', n: '#3a3f47', nd: '#24282e',
+  steel: '#5a6b84', steeld: '#3a4760', steell: '#7f92ad',
+  mus: '#d99a1e', musd: '#94640c', musl: '#f2bf4a',
+  grn: '#3a9a4a', grnd: '#22662e', grnl: '#5fc06a',
+  pork: '#8a3b1c', porkl: '#b9622f', bark: '#4f200e', pink: '#ef9a86', pinkd: '#d4705c',
+  saus: '#a83a26', sausl: '#d8653f',
+  tile: '#eef4f7', tiled: '#c9d8e2'
+};
+
+// ---------- primitives ----------
+function R(x, y, w, h, c) { g.fillStyle = c; g.fillRect(x, y, w, h); }
+function P(x, y, c) { g.fillStyle = c; g.fillRect(x, y, 1, 1); }
+// rounded outline box: 1px outline, corners clipped
+function box(x, y, w, h, fill, line) {
+  R(x + 1, y, w - 2, h, line); R(x, y + 1, w, h - 2, line);
+  R(x + 1, y + 1, w - 2, h - 2, fill);
+}
+// chunky button with pressed edge
+function chunky(x, y, w, h, face, hi, edge, edgeH) {
+  R(x + 1, y + 2, w - 2, h, C.bgd);           // drop shadow on the blue
+  box(x, y, w, h, face, C.k);
+  R(x + 1, y + h - 1 - edgeH, w - 2, edgeH, edge);
+  R(x + 2, y + 1, w - 4, 1, hi);
+  P(x + 1, y + h - 2, C.k); P(x + w - 2, y + h - 2, C.k);
+}
+// organic shape from per-row [leftInset, rightInset] profile; outlined
+function blob(x, y, w, prof, fill, line) {
+  for (let j = 0; j < prof.length; j++) R(x + prof[j][0], y + j, w - prof[j][0] - prof[j][1], 1, line);
+  for (let j = 1; j < prof.length - 1; j++) {
+    const l = Math.max(prof[j - 1][0], prof[j][0], prof[j + 1][0]) + 1, r = Math.max(prof[j - 1][1], prof[j][1], prof[j + 1][1]) + 1;
+    R(x + l, y + j, w - l - r, 1, fill);
+  }
+}
+// seeded rng
+let seed = 20261018;
+function rnd() { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; }
+
+// sprite from string rows; '.' transparent; map char -> color
+const BASEMAP = { k: C.k, w: C.w, c: C.c, o: C.o, g: C.gd, G: C.gdd, y: C.y, Y: C.ys, r: C.r, R: C.rd,
+  s: '#f2c093', S: '#d08f62', h: '#6b3a1e', H: '#2a1d16', p: C.pink, P: C.pork, b: C.bark, m: C.m, M: C.M, n: C.n,
+  e: C.grass, E: C.grassd, l: C.sky, d: C.wood, D: C.woodd, x: '#e9edf2', X: '#aab2bd', a: '#f4ecd8' };
+function spr(rows, x, y, over) {
+  const map = Object.assign({}, BASEMAP, over || {});
+  for (let j = 0; j < rows.length; j++) for (let i = 0; i < rows[j].length; i++) {
+    const ch = rows[j][i]; if (ch === '.' || ch === ' ') continue; P(x + i, y + j, map[ch] || '#f0f');
+  }
+}
+
+// scaled sprite, columns c0..c1-1 only
+function sprS(rows, x, y, over, s, c0, c1) {
+  const map = Object.assign({}, BASEMAP, over || {});
+  for (let j = 0; j < rows.length; j++) for (let i = c0; i < c1; i++) {
+    const ch = rows[j][i]; if (!ch || ch === '.' || ch === ' ') continue; R(x + (i - c0) * s, y + j * s, s, s, map[ch] || '#f0f');
+  }
+}
+
+// ---------- bitmap font (7 cap rows + 2 descender rows, proportional) ----------
+const F = {
+ 'A':'.###. #...# #...# ##### #...# #...# #...#','B':'####. #...# #...# ####. #...# #...# ####.',
+ 'C':'.###. #...# #.... #.... #.... #...# .###.','D':'####. #...# #...# #...# #...# #...# ####.',
+ 'E':'##### #.... #.... ####. #.... #.... #####','F':'##### #.... #.... ####. #.... #.... #....',
+ 'G':'.###. #...# #.... #.### #...# #...# .####','H':'#...# #...# #...# ##### #...# #...# #...#',
+ 'I':'### .#. .#. .#. .#. .#. ###','J':'..### ...#. ...#. ...#. #..#. #..#. .##..',
+ 'K':'#...# #..#. #.#.. ##... #.#.. #..#. #...#','L':'#.... #.... #.... #.... #.... #.... #####',
+ 'M':'#...# ##.## #.#.# #.#.# #...# #...# #...#','N':'#...# #...# ##..# #.#.# #..## #...# #...#',
+ 'O':'.###. #...# #...# #...# #...# #...# .###.','P':'####. #...# #...# ####. #.... #.... #....',
+ 'Q':'.###. #...# #...# #...# #.#.# #..#. .##.#','R':'####. #...# #...# ####. #.#.. #..#. #...#',
+ 'S':'.#### #.... #.... .###. ....# ....# ####.','T':'##### ..#.. ..#.. ..#.. ..#.. ..#.. ..#..',
+ 'U':'#...# #...# #...# #...# #...# #...# .###.','V':'#...# #...# #...# #...# #...# .#.#. ..#..',
+ 'W':'#...# #...# #...# #.#.# #.#.# #.#.# .#.#.','X':'#...# #...# .#.#. ..#.. .#.#. #...# #...#',
+ 'Y':'#...# #...# .#.#. ..#.. ..#.. ..#.. ..#..','Z':'##### ....# ...#. ..#.. .#... #.... #####',
+ '0':'.###. #...# #..## #.#.# ##..# #...# .###.','1':'.#. ##. .#. .#. .#. .#. ###',
+ '2':'.###. #...# ....# ...#. ..#.. .#... #####','3':'####. ....# ....# .###. ....# ....# ####.',
+ '4':'...#. ..##. .#.#. #..#. ##### ...#. ...#.','5':'##### #.... ####. ....# ....# #...# .###.',
+ '6':'.###. #.... #.... ####. #...# #...# .###.','7':'##### ....# ...#. ..#.. .#... .#... .#...',
+ '8':'.###. #...# #...# .###. #...# #...# .###.','9':'.###. #...# #...# .#### ....# ....# .###.',
+ 'a':'..... ..... .###. ....# .#### #...# .####','b':'#.... #.... ####. #...# #...# #...# ####.',
+ 'c':'.... .... .### #... #... #... .###','d':'....# ....# .#### #...# #...# #...# .####',
+ 'e':'..... ..... .###. #...# ##### #.... .###.','f':'..## .#.. .#.. ###. .#.. .#.. .#..',
+ 'g':'..... ..... .#### #...# #...# #...# .#### ....# .###.','h':'#.... #.... ####. #...# #...# #...# #...#',
+ 'i':'.#. ... ##. .#. .#. .#. ###','j':'..# ... .## ..# ..# ..# ..# #.# .#.',
+ 'k':'#... #... #..# #.#. ##.. #.#. #..#','l':'##. .#. .#. .#. .#. .#. ###',
+ 'm':'..... ..... ##.#. #.#.# #.#.# #.#.# #.#.#','n':'..... ..... ####. #...# #...# #...# #...#',
+ 'o':'..... ..... .###. #...# #...# #...# .###.','p':'..... ..... ####. #...# #...# #...# ####. #.... #....',
+ 'q':'..... ..... .#### #...# #...# #...# .#### ....# ....#','r':'.... .... #.## ##.. #... #... #...',
+ 's':'.... .... .### #... .##. ...# ###.','t':'.#.. .#.. ###. .#.. .#.. .#.. ..##',
+ 'u':'..... ..... #...# #...# #...# #..## .##.#','v':'..... ..... #...# #...# #...# .#.#. ..#..',
+ 'w':'..... ..... #...# #...# #.#.# #.#.# .#.#.','x':'..... ..... #...# .#.#. ..#.. .#.#. #...#',
+ 'y':'..... ..... #...# #...# #...# #...# .#### ....# .###.','z':'..... ..... ##### ...#. ..#.. .#... #####',
+ '.':'. . . . . . #',',':'.. .. .. .. .. .# .# #.',':':'. . # . . # .','!':'# # # # # . #',
+ '/':'....# ...#. ...#. ..#.. .#... .#... #....','+':'..... ..#.. ..#.. ##### ..#.. ..#.. .....',
+ '>':'#... .#.. ..#. ...# ..#. .#.. #...','?':'.###. #...# ....# ..##. ..#.. ..... ..#..'
+};
+const G = {};
+for (const k in F) { G[k] = F[k].split(' '); }
+// hand-drawn bold forms for glyphs whose gaps fill in when doubled
+const BF = {
+ 'M':'##...## ###.### ##.#.## ##.#.## ##...## ##...## ##...##','W':'##...## ##...## ##...## ##.#.## ##.#.## ##.#.## .##.##.',
+ 'N':'##...## ###..## ####.## ##.#### ##..### ##...## ##...##','V':'##...## ##...## ##...## ##...## .##.##. ..###.. ...#...',
+ 'm':'........ ........ #######. ##.##.## ##.##.## ##.##.## ##.##.##','w':'........ ........ ##....## ##....## ##.##.## ##.##.## .##..##.',
+ 'v':'....... ....... ##...## ##...## ##...## .##.##. ..###..'
+};
+const GB = {};
+for (const k in BF) { GB[k] = BF[k].split(' '); }
+function glyphW(ch) { return ch === ' ' ? 3 : (G[ch] ? G[ch][0].length : 5); }
+function advW(ch, bold) { if (ch === ' ') return 4; if (bold && GB[ch]) return GB[ch][0].length + 1; return glyphW(ch) + (bold ? 1 : 0) + 1; }
+function textW(s, bold, sc) { sc = sc || 1; let w = 0; for (const ch of s) w += advW(ch, bold); return (w - 1) * sc; }
+function drawGlyphs(s, x, y, col, bold, sc) {
+  g.fillStyle = col;
+  for (const ch of s) {
+    if (ch === ' ') { x += 4 * sc; continue; }
+    const pre = bold && GB[ch];
+    const rows = pre ? GB[ch] : (G[ch] || G['?']);
+    for (let j = 0; j < rows.length; j++) for (let i = 0; i < rows[j].length; i++) if (rows[j][i] === '#') {
+      g.fillRect(x + i * sc, y + j * sc, sc, sc);
+      if (bold && !pre) g.fillRect(x + (i + 1) * sc, y + j * sc, sc, sc);
+    }
+    x += advW(ch, bold) * sc;
+  }
+}
+// text with optional drop shadow; returns left x
+function T(s, x, y, col, o) {
+  o = o || {}; const sc = o.sc || 1;
+  if (o.align === 'right') x -= textW(s, o.bold, sc);
+  if (o.align === 'center') x -= Math.floor(textW(s, o.bold, sc) / 2);
+  if (o.sh) drawGlyphs(s, x, y + sc, o.sh, o.bold, sc);
+  drawGlyphs(s, x, y, col, o.bold, sc);
+  return x;
+}
+
+// ---------- small icons ----------
+const COIN = ['..kkkk..','.kggggk.','kggwgggk','kgwggGgk','kggggGgk','kgggGGgk','.kGGGGk.','..kkkk..'];
+const HEART = ['.kk.kk.','krrkrrk','krwrrrk','krrrrrk','.krrrk.','..krk..','...k...'];
+const CAL = ['kkkkkkk','krrrrrk','kwwwwwk','kwkwkwk','kwwwwwk','kwkwwwk','kkkkkkk'];
+const PERSON = ['.kkk.','kaaak','kaaak','.kak.','kaaak','kaaak','kk.kk'];
+const PORK = ['...kkkk...','.kkPPPPkk.','kPPbPPPbPk','kPbPPbPPPk','kpPPPPPPpk','kppppppppk','.kkkkkkkk.'];
+const SAUS = ['.kkkkkkkkk.','krrrwrrrrrk','krrrrrrrrRk','kRRRRRRRRRk','.kkkkkkkkk.'];
+const FLAME = ['...k...','..kok..','.kook..','.koyok.','kooyyok','koyyyok','koyyyok','.kyyyk.','..kkk..'];
+const FACE = {
+  happy: ['..kkkkk..','.kyyyyyk.','kykyyykyk','kykyyykyk','kyyyyyyyk','kkyyyyykk','kykkkkkyk','.kyyyyyk.','..kkkkk..'],
+  meh:   ['..kkkkk..','.kyyyyyk.','kykyyykyk','kykyyykyk','kyyyyyyyk','kyyyyyyyk','kyykkkyyk','.kyyyyyk.','..kkkkk..'],
+};
+const MOODCOL = { happy: {}, meh: { y: '#f39a3a' } };
+const LOCK = ['.kkk.','k...k','k...k','kkkkk','kgggk','kgkgk','kgggk','kkkkk'];
+
+// ---------- crew busts 14x16 (same people as the hiring screen) ----------
+const BODY = ['....kkSSkk....','..kkoowwookk..','.kooowwwwoook.','.kooowwwwoook.','.koowwwwwwook.','.koowwwwwwook.','.kkkkkkkkkkkk.'];
+const HEAD = {
+  dale:   ['....kkkkkk....','...khhhhhhk...','..khhhhhhhhk..','..khsssssshk..','..kssssssssk..','..kssksskssk..','..ksssSSsssk..','..kshhhhhhsk..','...kssRRssk...'],
+  rosa:   ['...kkkkkkkk...','..khhhhhhhhk..','.khhhhhhhhhhk.','.khhsssssshhk.','..kssssssssk..','..kssksskssk..','..kssssssssk..','..ksssRRsssk..','...kssssssk...'],
+  marcus: ['....kkkkkk....','...khhhhhhk...','..khhhhhhhhk..','..khsssssshk..','..kssssssssk..','..kssksskssk..','..kssssssssk..','..khssRRsshk..','...khhhhhhk...'],
+};
+const CREW = [
+  { rows: HEAD.dale.concat(BODY),   over: { h: '#cfcfcf', o: '#2c4f8f', w: '#6b4226', R: '#7a3a2a' }, mood: 'meh' },
+  { rows: HEAD.rosa.concat(BODY),   over: { h: '#2a1a12', s: '#c98a5e', S: '#a46a42', o: '#f4ecd8', w: '#ffffff', R: '#7a3a2a' }, mood: 'happy' },
+  { rows: HEAD.marcus.concat(BODY), over: { h: '#1e1410', s: '#7a4a2e', S: '#5e3620', o: '#e8b520', w: '#f4ecd8', R: '#e8e0d0' }, mood: 'happy' },
+];
+
+// ================= DRAW =================
+// background: flat Retro Bowl blue with a faint dither band behind the header
+R(0, 0, 195, 422, C.bg);
+for (let y = 0; y < 48; y++) for (let x = (y % 2); x < 195; x += 2) if ((x + y) % 4 === 0) P(x, y, '#2a5dd8');
+
+// ---- header: sign ----
+(function sign() {
+  const x = 5, y = 5, w = 98, h = 25;
+  R(x + 1, y + 2, w - 2, h, C.bgd);
+  box(x, y, w, h, C.wood, C.k);
+  R(x + 2, y + 1, w - 4, 1, C.woodl);
+  R(x + 1, y + 12, w - 2, 1, C.woodd);
+  R(x + 1, y + h - 3, w - 2, 2, C.woodd);
+  seed = 7;
+  for (let i = 0; i < 22; i++) { const gx = x + 3 + Math.floor(rnd() * (w - 8)); const gy = y + 3 + Math.floor(rnd() * 18); if (gy !== y + 12) R(gx, gy, 2 + Math.floor(rnd() * 3), 1, '#a56c34'); }
+  [[x + 3, y + 3], [x + w - 4, y + 3], [x + 3, y + h - 6], [x + w - 4, y + h - 6]].forEach(([a, b]) => { P(a, b, C.m); });
+  T('YOUR PIT', x + w / 2, y + 5, '#fff3d6', { sc: 2, align: 'center', sh: C.woodx });
+})();
+
+// ---- header: week + pips ----
+T('WEEK 3 OF 12', 190, 6, C.w, { bold: true, align: 'right', sh: C.navyd });
+(function pips() {
+  // weeks 1 to 11 as pips, week 12 (the competition BBQ championship) as a trophy box
+  const n = 11, pw = 5, gap = 1, bw = 11, x0 = 190 - bw + 1 - n * (pw + gap), y = 18;
+  for (let i = 0; i < n; i++) {
+    const x = x0 + i * (pw + gap);
+    if (i < 2) { R(x, y, pw, 8, C.k); R(x + 1, y + 1, pw - 2, 6, C.gd); P(x + 1, y + 6, C.gdd); P(x + 3, y + 6, C.gdd); }
+    else if (i === 2) { R(x - 1, y - 1, pw + 2, 10, C.w); R(x, y, pw, 8, C.k); R(x + 1, y + 1, pw - 2, 6, '#ff8a3a'); }
+    else { R(x, y, pw, 8, C.navyd); R(x + 1, y + 1, pw - 2, 6, C.navy); }
+  }
+  const bx = x0 + n * (pw + gap), by = y - 2;
+  R(bx, by, bw, 11, C.gd); R(bx + 1, by + 1, bw - 2, 9, C.navyd);
+  P(bx, by, C.bg); P(bx + bw - 1, by, C.bg); P(bx, by + 10, C.bg); P(bx + bw - 1, by + 10, C.bg);
+  spr(['yyyyyyy', 'yywyyyY', 'yywyyyY', '.yyyyY.', '..yYY..', '...Y...', '.YYYYY.'], bx + 2, by + 2);
+})();
+
+// ---- chips: cash + fans ----
+function chip(x, w, icon, label, val) {
+  const y = 33, h = 15;
+  R(x + 1, y + 2, w - 2, h, C.bgd);
+  box(x, y, w, h, C.w, C.w);
+  box(x + 1, y + 1, w - 2, h - 2, C.navy, C.navy);
+  icon(x + 4, y + 3);
+  T(label, x + 15, y + 4, '#a9c6ff', {});
+  T(val, x + w - 5, y + 4, C.w, { bold: true, align: 'right' });
+}
+chip(5, 91, (x, y) => spr(COIN, x, y), 'Cash', '1,240');
+chip(100, 90, (x, y) => spr(HEART, x, y + 1), 'Fans', '206');
+
+// ---- next event card ----
+(function eventCard() {
+  const x = 5, y = 53, w = 185, h = 116;
+  R(x + 1, y + 3, w - 2, h, C.bgd);
+  box(x, y, w, h, C.c, C.k);
+  R(x + 1, y + 1, w - 2, 14, C.umb); R(x + 1, y + 15, w - 2, 1, C.k);
+  T('NEXT EVENT', x + 5, y + 4, C.gd, { bold: true, sh: '#000' });
+  const pv = T('420', x + w - 5, y + 4, C.gd, { bold: true, align: 'right', sh: '#000' });
+  spr(COIN, pv - 11, y + 4);
+  T('PAY', pv - 14, y + 4, C.cl, { align: 'right' });
+
+  // scene: church picnic, guests seated with food, your drum smoker going
+  const sx = x + 5, sy = y + 20, sw = 60, sh = 56;
+  R(sx, sy, sw, sh, C.k);
+  const ix = sx + 1, iy = sy + 1, iw = sw - 2, ih = sh - 2;  // 58 x 54
+  const HZ = 22;
+  R(ix, iy, iw, HZ, C.sky);
+  R(ix, iy + HZ - 5, iw, 5, '#b4e3ff');
+  R(ix, iy + HZ, iw, ih - HZ, C.grass);
+  R(ix, iy + HZ, iw, 1, C.grassd);
+  seed = 99;
+  for (let i = 0; i < 46; i++) { const gx = ix + Math.floor(rnd() * iw), gy = iy + HZ + 2 + Math.floor(rnd() * (ih - HZ - 3)); P(gx, gy, rnd() < .5 ? C.grassd : C.grassl); }
+  // sun + cloud
+  R(ix + 35, iy + 2, 5, 5, C.y); R(ix + 34, iy + 3, 7, 3, C.y); R(ix + 36, iy + 1, 3, 7, C.y); R(ix + 36, iy + 3, 2, 1, '#fff3a8');
+  R(ix + 14, iy + 3, 10, 2, C.w); R(ix + 16, iy + 1, 5, 2, C.w); R(ix + 15, iy + 5, 8, 1, '#d6ecff');
+  // tree, 3 tones
+  R(ix + 49, iy + 12, 3, 11, C.woodd); R(ix + 51, iy + 12, 1, 11, C.woodx); R(ix + 48, iy + 21, 5, 1, C.grassd);
+  blob(ix + 42, iy + 2, 16, [[5,5],[3,2],[1,1],[1,0],[0,0],[0,0],[0,0],[0,0],[0,1],[1,1],[2,3],[5,5]], '#58b548', C.k);
+  R(ix + 45, iy + 4, 5, 2, '#8fe06a'); R(ix + 44, iy + 6, 3, 2, '#8fe06a'); R(ix + 52, iy + 5, 2, 1, '#8fe06a');
+  R(ix + 51, iy + 9, 5, 2, C.grassd); R(ix + 46, iy + 11, 9, 1, C.grassd); R(ix + 54, iy + 7, 2, 2, C.grassd);
+  // church: tower with steeple + nave, lit side and shade side
+  const t0 = ix + 3;
+  R(t0 + 3, iy, 1, 4, C.gdd); R(t0 + 2, iy + 1, 3, 1, C.gdd);
+  for (let i = 0; i < 4; i++) {
+    const lx = t0 + 3 - i, ww = 2 * i + 1, yy = iy + 3 + i;
+    R(lx, yy, ww, 1, C.k);
+    if (i > 0) { R(lx + 1, yy, i, 1, C.rh); R(t0 + 3, yy, i, 1, C.rd); }
+  }
+  R(t0 - 1, iy + 7, 9, 1, C.k);
+  R(t0, iy + 8, 7, 14, C.k);
+  R(t0 + 1, iy + 8, 4, 14, C.w); R(t0 + 4, iy + 8, 2, 14, '#c3ccd9'); R(t0 + 1, iy + 8, 5, 1, '#aeb8c7');
+  R(t0 + 2, iy + 10, 2, 4, C.n); P(t0 + 2, iy + 10, C.w); P(t0 + 3, iy + 12, C.gd);
+  // nave roof: two tones plus eave shadow
+  const n0 = ix + 9;
+  R(n0 + 2, iy + 8, 19, 1, C.k);
+  R(n0 + 1, iy + 9, 21, 1, C.k); R(n0 + 2, iy + 9, 19, 1, C.rh);
+  R(n0, iy + 10, 23, 3, C.k); R(n0 + 1, iy + 10, 21, 2, C.r); R(n0 + 1, iy + 12, 21, 1, C.rd);
+  for (let i = 3; i < 21; i += 4) P(n0 + i, iy + 11, C.rd);
+  for (let i = 5; i < 21; i += 4) P(n0 + i, iy + 10, '#e8483a');
+  // nave wall
+  R(n0, iy + 13, 22, 9, C.k);
+  R(n0, iy + 13, 21, 8, C.w); R(n0, iy + 13, 21, 1, '#b9c3d1'); R(n0 + 17, iy + 14, 4, 7, '#d3dae5');
+  [[3], [8], [18]].forEach(([wx]) => { R(n0 + wx, iy + 15, 3, 4, C.k); R(n0 + wx + 1, iy + 15, 1, 1, '#5aa7e8'); R(n0 + wx, iy + 16, 3, 2, '#5aa7e8'); P(n0 + wx, iy + 15, C.w); P(n0 + wx + 2, iy + 15, C.w); P(n0 + wx, iy + 16, '#9fd0ff'); });
+  R(n0 + 12, iy + 15, 5, 6, C.k); R(n0 + 13, iy + 16, 3, 5, C.wood); R(n0 + 15, iy + 16, 1, 5, C.woodd); P(n0 + 14, iy + 18, C.gd);
+  R(n0 + 11, iy + 21, 7, 1, '#aab2bd');
+  // a few more people by the church door (the other 57)
+  function tiny(px, py, shirt, hair) { R(px, py, 3, 1, C.k); R(px, py + 1, 3, 1, hair); R(px, py + 2, 3, 1, '#f2c093'); R(px - 1, py + 3, 5, 3, C.k); R(px, py + 3, 3, 2, shirt); }
+  tiny(ix + 9, iy + 17, '#3fae5a', '#3b2014');
+  tiny(ix + 28, iy + 16, '#e05a8a', '#e8b84a');
+  tiny(ix + 33, iy + 17, '#2c4f8f', '#1e1410');
+  // seated guests, busts at crew quality
+  const GW = ['..kkkkkk..', '.khhhhhhk.', 'khhhhhhhhk', 'khhhsshhhk', 'khsssssshk', 'khsHssHshk', 'khpssssphk', 'khsRssRshk', 'khhsRRshhk', 'khhkkkkhhk'];
+  const GWS = ['.khhoooohhk.', 'khhoowwoohhk', 'kooowwwwoook'];
+  const GK = ['..kkkk..', '.khhhhk.', 'khhhhhhk', 'khsssshk', 'ksHssHsk', 'kpsssspk', 'ksRssRsk', '.ksRRsk.', '..kkkk..'];
+  const GKS = ['.kooooook.', 'kooowwoook', 'koooooooook'];
+  const GM = ['..kkkkkk..', '.khhhhhhk.', 'khhhhhhhhk', 'khsssssshk', 'kssssssssk', 'kssHssHssk', 'kspsssspsk', 'kshhhhhhsk', '.ksRRRRsk.', '..kkkkkk..'];
+  const GMS = ['.kkooooookk.', 'kooowwwwoook', 'koooooooooook'];
+  const gw = { h: '#6a2f14', s: '#f2c093', p: '#f4a08a', H: '#2a1d16', R: '#9a2a20', o: '#8e5ad0', w: '#b48af0' };
+  const gk = { h: '#e8b84a', s: '#f6cfa0', p: '#f4a08a', H: '#2a1d16', R: '#9a2a20', o: '#3fae5a', w: '#7fd88a' };
+  const gm = { h: '#1e1410', s: '#b8784a', p: '#a8663c', H: '#1b1714', R: '#7a1f18', o: '#e8a33a', w: '#ffd27a' };
+  spr(GWS, ix + 3, iy + 34, gw); spr(GW, ix + 4, iy + 24, gw);
+  spr(GKS, ix + 17, iy + 35, gk); spr(GK, ix + 18, iy + 27, gk); R(ix + 24, iy + 26, 2, 2, C.r); P(ix + 25, iy + 26, C.rh);
+  spr(GMS, ix + 28, iy + 34, gm); spr(GM, ix + 29, iy + 24, gm);
+  // picnic table, checked cloth in 3/4 view
+  const tbx = ix + 1, tby = iy + 37, tbw = 43;
+  R(tbx + 2, tby + 10, tbw - 3, 2, C.grassd);
+  R(tbx + 3, tby + 7, 2, 5, C.woodx); R(tbx + tbw - 5, tby + 7, 2, 5, C.woodx);
+  R(tbx, tby, tbw, 8, C.k);
+  for (let j = 0; j < 3; j++) for (let i = 0; i < tbw - 2; i++) P(tbx + 1 + i, tby + 1 + j, ((Math.floor(i / 3) + j) % 2) ? C.r : C.w);
+  for (let j = 0; j < 3; j++) for (let i = 0; i < tbw - 2; i++) P(tbx + 1 + i, tby + 4 + j, ((Math.floor(i / 3) + (j > 1 ? 1 : 0)) % 2) ? C.rd : '#c9d2de');
+  for (let i = 1; i < tbw - 1; i += 3) P(tbx + i, tby + 7, i % 2 ? C.rd : '#c9d2de');
+  // plates and food
+  const PLATE = ['.kkkkkkk.', 'kxxxxxxxk', '.kXXXXXk.'];
+  const SAND = ['.kkkk.', 'kUuuuk', 'qPqPqP', 'kuuuuk', '.kkkk.'];
+  const fm = { x: '#ffffff', X: '#c3ccd9', u: '#d9954a', U: '#f4c47a', P: C.pork, q: '#d98a5e' };
+  spr(PLATE, ix + 4, iy + 38, fm); spr(SAND, ix + 6, iy + 35, fm);
+  spr(PLATE, ix + 17, iy + 38, fm); spr(['.kkkkk.', 'kaabaak', '.kkkkk.'], ix + 18, iy + 37, { a: C.sausl, b: C.saus }); R(ix + 21, iy + 39, 3, 1, '#c97a50'); P(ix + 22, iy + 39, '#eaa984');
+  spr(PLATE, ix + 29, iy + 38, fm); spr(SAND, ix + 31, iy + 35, fm);
+  // your drum smoker, smoking
+  const DRUM = ['...kkkk...', '..kNnnNk..', '.knnnnnNk.', 'kNNNNNNNNk', 'kkkkkkkkkk', 'khrrrrrRRk', 'khrrrrrRRk', 'kRRRRRRRRk', 'khrrkkrRRk', 'khrrrrrRRk', 'kRRRRRRRRk', 'khrrrrrRRk', 'khrrrrrRRk', 'kkkkkkkkkk', '.kk....kk.', '.kk....kk.'];
+  const dmx = ix + 45, dmy = iy + 31;
+  R(dmx + 1, dmy + 16, 9, 1, C.grassd);
+  spr(DRUM, dmx, dmy, { h: C.rh, r: C.r, R: C.rd, n: '#5a626e', N: C.nd });
+  R(dmx + 10, dmy + 7, 2, 1, C.k); R(dmx + 11, dmy + 7, 1, 3, C.k); R(dmx + 10, dmy + 9, 2, 1, C.k);
+  P(dmx + 4, dmy + 8, '#ff8a1f'); P(dmx + 5, dmy + 8, C.y);
+  function puff(px, py, w, h) { R(px + 1, py, w - 2, h, '#f6f8fa'); R(px, py + 1, w, h - 2, '#f6f8fa'); R(px + 1, py + h - 1, w - 2, 1, '#cdd5de'); R(px + w - 1, py + 1, 1, h - 2, '#cdd5de'); P(px + 1, py + 1, C.w); }
+  puff(dmx + 2, dmy - 4, 4, 3);
+  puff(dmx - 1, dmy - 9, 5, 4);
+  puff(dmx - 5, dmy - 15, 6, 5);
+
+  // details
+  const tx2 = x + 72;
+  T('Church picnic', tx2, y + 21, C.umb, { bold: true });
+  spr(CAL, tx2, y + 34); T('Saturday', tx2 + 11, y + 34, C.umb, {});
+  spr(PERSON, tx2 + 1, y + 46, { a: C.o }); T('60 people', tx2 + 11, y + 46, C.umb, {});
+  R(tx2, y + 57, 109, 1, '#c9b892');
+  spr(PORK, tx2 - 1, y + 61); T('Pulled pork', tx2 + 13, y + 61, C.umb, {});
+  spr(SAUS, tx2 - 1, y + 73); T('Sausage', tx2 + 13, y + 72, C.umb, {});
+
+  // start button
+  const bx = x + 5, by = y + 83, bw = w - 10, bh = 27;
+  box(bx, by + 2, bw, bh, C.k, C.k);
+  box(bx, by, bw, bh, C.o, C.k);
+  R(bx + 1, by + bh - 5, bw - 2, 4, C.od);
+  R(bx + 2, by + 1, bw - 4, 1, C.oh);
+  P(bx + 1, by + bh - 2, C.k); P(bx + bw - 2, by + bh - 2, C.k);
+  const label = 'START THE COOK';
+  const lw = textW(label, true) + 12;
+  const lx = bx + Math.floor((bw - lw) / 2);
+  spr(FLAME, lx, by + 6);
+  T(label, lx + 12, by + 8, C.w, { bold: true, sh: C.od });
+  T('>', bx + bw - 10, by + 8, '#ffd9bd', { bold: true });
+})();
+
+// ---- 2x2 tiles ----
+function tile(x, y, w, h, base, hi, dark, label, drawWin, l1, l2) {
+  chunky(x, y, w, h, base, hi, dark, 4);
+  T(label, x + 5, y + 4, C.w, { bold: true, sh: dark });
+  const wx = x + 4, wy = y + 15, ww = w - 8, wh = 44;
+  R(wx, wy, ww, wh, C.k);
+  g.save(); g.beginPath(); g.rect(wx + 1, wy + 1, ww - 2, wh - 2); g.clip();
+  drawWin(wx + 1, wy + 1, ww - 2, wh - 2);
+  g.restore();
+  l1(x + 5, y + 63); l2(x + 5, y + 75);
+}
+function chev(x, y, col) { T('>', x, y, col, { bold: true }); }
+
+// CREW
+tile(5, 176, 90, 94, C.r, C.rh, C.rd, 'CREW', (x, y, w, h) => {
+  // three Retro Bowl style portrait cards, busts at 2x, mood face as a corner badge
+  R(x, y, w, h, C.k);
+  const cw = 26;
+  for (let i = 0; i < 3; i++) {
+    const cx = x + i * (cw + 1), m = CREW[i];
+    R(cx, y, cw, h, C.sky);
+    R(cx, y, cw, 1, '#c8ebff');
+    R(cx, y + h - 7, cw, 7, '#7ec0ee');
+    sprS(m.rows, cx + 1, y + h - 32, m.over, 2, 1, 13);
+    const bx = cx + cw - 11, by = y + 1;
+    R(bx, by, 11, 11, C.w); P(bx, by, C.sky); P(bx + 10, by, C.sky); P(bx, by + 10, C.sky); P(bx + 10, by + 10, C.sky);
+    spr(FACE[m.mood], bx + 1, by + 1, MOODCOL[m.mood]);
+  }
+}, (x, y) => { T('3 of 5 hired', x, y, C.w, { bold: true, sh: C.rd }); },
+   (x, y) => { T('Mostly happy', x, y, '#fff6ea', { sh: C.rd }); });
+(function () { const bx = 5 + 90 - 15, by = 179; R(bx + 1, by, 8, 10, C.k); R(bx, by + 1, 10, 8, C.k); R(bx + 1, by + 1, 8, 8, C.gd); R(bx + 4, by + 2, 2, 4, C.k); R(bx + 4, by + 7, 2, 1, C.k); })();
+
+// GEAR
+tile(100, 176, 90, 94, C.steel, C.steell, C.steeld, 'GEAR', (x, y, w, h) => {
+  R(x, y, w, h, C.sky);
+  R(x, y + 10, w, 16, C.woodl);
+  for (let i = 0; i < w; i += 6) R(x + i, y + 10, 1, 16, C.wood);
+  R(x, y + 14, w, 1, C.wood); R(x, y + 22, w, 1, C.wood);
+  R(x, y + 26, w, h - 26, '#e8dcc0');
+  for (let j = 0; j < 3; j++) for (let i = 0; i < w; i += 10) R(x + i + (j % 2) * 5, y + 26 + j * 5, 1, 5, '#cbbd9c');
+  for (let j = 0; j < 3; j++) R(x, y + 30 + j * 5, w, 1, '#cbbd9c');
+  // drum smoker
+  const dx = x + 14, dy = y + 7;
+  R(dx + 6, dy - 2, 4, 3, '#ffffff'); R(dx + 9, dy - 6, 5, 4, '#f1f4f7'); R(dx + 6, dy - 9, 3, 2, '#dfe5ec');
+  R(dx + 7, dy + 1, 4, 2, C.k);
+  R(dx + 3, dy + 3, 12, 1, C.k); R(dx + 1, dy + 4, 16, 1, C.k);
+  R(dx + 4, dy + 3, 10, 1, C.n); R(dx + 2, dy + 4, 14, 2, C.n); R(dx + 3, dy + 4, 3, 1, '#6a717c');
+  R(dx, dy + 5, 18, 1, C.k); R(dx + 1, dy + 5, 16, 2, C.nd);
+  R(dx, dy + 7, 18, 23, C.k);
+  R(dx + 1, dy + 7, 16, 22, C.r); R(dx + 1, dy + 7, 2, 22, C.rh); R(dx + 14, dy + 7, 3, 22, C.rd);
+  R(dx + 1, dy + 13, 16, 1, C.rd); R(dx + 1, dy + 21, 16, 1, C.rd);
+  R(dx + 3, dy + 10, 3, 1, '#ffb0a6');
+  R(dx + 7, dy + 9, 4, 3, C.k); R(dx + 8, dy + 10, 2, 1, C.w);
+  R(dx + 18, dy + 15, 2, 1, C.k); R(dx + 19, dy + 15, 1, 4, C.k); R(dx + 18, dy + 18, 2, 1, C.k);
+  R(dx + 3, dy + 25, 4, 3, C.k); P(dx + 4, dy + 26, '#ff8a1f'); P(dx + 5, dy + 26, C.y);
+  R(dx + 1, dy + 30, 16, 1, '#b9a882');
+  // next tier, locked
+  const lx = x + 50, ly = y + 6;
+  R(lx, ly, 18, 26, '#5b6b80'); R(lx + 1, ly + 1, 16, 24, '#8d9bb0'); R(lx + 3, ly + 3, 12, 20, '#7a889d');
+  R(lx + 13, ly + 11, 1, 4, '#5b6b80'); R(lx + 2, ly + 26, 2, 3, '#5b6b80'); R(lx + 14, ly + 26, 2, 3, '#5b6b80');
+  spr(LOCK, lx + 6, ly + 8);
+}, (x, y) => { T('Drum smoker', x, y, C.w, { bold: true, sh: C.steeld }); },
+   (x, y) => { const ex = T('Level 2', x, y, '#f6f9ff', { sh: C.steeld }) + textW('Level 2') + 4;
+               for (let i = 0; i < 6; i++) { R(ex + i * 5, y + 1, 4, 6, C.steeld); R(ex + i * 5 + 1, y + 2, 2, 4, i < 2 ? C.gd : '#4c5b74'); } });
+chev(100 + 90 - 10, 180, '#dce6f5');
+
+// MENU
+tile(5, 275, 90, 94, C.mus, C.musl, C.musd, 'MENU', (x, y, w, h) => {
+  R(x, y, w, h, C.woodd);
+  for (let j = 0; j < h; j += 7) R(x, y + j, w, 1, C.woodx);
+  seed = 44; for (let i = 0; i < 20; i++) R(x + Math.floor(rnd() * w), y + Math.floor(rnd() * h), 3, 1, '#8a5a2e');
+  R(x + 4, y + 4, w - 8, h - 8, '#d9c9a4'); R(x + 5, y + 5, w - 10, h - 10, '#f2e6c8');
+  // smoked pork shoulder: a dark bark lump, pulled open on one side
+  const px = x + 7, py = y + 7;
+  const SH = [[9,9],[5,5],[3,3],[2,1],[1,1],[1,0],[0,0],[0,0],[0,0],[0,0],[0,1],[1,1],[2,2],[4,4],[8,7]];
+  blob(px, py, 30, SH, '#3f1a0b', C.k);
+  R(px + 9, py + 2, 9, 1, '#6e3416'); R(px + 5, py + 3, 9, 1, '#6e3416'); R(px + 3, py + 4, 5, 2, '#6e3416'); R(px + 2, py + 6, 2, 3, '#5a2810');
+  R(px + 10, py + 2, 3, 1, '#9a5426'); P(px + 6, py + 4, '#9a5426');
+  seed = 5; for (let i = 0; i < 34; i++) P(px + 4 + Math.floor(rnd() * 20), py + 4 + Math.floor(rnd() * 9), rnd() < .6 ? '#241005' : '#7a3a18');
+  // the pulled side: torn open, shreds spilling onto the board
+  seed = 31;
+  for (let j = 4; j < 13; j++) {
+    const l = px + 18 + Math.abs(8 - j) % 3, r = px + 28 - (j > 10 ? j - 10 : 0) - (j < 6 ? 6 - j : 0);
+    for (let i = l; i < r; i++) { const v = rnd(); P(i, py + j, v < .35 ? '#f0b48a' : v < .8 ? '#c97a50' : '#8a3b1c'); }
+    P(l - 1, py + j, '#241005');
+  }
+  [[29, 9, 4], [30, 11, 3], [27, 13, 5], [31, 14, 3]].forEach(([ox, oy, ln]) => { R(px + ox, py + oy, ln, 1, '#c97a50'); P(px + ox + 1, py + oy, '#f0b48a'); P(px + ox + ln, py + oy, '#1b1714'); });
+  // pulled pork mound
+  const qx = x + 9, qy = y + 27;
+  const MD = [[7,7],[4,4],[2,2],[1,1],[0,0],[0,0],[1,1]];
+  blob(qx, qy, 26, MD, '#c97a50', C.k);
+  seed = 12;
+  for (let j = 1; j < 6; j++) for (let i = 2; i < 24; i++) { if (j === 1 && (i < 6 || i > 19)) continue; if (j === 2 && (i < 4 || i > 21)) continue; const v = rnd(); if (v < .3) R(qx + i, qy + j, 2, 1, '#eaa984'); else if (v < .45) P(qx + i, qy + j, C.pork); }
+  // sausage links
+  const LK = [[3,3],[1,1],[0,0],[0,0],[0,0],[1,1],[3,3]];
+  [[42, 15], [59, 15], [50, 28]].forEach(([ox, oy]) => {
+    const lx = x + ox, ly = y + oy;
+    blob(lx, ly, 17, LK, '#9e3a22', C.k);
+    R(lx + 4, ly + 1, 8, 1, C.sausl); R(lx + 2, ly + 2, 4, 1, C.sausl); P(lx + 5, ly + 1, '#f29a6a');
+    P(lx + 7, ly + 3, '#5a1d10'); P(lx + 8, ly + 4, '#5a1d10'); P(lx + 11, ly + 3, '#5a1d10'); P(lx + 12, ly + 4, '#5a1d10');
+  });
+  R(x + 58, y + 17, 2, 2, '#e8d9b0'); P(x + 58, y + 17, C.k); P(x + 59, y + 18, C.k);
+  P(x + 71, y + 31, C.grassd); P(x + 72, y + 30, C.grass); P(x + 73, y + 31, C.grassd); P(x + 72, y + 32, C.grassd);
+}, (x, y) => { T('2 meats', x, y, C.w, { bold: true, sh: C.musd }); },
+   (x, y) => { T('Pork, sausage', x, y, '#3a2608', {}); });
+chev(5 + 90 - 10, 279, '#fff1c8');
+
+// SHOP
+tile(100, 275, 90, 94, C.grn, C.grnl, C.grnd, 'SHOP', (x, y, w, h) => {
+  R(x, y, w, h, C.tile);
+  for (let i = 0; i < w; i += 6) R(x + i, y, 1, 26, C.tiled);
+  for (let j = 0; j < 26; j += 6) R(x, y + j, w, 1, C.tiled);
+  for (let i = 0; i < w; i += 8) { R(x + i, y, 4, 5, C.r); R(x + i + 4, y, 4, 5, C.w); }
+  R(x, y + 5, w, 1, C.rd);
+  R(x, y + 26, w, h - 26, '#c9b893'); R(x, y + 26, w, 1, '#a8956c');
+  for (let i = 0; i < 4; i++) { const hx = x + 52 + i * 6; R(hx + 1, y + 7, 1, 2, C.n); R(hx, y + 9, 3, 7, C.k); R(hx + 1, y + 10, 1, 5, C.saus); }
+  R(x + 50, y + 7, 26, 1, C.n);
+  const cx = x + 8, cy = y + 11;
+  R(cx - 2, cy + 8, 6, 2, C.k); R(cx + 2, cy + 8, 2, 4, C.k);
+  // charcoal bag
+  R(cx + 6, cy, 14, 12, C.k); R(cx + 7, cy + 1, 12, 11, '#4a4f58'); R(cx + 7, cy + 4, 12, 3, '#f2e6c8'); R(cx + 8, cy + 5, 3, 1, C.k); R(cx + 12, cy + 5, 5, 1, C.o);
+  R(cx + 7, cy + 1, 12, 1, '#6a707a');
+  // wrapped meat
+  R(cx + 21, cy + 3, 13, 9, C.k); R(cx + 22, cy + 4, 11, 7, '#f6ead0'); R(cx + 22, cy + 7, 11, 1, C.pinkd); R(cx + 26, cy + 4, 3, 7, C.pink);
+  // basket
+  R(cx + 3, cy + 9, 34, 1, C.k);
+  for (let j = 0; j < 12; j++) { const inset = Math.floor(j / 3); R(cx + 3 + inset, cy + 10 + j, 34 - inset * 2, 1, j % 3 === 2 ? C.M : C.m); P(cx + 3 + inset, cy + 10 + j, C.k); P(cx + 36 - inset, cy + 10 + j, C.k); }
+  for (let i = 0; i < 34; i += 4) R(cx + 5 + i, cy + 10, 1, 11, C.M);
+  R(cx + 6, cy + 22, 28, 1, C.k);
+  R(cx + 8, cy + 23, 1, 2, C.k); R(cx + 31, cy + 23, 1, 2, C.k);
+  R(cx + 6, cy + 25, 5, 3, C.k); R(cx + 29, cy + 25, 5, 3, C.k); P(cx + 8, cy + 26, C.M); P(cx + 31, cy + 26, C.M);
+  // item badge
+  const bx = cx + 36, by = cy - 2;
+  R(bx + 1, by, 9, 11, C.k); R(bx, by + 1, 11, 9, C.k); R(bx + 1, by + 1, 9, 9, C.r);
+  T('3', bx + 3, by + 2, C.w, {});
+  // price card on the counter
+  R(x + 56, y + 28, 22, 10, C.k); R(x + 57, y + 29, 20, 8, '#fff8e6');
+  spr(['.kk.','kggk','kgGk','.kk.'], x + 59, y + 31);
+  R(x + 65, y + 32, 9, 1, '#9a8a6a'); R(x + 65, y + 34, 6, 1, '#9a8a6a');
+}, (x, y) => { const e = T('Cart', x, y, C.w, { bold: true, sh: C.grnd }) + textW('Cart', true) + 5; spr(COIN, e, y - 1); T('186', e + 10, y, C.w, { bold: true, sh: C.grnd }); },
+   (x, y) => { T('3 items', x, y, '#f6fff2', { sh: C.grnd }); });
+chev(100 + 90 - 10, 279, '#dcf5dc');
+
+// ---- news ticker ----
+(function news() {
+  const x = 5, y = 385, w = 185, h = 30;
+  R(x + 1, y + 2, w - 2, h, C.bgd);
+  box(x, y, w, h, C.w, C.w);
+  box(x + 1, y + 1, w - 2, h - 2, '#101828', '#101828');
+  const tl = 'PIT NEWS', tw = textW(tl, true) + 10;
+  box(x + 4, y - 11, tw, 13, C.r, C.k);
+  R(x + 5, y - 10, tw - 2, 1, C.rh);
+  T(tl, x + 9, y - 8, C.w, { bold: true, sh: C.rd });
+  const fx = x + 5, fy = y + 5;
+  R(fx, fy, 18, 20, C.w); R(fx + 1, fy + 1, 16, 18, C.sky);
+  g.save(); g.beginPath(); g.rect(fx + 1, fy + 1, 16, 18); g.clip();
+  spr(CREW[0].rows, fx + 2, fy + 3, CREW[0].over);
+  g.restore();
+  T('Your crew is happy.', x + 28, y + 6, C.w, {});
+  T('Dale wants a raise.', x + 28, y + 17, C.gd, {});
+  T('>', x + w - 10, y + 11, C.w, { bold: true });
+  R(x + w - 26, y + 25, 2, 2, C.w); R(x + w - 22, y + 25, 2, 2, '#4a5670'); R(x + w - 18, y + 25, 2, 2, '#4a5670');
+})();
+</script>
+</body>
+</html>

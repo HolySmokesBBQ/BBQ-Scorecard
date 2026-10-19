@@ -1,0 +1,645 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=390, initial-scale=1">
+<title>Gear Ladder</title>
+<style>
+  html, body { margin: 0; padding: 0; background: #2f62d6; }
+  body { width: 390px; height: 844px; overflow: hidden; }
+  canvas { display: block; width: 390px; height: 844px; image-rendering: pixelated; }
+</style>
+</head>
+<body>
+<canvas id="c" width="780" height="1688"></canvas>
+<script>
+// Your Pit v3 mock, screen 5: the gear ladder (facilities).
+// One canvas, 390x844 CSS at 2x. All coordinates below are CSS px; D() maps to device px.
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+const D = v => Math.round(v * 2);
+
+const C = {
+  bg: '#2f62d6', bgDark: '#2552bd', navy: '#14245f', out: '#0d1433',
+  white: '#ffffff', cream: '#E6D8B8', gold: '#F3CF6D', goldDk: '#b8892a',
+  orange: '#D06129', orangeDk: '#8f3c14', orangeHi: '#f08a4e',
+  green: '#3fb95a', greenDk: '#22783a', lightBlue: '#cfe0ff',
+  panel: '#4a5272', panelDk: '#333a55', panelLock: '#2a3048',
+  mute: '#a9b3cf', red: '#e0483c'
+};
+
+function R(x, y, w, h, c) { ctx.fillStyle = c; ctx.fillRect(D(x), D(y), D(w), D(h)); }
+
+// ---------- bitmap font (5x7, caps) ----------
+const G = {
+  'A':['01110','10001','10001','11111','10001','10001','10001'],
+  'B':['11110','10001','10001','11110','10001','10001','11110'],
+  'C':['01110','10001','10000','10000','10000','10001','01110'],
+  'D':['11110','10001','10001','10001','10001','10001','11110'],
+  'E':['11111','10000','10000','11110','10000','10000','11111'],
+  'F':['11111','10000','10000','11110','10000','10000','10000'],
+  'G':['01110','10001','10000','10111','10001','10001','01111'],
+  'H':['10001','10001','10001','11111','10001','10001','10001'],
+  'I':['01110','00100','00100','00100','00100','00100','01110'],
+  'J':['00111','00010','00010','00010','00010','10010','01100'],
+  'K':['10001','10010','10100','11000','10100','10010','10001'],
+  'L':['10000','10000','10000','10000','10000','10000','11111'],
+  'M':['10001','11011','10101','10101','10001','10001','10001'],
+  'N':['10001','10001','11001','10101','10011','10001','10001'],
+  'O':['01110','10001','10001','10001','10001','10001','01110'],
+  'P':['11110','10001','10001','11110','10000','10000','10000'],
+  'Q':['01110','10001','10001','10001','10101','10010','01101'],
+  'R':['11110','10001','10001','11110','10100','10010','10001'],
+  'S':['01111','10000','10000','01110','00001','00001','11110'],
+  'T':['11111','00100','00100','00100','00100','00100','00100'],
+  'U':['10001','10001','10001','10001','10001','10001','01110'],
+  'V':['10001','10001','10001','10001','10001','01010','00100'],
+  'W':['10001','10001','10001','10101','10101','10101','01010'],
+  'X':['10001','10001','01010','00100','01010','10001','10001'],
+  'Y':['10001','10001','01010','00100','00100','00100','00100'],
+  'Z':['11111','00001','00010','00100','01000','10000','11111'],
+  '0':['01110','10001','10011','10101','11001','10001','01110'],
+  '1':['00100','01100','00100','00100','00100','00100','01110'],
+  '2':['01110','10001','00001','00010','00100','01000','11111'],
+  '3':['11111','00010','00100','00010','00001','10001','01110'],
+  '4':['00010','00110','01010','10010','11111','00010','00010'],
+  '5':['11111','10000','11110','00001','00001','10001','01110'],
+  '6':['00110','01000','10000','11110','10001','10001','01110'],
+  '7':['11111','00001','00010','00100','01000','01000','01000'],
+  '8':['01110','10001','10001','01110','10001','10001','01110'],
+  '9':['01110','10001','10001','01111','00001','00010','01100'],
+  ' ':['00000','00000','00000','00000','00000','00000','00000'],
+  '/':['00001','00010','00010','00100','01000','01000','10000'],
+  '+':['00000','00100','00100','11111','00100','00100','00000'],
+  ',':['00000','00000','00000','00000','00110','00100','01000'],
+  '.':['00000','00000','00000','00000','00000','01100','01100'],
+  ':':['00000','01100','01100','00000','01100','01100','00000'],
+  '!':['00100','00100','00100','00100','00100','00000','00100']
+};
+// s = device px per font pixel (3 = small body, 4 = medium, 6 = title)
+function textW(str, s) { return (str.length * 6 * s - s) / 2; } // CSS px
+function text(str, x, y, s, color, shadow) {
+  const X0 = D(x), Y0 = D(y);
+  const pass = (ox, oy, col) => {
+    ctx.fillStyle = col;
+    let cx = X0 + ox;
+    for (const ch of str) {
+      const g = G[ch] || G[' '];
+      for (let r = 0; r < 7; r++) for (let k = 0; k < 5; k++) {
+        if (g[r][k] === '1') ctx.fillRect(cx + k * s, Y0 + oy + r * s, s + 1, s); // +1 = bold smear
+      }
+      cx += 6 * s;
+    }
+  };
+  if (shadow) pass(0, s > 3 ? s : 2, shadow);
+  pass(0, 0, color);
+}
+const overflow = [];
+function fit(str, s, maxW, tag) { if (textW(str, s) > maxW + 0.01) overflow.push(tag + ': "' + str + '" ' + textW(str, s) + '>' + maxW); }
+
+// ---------- sprite builder ----------
+// Procedural pixel sprites drawn in sprite px, then auto-outlined.
+function sprite(w, h, draw, outline = '#1a1220') {
+  const c = document.createElement('canvas'); c.width = w + 2; c.height = h + 2;
+  const g = c.getContext('2d');
+  const api = {
+    r(x, y, ww, hh, col) { g.fillStyle = col; g.fillRect(x + 1, y + 1, ww, hh); },
+    p(x, y, col) { g.fillStyle = col; g.fillRect(x + 1, y + 1, 1, 1); },
+    line(x0, y0, x1, y1, col) {
+      let dx = Math.abs(x1 - x0), sx = x0 < x1 ? 1 : -1, dy = -Math.abs(y1 - y0), sy = y0 < y1 ? 1 : -1, e = dx + dy;
+      for (;;) { api.p(x0, y0, col); if (x0 === x1 && y0 === y1) break; const e2 = 2 * e; if (e2 >= dy) { e += dy; x0 += sx; } if (e2 <= dx) { e += dx; y0 += sy; } }
+    },
+    disc(cx, cy, rad, col) { for (let y = -Math.ceil(rad); y <= Math.ceil(rad); y++) for (let x = -Math.ceil(rad); x <= Math.ceil(rad); x++) if (x * x + y * y <= rad * rad) api.p(cx + x, cy + y, col); },
+    map(rows, pal, ox = 0, oy = 0) { rows.forEach((row, y) => [...row].forEach((ch, x) => { if (pal[ch]) api.p(ox + x, oy + y, pal[ch]); })); }
+  };
+  draw(api);
+  if (outline) {
+    const id = g.getImageData(0, 0, c.width, c.height), d = id.data, W = c.width, H = c.height;
+    const solid = (x, y) => x >= 0 && y >= 0 && x < W && y < H && d[(y * W + x) * 4 + 3] > 0;
+    const marks = [];
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (!solid(x, y) && (solid(x - 1, y) || solid(x + 1, y) || solid(x, y - 1) || solid(x, y + 1))) marks.push([x, y]);
+    g.fillStyle = outline; marks.forEach(([x, y]) => g.fillRect(x, y, 1, 1));
+  }
+  return c;
+}
+// draw a sprite at CSS (x,y) with `dev` device px per sprite px
+function blit(spr, x, y, dev = 4) { ctx.drawImage(spr, D(x), D(y), spr.width * dev, spr.height * dev); }
+function sw(spr, dev = 4) { return spr.width * dev / 2; } // CSS width
+function sh(spr, dev = 4) { return spr.height * dev / 2; }
+
+const IRON = '#2c2c36', IRON_HI = '#5d6174', IRON_MID = '#46495a', IRON_LO = '#1f1f27';
+const WOOD = '#9a6432', WOOD_HI = '#c8925a';
+
+const SPR = {};
+SPR.kettle = sprite(24, 28, s => {
+  for (let y = 6; y <= 13; y++) { const hw = Math.floor(9 * Math.sqrt(Math.max(0, 1 - ((y - 13) / 7.5) ** 2))); s.r(12 - hw, y, hw * 2 + 1, 1, IRON); }
+  for (let y = 13; y <= 19; y++) { const hw = Math.floor(9 * Math.sqrt(Math.max(0, 1 - ((y - 13) / 6.8) ** 2))); s.r(12 - hw, y, hw * 2 + 1, 1, IRON); }
+  s.r(3, 13, 19, 1, '#6a6e80');
+  [[8,7],[7,8],[6,9],[6,10],[9,7],[10,7]].forEach(([x,y]) => s.p(x, y, '#8d93ab'));
+  s.p(5, 15, IRON_HI); s.p(6, 16, IRON_HI); s.p(7, 17, IRON_HI);
+  s.r(10, 3, 5, 2, WOOD); s.r(10, 3, 5, 1, WOOD_HI); s.p(11, 5, '#666a7a'); s.p(13, 5, '#666a7a');
+  s.r(15, 9, 3, 1, '#9aa0b4');
+  s.line(7, 20, 4, 26, '#3c3d4a'); s.line(17, 20, 20, 26, '#3c3d4a'); s.line(12, 20, 12, 25, '#3c3d4a');
+  s.r(7, 22, 11, 1, '#6a6e80');
+  s.r(2, 25, 4, 3, '#222229'); s.p(3, 26, '#a0a6b8'); s.r(19, 25, 4, 3, '#222229'); s.p(20, 26, '#a0a6b8');
+});
+SPR.drum = sprite(18, 30, s => {
+  s.r(2, 6, 14, 20, '#c0392b'); s.r(2, 6, 2, 20, '#8e2a20'); s.r(11, 6, 2, 20, '#e5604f'); s.r(14, 6, 2, 20, '#a83226');
+  s.r(2, 10, 14, 1, '#3a3a46'); s.r(2, 20, 14, 1, '#3a3a46');
+  s.r(2, 3, 14, 3, IRON); s.r(3, 2, 12, 1, IRON); s.r(4, 3, 9, 1, IRON_HI);
+  s.r(6, 0, 6, 1, WOOD_HI); s.p(7, 1, '#666a7a'); s.p(10, 1, '#666a7a');
+  s.r(4, 4, 2, 2, '#f4f4f4'); s.p(5, 4, C.red);
+  s.r(0, 13, 2, 3, '#3a3a46'); s.r(16, 13, 2, 3, '#3a3a46');
+  s.r(7, 23, 4, 2, '#3a3a46'); s.r(8, 23, 2, 1, '#6a6e80');
+  s.r(3, 26, 2, 4, '#3a3a46'); s.r(13, 26, 2, 4, '#3a3a46');
+});
+SPR.cabinet = sprite(22, 34, s => {
+  s.r(15, 0, 3, 5, IRON); s.r(14, 0, 5, 1, IRON_HI);
+  s.r(1, 4, 20, 2, '#596276');
+  s.r(2, 6, 18, 23, '#8f99ad'); s.r(2, 6, 2, 23, '#6b7488'); s.r(18, 6, 2, 23, '#6b7488');
+  s.r(4, 8, 14, 19, '#a9b2c4'); s.r(4, 8, 14, 1, '#c9d0dd'); s.r(4, 8, 1, 19, '#c9d0dd'); s.r(4, 26, 14, 1, '#7f889c'); s.r(17, 8, 1, 19, '#7f889c');
+  s.r(15, 15, 1, 5, IRON);
+  s.disc(10, 12, 2, '#f4f4f4'); s.p(10, 12, IRON); s.p(11, 11, C.red);
+  s.r(6, 23, 9, 1, '#5d6174'); s.r(6, 21, 9, 1, '#5d6174');
+  s.r(3, 29, 2, 5, '#3a3a46'); s.r(17, 29, 2, 5, '#3a3a46');
+});
+// Stick burner on wheels: gunmetal cook chamber with the lid propped open (meat on the grate),
+// a square firebox with a glowing door on the left end, an elbow chimney on the right end,
+// one small axle, a tongue, and split logs on the rack.
+const GUN = '#6b7584', GUN_HI = '#a3aebd', GUN_LO = '#4b5361', GUN_DK = '#2b3038';
+SPR.stick = sprite(38, 29, s => {
+  // open lid: we see its dark inside, standing up behind the grate, warm glow at the bottom
+  s.r(15, 5, 17, 1, GUN_HI); s.r(14, 6, 19, 8, '#2c313a'); s.r(14, 6, 1, 8, GUN); s.r(32, 6, 1, 8, GUN);
+  s.r(15, 6, 17, 1, '#454c58'); s.r(15, 11, 17, 3, '#5a3a2a'); s.r(15, 12, 17, 2, '#7a4a2a');
+  s.r(20, 3, 7, 1, WOOD_HI); s.p(21, 4, '#8c92a4'); s.p(25, 4, '#8c92a4');
+  // meat on the grate: brisket and a rack of ribs
+  s.r(16, 11, 7, 3, '#4a2614'); s.r(16, 11, 7, 1, '#7a3e1e'); s.p(18, 12, '#5e3018'); s.p(21, 12, '#5e3018');
+  s.r(25, 12, 6, 2, '#8a3f1e'); s.r(25, 12, 6, 1, '#b0582a'); s.p(25, 13, '#f2e3c2'); s.p(31, 13, '#f2e3c2');
+  // chamber trough (lower half of the barrel)
+  s.r(13, 14, 21, 1, GUN_HI); s.r(13, 15, 21, 5, GUN); s.r(15, 20, 17, 1, GUN_LO);
+  s.r(13, 18, 21, 2, GUN_LO); s.r(14, 15, 19, 1, '#8994a3');
+  s.r(27, 16, 2, 2, '#f4f4f4'); s.p(28, 16, C.red);
+  // elbow chimney out of the right end
+  s.r(34, 16, 2, 2, GUN); s.r(35, 7, 2, 10, GUN); s.r(35, 7, 1, 10, GUN_HI); s.r(34, 6, 4, 1, GUN_HI);
+  // firebox on the left end with fire glow
+  s.r(4, 13, 9, 10, '#525a68'); s.r(4, 13, 9, 1, GUN_HI);
+  s.r(5, 15, 7, 6, '#1f2228'); s.r(6, 16, 5, 4, '#a8441a');
+  s.r(6, 17, 5, 1, '#ff8a2a'); s.r(6, 19, 5, 1, '#ff8a2a'); s.r(7, 17, 3, 1, '#ffd25a'); s.r(7, 19, 3, 1, '#ffd25a'); s.p(8, 18, '#ffd25a');
+  s.r(3, 17, 1, 2, '#c9d0dd');
+  // frame and tongue
+  s.r(3, 21, 31, 2, GUN_DK); s.r(3, 21, 31, 1, '#6a7180');
+  s.r(0, 22, 4, 1, GUN_DK); s.r(0, 21, 2, 3, '#1f1f27'); s.r(2, 23, 1, 5, '#8c92a4'); s.r(1, 28, 3, 1, '#5a5e72');
+  // split logs on a rack under the chamber
+  s.r(13, 26, 9, 1, '#5a5e72'); s.r(13, 23, 1, 3, '#5a5e72'); s.r(21, 23, 1, 3, '#5a5e72');
+  s.r(14, 24, 4, 2, WOOD); s.r(14, 24, 1, 2, '#e2b47a'); s.r(18, 24, 3, 2, '#7d4e26'); s.r(20, 24, 1, 2, '#e2b47a'); s.r(15, 23, 4, 1, WOOD_HI);
+  // one axle, small wheel, leg under the firebox
+  s.disc(28, 25, 3.2, '#202027'); s.r(27, 24, 2, 2, '#c9d0dd');
+  s.r(7, 23, 2, 5, GUN_DK); s.r(6, 28, 4, 1, '#5a5e72');
+});
+// Trailer rig: a long flatbed seen a little from above (cream deck planks, red side rail and railing),
+// hitch and wood rack on the tongue, a big red-painted barrel smoker with a black firebox,
+// a cream warming box, tandem wheels under a red fender.
+SPR.trailer = sprite(40, 30, s => {
+  const RD = '#d23c3c', RD_HI = '#ee6a5a', RD_LO = '#8e2a20', CR = '#f2e3c2', CR_LO = '#d9c7a0', CR_DK = '#bfa97e';
+  // hitch: A-frame tongue, coupler, jack
+  s.r(0, 23, 7, 1, '#3a3d4c'); s.r(1, 22, 5, 1, '#3a3d4c'); s.r(0, 22, 2, 2, '#1f1f27'); s.r(3, 24, 1, 4, '#8c92a4'); s.r(2, 28, 3, 1, '#5a5e72');
+  // wood rack on the tongue (log ends)
+  s.r(1, 15, 1, 7, WOOD); s.r(6, 15, 1, 7, WOOD); s.r(1, 15, 6, 1, WOOD_HI);
+  for (let y = 16; y <= 20; y += 2) for (let x = 2; x <= 4; x += 2) { s.r(x, y, 2, 2, ((x + y) / 2 | 0) % 2 ? '#e2b47a' : '#c8925a'); s.p(x + 1, y + 1, '#7d4e26'); }
+  // railing along the back edge of the deck
+  s.r(8, 11, 32, 1, RD_HI);
+  for (let x = 8; x <= 39; x += 5) s.r(x, 11, 1, 6, RD);
+  // deck top surface (planks) and red side face
+  s.r(7, 16, 33, 5, CR); s.r(7, 16, 33, 1, CR_LO);
+  for (let x = 10; x < 40; x += 4) s.r(x, 17, 1, 4, CR_DK);
+  s.r(7, 21, 33, 2, RD); s.r(7, 21, 33, 1, RD_HI); s.r(7, 23, 33, 1, RD_LO);
+  // black firebox
+  s.r(9, 10, 6, 9, '#2c2c36'); s.r(9, 10, 6, 1, IRON_HI);
+  s.r(10, 12, 4, 5, '#16161c'); s.r(10, 13, 4, 1, '#ff8a2a'); s.r(11, 13, 2, 1, '#ffd25a'); s.r(10, 15, 4, 1, '#ff8a2a'); s.r(11, 15, 2, 1, '#ffd25a');
+  // red barrel smoker with black end bands and a black lid seam
+  s.r(17, 6, 10, 1, RD); s.r(15, 7, 14, 10, RD); s.r(17, 17, 10, 1, RD_LO);
+  s.r(17, 7, 10, 1, RD_HI); s.r(15, 13, 14, 1, '#2c2c36'); s.r(16, 15, 12, 2, RD_LO);
+  s.r(15, 7, 1, 10, '#2c2c36'); s.r(28, 7, 1, 10, '#2c2c36');
+  s.r(18, 4, 7, 1, WOOD_HI); s.p(19, 5, '#8c92a4'); s.p(23, 5, '#8c92a4');
+  s.r(25, 9, 2, 2, '#f4f4f4'); s.p(26, 9, '#2c2c36');
+  // short chimney on top of the right end
+  s.r(26, 1, 2, 5, '#2c2c36'); s.r(25, 0, 4, 1, IRON_HI);
+  s.p(17, 18, '#2c2c36'); s.p(27, 18, '#2c2c36');
+  // cream warming box with a red door handle
+  s.r(31, 9, 7, 10, CR); s.r(31, 9, 7, 1, '#ffffff'); s.r(37, 10, 1, 9, CR_DK); s.r(32, 11, 4, 6, CR_LO);
+  s.r(35, 13, 1, 2, RD);
+  // tandem wheels and a red fender
+  s.disc(22, 25, 3.3, '#202027'); s.r(21, 24, 2, 2, '#c9d0dd');
+  s.disc(30, 25, 3.3, '#202027'); s.r(29, 24, 2, 2, '#c9d0dd');
+  s.r(18, 20, 16, 1, RD_HI); s.r(17, 21, 18, 1, RD_LO); s.r(17, 22, 1, 2, RD_LO); s.r(34, 22, 1, 2, RD_LO);
+});
+// Restaurant: building with a chef in the left window, a red OPEN sign in the right window.
+SPR.restaurant = sprite(40, 33, s => {
+  s.r(7, 1, 4, 6, '#b5523b'); s.r(6, 0, 6, 1, '#7a3528'); s.p(8, 3, '#d9775c');
+  for (let y = 4; y <= 12; y++) { const x0 = Math.max(0, 8 - (y - 4)), x1 = Math.min(39, 31 + (y - 4)); s.r(x0, y, x1 - x0 + 1, 1, y === 4 ? '#b8463a' : '#8e2a20'); }
+  for (let y = 6; y <= 11; y += 2) for (let x = 0; x < 40; x += 3) s.p(x + (y % 4 ? 1 : 0), y, '#6e1f17');
+  s.r(14, 5, 12, 5, '#3a2416'); s.r(14, 5, 12, 1, C.gold); s.r(14, 9, 12, 1, C.goldDk);
+  s.p(20, 6, '#ff8a2a'); s.r(19, 7, 3, 1, '#ff8a2a'); s.p(20, 7, '#ffd25a'); s.r(19, 8, 3, 1, '#ff8a2a'); s.p(20, 8, '#ffd25a');
+  s.r(1, 13, 38, 20, '#f2e3c2'); s.r(37, 17, 2, 16, '#d8c49c');
+  for (let x = 1; x < 39; x++) { const col = Math.floor((x - 1) / 2) % 2 ? '#ffffff' : '#d23c3c'; s.r(x, 13, 1, 4, col); if ((x % 4) === 1 || (x % 4) === 2) s.p(x, 17, col); }
+  // brick base
+  s.r(1, 29, 38, 4, '#b5523b'); s.r(1, 30, 38, 1, '#8e3a28'); for (let x = 2; x < 39; x += 4) s.p(x, 32, '#8e3a28');
+  // chef window (chef face as big as the crew faces)
+  s.r(2, 18, 11, 11, '#7a4a26'); s.r(3, 19, 9, 9, '#ffe7a0');
+  s.r(4, 19, 7, 1, '#ffffff'); s.r(5, 20, 5, 1, '#ffffff');
+  s.r(5, 21, 5, 4, '#f1b98d'); s.p(6, 22, '#1a1220'); s.p(8, 22, '#1a1220'); s.p(7, 24, '#b0604a'); s.p(5, 23, '#f39a8a'); s.p(9, 23, '#f39a8a');
+  s.r(4, 25, 7, 3, '#ffffff'); s.r(6, 25, 3, 1, '#d23c3c');
+  s.r(2, 29, 11, 1, WOOD);
+  // door
+  s.r(13, 19, 6, 14, '#7a4a26'); s.r(14, 20, 4, 5, '#946036'); s.r(14, 26, 4, 5, '#946036'); s.p(17, 26, C.gold);
+  // OPEN sign window
+  s.r(20, 19, 18, 9, '#7a4a26'); s.r(21, 20, 16, 7, '#2a1830');
+  const GL = { O: ['111','101','101','101','111'], P: ['111','101','111','100','100'], E: ['111','100','110','100','111'], N: ['101','111','111','101','101'] };
+  ['O','P','E','N'].forEach((ch, k) => GL[ch].forEach((row, ry) => [...row].forEach((b, rx) => { if (b === '1') s.p(22 + k * 4 + rx, 21 + ry, '#ff5a4a'); })));
+  s.r(20, 28, 18, 1, WOOD);
+});
+SPR.chef = sprite(11, 19, s => {
+  s.r(2, 0, 7, 2, C.orange); s.r(3, 0, 4, 1, C.orangeHi); s.r(6, 2, 4, 1, '#a84a1c');
+  s.r(2, 2, 4, 1, '#5a3418');
+  s.r(3, 3, 6, 5, '#f1b98d'); s.r(2, 3, 1, 3, '#5a3418');
+  s.p(5, 5, '#1a1220'); s.p(7, 5, '#1a1220'); s.p(6, 7, '#b0604a'); s.p(4, 6, '#f39a8a');
+  s.r(2, 8, 7, 6, C.orange); s.r(4, 9, 3, 6, '#f2e3c2'); s.r(4, 8, 3, 1, '#f2e3c2');
+  s.r(1, 9, 1, 4, C.orange); s.r(9, 9, 1, 4, C.orange); s.p(1, 13, '#f1b98d'); s.p(9, 13, '#f1b98d');
+  s.r(10, 10, 1, 5, '#a0a6b8');
+  s.r(3, 14, 5, 3, '#3e5aa8'); s.r(5, 15, 1, 2, '#2c3f7a');
+  s.r(2, 17, 3, 2, '#2a1a10'); s.r(6, 17, 3, 2, '#2a1a10');
+});
+// upgrade icons
+SPR.cooler = sprite(18, 13, s => {
+  s.r(0, 1, 18, 3, '#f4f4f4'); s.r(0, 3, 18, 1, '#cfd3dc'); s.r(6, 0, 6, 1, '#8c92a4');
+  s.r(1, 4, 16, 9, '#d23c3c'); s.r(2, 5, 1, 7, '#ee6a5a'); s.r(15, 5, 1, 8, '#9e2a24'); s.r(1, 12, 16, 1, '#9e2a24');
+  s.r(8, 4, 2, 2, '#f4f4f4'); s.r(4, 8, 10, 2, '#f4f4f4');
+});
+SPR.prep = sprite(20, 14, s => {
+  s.r(2, 2, 9, 2, '#b07a45'); s.r(3, 1, 6, 2, '#6b3a22'); s.r(4, 1, 2, 1, '#9a5236');
+  s.r(12, 1, 5, 2, '#c9d0dd'); s.r(12, 1, 5, 1, '#eef1f6'); s.r(17, 2, 2, 1, '#5a3418');
+  s.r(0, 4, 20, 2, '#d9a865'); s.r(0, 5, 20, 1, '#b07f45');
+  s.r(1, 6, 2, 8, WOOD); s.r(17, 6, 2, 8, WOOD); s.r(3, 10, 14, 1, '#b07f45');
+});
+SPR.canopy = sprite(20, 17, s => {
+  const rows = [[6, 13], [4, 15], [2, 17], [0, 19], [0, 19], [0, 19]];
+  rows.forEach(([a, b], y) => { for (let x = a; x <= b; x++) s.p(x, y, Math.floor(x / 2) % 2 ? '#f2e3c2' : C.orange); });
+  for (let x = 0; x < 20; x++) if (x % 4 < 2) s.p(x, 6, Math.floor(x / 2) % 2 ? '#f2e3c2' : C.orange);
+  s.r(1, 6, 1, 11, '#8c92a4'); s.r(18, 6, 1, 11, '#8c92a4'); s.r(0, 16, 3, 1, '#5a5e72'); s.r(17, 16, 3, 1, '#5a5e72');
+});
+SPR.truck = sprite(22, 14, s => {
+  s.r(0, 5, 12, 5, C.orange); s.r(0, 5, 11, 1, '#a84a1c');
+  s.r(11, 1, 7, 9, C.orange); s.r(12, 1, 5, 1, C.orangeHi);
+  s.r(13, 2, 4, 3, '#9ad8ff'); s.p(13, 2, '#e6f6ff');
+  s.r(18, 5, 4, 5, C.orange); s.p(21, 6, '#ffe27a'); s.r(21, 8, 1, 2, '#c9d0dd');
+  s.r(0, 9, 22, 1, '#8f3c14');
+  s.disc(5, 11, 2.4, '#202027'); s.p(5, 11, '#a0a6b8');
+  s.disc(17, 11, 2.4, '#202027'); s.p(17, 11, '#a0a6b8');
+});
+SPR.star = sprite(9, 9, s => s.map([
+  '....y....','...yyy...','...ywy...','yyyyyyyyy','.yyyyyyy.','..yyyyy..','..yyoyy..','.yyo.oyy.','.yo...oy.'
+], { y: C.gold, w: '#fff6c8', o: '#d9a43a' }), '#3a2a08');
+SPR.starOff = sprite(9, 9, s => s.map([
+  '....y....','...yyy...','...yyy...','yyyyyyyyy','.yyyyyyy.','..yyyyy..','..yyyyy..','.yyy.yyy.','.yy...yy.'
+], { y: '#1f2c66' }), '#0d1433');
+
+// crew builder: same body proportions as the drum chef, different hair, shirt and pose
+function person(o) {
+  return sprite(12, 19, s => {
+    const sk = o.skin || '#f1b98d', dk = '#1a1220';
+    s.r(2, 8, 7, 6, o.shirt);
+    if (o.apron) { s.r(4, 9, 3, 6, o.apron); s.r(4, 8, 3, 1, o.apron); }
+    s.r(1, 9, 1, 4, o.shirt); s.p(1, 13, sk);
+    if (o.pose === 'wave') { s.r(9, 7, 1, 2, o.shirt); s.r(10, 5, 1, 2, o.shirt); s.r(10, 3, 2, 2, sk); }
+    else if (o.pose === 'tongs') { s.r(9, 9, 1, 4, o.shirt); s.p(9, 13, sk); s.r(10, 9, 1, 6, '#a0a6b8'); s.p(11, 14, '#a0a6b8'); }
+    else { s.r(9, 9, 1, 4, o.shirt); s.p(9, 13, sk); }
+    s.r(3, 14, 5, 3, o.pants); s.r(5, 15, 1, 2, o.pantsDk || '#2c3f7a');
+    s.r(2, 17, 3, 2, '#2a1a10'); s.r(6, 17, 3, 2, '#2a1a10');
+    s.r(3, 3, 6, 5, sk);
+    if (o.hair === 'pony') {
+      s.r(3, 1, 6, 2, o.hairC); s.r(2, 2, 1, 4, o.hairC); s.r(8, 2, 1, 1, o.hairC); s.r(1, 3, 1, 4, o.hairC); s.p(0, 6, o.hairC);
+      if (o.band) s.r(3, 1, 6, 1, o.band);
+    } else if (o.hair === 'grey') {
+      s.r(3, 2, 6, 1, o.hairC); s.r(2, 3, 1, 3, o.hairC); s.r(5, 6, 3, 1, o.hairC);
+    }
+    s.p(5, 5, dk); s.p(7, 5, dk); s.p(6, 7, '#b0604a'); s.p(4, 6, '#f39a8a');
+  });
+}
+SPR.rosa = person({ hair: 'pony', hairC: '#4a2a14', band: '#d23c3c', shirt: '#2f9e8f', apron: '#f2e3c2', pants: '#3e5aa8', pose: 'wave', skin: '#c98e62' });
+SPR.hank = person({ hair: 'grey', hairC: '#d9d9d9', shirt: '#3fa860', apron: '#7a4a26', pants: '#4a4a58', pantsDk: '#33333e', pose: 'tongs' });
+// silhouette customers lining up at the restaurant door
+function customer(col) {
+  return sprite(5, 10, s => s.map(['.ccc.','ccccc','ccccc','.ccc.','ccccc','ccccc','ccccc','.ccc.','.c.c.','.c.c.'], { c: col }), '#141a33');
+}
+SPR.custA = customer('#2a3358');
+SPR.custB = customer('#3a2f4a');
+
+// small 7x7 UI icons, self-outlined, drawn at font scale
+function icon(rows, pal) { return sprite(rows[0].length - 2, rows.length - 2, s => s.map(rows, pal, -1, -1), null); }
+const ICON = {
+  coin: icon(['..kkk..','.kyyyk.','kywyyyk','kyyyyok','kyyyook','.koook.','..kkk..'], { k: '#4a2e08', y: C.gold, w: '#fff6d0', o: '#c9962e' }),
+  person: icon(['..fff..','.fffff.','.fffff.','..fff..','.ccccc.','ccccccc','ccccccc'], { f: '#f1b98d', c: C.cream }),
+  lock: icon(['..sss..','.s...s.','.s...s.','ggggggg','gggdggg','gggdggg','ggggggg'], { s: '#c9d0dd', g: C.gold, d: '#3a2a08' }),
+  check: icon(['.......','......w','.....ww','w...ww.','ww.ww..','.www...','..w....'], { w: '#ffffff' }),
+  heart: icon(['.rr.rr.','rrrrrrr','rwrrrrr','rrrrrrr','.rrrrr.','..rrr..','...r...'], { r: '#ff5a6a', w: '#ffd0d6' }),
+  up: icon(['...g...','..ggg..','.ggggg.','ggggggg','..ggg..','..ggg..','..ggg..'], { g: C.gold }),
+  upW: icon(['...w...','..www..','.wwwww.','wwwwwww','..www..','..www..','..www..'], { w: '#ffffff' })
+};
+
+
+// ---------- UI primitives ----------
+// notched pixel box: border colour b (bw CSS px), fill f
+function box(x, y, w, h, f, b, bw = 2) {
+  R(x + bw, y, w - 2 * bw, h, b); R(x, y + bw, w, h - 2 * bw, b);
+  R(x + bw, y + bw, w - 2 * bw, h - 2 * bw, f);
+}
+function shadowBox(x, y, w, h, f, b, bw = 2) { R(x + 2, y + 3, w, h, 'rgba(9,16,52,0.55)'); box(x, y, w, h, f, b, bw); }
+// chunky button with pressed bottom edge
+function button(x, y, w, h, face, edge, hi) {
+  R(x + 2, y + 3, w, h, 'rgba(9,16,52,0.55)');
+  box(x, y, w, h, edge, C.out, 2);
+  R(x + 2, y + 2, w - 4, h - 8, face);
+  R(x + 4, y + 2, w - 8, 2, hi);
+}
+
+// ---------- background ----------
+R(0, 0, 390, 844, C.bg);
+// faint pixel dither so the blue reads as a game backdrop, not a flat web fill
+for (let y = 0; y < 844; y += 8) for (let x = ((y / 8) % 2) * 8; x < 390; x += 16) R(x, y, 2, 2, C.bgDark);
+
+// ---------- header ----------
+R(0, 0, 390, 52, C.navy); R(0, 52, 390, 2, C.out);
+// back button
+button(8, 9, 40, 34, '#3a6ee6', '#1f45a8', '#6f9bff');
+R(22, 22, 16, 4, C.white);
+for (let i = 0; i < 6; i++) R(16 + i * 2, 24 - 1 - i * 1.5 - 1, 2, 4 + i * 3, C.white);
+// title
+const title = 'GEAR';
+const tW = textW(title, 6);
+text(title, 195 - tW / 2, 14, 6, C.white, C.out);
+blit(SPR.star, 195 - tW / 2 - 30, 15, 4); blit(SPR.star, 195 + tW / 2 + 8, 15, 4);
+// cash pill
+box(282, 10, 100, 32, '#1d2f78', C.white, 2);
+blit(ICON.coin, 291, 19, 4);
+text('1,240', 309, 19, 4, C.gold, C.out);
+fit('1,240', 4, 66, 'cash');
+
+
+// ---------- layout ----------
+const LAD = { x: 6, w: 270, top: 88, cardH: 98, gap: 14 };
+const UP = { x: 280, w: 106, top: 88, h: 152, gap: 16 };
+
+// ---------- column labels ----------
+text('THE LADDER', (LAD.x + LAD.x + LAD.w) / 2 - textW('THE LADDER', 3) / 2, 63, 3, C.white, C.navy);
+text('UPGRADES', UP.x + UP.w / 2 - textW('UPGRADES', 3) / 2, 63, 3, C.white, C.navy);
+
+// ---------- the ladder ----------
+const RUNGS = [ // top to bottom
+  { key: 'restaurant', name: ['RESTAURANT'], serves: 400, unlock: ['+ YOUR OWN SPOT'], state: 'locked', need: 'NEEDS 200 FANS', scene: 'street' },
+  { key: 'trailer', name: ['TRAILER RIG'], serves: 250, unlock: ['+ 2 EVENTS', '  A WEEK'], state: 'locked', need: 'NEEDS 90 FANS', scene: 'yard' },
+  { key: 'stick', name: ['STICK BURNER', 'ON WHEELS'], serves: 150, unlock: ['+ BIGGER EVENTS'], state: 'locked', need: 'NEEDS 40 FANS', scene: 'yard' },
+  { key: 'cabinet', name: ['CABINET SMOKER'], serves: 90, unlock: ['+ BRISKET'], state: 'buy', price: '900', scene: 'yard' },
+  { key: 'drum', name: ['DRUM SMOKER'], serves: 45, unlock: ['+ PULLED PORK'], state: 'current', scene: 'yard' },
+  { key: 'kettle', name: ['KETTLE'], serves: 20, unlock: ['+ CHICKEN'], state: 'owned', scene: 'yard' }
+];
+const cardY = i => LAD.top + i * (LAD.cardH + LAD.gap);
+const currentIdx = RUNGS.findIndex(r => r.state === 'current');
+const splitY = cardY(currentIdx) + LAD.cardH / 2; // rails below this are "climbed"
+
+// rails and slats
+const railL = LAD.x, railR = LAD.x + LAD.w - 10, railTop = LAD.top - 10, railBot = cardY(5) + LAD.cardH + 8;
+function rail(x, y0, y1, lit) {
+  R(x, y0, 10, y1 - y0, lit ? '#c98a42' : '#6a5a52');
+  R(x, y0, 3, y1 - y0, lit ? '#f0b86a' : '#857571');
+  R(x + 8, y0, 2, y1 - y0, lit ? '#8a5428' : '#4b3e3a');
+  for (let y = y0 + 6; y < y1; y += 22) R(x + 4, y, 3, 2, lit ? '#8a5428' : '#4b3e3a');
+}
+[railL, railR].forEach(x => { R(x - 2, railTop - 2, 14, railBot - railTop + 4, C.out); rail(x, railTop, splitY, false); rail(x, splitY, railBot, true); });
+for (let i = -1; i < 6; i++) {
+  const yy = i < 0 ? railTop + 1 : cardY(i) + LAD.cardH + LAD.gap / 2 - 4;
+  const lit = yy > splitY;
+  R(railL + 10, yy - 1, railR - railL - 10, 10, C.out);
+  R(railL + 10, yy, railR - railL - 10, 8, lit ? '#c98a42' : '#6a5a52');
+  R(railL + 10, yy, railR - railL - 10, 2, lit ? '#f0b86a' : '#857571');
+  R(railL + 10, yy + 6, railR - railL - 10, 2, lit ? '#8a5428' : '#4b3e3a');
+}
+[railL, railR].forEach(x => { R(x - 2, railTop - 6, 14, 6, C.out); R(x, railTop - 4, 10, 4, '#857571'); });
+
+// well scene behind a cooker
+function well(x, y, w, h, kind) {
+  const bands = ['#7cc8ff', '#94d4ff', '#ade0ff'];
+  const gh = 16;
+  const bh = Math.floor((h - gh) / 3);
+  bands.forEach((c, i) => R(x, y + i * bh, w, i === 2 ? h - gh - 2 * bh : bh, c));
+  R(x + 8, y + 12, 14, 4, '#ffffff'); R(x + 12, y + 9, 8, 3, '#ffffff'); R(x + 50, y + 26, 12, 3, '#e8f6ff');
+  const gy = y + h - gh;
+  if (kind === 'street') {
+    R(x, gy, w, gh, '#b9b2a2'); R(x, gy, w, 2, '#d8d1c0');
+    for (let k = 0; k < w; k += 12) R(x + k, gy + 10, 6, 2, '#9e9686');
+  } else {
+    R(x, gy, w, gh, '#4fb548'); R(x, gy, w, 2, '#79d36a');
+    for (let k = 3; k < w; k += 9) R(x + k, gy + 6 + (k % 3) * 2, 2, 2, '#3d9a3b');
+  }
+  return gy;
+}
+function puff(x, y, a) { ctx.globalAlpha = a; R(x, y, 6, 4, '#ffffff'); R(x + 2, y - 2, 4, 2, '#ffffff'); R(x - 2, y + 2, 2, 2, '#ffffff'); ctx.globalAlpha = 1; }
+// locked art: desaturate and pull toward navy (about 40 percent) so locked reads at a glance
+function dimArt(x, y, w, h) {
+  const X = D(x), Y = D(y), W = D(w), H = D(h);
+  const id = ctx.getImageData(X, Y, W, H), d = id.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const l = 0.3 * d[i] + 0.59 * d[i + 1] + 0.11 * d[i + 2];
+    const nav = [24, 32, 74];
+    for (let k = 0; k < 3; k++) d[i + k] = Math.round((d[i + k] * 0.55 + l * 0.45) * 0.68 + nav[k] * 0.32);
+  }
+  ctx.putImageData(id, X, Y);
+}
+// every cooker and person must sit 2 px or more inside its picture well
+function place(spr, x, y, wx, wy, ww, wh, tag) {
+  if (x < wx + 2 || x + sw(spr) > wx + ww - 2 || y < wy || y + sh(spr) > wy + wh) overflow.push('art ' + tag + ' out of well');
+  blit(spr, x, y);
+}
+function bubble(x, y) { // speech bubble with a coin, tail down-left
+  R(x, y, 22, 16, C.out); R(x + 1, y + 1, 20, 14, '#ffffff'); R(x + 1, y + 13, 20, 2, '#d7deef');
+  blit(ICON.coin, x + 5.75, y + 2.75, 3);
+  R(x + 4, y + 16, 5, 2, C.out); R(x + 5, y + 15, 3, 2, '#d7deef'); R(x + 3, y + 18, 3, 2, C.out);
+}
+function badge(x, y, kind) {
+  R(x, y, 19, 19, C.out);
+  if (kind === 'lock') { R(x + 1, y + 1, 17, 17, '#59627f'); blit(ICON.lock, x + 3, y + 3.5, 3); return; }
+  const cur = kind === 'current';
+  R(x + 1, y + 1, 17, 17, cur ? C.goldDk : C.greenDk); R(x + 1, y + 1, 17, 15, cur ? C.gold : C.green); blit(ICON.check, x + 3.5, y + 3, 3);
+}
+
+RUNGS.forEach((rg, i) => {
+  const x = LAD.x + 14, y = cardY(i), w = LAD.w - 28, h = LAD.cardH;
+  const locked = rg.state === 'locked', current = rg.state === 'current';
+  if (current) {
+    R(x - 4, y - 4, w + 8, h + 8, 'rgba(243,207,109,0.35)');
+    shadowBox(x, y, w, h, C.panel, C.gold, 3);
+  } else {
+    shadowBox(x, y, w, h, locked ? C.panelLock : C.panel, locked ? '#8c96b4' : C.white, 2);
+  }
+  const bw = current ? 3 : 2;
+  // picture well: the art leads the card
+  const wx = x + bw + 2, wy = y + bw + 2, ww = 88, wh = h - 2 * bw - 4;
+  const gy = well(wx, wy, ww, wh, rg.scene);
+  R(wx + ww, wy, 2, wh, locked ? '#1e2338' : '#2e3550');
+  ctx.save(); ctx.beginPath(); ctx.rect(D(wx), D(wy), D(ww), D(wh)); ctx.clip();
+  const spr = SPR[rg.key];
+  const base = gy + 4;
+  if (rg.key === 'drum') {
+    place(spr, wx + 8, base - sh(spr), wx, wy, ww, wh, 'drum');
+    place(SPR.chef, wx + 54, base - sh(SPR.chef), wx, wy, ww, wh, 'drum chef');
+    puff(wx + 34, wy + 12, 0.85); puff(wx + 28, wy + 5, 0.5);
+  } else if (rg.key === 'kettle') {
+    place(spr, wx + 4, base - sh(spr), wx, wy, ww, wh, 'kettle');
+    place(SPR.hank, wx + 58, base - sh(SPR.hank), wx, wy, ww, wh, 'hank');
+    puff(wx + 30, wy + 14, 0.8); puff(wx + 36, wy + 7, 0.45);
+  } else if (rg.key === 'cabinet') {
+    place(spr, wx + 4, base - sh(spr), wx, wy, ww, wh, 'cabinet');
+    place(SPR.rosa, wx + 57, base - sh(SPR.rosa), wx, wy, ww, wh, 'rosa');
+    puff(wx + 42, wy + 4, 0.7);
+    bubble(wx + 62, wy + 10);
+  } else if (rg.key === 'restaurant') {
+    const sx = wx + Math.floor((ww - sw(spr)) / 2);
+    place(spr, sx, base - sh(spr), wx, wy, ww, wh, 'restaurant');
+    place(SPR.custA, sx + 30, gy + 12 - sh(SPR.custA), wx, wy, ww, wh, 'custA');
+    place(SPR.custB, sx + 44, gy + 13 - sh(SPR.custB), wx, wy, ww, wh, 'custB');
+    puff(wx + 18, wy + 2, 0.6);
+  } else {
+    const sx = wx + Math.floor((ww - sw(spr)) / 2);
+    place(spr, sx, base - sh(spr), wx, wy, ww, wh, rg.key);
+    if (rg.key === 'stick') { puff(wx + 36, wy + 10, 0.8); puff(wx + 44, wy + 4, 0.5); puff(wx + 76, wy + 8, 0.6); }
+    if (rg.key === 'trailer') { puff(wx + 56, wy + 9, 0.75); puff(wx + 62, wy + 3, 0.45); }
+  }
+  ctx.restore();
+  if (locked) dimArt(wx, wy, ww, wh);
+  // status badge pinned to the well's top-right corner, clear of the art
+  const bx = wx + ww - 22, byy = wy + 3;
+  if (locked) badge(bx, byy, 'lock');
+  if (rg.state === 'owned') badge(bx, byy, 'owned');
+  if (current) badge(bx, byy, 'current');
+
+  // info text
+  const tx = wx + ww + 5, tmax = x + w - bw - 4 - tx;
+  const nameCol = locked ? '#c9cfe0' : C.white, sh2 = locked ? '#141a33' : '#262c45';
+  let ty = rg.name.length > 1 ? y + 8 : (current ? y + 12 : y + 10);
+  rg.name.forEach(n => { fit(n, 3, tmax, 'name'); text(n, tx, ty, 3, nameCol, sh2); ty += 14; });
+  ty += rg.name.length > 1 ? 2 : 4;
+  blit(ICON.person, tx, ty - 0.5, 3);
+  const sv = 'SERVES ' + rg.serves; fit(sv, 3, tmax - 14, 'serves');
+  text(sv, tx + 14, ty, 3, locked ? C.mute : C.cream, sh2);
+  ty += 16;
+  rg.unlock.forEach(u => { fit(u, 3, tmax, 'unlock'); text(u, tx, ty, 3, locked ? '#bba872' : C.gold, sh2); ty += 13; });
+  // state
+  const by = y + h - bw - 30;
+  if (rg.state === 'buy') {
+    const lw = textW('BUY', 3) + 6 + 10.5 + 3 + textW(rg.price, 3);
+    const bwid = Math.min(tmax, lw + 22);
+    button(tx, by - 1, bwid, 28, C.orange, C.orangeDk, C.orangeHi);
+    let cx = tx + (bwid - lw) / 2;
+    text('BUY', cx, by + 6, 3, C.white, C.orangeDk); cx += textW('BUY', 3) + 6;
+    blit(ICON.coin, cx, by + 5.5, 3); cx += 13.5;
+    text(rg.price, cx, by + 6, 3, C.white, C.orangeDk);
+  } else if (rg.state === 'owned') {
+    const lw = 10.5 + 5 + textW('OWNED', 3);
+    box(tx, by + 3, lw + 14, 22, C.green, C.out, 2); R(tx + 2, by + 21, lw + 10, 2, C.greenDk);
+    blit(ICON.check, tx + 7, by + 9, 3); text('OWNED', tx + 7 + 15.5, by + 9, 3, C.white, C.greenDk);
+  } else if (current) {
+    const lw = textW('IN USE', 3);
+    box(tx, by + 3, lw + 14, 22, C.gold, C.out, 2); R(tx + 2, by + 21, lw + 10, 2, C.goldDk);
+    text('IN USE', tx + 7, by + 9, 3, '#3a2a08');
+  } else {
+    blit(ICON.lock, tx, by + 9.5, 3);
+    fit(rg.need, 3, tmax - 13, 'need');
+    text(rg.need, tx + 13, by + 10, 3, '#e6ebf7', '#141a33');
+  }
+  if (ty > by + 2 && !locked) overflow.push('rung text runs into state row: ' + rg.key);
+  if (ty > by + 9 && locked) overflow.push('rung text runs into need row: ' + rg.key);
+});
+
+// "you are here" tag, hung on the drum smoker panel's top border (clear of the cabinet panel above)
+(() => {
+  const cy = cardY(currentIdx), label = 'YOU ARE HERE', lw = textW(label, 3);
+  const y = cy - 8, x = LAD.x + 14 + (LAD.w - 28) - 8 - (lw + 16);
+  if (y < cardY(currentIdx - 1) + LAD.cardH + 4) overflow.push('you-are-here tag touches the panel above');
+  R(x + 2, y + 2, lw + 16, 16, 'rgba(9,16,52,0.55)');
+  box(x, y, lw + 16, 16, C.gold, C.out, 2);
+  R(x + 2, y + 12, lw + 12, 2, C.goldDk);
+  text(label, x + 8, y + 2.5, 3, '#3a2a08');
+})();
+// arrow marker on the left rail (pixel triangle, pointing right), 4 px in from the screen edge
+(() => {
+  const ay = cardY(currentIdx) + LAD.cardH / 2, ax = 4;
+  for (let i = 0; i < 7; i++) R(ax + i * 2, ay - 14 + i * 2, 2, 28 - i * 4, C.out);
+  for (let i = 0; i < 6; i++) R(ax + 2 + i * 2, ay - 11 + i * 2, 2, 22 - i * 4, C.gold);
+  R(ax + 2, ay - 11, 2, 22, '#fff2b8');
+})();
+
+// ---------- upgrades column ----------
+const UPS = [
+  { key: 'cooler', name: 'COOLER', lv: 2, max: 3, fx: 'MORE STOCK', price: '400' },
+  { key: 'prep', name: 'PREP TABLE', lv: 1, max: 3, fx: 'QUICK PREP', price: '150' },
+  { key: 'canopy', name: 'CANOPY', lv: 0, max: 1, fx: 'RAIN COVER', price: '250' },
+  { key: 'truck', name: 'TRUCK', lv: 1, max: 3, fx: 'MORE MILES', price: '600' }
+];
+UPS.forEach((u, i) => {
+  const x = UP.x, y = UP.top + i * (UP.h + UP.gap), w = UP.w, h = UP.h;
+  shadowBox(x, y, w, h, C.panel, C.white, 2);
+  const wx = x + 4, wy = y + 4, ww = w - 8, wh = 42;
+  R(wx, wy, ww, wh - 10, '#94d4ff'); R(wx, wy, ww, 12, '#7cc8ff');
+  R(wx, wy + wh - 10, ww, 10, '#d8c49c'); R(wx, wy + wh - 10, ww, 2, '#efe0bd');
+  for (let k = 4; k < ww; k += 14) R(wx + k, wy + wh - 5, 6, 2, '#bfa97e');
+  const spr = SPR[u.key];
+  blit(spr, wx + Math.floor((ww - sw(spr)) / 2), wy + wh - 4 - sh(spr));
+  R(wx, wy + wh, ww, 2, '#2e3550');
+  fit(u.name, 3, w - 12, 'upname');
+  text(u.name, x + 6, y + 54, 3, C.white, '#262c45');
+  let sx = x + 6;
+  for (let k = 0; k < u.max; k++) { blit(k < u.lv ? SPR.star : SPR.starOff, sx, y + 71, 3); sx += 19; }
+  const lvTxt = u.lv + '/' + u.max;
+  if (sx - 2 > x + w - 8 - textW(lvTxt, 3) - 2) overflow.push('stars hit level ' + u.key);
+  text(lvTxt, x + w - 8 - textW(lvTxt, 3), y + 75, 3, C.cream, '#262c45');
+  fit(u.fx, 3, w - 12, 'upfx');
+  text(u.fx, x + 6, y + 96, 3, C.gold, '#262c45');
+  const by = y + h - 36;
+  button(x + 5, by, w - 10, 30, C.orange, C.orangeDk, C.orangeHi);
+  const lw = 10.5 + 6 + 10.5 + 3 + textW(u.price, 3);
+  let cx = x + 5 + (w - 10 - lw) / 2;
+  blit(ICON.upW, cx, by + 6.5, 3); cx += 16.5;
+  blit(ICON.coin, cx, by + 6.5, 3); cx += 13.5;
+  text(u.price, cx, by + 7, 3, C.white, C.orangeDk);
+  if (lw > w - 18) overflow.push('upgrade btn ' + u.key + ' ' + lw);
+});
+
+// ---------- bottom bar ----------
+(() => {
+  const y = 772;
+  const x = LAD.x, w = LAD.w, h = 66;
+  box(x, y + 6, w, h - 6, C.bg, C.white, 2);
+  const label = 'FANS 28 / 40';
+  const lw = textW(label, 3) + 10.5 + 6;
+  R(x + 12, y, lw + 12, 14, C.bg);
+  blit(ICON.heart, x + 18, y + 1.5, 3);
+  text(label, x + 18 + 15, y + 2, 3, C.white, C.navy);
+  const bx = x + 10, bby = y + 20, bw2 = w - 20, bh = 16;
+  R(bx, bby, bw2, bh, C.out);
+  R(bx + 2, bby + 2, Math.round((bw2 - 4) * 28 / 40), bh - 4, C.gold);
+  R(bx + 2, bby + 2, Math.round((bw2 - 4) * 28 / 40), 2, '#fff2b8');
+  const nxt = 'NEXT: STICK BURNER';
+  fit(nxt, 3, w - 20, 'next');
+  text(nxt, x + w / 2 - textW(nxt, 3) / 2, bby + 23, 3, C.lightBlue, C.navy);
+  button(UP.x, y + 10, 58, 50, '#3a6ee6', '#1f45a8', '#6f9bff');
+  text('CREW', UP.x + 29 - textW('CREW', 3) / 2, y + 26, 3, C.white, '#1f45a8');
+  button(UP.x + 64, y + 10, 42, 50, C.white, '#9aa6c8', '#ffffff');
+  const ax = UP.x + 71, ay = y + 30;
+  R(ax, ay - 1, 14, 4, C.bg);
+  for (let i = 0; i < 6; i++) R(ax + 12 + i * 2, ay - 6 + i, 2, 14 - i * 2, C.bg);
+})();
+
+if (overflow.length) console.warn('OVERFLOW ' + overflow.join(' | '));
+</script>
+</body>
+</html>

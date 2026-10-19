@@ -1,5 +1,6 @@
 // games/pit-sim/dev/econ.mjs
-// Economy rerun for the pit sim v2 (design spec V2.19 item 2). Dev only, never shipped, not a
+// Economy rerun for the pit sim v2 (design spec V2.19 item 2), v2.1 windows and burn rate
+// ([T 3.5]: the tutorial is skipped right after createSim). Dev only, never shipped, not a
 // harness step. Drives the real PitSim.createSim from ../sim.js with a scripted competent bot
 // (the section 20.1 policy: quickest meat first, fire kept above 50, pull on done, carry the
 // plate someone waits for, buy about 1.1 times the expected crowd, hold a day's reserve before
@@ -198,6 +199,8 @@ function morning(sim) {
 
 function run(seed, days) {
   const sim = P.createSim(null, seed);
+  // v2.1 [T 3.5]: skip the guided tutorial so day 1 is the economy day the bot always played.
+  if (typeof sim.skipTutorial === 'function') sim.skipTutorial();
   sim.drainEvents();
   const rows = [];
   const firsts = {};

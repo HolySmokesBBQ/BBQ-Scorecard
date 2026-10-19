@@ -1,0 +1,883 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Your Pit v3 mock A: HD pixel</title>
+<style>
+  html, body { margin: 0; padding: 0; background: #1b1714; overflow: hidden; }
+  body { width: 390px; height: 844px; }
+  canvas { display: block; width: 390px; height: 844px; image-rendering: pixelated; image-rendering: crisp-edges; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+/* Mock A: polished HD pixel art, 3/4 top-down, 32 px tiles.
+   Native art is 195 x 422, shown at 390 x 844 CSS px (2x). At a 2x phone that is exactly 4 device px per art px.
+   Deterministic: a seeded generator, no Math.random. Picture only, no game logic. */
+'use strict';
+const W = 195, H = 422;
+const cv = document.getElementById('c');
+cv.width = W; cv.height = H;
+const g = cv.getContext('2d');
+g.imageSmoothingEnabled = false;
+
+/* ---------- seeded generator ---------- */
+function mulberry(a){ return function(){ a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const rnd = mulberry(20261018);
+
+/* ---------- palette ---------- */
+const OL = '#3a2216';           // soft dark brown outline
+const OLRGB = [58, 34, 22];
+const C = {
+  g0:'#66c545', g0b:'#5ebd40', gHi:'#8fe05f', gSh:'#47a334', gDeep:'#2f8a2e',
+  st:'#e9d4a8', st2:'#e1c99a', st3:'#efdcb4', stHi:'#f9ecd2', stSh:'#c8ab7d', grout:'#b0915f',
+  red:'#cf4a3b', redHi:'#ea6650', redSh:'#a33429', redDeep:'#7c2520',
+  trim:'#f6f1e6', trimSh:'#d3c9b6',
+  roof:'#4d5a80', roofHi:'#6679aa', roofSh:'#363f5c',
+  wood:'#c98a4b', woodHi:'#e6ab68', woodSh:'#a06a35', woodDeep:'#77491f',
+  m:'#2e3142', mHi:'#4d5573', mHi2:'#8792b4', mSh:'#1b1c27',
+  blue:'#3f86e8', blueHi:'#74adff', blueSh:'#2a62c2', blueDeep:'#1f4a99',
+  white:'#ffffff', plate:'#f4f7fb', plateSh:'#c7d1dd',
+  umber:'#2a2015', ink:'#1b1714', cream:'#E6D8B8', orange:'#D06129', gold:'#F3CF6D', goldSh:'#c98a1a'
+};
+const SKIN = {
+  a:{b:'#ffd5ad', s:'#eeab86', h:'#ffe6cc'},
+  b:{b:'#e8a774', s:'#c98557', h:'#f6c294'},
+  c:{b:'#a86d45', s:'#87512f', h:'#c48659'},
+  d:{b:'#f6c08f', s:'#dc9a6b', h:'#ffd8b0'}
+};
+const HAIR = {
+  brown:{b:'#6b3e22', s:'#4c2a17', h:'#8f5a33'},
+  black:{b:'#2f2530', s:'#1d1720', h:'#4b3d4e'},
+  blond:{b:'#f2c14e', s:'#cf9632', h:'#ffe08a'},
+  red:{b:'#d0572a', s:'#a63e1c', h:'#f07a45'},
+  gray:{b:'#b8b4ae', s:'#8f8a84', h:'#dedad4'},
+  dark:{b:'#3d2418', s:'#28160e', h:'#5a3826'}
+};
+const CLOTH = {
+  teal:{b:'#2fb3a6', s:'#1f8a80', h:'#5fd6c8'},
+  pink:{b:'#ff7aa8', s:'#d9567f', h:'#ffa6c6'},
+  yellow:{b:'#ffcf3a', s:'#e0a420', h:'#ffe57a'},
+  purple:{b:'#9a6ae0', s:'#744bb8', h:'#b994f2'},
+  green:{b:'#4bbf5a', s:'#33963f', h:'#7ddd85'},
+  white:{b:'#f4f1ea', s:'#cfc8bb', h:'#ffffff'},
+  sky:{b:'#5ab7f0', s:'#3a8ccc', h:'#8fd2ff'},
+  orange:{b:'#f08a32', s:'#c96a1c', h:'#ffad63'},
+  denim:{b:'#4767a8', s:'#334d82', h:'#5f82c4'},
+  khaki:{b:'#b89a6a', s:'#957a4f', h:'#d4b888'},
+  charcoal:{b:'#4a4450', s:'#332e38', h:'#655e6c'},
+  apronDark:{b:'#5a3a2c', s:'#3f281e', h:'#7a5240', t:'#5a3a2c'},
+  apronCream:{b:'#f3e6c8', s:'#d4c19a', h:'#fff6e0', t:'#f3e6c8'},
+  capOrange:{b:'#D06129', s:'#a8481b', h:'#ee8248'},
+  bandYellow:{b:'#ffcf3a', s:'#e0a420', h:'#ffe57a'},
+  straw:{b:'#f1d58a', s:'#d2b061', h:'#fff0b8'}
+};
+
+/* ---------- sprite helper ---------- */
+function eRows(X, Y, w, h){
+  const rows = [];
+  for (let j = 0; j < h; j++){
+    const dy = (j + 0.5 - h/2) / (h/2);
+    const hw = (w/2) * Math.sqrt(Math.max(0, 1 - dy*dy));
+    const x0 = Math.round(X + w/2 - hw), x1 = Math.round(X + w/2 + hw);
+    if (x1 > x0) rows.push([Y + j, x0, x1]);
+  }
+  return rows;
+}
+function S(w, h){
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const x = c.getContext('2d'); x.imageSmoothingEnabled = false;
+  const o = {
+    c, x, w, h,
+    r(X, Y, W2, H2, col){ if (col){ x.fillStyle = col; x.fillRect(X, Y, W2, H2); } return o; },
+    p(X, Y, col){ x.fillStyle = col; x.fillRect(X, Y, 1, 1); return o; },
+    clr(X, Y, W2 = 1, H2 = 1){ x.clearRect(X, Y, W2, H2); return o; },
+    e(X, Y, W2, H2, col){ x.fillStyle = col; for (const [yy, a, b] of eRows(X, Y, W2, H2)) x.fillRect(a, yy, b - a, 1); return o; },
+    line(x0, y0, x1, y1, col, th = 1){
+      x.fillStyle = col; const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0)) || 1;
+      for (let i = 0; i <= n; i++){ const t = i / n; x.fillRect(Math.round(x0 + (x1 - x0) * t), Math.round(y0 + (y1 - y0) * t), th, 1); }
+      return o;
+    },
+    outline(rgb = OLRGB){
+      const d = x.getImageData(0, 0, w, h), a = d.data, mark = new Uint8Array(w * h);
+      for (let yy = 0; yy < h; yy++) for (let xx = 0; xx < w; xx++){
+        const i = (yy * w + xx) * 4; if (a[i + 3] >= 128) continue;
+        const on = (X, Y) => X >= 0 && Y >= 0 && X < w && Y < h && a[(Y * w + X) * 4 + 3] >= 128;
+        if (on(xx - 1, yy) || on(xx + 1, yy) || on(xx, yy - 1) || on(xx, yy + 1)) mark[yy * w + xx] = 1;
+      }
+      for (let k = 0; k < w * h; k++) if (mark[k]){ const i = k * 4; a[i] = rgb[0]; a[i + 1] = rgb[1]; a[i + 2] = rgb[2]; a[i + 3] = 255; }
+      x.putImageData(d, 0, 0); return o;
+    },
+    put(X, Y, ctx = g){ ctx.drawImage(c, Math.round(X), Math.round(Y)); return o; }
+  };
+  return o;
+}
+function R(X, Y, w, h, col){ g.fillStyle = col; g.fillRect(X, Y, w, h); }
+function P(X, Y, col){ g.fillStyle = col; g.fillRect(X, Y, 1, 1); }
+function E(X, Y, w, h, col){ g.fillStyle = col; for (const [yy, a, b] of eRows(X, Y, w, h)) g.fillRect(a, yy, b - a, 1); }
+function shadow(cx, cy, w, h, a = 0.26){ E(Math.round(cx - w/2), Math.round(cy - h/2), w, h, `rgba(28,52,18,${a})`); }
+
+/* ---------- bitmap font 5x7 ---------- */
+const FONT = {
+ 'A':['.###.','#...#','#...#','#####','#...#','#...#','#...#'], 'B':['####.','#...#','#...#','####.','#...#','#...#','####.'],
+ 'C':['.###.','#...#','#....','#....','#....','#...#','.###.'], 'D':['####.','#...#','#...#','#...#','#...#','#...#','####.'],
+ 'E':['#####','#....','#....','####.','#....','#....','#####'], 'F':['#####','#....','#....','####.','#....','#....','#....'],
+ 'G':['.###.','#...#','#....','#.###','#...#','#...#','.####'], 'H':['#...#','#...#','#...#','#####','#...#','#...#','#...#'],
+ 'I':['.###.','..#..','..#..','..#..','..#..','..#..','.###.'], 'J':['..###','...#.','...#.','...#.','...#.','#..#.','.##..'],
+ 'K':['#...#','#..#.','#.#..','##...','#.#..','#..#.','#...#'], 'L':['#....','#....','#....','#....','#....','#....','#####'],
+ 'M':['#...#','##.##','#.#.#','#.#.#','#...#','#...#','#...#'], 'N':['#...#','#...#','##..#','#.#.#','#..##','#...#','#...#'],
+ 'O':['.###.','#...#','#...#','#...#','#...#','#...#','.###.'], 'P':['####.','#...#','#...#','####.','#....','#....','#....'],
+ 'Q':['.###.','#...#','#...#','#...#','#.#.#','#..#.','.##.#'], 'R':['####.','#...#','#...#','####.','#.#..','#..#.','#...#'],
+ 'S':['.####','#....','#....','.###.','....#','....#','####.'], 'T':['#####','..#..','..#..','..#..','..#..','..#..','..#..'],
+ 'U':['#...#','#...#','#...#','#...#','#...#','#...#','.###.'], 'V':['#...#','#...#','#...#','#...#','#...#','.#.#.','..#..'],
+ 'W':['#...#','#...#','#...#','#.#.#','#.#.#','#.#.#','.#.#.'], 'X':['#...#','#...#','.#.#.','..#..','.#.#.','#...#','#...#'],
+ 'Y':['#...#','#...#','.#.#.','..#..','..#..','..#..','..#..'], 'Z':['#####','....#','...#.','..#..','.#...','#....','#####'],
+ '0':['.###.','#...#','#..##','#.#.#','##..#','#...#','.###.'], '1':['..#..','.##..','..#..','..#..','..#..','..#..','.###.'],
+ '2':['.###.','#...#','....#','...#.','..#..','.#...','#####'], '3':['####.','....#','....#','.###.','....#','....#','####.'],
+ '4':['...#.','..##.','.#.#.','#..#.','#####','...#.','...#.'], '5':['#####','#....','####.','....#','....#','#...#','.###.'],
+ '6':['.###.','#....','#....','####.','#...#','#...#','.###.'], '7':['#####','....#','...#.','..#..','.#...','.#...','.#...'],
+ '8':['.###.','#...#','#...#','.###.','#...#','#...#','.###.'], '9':['.###.','#...#','#...#','.####','....#','....#','.###.'],
+ '+':['.....','..#..','..#..','#####','..#..','..#..','.....'], 'x':['.....','.....','#...#','.#.#.','..#..','.#.#.','#...#'],
+ ' ':['.....','.....','.....','.....','.....','.....','.....']
+};
+function textW(s, bold){ return s.length * (bold ? 7 : 6) - 1; }
+const BOLDG = { 'W':['##...##','##...##','##...##','##.#.##','##.#.##','#######','.##.##.'] };
+function glyphs(ctx, s, X, Y, col, bold){
+  ctx.fillStyle = col; let cx = X;
+  for (const ch of s){
+    if (bold && BOLDG[ch]){ const bg = BOLDG[ch]; for (let j = 0; j < 7; j++) for (let i = 0; i < bg[j].length; i++) if (bg[j][i] === '#') ctx.fillRect(cx + i, Y + j, 1, 1); cx += bg[0].length + 1; continue; }
+    const gl = FONT[ch] || FONT[' '];
+    for (let j = 0; j < 7; j++) for (let i = 0; i < 5; i++) if (gl[j][i] === '#'){ ctx.fillRect(cx + i, Y + j, bold ? 2 : 1, 1); }
+    cx += bold ? 7 : 6; }
+}
+function text(s, X, Y, col, opt = {}){
+  const ctx = opt.ctx || g, bold = !!opt.bold;
+  if (opt.outline){ for (const [dx, dy] of [[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[1,-1],[-1,1],[1,1]]) glyphs(ctx, s, X + dx, Y + dy, opt.outline, bold); }
+  if (opt.shadow) glyphs(ctx, s, X, Y + 1, opt.shadow, bold);
+  glyphs(ctx, s, X, Y, col, bold);
+}
+
+/* ---------- small icons ---------- */
+function coin(X, Y, ctx = g){
+  const s = S(9, 9);
+  s.e(1, 1, 7, 7, C.goldSh).e(1, 1, 6, 6, C.gold).p(3, 2, '#fff6c8').p(2, 3, '#fff6c8').r(4, 3, 1, 3, C.goldSh).outline();
+  s.put(X - 1, Y - 1, ctx);
+}
+function star(X, Y, on, ctx = g){
+  const pat = ['...#...','..###..','#######','.#####.','..###..','.##.##.','.#...#.'];
+  const s = S(9, 9);
+  pat.forEach((row, j) => [...row].forEach((ch, i) => { if (ch === '#') s.p(i + 1, j + 1, on ? (j < 3 ? '#ffe68a' : C.gold) : '#5a4a36'); }));
+  if (on){ s.p(4, 2, '#fffbe0'); s.p(3, 3, '#fffbe0'); s.p(5, 6, C.goldSh); s.p(4, 6, C.goldSh); }
+  s.outline(on ? OLRGB : [20, 15, 11]);
+  s.put(X - 1, Y - 1, ctx);
+}
+
+/* ---------- people ---------- */
+function person(o){
+  const s = S(30, 34), X = 3, Y = 2;
+  const r = (a, b, c, d, col) => s.r(a + X, b + Y, c, d, col);
+  const p = (a, b, col) => s.p(a + X, b + Y, col);
+  const clr = (a, b, w = 1, h = 1) => s.clr(a + X, b + Y, w, h);
+  const sk = SKIN[o.skin], hr = HAIR[o.hair], sh = CLOTH[o.shirt], up = o.face === 'up';
+  const pose = o.pose || 'stand';
+  // hair that hangs behind the body
+  if (o.style === 'long' && !up){ r(4, 6, 16, 12, hr.s); }
+  if (o.style === 'pony' && up){ /* drawn later on top */ }
+  // legs
+  if (pose !== 'sit'){
+    if (o.skirt){ const sc = CLOTH[o.skirt]; r(7, 22, 10, 4, sc.b); r(6, 24, 12, 2, sc.b); r(14, 22, 3, 4, sc.s); r(6, 25, 12, 1, sc.s);
+      r(8, 26, 2, 1, sk.b); r(14, 26, 2, 1, sk.s); }
+    else { const pc = CLOTH[o.pants]; r(8, 23, 8, 4, pc.b); r(8, 23, 2, 4, pc.h); r(14, 23, 2, 4, pc.s); clr(11, 25, 2, 2); }
+    const shoe = o.shoe || '#4a2c22';
+    if (o.walk){ r(7, 26, 4, 2, shoe); r(13, 27, 4, 2, shoe); r(7, 26, 2, 1, '#6d4636'); }
+    else { r(7, 27, 4, 2, shoe); r(13, 27, 4, 2, shoe); r(7, 27, 2, 1, '#6d4636'); r(13, 27, 2, 1, '#6d4636'); }
+  }
+  // torso
+  r(7, 15, 10, 8, sh.b); r(7, 15, 2, 8, sh.h); r(15, 15, 2, 8, sh.s); r(7, 22, 10, 1, sh.s);
+  if (!up && !o.apron){ r(10, 15, 4, 1, sk.s); p(11, 16, sk.s); p(12, 16, sk.s); } // collar
+  // arms
+  if (pose === 'carry'){ r(5, 16, 2, 3, sh.h); r(17, 16, 2, 3, sh.s); }
+  else if (pose === 'tongs'){ r(5, 16, 2, 5, sh.h); r(5, 21, 2, 2, sk.b); r(17, 16, 2, 3, sh.s); r(18, 18, 2, 2, sh.s); r(19, 20, 2, 2, sk.s); }
+  else if (pose === 'grill'){ r(5, 16, 2, 3, sh.h); r(17, 16, 2, 3, sh.s); }
+  else if (pose === 'sit'){ r(5, 16, 2, 4, sh.h); r(17, 16, 2, 4, sh.s); r(6, 20, 3, 2, sk.b); r(15, 20, 3, 2, sk.s); }
+  else { r(5, 16, 2, 5, sh.h); r(17, 16, 2, 5, sh.s); r(5, 21, 2, 2, sk.b); r(17, 21, 2, 2, sk.s); }
+  // apron
+  if (o.apron){ const a = CLOTH[o.apron];
+    if (!up){
+      r(9, 16, 6, 5, a.b); r(8, 20, 8, 6, a.b); r(8, 20, 1, 6, a.h); r(9, 16, 1, 4, a.h);
+      r(14, 16, 1, 4, a.s); r(14, 20, 2, 6, a.s); r(10, 22, 4, 2, a.s); r(10, 22, 4, 1, a.h === a.b ? a.s : a.s);
+      p(8, 15, a.b); p(15, 15, a.s); p(9, 15, a.b); p(14, 15, a.s); // neck strap
+      p(7, 20, a.t); p(6, 21, a.t); p(16, 20, a.t); p(17, 21, a.t); // waist ties
+      if (o.apronTrim) { r(8, 25, 8, 1, o.apronTrim); r(9, 16, 6, 1, o.apronTrim); }
+      if (o.bow){ const bc = o.bow, bh = '#ee8248', bs = '#8f3a14';
+        r(6, 21, 12, 1, a.s); p(6, 21, a.t); p(17, 21, a.t); // waist strap
+        r(7, 20, 3, 3, bc); r(14, 20, 3, 3, bc); r(10, 21, 4, 1, bc); r(11, 20, 2, 3, bs); p(7, 20, bh); p(8, 20, bh); p(14, 20, bh);
+        p(9, 22, bs); p(16, 22, bs); p(10, 23, bc); p(13, 23, bc); }
+    } else {
+      p(8, 15, a.b); p(15, 15, a.b); r(7, 20, 10, 1, a.s);
+      r(10, 19, 4, 3, a.b); p(9, 18, a.b); p(14, 18, a.b); p(9, 22, a.b); p(14, 22, a.b); p(11, 20, a.s); p(12, 20, a.s);
+      r(10, 22, 1, 3, a.s); r(13, 22, 1, 3, a.s);
+      r(7, 21, 1, 4, a.b); r(16, 21, 1, 4, a.s);
+    }
+  }
+  // head
+  const side = o.face === 'side';
+  const r0 = r, p0 = p;
+  if (!up && side){
+    // 3/4 profile facing right, chin up, eyes raised to a bubble overhead
+    r(6, 5, 12, 10, sk.b); clr(6, 14); clr(17, 14); clr(6, 5); clr(17, 5);
+    r(6, 6, 3, 8, sk.s); r(7, 14, 10, 1, sk.s); r(13, 6, 3, 2, sk.h);
+    r(18, 9, 1, 2, sk.b); p(18, 10, sk.s);
+  } else if (!up){
+    const fx = o.fx || 0;
+    r0(6, 5, 12, 10, sk.b); clr(6, 14); clr(17, 14); clr(6, 5); clr(17, 5);
+    if (fx < 0){ r0(15, 6, 3, 8, sk.s); r0(7, 6, 2, 3, sk.h); r0(5, 9, 1, 2, sk.b); }
+    else { r0(16, 6, 2, 8, sk.s); r0(7, 6, 2, 3, sk.h); r0(5, 9, 1, 2, sk.b); r0(18, 9, 1, 2, sk.s); }
+    r0(7, 14, 10, 1, sk.s);
+    const r = (a, b, c, d, col) => r0(a + fx, b, c, d, col);
+    const p = (a, b, col) => p0(a + fx, b, col);
+    const eye = '#2b1810', m = '#7a2e22', blush = '#ff9a8e';
+    const ex = o.expr || 'smile';
+    if (ex === 'happy' || ex === 'chew'){
+      p(7, 10, eye); r(8, 9, 2, 1, eye); p(10, 10, eye);
+      p(13, 10, eye); r(14, 9, 2, 1, eye); p(16, 10, eye);
+    } else if (ex === 'focus'){
+      r(8, 10, 2, 2, eye); r(14, 10, 2, 2, eye); p(8, 10, '#fff'); p(14, 10, '#fff');
+      r(7, 8, 3, 1, hr.s); r(14, 8, 3, 1, hr.s); p(10, 9, hr.s); p(13, 9, hr.s);
+    } else {
+      r(8, 9, 2, 3, eye); r(14, 9, 2, 3, eye); p(8, 9, '#fff'); p(14, 9, '#fff');
+    }
+    r(7, 12, 2, 1, blush); r(15, 12, 2, 1, blush);
+    if (o.beard){ r(7, 12, 10, 3, hr.b); r(6, 11, 1, 3, hr.b); r(17, 11, 1, 3, hr.s); r(8, 14, 8, 1, hr.s); r(9, 15, 6, 1, hr.s); r(13, 12, 3, 2, hr.s); }
+    if (ex === 'open' || ex === 'happy'){ r(10, 12, 4, 2, '#7a2020'); r(11, 13, 2, 1, '#ff8a80'); r(10, 12, 4, 1, '#fff'); r(10,12,1,1,'#7a2020'); r(13,12,1,1,'#7a2020'); }
+    else if (ex === 'chew'){ r(11, 13, 2, 1, m); r(15, 11, 2, 2, sk.h); }
+    else if (ex === 'focus'){ r(10, 13, 4, 1, m); p(14, 12, m); r(11, 13, 2, 1, '#ffffff'); }
+    else { p(10, 12, m); r(11, 13, 2, 1, m); p(13, 12, m); }
+  } else {
+    r(6, 5, 12, 10, hr.b); r(5, 9, 1, 2, sk.b); r(18, 9, 1, 2, sk.s); r(9, 14, 6, 1, sk.s);
+  }
+  // hair / hats
+  const st = o.style || 'short';
+  if (st === 'cap'){
+    const cp = CLOTH[o.hat || 'capOrange'];
+    if (!up){
+      r(5, 7, 1, 3, hr.b); r(18, 7, 1, 3, hr.s); r(6, 6, 12, 1, hr.b);
+      r(7, 0, 10, 1, cp.b); r(6, 1, 12, 5, cp.b); r(5, 3, 14, 3, cp.b); r(8, 1, 4, 1, cp.h); r(7, 2, 2, 2, cp.h); r(15, 2, 3, 4, cp.s);
+      r(5, 6, 14, 1, cp.s); r(6, 7, 12, 1, cp.s); r(7, 6, 10, 1, cp.b);
+      r(11, 2, 2, 2, C.cream); p(11, 2, '#fff');
+    } else {
+      r(5, 5, 14, 8, hr.b); r(6, 13, 12, 1, hr.b); r(6, 11, 12, 2, hr.s);
+      r(7, 0, 10, 1, cp.b); r(6, 1, 12, 5, cp.b); r(5, 3, 14, 3, cp.b); r(8, 1, 4, 1, cp.h); r(15, 2, 3, 4, cp.s);
+      r(9, 6, 6, 1, cp.s); r(10, 5, 4, 1, '#f0e0c0');
+    }
+  } else if (st === 'sunhat'){
+    const ht = CLOTH[o.hat || 'straw'];
+    if (!up){
+      r(4, 6, 2, 7, hr.b); r(18, 6, 2, 7, hr.s); p(4, 7, hr.h); p(5, 9, hr.h); p(4, 11, hr.s); p(19, 8, hr.b); p(18, 11, '#7a756f');
+      r(6, 6, 12, 2, hr.b); [7, 8, 11, 12].forEach(xx => p(xx, 6, hr.h)); [6, 9, 10, 13, 16, 17].forEach(xx => p(xx, 7, hr.s)); p(15, 6, hr.s);
+      p(4, 12, hr.h); p(19, 12, hr.s);
+    } else { r(5, 5, 14, 9, hr.b); r(6, 12, 12, 2, hr.s); }
+    r(8, -1, 8, 1, ht.b); r(7, 0, 10, 4, ht.b); r(8, 0, 3, 1, ht.h); r(14, 0, 3, 4, ht.s);
+    r(7, 3, 10, 1, '#ff6b8f'); r(1, 4, 22, 2, ht.b); r(2, 6, 20, 1, ht.s); r(3, 4, 6, 1, ht.h); r(0, 5, 1, 1, ht.b); r(23, 5, 1, 1, ht.s);
+  } else if (st === 'bandana'){
+    const bd = CLOTH[o.hat || 'bandYellow'];
+    r(7, 1, 10, 1, hr.b); r(6, 2, 12, 3, hr.b); r(5, 3, 14, 2, hr.b);
+    r(5, 5, 14, 2, bd.b); r(5, 6, 14, 1, bd.s); r(6, 5, 4, 1, bd.h);
+    if (!up){ r(5, 7, 1, 3, hr.b); r(18, 7, 1, 3, hr.s); p(7, 7, hr.s); p(16,7,hr.s); r(19, 5, 2, 2, bd.b); p(20, 7, bd.s); p(21, 8, bd.s); }
+    else { r(5, 7, 14, 6, hr.b); r(6, 13, 12, 1, hr.b); r(6, 11, 12, 2, hr.s); r(10, 6, 4, 2, bd.s); p(10, 8, bd.b); p(13, 8, bd.b); }
+    if (o.pony){ if (!up){ r(18, 8, 3, 3, hr.b); r(19, 11, 2, 4, hr.s); } else { r(10, 12, 4, 6, hr.b); r(11, 17, 2, 1, hr.s); r(10, 13, 4, 1, '#ff5c8a'); } }
+  } else {
+    // plain hair: short / bob / long / pony
+    r(7, 1, 10, 1, hr.b); r(6, 2, 12, 4, hr.b); r(5, 3, 14, 4, hr.b);
+    r(8, 2, 4, 1, hr.h); r(7, 3, 2, 1, hr.h); r(15, 3, 3, 3, hr.s);
+    if (!up){
+      r(6, 6, 12, 1, hr.b); r(5, 6, 1, 4, hr.b); r(18, 6, 1, 4, hr.s);
+      [6, 7, 9, 10, 13, 16, 17].forEach(xx => p(xx, 7, hr.s));
+      p(8, 7, hr.b); p(12, 7, hr.b);
+      if (st === 'bob' || st === 'long'){ r(4, 5, 2, st === 'long' ? 12 : 8, hr.b); r(18, 5, 2, st === 'long' ? 12 : 8, hr.s); r(4, 5, 1, 4, hr.h); }
+      if (st === 'pony'){ r(18, 3, 3, 3, hr.b); r(19, 6, 2, 5, hr.s); p(18, 4, '#ff5c8a'); p(19, 4, '#ff5c8a'); }
+      if (st === 'curly'){ [[5,2],[17,2],[4,5],[19,5],[9,0],[13,0]].forEach(([a,b]) => r(a, b, 2, 2, hr.b)); }
+    } else {
+      r(5, 5, 14, 8, hr.b); r(6, 13, 12, 1, hr.b); r(6, 11, 12, 2, hr.s); r(5, 9, 1, 2, sk.b); r(18, 9, 1, 2, sk.s);
+      if (st === 'bob' || st === 'long'){ r(4, 5, 16, st === 'long' ? 12 : 8, hr.b); r(5, st === 'long' ? 14 : 11, 14, 2, hr.s); }
+      if (st === 'pony'){ r(10, 12, 4, 6, hr.b); r(11, 17, 2, 1, hr.s); r(10, 13, 4, 1, '#ff5c8a'); }
+      if (st === 'curly'){ [[5,2],[17,2],[4,6],[19,6],[9,0],[13,0],[4,10],[19,10]].forEach(([a,b]) => r(a, b, 2, 2, hr.b)); }
+    }
+  }
+  if (side && !up){
+    const eye = '#2b1810';
+    r(5, 5, 4, 8, hr.b); r(5, 10, 3, 3, hr.s); r(6, 5, 2, 2, hr.h); clr(18, 6, 1, 3);
+    r(9, 9, 2, 3, sk.s); p(9, 10, sk.b);                  // ear
+    r(11, 8, 1, 2, eye);                                   // far eye
+    r(14, 8, 2, 2, eye); p(15, 8, '#ffffff');              // near eye, glint high: looking up
+    r(14, 7, 2, 1, hr.s);                                  // raised brow
+    r(14, 11, 3, 2, '#7a2020'); p(15, 12, '#ff8a80'); r(14, 11, 3, 1, '#ffffff'); // open grin
+    r(11, 12, 2, 1, '#ff9a8e');                           // blush
+  }
+  // held items
+  if (pose === 'carry'){
+    const plate = (px, py, food) => { s.e(px + X, py + Y, 10, 5, C.plate); s.r(px + X + 2, py + Y + 4, 6, 1, C.plateSh); food(px + X, py + Y); };
+    plate(1, 17, (a, b) => { s.r(a + 3, b + 1, 4, 2, '#8a3a22'); s.r(a + 3, b + 1, 4, 1, '#c55a36'); s.p(a + 4, b + 3, '#f2e2c4'); s.p(a + 6, b + 3, '#f2e2c4'); });
+    plate(13, 16, (a, b) => { s.r(a + 2, b + 1, 6, 2, '#b0704e'); s.r(a + 2, b + 1, 6, 1, '#3a1e14'); s.p(a + 4, b + 2, '#e08a70'); s.r(a + 7, b + 2, 1, 1, '#4bbf5a'); });
+    r(4, 19, 2, 2, sk.b); r(18, 18, 2, 2, sk.s);
+  }
+  if (pose === 'tongs'){ s.line(21 + X, 21 + Y, 24 + X, 27 + Y, '#9aa3b8'); s.line(22 + X, 21 + Y, 25 + X, 27 + Y, '#cfd5e2'); }
+  s.outline();
+  return s;
+}
+// place by foot point (stand) or by head top (sit)
+function putFoot(s, cx, fy){ s.put(cx - 15, fy - 30); }
+function putHead(s, cx, ty){ s.put(cx - 15, ty - 3); }
+
+/* ---------- food icons ---------- */
+function capsule(s, X, Y, w, h, b, hi, sh){
+  s.r(X + 1, Y, w - 2, h, b); s.r(X, Y + 1, w, h - 2, b);
+  s.r(X + 2, Y, w - 4, 1, hi); s.r(X + 1, Y + 1, 2, 1, hi);
+  s.r(X + 2, Y + h - 1, w - 3, 1, sh); s.r(X + w - 1, Y + 1, 1, h - 2, sh);
+}
+function sausageIcon(s, X, Y){
+  capsule(s, X, Y + 4, 18, 6, '#b8462c', '#e8774c', '#7e2a1c');
+  capsule(s, X + 4, Y, 18, 6, '#c04e30', '#f08a5a', '#86301f');
+  for (const gx of [8, 13, 18]) { s.p(X + gx, Y + 1, '#5a1e12'); s.p(X + gx + 1, Y + 2, '#5a1e12'); }
+  for (const gx of [4, 9, 14]) { s.p(X + gx, Y + 5, '#5a1e12'); s.p(X + gx + 1, Y + 6, '#5a1e12'); }
+  s.p(X + 6, Y + 1, '#ffd0b0'); s.p(X + 2, Y + 5, '#ffd0b0');
+}
+function chickenIcon(s, X, Y){
+  s.e(X, Y, 15, 12, '#d98a35'); s.e(X + 2, Y + 1, 9, 6, '#f2a94e'); s.p(X + 4, Y + 2, '#ffd890'); s.p(X + 5, Y + 2, '#ffd890');
+  s.r(X + 9, Y + 8, 5, 3, '#a85e20'); s.r(X + 3, Y + 10, 8, 1, '#a85e20');
+  s.r(X + 13, Y + 5, 6, 3, '#f6ecd8'); s.r(X + 13, Y + 7, 6, 1, '#d8c8a8');
+  s.e(X + 18, Y + 2, 4, 4, '#f6ecd8'); s.e(X + 18, Y + 6, 4, 4, '#e8dcc0');
+  s.p(X + 6, Y + 5, '#8a4a1a'); s.p(X + 9, Y + 4, '#8a4a1a');
+}
+function ribsIcon(s, X, Y){
+  for (const bx of [2, 6, 10, 14, 18]) { s.r(X + bx, Y + 8, 2, 4, '#f2e2c4'); s.p(X + bx + 1, Y + 11, '#cdb894'); }
+  s.r(X + 1, Y, 20, 9, '#8e341f'); s.r(X, Y + 1, 22, 7, '#8e341f');
+  s.r(X + 2, Y + 1, 17, 2, '#c85a36'); s.r(X + 3, Y + 1, 6, 1, '#f08a5a');
+  s.r(X + 1, Y + 7, 20, 1, '#5e1e12');
+  for (const bx of [5, 9, 13, 17]) s.r(X + bx, Y + 3, 1, 4, '#6e2616');
+}
+function brisketIcon(s, X, Y){
+  for (let i = 0; i < 4; i++){
+    const bx = X + i * 5, by = Y + (i % 2 ? 1 : 0);
+    s.r(bx, by, 7, 11, '#c27a55'); s.r(bx, by, 7, 2, '#3a1e14'); s.r(bx, by + 2, 7, 1, '#d4505a');
+    s.r(bx + 1, by + 4, 3, 2, '#e09a72'); s.r(bx, by + 7, 7, 1, '#f3dcc0'); s.r(bx + 6, by + 2, 1, 9, '#9a5a3c');
+  }
+}
+
+/* ---------- mini 3x5 font for button labels ---------- */
+const MINI = {
+  'A':['.#.','#.#','###','#.#','#.#'], 'B':['##.','#.#','##.','#.#','##.'], 'C':['.##','#..','#..','#..','.##'],
+  'E':['###','#..','##.','#..','###'], 'G':['.##','#..','#.#','#.#','.##'], 'H':['#.#','#.#','###','#.#','#.#'],
+  'I':['###','.#.','.#.','.#.','###'], 'K':['#.#','#.#','##.','#.#','#.#'], 'N':['##.','#.#','#.#','#.#','#.#'],
+  'R':['##.','#.#','##.','#.#','#.#'], 'S':['.##','#..','.#.','..#','##.'], 'T':['###','.#.','.#.','.#.','.#.'],
+  'U':['#.#','#.#','#.#','#.#','###'], ' ':['...','...','...','...','...']
+};
+function mini(ctx, s, X, Y, col){ ctx.fillStyle = col; let cx = X; for (const ch of s){ const gl = MINI[ch] || MINI[' ']; for (let j = 0; j < 5; j++) for (let i = 0; i < 3; i++) if (gl[j][i] === '#') ctx.fillRect(cx + i, Y + j, 1, 1); cx += 4; } }
+
+/* =========================================================
+   SCENE
+   ========================================================= */
+/* ground: grass on a 32 px tile grid */
+for (let ty = 0; ty < H; ty += 32) for (let tx = 0; tx < W; tx += 32){
+  R(tx, ty, 32, 32, ((tx + ty) / 32) % 2 ? C.g0 : C.g0b);
+}
+for (let i = 0; i < 170; i++){
+  const x = Math.floor(rnd() * W), y = 36 + Math.floor(rnd() * (H - 36));
+  const k = rnd();
+  if (k < 0.7){ P(x, y, C.gHi); P(x + 2, y, C.gHi); P(x + 1, y + 1, C.gHi); P(x + 1, y + 2, C.gSh); }
+  else if (k < 0.85){ P(x, y, C.gSh); P(x + 1, y - 1, C.gSh); }
+  else { const fc = rnd() < 0.5 ? '#ffffff' : '#ffe14d'; P(x, y - 1, fc); P(x - 1, y, fc); P(x + 1, y, fc); P(x, y + 1, fc); P(x, y, '#ffb02e'); }
+}
+
+/* patio pavers */
+function patio(x0, y0, x1, y1){
+  R(x0, y0, x1 - x0, y1 - y0, C.grout);
+  const sw = 16, shh = 12;
+  for (let row = 0, y = y0; y < y1; row++, y += shh){
+    const off = row % 2 ? -8 : 0;
+    for (let x = x0 + off; x < x1; x += sw){
+      const v = rnd(); const base = v < 0.33 ? C.st : v < 0.66 ? C.st2 : C.st3;
+      const a = Math.max(x, x0), b = Math.min(x + sw - 1, x1), yb = Math.min(y + shh - 1, y1);
+      if (b <= a) continue;
+      R(a, y, b - a, yb - y, base);
+      R(a, y, b - a, 1, C.stHi); R(a, y, 1, yb - y, C.stHi);
+      R(a, yb - 1, b - a, 1, C.stSh); R(b - 1, y, 1, yb - y, C.stSh);
+      if (rnd() < 0.3){ P(a + 4 + Math.floor(rnd() * 6), y + 4 + Math.floor(rnd() * 4), C.stSh); }
+    }
+  }
+}
+patio(0, 96, 130, 212);
+patio(130, 160, 193, 218);
+const EDGE = '#a3845a', GS = 'rgba(28,52,18,0.25)';
+R(0, 212, 130, 2, EDGE); R(0, 214, 130, 2, GS);
+R(130, 218, 63, 2, EDGE); R(130, 220, 65, 2, GS);
+R(130, 96, 2, 64, EDGE); R(132, 96, 2, 64, GS);
+R(130, 158, 63, 2, EDGE);
+R(193, 160, 2, 60, EDGE);
+
+/* stepping stones from the gate up to the counter */
+[[148, 344], [142, 328], [150, 312], [143, 296], [151, 280], [144, 264], [153, 248], [146, 232]].forEach(([x, y]) => {
+  E(x - 7, y - 3, 16, 9, GS);
+  E(x - 8, y - 5, 16, 9, C.stSh); E(x - 8, y - 6, 16, 8, C.st); E(x - 5, y - 5, 7, 3, C.stHi);
+});
+
+/* ---------- back: shed wall ---------- */
+const SHED = 140;
+R(0, 24, SHED + 2, 14, C.roof);
+for (let y = 24; y < 38; y += 4){ R(0, y + 3, SHED + 2, 1, C.roofSh); for (let x = (y / 4) % 2 ? 0 : 6; x < SHED + 2; x += 12) R(x, y, 1, 3, C.roofSh); R(0, y, SHED + 2, 1, C.roofHi); }
+R(0, 36, SHED + 4, 3, C.roofSh); R(0, 39, SHED + 4, 2, C.trim); R(0, 41, SHED + 4, 1, C.trimSh);
+for (let y = 42; y < 92; y += 7){ R(0, y, SHED, 7, C.red); R(0, y, SHED, 1, C.redHi); R(0, y + 6, SHED, 1, C.redSh); }
+for (let i = 0; i < 30; i++){ const x = Math.floor(rnd() * (SHED - 2)), y = 44 + Math.floor(rnd() * 46); P(x, y, C.redSh); }
+R(SHED - 4, 39, 6, 55, C.trim); R(SHED, 39, 2, 55, C.trimSh); R(SHED - 4, 39, 1, 55, '#ffffff');
+R(0, 92, SHED + 2, 4, '#9a9488'); R(0, 92, SHED + 2, 1, '#bdb8ac'); R(0, 96, SHED + 2, 2, 'rgba(28,30,18,0.3)');
+for (let x = 2; x < SHED; x += 9) R(x, 93, 1, 3, '#7c766a');
+// door
+(function(){
+  const s = S(30, 52);
+  s.r(1, 1, 28, 50, C.trim); s.r(27, 1, 2, 50, C.trimSh);
+  s.r(4, 4, 22, 47, '#8b5530');
+  for (let x = 4; x < 26; x += 6){ s.r(x, 4, 1, 47, '#6a3d20'); s.r(x + 1, 4, 1, 47, '#a46a3e'); }
+  s.r(4, 4, 22, 3, '#6a3d20'); s.r(4, 26, 22, 3, '#6a3d20'); s.r(4, 46, 22, 3, '#6a3d20');
+  s.line(5, 44, 24, 30, '#6a3d20', 2); s.line(5, 24, 24, 9, '#6a3d20', 2);
+  s.r(21, 28, 3, 3, C.gold); s.p(21, 28, '#fff6c8');
+  s.outline(); s.put(47, 43);
+})();
+// window with curtains and a flower box
+(function(){
+  const s = S(42, 40);
+  s.r(1, 1, 38, 30, C.trim); s.r(37, 1, 2, 30, C.trimSh); s.r(1, 29, 38, 2, C.trimSh);
+  s.r(4, 4, 32, 24, '#8fd0ff'); s.r(4, 4, 32, 2, '#3a6fa8'); s.r(4, 4, 2, 24, '#3a6fa8');
+  for (let i = 0; i < 9; i++){ s.p(10 + i, 8 + i, '#d8f1ff'); s.p(11 + i, 8 + i, '#d8f1ff'); s.p(24 + i, 6 + i, '#d8f1ff'); }
+  s.r(19, 4, 2, 24, C.trim); s.r(4, 15, 32, 2, C.trim); s.r(20, 4, 1, 24, C.trimSh);
+  s.r(6, 6, 4, 9, '#ffb8c8'); s.r(30, 6, 4, 9, '#ffb8c8'); s.r(6, 6, 4, 1, '#ffd6e0'); s.r(9, 6, 1, 9, '#e8909f'); s.r(33, 6, 1, 9, '#e8909f');
+  s.r(0, 31, 40, 7, C.wood); s.r(0, 31, 40, 1, C.woodHi); s.r(0, 36, 40, 2, C.woodSh); s.r(2, 33, 36, 1, C.woodSh);
+  const fl = ['#ff4d6d', '#ffd23f', '#ff8ad0', '#ffffff', '#ff4d6d', '#ffd23f', '#ff8ad0'];
+  for (let i = 0; i < 7; i++){ const fx = 3 + i * 5; s.r(fx, 28, 4, 3, '#3f9b3a'); s.p(fx + 1, 26, fl[i]); s.r(fx, 27, 3, 1, fl[i]); s.p(fx + 1, 28, fl[i]); s.p(fx + 1, 27, '#fff2a0'); }
+  s.outline(); s.put(3, 46);
+})();
+// sign
+(function(){
+  const s = S(60, 22);
+  s.line(14, 1, 9, 6, '#6b5a4a'); s.line(44, 1, 49, 6, '#6b5a4a'); s.p(14, 1, '#cfd5e2'); s.p(44, 1, '#cfd5e2');
+  s.r(2, 6, 56, 14, '#6d4424'); s.r(2, 6, 56, 1, '#8f5c34'); s.r(2, 18, 56, 2, '#4f2f17'); s.r(56, 6, 2, 14, '#4f2f17');
+  s.r(3, 12, 53, 1, '#5d391d');
+  text('YOUR PIT', 6, 9, C.gold, { ctx: s.x, shadow: '#3a2216' });
+  s.outline(); s.put(80, 47);
+})();
+// towel and tongs on a hook under the sign
+(function(){
+  const s = S(14, 22);
+  s.r(1, 1, 12, 2, C.woodSh); s.r(2, 3, 1, 2, '#9aa3b8'); s.r(10, 3, 1, 2, '#9aa3b8');
+  s.r(8, 5, 5, 10, '#ffffff'); s.r(8, 7, 5, 1, '#ff5a5a'); s.r(8, 11, 5, 1, '#ff5a5a'); s.r(12, 5, 1, 10, '#d0d6e0');
+  s.line(2, 5, 1, 16, '#9aa3b8'); s.line(3, 5, 4, 16, '#cfd5e2');
+  s.outline(); s.put(120, 68);
+})();
+
+/* ---------- back right: hedge and fence ---------- */
+for (let x = SHED; x < W + 12; x += 12){ E(x - 4, 36, 22, 28, C.gDeep); E(x - 2, 38, 16, 14, '#3f9b3a'); E(x, 39, 8, 5, '#5cbd4a'); }
+(function(){
+  const s = S(60, 36);
+  s.r(0, 12, 60, 3, C.trim); s.r(0, 14, 60, 1, C.trimSh); s.r(0, 26, 60, 3, C.trim); s.r(0, 28, 60, 1, C.trimSh);
+  for (let x = 1; x < 60; x += 7){ s.r(x, 4, 5, 30, C.trim); s.r(x + 1, 3, 3, 1, C.trim); s.p(x + 2, 2, C.trim); s.r(x + 4, 4, 1, 30, C.trimSh); s.r(x, 4, 1, 30, '#ffffff'); }
+  s.outline(); s.put(SHED + 2, 61);
+})();
+R(SHED + 2, 96, W, 3, GS);
+
+/* ---------- tree inside the yard ---------- */
+shadow(163, 134, 40, 11, 0.3);
+(function(){
+  const s = S(66, 100);
+  s.r(28, 54, 10, 44, '#8a5a32'); s.r(28, 54, 3, 44, '#a87244'); s.r(35, 54, 3, 44, '#6a4322');
+  s.r(26, 94, 14, 4, '#8a5a32'); s.r(24, 96, 4, 2, '#6a4322'); s.r(38, 96, 4, 2, '#6a4322');
+  s.r(31, 70, 2, 3, '#5a3a1e'); s.r(32, 82, 3, 2, '#5a3a1e');
+  s.line(33, 60, 22, 48, '#8a5a32', 3); s.line(34, 62, 46, 50, '#8a5a32', 3);
+  const blob = (x, y, w, h, b, hi) => { s.e(x, y, w, h, b); s.e(x + 3, y + 2, w * 0.55, h * 0.45, hi); };
+  blob(1, 26, 32, 32, '#2f8a2e', '#3fa53a');
+  blob(31, 28, 33, 30, '#2f8a2e', '#3fa53a');
+  blob(5, 6, 30, 32, '#3a9d36', '#57bd47');
+  blob(27, 4, 33, 34, '#3a9d36', '#57bd47');
+  blob(12, 18, 40, 30, '#45ad3d', '#6ad152');
+  s.e(14, 9, 11, 6, '#7ee05e'); s.e(35, 7, 11, 6, '#7ee05e'); s.e(20, 25, 9, 5, '#7ee05e');
+  [[10, 44], [50, 46], [24, 50], [40, 52], [5, 36], [56, 34]].forEach(([a, b]) => s.e(a, b, 8, 6, '#26762a'));
+  [[14, 15], [40, 18], [29, 32], [49, 30], [10, 34], [22, 22], [52, 13]].forEach(([a, b]) => { s.r(a, b, 3, 3, '#ff5a4a'); s.p(a, b, '#ffb0a0'); s.p(a + 2, b + 2, '#b8302a'); });
+  s.outline(); s.put(130, 36);
+})();
+
+/* ---------- string-light posts ---------- */
+function post(x, top, base){
+  shadow(x + 3, base, 12, 4, 0.3);
+  const s = S(10, base - top + 4);
+  s.r(2, 2, 5, base - top, '#8a5a32'); s.r(2, 2, 2, base - top, '#a87244'); s.r(6, 2, 1, base - top, '#6a4322');
+  s.r(1, 1, 7, 3, '#6a4322'); s.r(1, 1, 7, 1, '#8a5a32');
+  s.outline(); s.put(x - 1, top - 1);
+}
+post(189, 70, 206);
+
+/* ---------- cooking area ---------- */
+// drum smoker against the wall
+(function(){
+  const s = S(28, 60);
+  const bx = 4, bw = 20;
+  const shadeCol = i => i < 2 ? C.redDeep : i < 4 ? C.red : i < 7 ? C.redHi : i < 14 ? C.red : i < 17 ? C.redSh : C.redDeep;
+  for (let i = 0; i < bw; i++){ s.r(bx + i, 18, 1, 28, shadeCol(i)); }
+  for (const [yy, a, b] of eRows(bx, 42, bw, 8)){ if (yy < 46) continue; for (let xx = a; xx < b; xx++) s.p(xx, yy, shadeCol(xx - bx)); }
+  for (const ry of [26, 36]){ s.r(bx, ry, bw, 1, C.redDeep); s.r(bx + 1, ry + 1, bw - 2, 1, C.redHi); }
+  s.r(bx + 5, 20, 1, 5, '#ffa08a'); s.r(bx + 5, 29, 1, 6, '#ffa08a');
+  s.e(7, 39, 6, 5, C.m); s.p(9, 40, C.mHi2); s.r(12, 41, 2, 1, C.mHi);
+  s.r(0, 30, 4, 2, C.mSh); s.r(24, 30, 4, 2, C.mSh); s.r(0, 30, 1, 4, C.mSh); s.r(27, 30, 1, 4, C.mSh);
+  s.r(6, 49, 3, 5, C.mSh); s.r(19, 49, 3, 5, C.mSh);
+  s.e(3, 8, 22, 14, C.m);
+  for (const [yy, a, b] of eRows(3, 8, 22, 14)){ s.r(b - 5, yy, 5, 1, C.mSh); }
+  s.e(6, 9, 8, 4, C.mHi); s.p(8, 10, C.mHi2); s.p(9, 10, C.mHi2);
+  s.r(3, 17, 22, 2, C.mSh); s.r(4, 16, 20, 1, C.mHi);
+  s.r(17, 2, 5, 9, C.m); s.r(17, 2, 1, 9, C.mHi); s.r(21, 2, 1, 9, C.mSh); s.r(16, 1, 7, 2, C.mSh); s.r(17, 1, 5, 1, C.mHi);
+  s.r(9, 6, 6, 2, C.wood); s.r(9, 6, 6, 1, C.woodHi);
+  s.e(8, 11, 6, 6, '#f6f6f6'); s.p(10, 13, '#e23a2a'); s.p(11, 12, '#e23a2a'); s.p(9, 12, '#b0b8c8');
+  s.outline(); shadow(18, 133, 26, 7, 0.3); s.put(4, 80);
+})();
+// charcoal sack under the sign
+(function(){
+  const s = S(18, 22);
+  s.r(2, 5, 14, 16, '#c99a62'); s.r(3, 4, 12, 1, '#c99a62'); s.r(2, 5, 3, 16, '#e0b47a'); s.r(13, 5, 3, 16, '#a87a44');
+  s.r(2, 2, 14, 3, '#b3864f'); s.r(3, 2, 2, 3, '#d4a86e'); s.p(8, 1, '#b3864f'); s.p(12, 1, '#b3864f');
+  s.r(5, 10, 8, 6, '#2e3142'); s.r(7, 11, 2, 3, '#ff7a1a'); s.r(9, 12, 2, 2, '#ffb02e'); s.p(8, 10, '#ffb02e');
+  s.r(2, 19, 14, 2, '#8a6034');
+  s.r(-1, 0, 0, 0, '#000');
+  s.outline(); shadow(109, 121, 18, 5); s.put(100, 100);
+  // galvanized bucket of wood chunks
+  const c = S(16, 17);
+  c.r(2, 6, 12, 10, '#a9b3c4'); c.r(3, 15, 10, 1, '#7f8a9e'); c.r(2, 6, 3, 10, '#cfd7e4'); c.r(11, 6, 3, 10, '#8892a6');
+  c.r(2, 9, 12, 1, '#8892a6'); c.r(2, 12, 12, 1, '#8892a6');
+  c.r(1, 5, 14, 2, '#dfe5ef'); c.r(1, 6, 14, 1, '#9aa3b8');
+  c.r(3, 2, 4, 4, '#a86a38'); c.r(3, 2, 4, 1, '#d79a5a'); c.r(7, 1, 4, 5, '#8e5a2e'); c.r(7, 1, 4, 1, '#c88a52'); c.r(10, 3, 3, 3, '#b8784a'); c.p(11, 3, '#e8c08a'); c.p(4, 3, '#e8c08a');
+  c.line(1, 6, 0, 1, '#7f8a9e'); c.line(14, 6, 15, 1, '#7f8a9e'); c.r(1, 0, 14, 1, '#7f8a9e');
+  c.outline(); shadow(124, 125, 16, 4); c.put(116, 108);
+})();
+// pitmaster behind the kettle
+shadow(58, 121, 20, 6);
+const pitmaster = person({ skin: 'b', hair: 'dark', style: 'cap', hat: 'capOrange', beard: true, shirt: 'white', pants: 'denim', apron: 'apronDark', apronTrim: C.orange, bow: C.orange, face: 'down', pose: 'grill', expr: 'focus' });
+putFoot(pitmaster, 58, 120);
+
+// kettle, lid off, food on the grate
+(function(){
+  const s = S(36, 42);
+  const mx = 2, my = 4;
+  s.line(9, 26, 4, 38, C.mSh, 2); s.line(27, 26, 32, 38, C.mSh, 2); s.line(18, 28, 18, 35, '#151620', 2);
+  s.r(9, 32, 18, 1, '#555b70'); s.e(12, 31, 12, 4, '#3c4155'); s.r(13, 31, 10, 1, '#5d6580');
+  s.e(1, 37, 6, 4, '#20222e'); s.p(3, 38, '#5d6580'); s.e(29, 37, 6, 4, '#20222e'); s.p(31, 38, '#5d6580');
+  s.e(mx, my, 32, 28, C.m);
+  for (const [yy, a, b] of eRows(mx, my, 32, 28)){ if (yy < my + 7) continue; s.r(a, yy, 2, 1, C.mSh); s.r(a + 2, yy, 3, 1, C.mHi); s.r(b - 6, yy, 6, 1, C.mSh); }
+  s.r(7, 13, 2, 9, C.mHi2); s.p(7, 22, C.mHi);
+  s.e(14, 27, 8, 3, '#5d6580'); s.r(16, 28, 4, 1, '#8792b4');
+  s.e(mx, my, 32, 14, C.mSh);
+  s.e(mx + 2, my + 1, 28, 12, '#1d1312');
+  const inner = eRows(mx + 2, my + 1, 28, 12);
+  for (const [yy, a, b] of inner){ if (yy > my + 6) for (let xx = a + 1; xx < b - 1; xx++){ const k = (xx * 7 + yy * 13) % 11; if (k < 3) s.p(xx, yy, k ? '#ff7a1a' : '#ffc23e'); } }
+  for (const [yy, a, b] of inner){ for (let xx = a + 1; xx < b - 1; xx += 3) s.p(xx, yy, '#9aa1b5'); }
+  s.r(mx + 3, my + 6, 26, 1, '#b8bfd0');
+  capsule(s, 7, 7, 9, 4, '#b8462c', '#e8774c', '#7e2a1c'); capsule(s, 9, 11, 9, 4, '#c04e30', '#f08a5a', '#86301f');
+  s.p(10, 8, '#5a1e12'); s.p(13, 8, '#5a1e12'); s.p(12, 12, '#5a1e12'); s.p(15, 12, '#5a1e12');
+  s.e(20, 7, 9, 6, '#d98a35'); s.e(21, 7, 5, 3, '#f2a94e'); s.r(27, 9, 3, 2, '#f6ecd8');
+  const rim = eRows(mx, my, 32, 14); rim.slice(0, 2).forEach(([yy, a, b]) => s.r(a + 3, yy, b - a - 6, 1, C.mHi2));
+  s.r(0, 9, 3, 3, C.wood); s.r(33, 9, 3, 3, C.woodSh);
+  s.outline(); shadow(54, 152, 34, 8, 0.3); s.put(36, 114);
+})();
+// pitmaster's arms reaching over the rim: left hand on the rim, right hand working the tongs
+(function(){
+  const sk = SKIN.b, sh = CLOTH.white;
+  const s = S(34, 26), ox = 40, oy = 104;   // local = abs - (ox, oy)
+  const A = (x, y, w, h, col) => s.r(x - ox, y - oy, w, h, col);
+  // left arm: sleeve, rolled cuff, forearm, hand on the rim
+  A(50, 107, 3, 5, sh.h); A(50, 111, 3, 1, sh.s); A(49, 112, 3, 1, '#e8e2d6');
+  A(48, 113, 3, 3, sk.b); A(47, 116, 3, 2, sk.b); A(47, 113, 1, 3, sk.h); A(46, 118, 4, 2, sk.b); A(46, 119, 4, 1, sk.s);
+  // right arm: sleeve, cuff, forearm angled in, fist on the tongs
+  A(63, 107, 3, 5, sh.s); A(63, 107, 1, 5, sh.b); A(63, 111, 3, 1, '#b8b0a2'); A(63, 112, 3, 1, '#e8e2d6');
+  A(63, 113, 3, 3, sk.b); A(62, 116, 3, 2, sk.b); A(65, 113, 1, 3, sk.s); A(60, 117, 4, 3, sk.b); A(60, 117, 4, 1, sk.h); A(63, 118, 1, 2, sk.s);
+  s.outline();
+  // tongs (outline-free so they read as thin steel), tips pinching a sausage
+  A(59, 119, 1, 1, '#cfd5e2'); s.line(59 - ox, 120 - oy, 53 - ox, 124 - oy, '#cfd5e2'); s.line(60 - ox, 120 - oy, 55 - ox, 125 - oy, '#8f98ad');
+  A(52, 124, 2, 1, '#e8edf5'); A(54, 125, 2, 1, '#8f98ad');
+  s.put(ox, oy);
+})();
+// charcoal chimney starter with glowing coals where the lid used to sit
+(function(){
+  const s = S(22, 26);
+  s.r(4, 7, 12, 16, '#9aa3b8'); s.r(4, 7, 3, 16, '#cfd5e2'); s.r(13, 7, 3, 16, '#6f7890'); s.r(4, 22, 12, 1, '#5d6580');
+  for (const [hx, hy] of [[8, 11], [11, 11], [8, 15], [11, 15], [8, 19], [11, 19]]){ s.r(hx, hy, 2, 2, '#2e3142'); s.p(hx, hy + 1, '#ff7a1a'); }
+  s.e(4, 5, 12, 5, '#6f7890'); s.e(5, 5, 10, 4, '#1d1312');
+  s.r(6, 5, 2, 2, '#ff7a1a'); s.r(9, 5, 3, 2, '#ffb02e'); s.p(12, 6, '#ff7a1a'); s.p(10, 5, '#fff2a0'); s.p(7, 6, '#ffc23e');
+  s.r(16, 10, 4, 2, '#5d6580'); s.r(18, 10, 2, 9, C.wood); s.r(18, 10, 1, 9, C.woodHi); s.r(16, 17, 4, 2, '#5d6580');
+  s.outline();
+  shadow(15, 166, 18, 5); s.put(4, 141);
+  g.globalAlpha = 0.3; E(6, 143, 14, 7, '#ffb02e'); g.globalAlpha = 0.5; E(9, 144, 7, 4, '#ffd27a'); g.globalAlpha = 1;
+  [[15, 140, 2, 0.5], [17, 136, 2, 0.32]].forEach(([x, y, r, a]) => { g.globalAlpha = a; E(x - r, y - r, r * 2, r * 2, '#f4f4f8'); });
+  g.globalAlpha = 1;
+})();
+
+// cutting board on a stand with sliced brisket
+(function(){
+  const s = S(42, 34);
+  s.r(3, 18, 3, 14, C.woodSh); s.r(36, 18, 3, 14, C.woodDeep); s.r(5, 26, 32, 2, C.woodDeep);
+  s.r(1, 6, 40, 10, C.wood); s.r(1, 6, 40, 1, C.woodHi); s.r(1, 16, 40, 3, C.woodSh); s.r(1, 18, 40, 1, C.woodDeep);
+  for (let x = 1; x < 41; x += 10) s.r(x, 7, 1, 9, C.woodSh);
+  s.r(4, 3, 32, 11, '#f0c487'); s.r(4, 3, 32, 1, '#ffdcaa'); s.r(4, 13, 32, 1, '#c99a5e'); s.r(35, 3, 1, 11, '#c99a5e');
+  s.r(31, 5, 3, 2, '#c99a5e');
+  s.r(6, 4, 12, 8, '#3a1e14'); s.r(7, 4, 10, 2, '#5a3220'); s.p(9, 5, '#7a4a30'); s.p(13, 4, '#7a4a30');
+  s.r(17, 4, 1, 8, '#d4505a');
+  for (let i = 0; i < 4; i++){ const x = 19 + i * 3, y = 4 + (i % 2);
+    s.r(x, y, 3, 8, '#c27a55'); s.r(x, y, 3, 1, '#3a1e14'); s.r(x, y + 1, 3, 1, '#d4505a'); s.r(x, y + 3, 2, 2, '#e8a37c'); s.r(x, y + 6, 3, 1, '#f3dcc0'); s.r(x + 2, y + 1, 1, 7, '#9a5a3c'); }
+  s.r(8, 12, 11, 1, '#e8edf5'); s.r(8, 13, 11, 1, '#aab3c4'); s.r(19, 12, 5, 2, '#3a3040');
+  s.outline(); shadow(105, 162, 40, 7, 0.28); s.put(84, 130);
+})();
+// wood stack and cooler on the patio
+(function(){
+  const s = S(30, 18);
+  const log = (x, y) => { s.r(x, y, 14, 5, '#a86a38'); s.r(x, y, 14, 1, '#c88a52'); s.r(x, y + 4, 14, 1, '#7a4a22'); s.e(x + 11, y, 5, 5, '#e8c08a'); s.p(x + 13, y + 2, '#b8864a'); };
+  log(2, 11); log(14, 11); log(8, 6); log(4, 1); log(14, 1);
+  s.outline(); shadow(16, 204, 30, 6); s.put(2, 188);
+})();
+(function(){
+  const s = S(24, 20);
+  s.r(1, 5, 22, 13, '#3a7fe0'); s.r(1, 5, 22, 1, '#6aa8ff'); s.r(19, 5, 4, 13, '#2a5fb8'); s.r(1, 16, 22, 2, '#2a5fb8');
+  s.r(1, 2, 22, 4, '#ffffff'); s.r(1, 5, 22, 1, '#d0d8e4'); s.r(8, 0, 8, 2, '#d0d8e4');
+  s.outline(); shadow(48, 202, 22, 5); s.put(36, 183);
+})();
+
+/* ---------- counter with a blue cloth ---------- */
+shadow(146, 214, 90, 10, 0.3);
+(function(){
+  const s = S(88, 44);
+  s.r(6, 30, 2, 12, '#7c8498'); s.r(80, 30, 2, 12, '#5d6478'); s.r(20, 30, 2, 10, '#5d6478'); s.r(66, 30, 2, 10, '#5d6478');
+  const gx = 1, gw = 86;
+  for (let y = 0; y < 14; y++) for (let x = 0; x < gw; x++){ const a = (x % 6) < 3, b = (y % 6) < 3; s.p(gx + x, 2 + y, a && b ? '#dcebff' : (a || b) ? C.blueHi : C.blue); }
+  s.r(gx, 2, gw, 1, '#eaf3ff');
+  for (let y = 0; y < 14; y++) for (let x = 0; x < gw; x++){ const a = (x % 6) < 3, b = (y % 6) < 3; s.p(gx + x, 16 + y, a && b ? '#b4d0ff' : (a || b) ? C.blue : C.blueSh); }
+  for (const fx of [12, 28, 44, 60, 76]){ s.r(fx, 17, 2, 13, 'rgba(20,40,110,0.35)'); s.r(fx - 2, 17, 1, 13, 'rgba(255,255,255,0.25)'); }
+  s.r(gx, 16, gw, 1, C.blueDeep);
+  for (let x = 0; x < gw; x++){ const d = Math.round(1.2 * Math.sin(x / 3)); s.r(gx + x, 29 + d, 1, 2, x % 6 < 3 ? C.blueSh : C.blueDeep); if (d < 0) s.clr(gx + x, 31 + d, 1, 1 - d); }
+  const plate = (px, py, food) => { s.e(px, py, 16, 8, C.white); s.e(px + 2, py + 1, 12, 6, '#eef2f7'); s.r(px + 3, py + 7, 10, 1, C.plateSh); food(px, py); };
+  plate(6, 4, (a, b) => { s.r(a + 4, b + 2, 8, 3, '#8e341f'); s.r(a + 4, b + 2, 8, 1, '#d0603a'); for (const k of [5, 7, 9, 11]) s.p(a + k, b + 5, '#f2e2c4'); });
+  plate(26, 5, (a, b) => { s.r(a + 4, b + 2, 8, 2, '#c04e30'); s.r(a + 4, b + 2, 7, 1, '#f08a5a'); s.r(a + 5, b + 4, 7, 2, '#b8462c'); s.p(a + 7, b + 4, '#e8774c'); });
+  plate(46, 4, (a, b) => { for (let i = 0; i < 3; i++){ s.r(a + 4 + i * 3, b + 2, 3, 4, '#c27a55'); s.r(a + 4 + i * 3, b + 2, 3, 1, '#3a1e14'); s.p(a + 5 + i * 3, b + 3, '#d4505a'); } });
+  s.r(70, 0, 9, 13, '#cfeeff'); s.r(70, 0, 9, 2, '#9fd0ee'); s.r(71, 6, 7, 6, C.gold); s.r(72, 7, 2, 1, '#fff6c8'); s.p(75, 9, C.goldSh); s.r(71, 2, 1, 9, '#ffffff'); s.r(78, 2, 1, 10, '#8fbcd8');
+  s.outline(); s.put(102, 170);
+})();
+
+/* ---------- people ---------- */
+const cust1 = person({ skin: 'c', hair: 'black', style: 'curly', shirt: 'yellow', pants: 'denim', face: 'side' });
+const cust2 = person({ skin: 'a', hair: 'gray', style: 'sunhat', hat: 'straw', shirt: 'purple', skirt: 'sky', face: 'down', fx: -1, expr: 'open', walk: true, shoe: '#7a3a5a' });
+shadow(166, 240, 18, 6); putFoot(cust1, 166, 238);
+shadow(152, 270, 18, 6); putFoot(cust2, 152, 268);
+
+const crew = person({ skin: 'd', hair: 'red', style: 'bandana', hat: 'bandYellow', pony: true, shirt: 'green', pants: 'charcoal', apron: 'apronCream', face: 'down', pose: 'carry', expr: 'open', walk: true });
+shadow(112, 252, 18, 6); putFoot(crew, 112, 250);
+
+/* ---------- picnic tables ---------- */
+function picnic(x, y, w, planks, nearBench){
+  const top = planks * 6, hgt = top + (nearBench ? 28 : 22);
+  const s = S(w + 4, hgt);
+  const L = 10, Rr = w - 12;
+  s.line(L + 2, top + 2, L - 4, top + 20, C.woodDeep, 3); s.line(L + 6, top + 2, L + 12, top + 20, C.woodSh, 3);
+  s.line(Rr - 2, top + 2, Rr - 8, top + 20, C.woodDeep, 3); s.line(Rr + 2, top + 2, Rr + 8, top + 20, C.woodSh, 3);
+  for (let i = 0; i < planks; i++){ const yy = 2 + i * 6; s.r(2, yy, w, 5, C.wood); s.r(2, yy, w, 1, C.woodHi); s.r(2, yy + 5, w, 1, C.woodSh);
+    s.p(10 + i * 23, yy + 2, C.woodSh); s.p(Math.round(w * 0.45) + i * 17, yy + 3, C.woodSh); s.r(Math.round(w * 0.75) - i * 9, yy + 2, 4, 1, '#d79a5a'); }
+  s.r(2, top + 2, w, 3, C.woodSh); s.r(2, top + 4, w, 1, C.woodDeep);
+  if (nearBench){ const by = top + 14; s.r(4, by, w - 4, 5, C.wood); s.r(4, by, w - 4, 1, C.woodHi); s.r(4, by + 5, w - 4, 3, C.woodSh); s.r(4, by + 7, w - 4, 1, C.woodDeep);
+    s.r(12, by + 8, 3, 5, C.woodDeep); s.r(w - 11, by + 8, 3, 5, C.woodDeep); }
+  return s;
+}
+function farBench(x, y, w){
+  const s = S(w + 2, 5);
+  s.r(1, 1, w, 2, C.wood); s.r(1, 1, w, 1, C.woodHi); s.r(1, 3, w, 1, C.woodDeep);
+  s.outline(); s.put(x, y);
+}
+function forearms(cx, y, skin, sleeve){
+  const sk = SKIN[skin], sl = CLOTH[sleeve];
+  const s = S(24, 6);
+  s.r(1, 1, 2, 2, sl.h); s.r(3, 1, 4, 2, sk.b); s.r(3, 2, 4, 1, sk.s);
+  s.r(19, 1, 2, 2, sl.s); s.r(15, 1, 4, 2, sk.b); s.r(15, 2, 4, 1, sk.s);
+  s.outline(); s.put(cx - 12, y - 1);
+}
+function plate(sp, px, py, food){ sp.e(px, py, 16, 8, C.white); sp.e(px + 2, py + 1, 12, 6, '#eef2f7'); sp.r(px + 3, py + 7, 10, 1, C.plateSh); food(px, py); }
+const food = {
+  brisket: (sp) => (a, b) => { for (let i = 0; i < 2; i++){ sp.r(a + 4 + i * 3, b + 2, 3, 4, '#c27a55'); sp.r(a + 4 + i * 3, b + 2, 3, 1, '#3a1e14'); } sp.r(a + 11, b + 3, 2, 2, '#ffd23f'); },
+  ribs: (sp) => (a, b) => { sp.r(a + 4, b + 2, 8, 3, '#8e341f'); sp.r(a + 4, b + 2, 8, 1, '#d0603a'); sp.p(a + 6, b + 5, '#f2e2c4'); sp.p(a + 9, b + 5, '#f2e2c4'); },
+  chicken: (sp) => (a, b) => { sp.e(a + 4, b + 1, 8, 5, '#d98a35'); sp.e(a + 5, b + 1, 4, 2, '#f2a94e'); sp.r(a + 11, b + 3, 2, 2, '#f6ecd8'); },
+  slaw: (sp) => (a, b) => { sp.e(a + 4, b + 1, 8, 5, '#eaf2c8'); sp.p(a + 6, b + 2, '#8fd06a'); sp.p(a + 9, b + 3, '#ff9a6a'); sp.p(a + 7, b + 4, '#8fd06a'); }
+};
+
+// table 1 (upper): two diners on the far bench
+shadow(50, 272, 92, 14, 0.28);
+farBench(6, 245, 86);
+const guest1 = person({ skin: 'a', hair: 'blond', style: 'bob', shirt: 'pink', face: 'down', pose: 'sit', expr: 'chew' });
+const guest2 = person({ skin: 'c', hair: 'brown', style: 'short', shirt: 'teal', face: 'down', pose: 'sit', expr: 'happy' });
+putHead(guest1, 30, 228);
+putHead(guest2, 68, 228);
+(function(){
+  const s = picnic(4, 247, 88, 3, true);
+  plate(s, 16, 3, food.brisket(s)); plate(s, 54, 3, food.ribs(s));
+  s.r(37, 2, 5, 7, '#e84a3a'); s.r(37, 2, 5, 1, '#ff8070'); s.r(38, 3, 3, 1, '#fff2a0');
+  s.r(74, 3, 5, 7, '#ffd23f'); s.r(74, 3, 5, 1, '#ffffff'); s.r(77, 4, 2, 6, '#e0a420'); s.p(78, 1, '#3fb34a'); s.p(78, 2, '#3fb34a');
+  s.outline(); s.put(4, 247);
+})();
+forearms(30, 250, 'a', 'pink');
+forearms(68, 250, 'c', 'teal');
+R(42, 250, 1, 4, '#cfd5e2'); R(56, 250, 1, 4, '#cfd5e2');
+
+// table 2 (lower): a smaller table, two more diners, one waiting on ribs
+shadow(74, 324, 70, 12, 0.28);
+farBench(40, 303, 66);
+const guest3 = person({ skin: 'd', hair: 'gray', style: 'short', shirt: 'khaki', face: 'down', pose: 'sit', expr: 'smile' });
+const guest4 = person({ skin: 'b', hair: 'dark', style: 'long', shirt: 'orange', face: 'down', pose: 'sit', expr: 'open' });
+putHead(guest3, 57, 287);
+putHead(guest4, 90, 287);
+(function(){
+  const s = picnic(38, 305, 66, 2, true);
+  plate(s, 9, 2, food.slaw(s)); plate(s, 40, 2, (a, b) => { s.e(a + 5, b + 2, 6, 3, '#e4e9f2'); });
+  s.r(29, 1, 5, 7, '#7fd8ff'); s.r(29, 1, 5, 1, '#ffffff'); s.r(30, 4, 3, 3, '#ff6a5a');
+  s.outline(); s.put(38, 305);
+})();
+forearms(57, 308, 'd', 'khaki');
+forearms(90, 308, 'b', 'orange');
+
+/* ---------- flower beds ---------- */
+function flowerBed(x, y, w, h, seed){
+  const r2 = mulberry(seed);
+  const s = S(w + 2, h + 10);
+  s.r(1, 6, w, h, '#7a4a2a'); s.r(1, 6, w, 2, '#5a341c');
+  s.r(1, h + 3, w, 4, C.wood); s.r(1, h + 3, w, 1, C.woodHi); s.r(1, h + 6, w, 1, C.woodSh);
+  for (let i = 0; i < w * h / 14; i++){ const fx = 3 + Math.floor(r2() * (w - 6)), fy = 4 + Math.floor(r2() * (h - 2)); s.r(fx - 1, fy + 1, 3, 3, r2() < 0.5 ? '#3f9b3a' : '#2f8a2e'); s.p(fx + 2, fy + 2, '#57bd47'); }
+  const cols = [['#ff4d6d', '#ffb0bc'], ['#ffd23f', '#fff2a0'], ['#ff8ad0', '#ffd0ee'], ['#ffffff', '#ffffff'], ['#a77bff', '#d8c4ff'], ['#ff8a3d', '#ffc890']];
+  for (let i = 0; i < w * h / 20; i++){ const fx = 3 + Math.floor(r2() * (w - 6)), fy = 2 + Math.floor(r2() * (h - 2)); const [b, hi] = cols[Math.floor(r2() * cols.length)];
+    s.p(fx, fy - 1, b); s.p(fx - 1, fy, b); s.p(fx + 1, fy, b); s.p(fx, fy + 1, b); s.p(fx, fy, '#ffcf3a'); s.p(fx - 1, fy - 1, hi); }
+  s.outline(); shadow(x + w / 2 + 2, y + h + 9, w, 5, 0.25); s.put(x, y);
+}
+flowerBed(162, 262, 30, 18, 7);
+flowerBed(2, 312, 30, 14, 13);
+
+// front hedge with a gap where the path comes in
+(function(){
+  const r3 = mulberry(99);
+  const s = S(W + 4, 34);
+  const seg = (x0, x1) => {
+    s.r(x0, 14, x1 - x0, 16, '#2f8a2e');
+    for (let x = x0; x < x1 - 6; x += 11){ s.e(x, 4, 16, 18, '#2f8a2e'); }
+    for (let x = x0; x < x1 - 6; x += 11){ s.e(x + 1, 5, 14, 14, '#3f9b3a'); s.e(x + 3, 6, 8, 6, '#57bd47'); s.e(x + 4, 6, 4, 3, '#7ee05e'); }
+    s.r(x0, 26, x1 - x0, 4, '#26762a');
+    for (let i = 0; i < (x1 - x0) / 5; i++){ const fx = x0 + 3 + Math.floor(r3() * (x1 - x0 - 6)), fy = 8 + Math.floor(r3() * 14);
+      const c = ['#ffffff', '#ff8ad0', '#ffd23f', '#ff4d6d'][Math.floor(r3() * 4)]; s.p(fx, fy, c); s.p(fx + 1, fy, c); s.p(fx, fy + 1, c); s.p(fx + 1, fy + 1, '#ffcf3a'); }
+  };
+  seg(166, W + 4);
+  s.outline(); s.put(-2, 312);
+})();
+/* ---------- overhead: smoke ---------- */
+function puff(cx, cy, rad, a){
+  g.globalAlpha = a;
+  E(Math.round(cx - rad), Math.round(cy - rad * 0.9), rad * 2, Math.round(rad * 1.8), '#cfd0de');
+  E(Math.round(cx - rad), Math.round(cy - rad * 0.9 - 1), rad * 2 - 1, Math.round(rad * 1.8) - 1, '#f4f4f8');
+  E(Math.round(cx - rad * 0.6), Math.round(cy - rad * 0.8), Math.round(rad * 0.9), Math.round(rad * 0.7), '#ffffff');
+  g.globalAlpha = 1;
+}
+// drum chimney: column curling up and to the left over the door
+[[24, 77, 3, 0.8], [22, 70, 4, 0.72], [18, 62, 5, 0.6], [13, 54, 6, 0.48], [8, 46, 7, 0.36], [3, 38, 8, 0.26]].forEach(([x, y, r, a]) => puff(x, y, r, a));
+// kettle: light wisps
+[[42, 116, 3, 0.7], [40, 109, 3, 0.6], [38, 101, 4, 0.46], [37, 92, 5, 0.32]].forEach(([x, y, r, a]) => puff(x, y, r, a));
+g.globalAlpha = 0.75;
+[[44, 120], [43, 117], [42, 114], [41, 111]].forEach(([x, y]) => P(x, y, '#ffffff'));
+[[27, 80], [28, 77], [27, 74]].forEach(([x, y]) => P(x, y, '#ffffff'));
+g.globalAlpha = 1;
+
+/* ---------- overhead: string lights ---------- */
+(function(){
+  const x0 = 0, y0 = 64, x1 = 192, y1 = 72, sag = 14;
+  const n = x1 - x0, pts = [];
+  for (let i = 0; i <= n; i++){ const t = i / n; pts.push([Math.round(x0 + (x1 - x0) * t), Math.round(y0 + (y1 - y0) * t + 4 * sag * t * (1 - t))]); }
+  for (const [x, y] of pts) P(x, y, '#2b2420');
+  const cols = ['#ffd84a', '#ff6a5a', '#7fd8ff', '#ffa040', '#a8f07a'];
+  let k = 0;
+  for (let i = 7; i < pts.length - 4; i += 12, k++){
+    const [x, y] = pts[i], c = cols[k % cols.length];
+    g.globalAlpha = 0.22; E(x - 5, y - 1, 11, 10, c); g.globalAlpha = 1;
+    R(x, y + 1, 1, 1, '#2b2420');
+    const s = S(5, 7); s.r(1, 1, 3, 4, c); s.p(1, 1, '#ffffff'); s.r(2, 5, 1, 1, c); s.outline([43, 36, 32]); s.put(x - 2, y + 1);
+  }
+})();
+
+/* ---------- feedback: bubble, heart, floating numbers ---------- */
+function bubble(X, Y, icon, ix, iy){
+  const s = S(34, 28);
+  s.r(2, 1, 28, 19, '#ffffff'); s.r(1, 2, 30, 17, '#ffffff'); s.r(2, 18, 28, 2, '#e4e9f2');
+  s.r(7, 20, 6, 2, '#ffffff'); s.r(7, 22, 3, 2, '#ffffff'); s.p(7, 24, '#ffffff');
+  icon(s, ix, iy);
+  s.outline(); s.put(X, Y);
+}
+bubble(160, 185, sausageIcon, 5, 5);
+bubble(82, 259, ribsIcon, 5, 4);
+(function(){
+  const pat = ['.##...##.', '####.####', '#########', '#########', '.#######.', '..#####..', '...###...', '....#....'];
+  const s = S(13, 12);
+  pat.forEach((row, j) => [...row].forEach((ch, i) => { if (ch === '#') s.p(i + 2, j + 2, '#ff4d6d'); }));
+  s.p(3, 3, '#ffd0d8'); s.p(4, 3, '#ffd0d8'); s.p(3, 4, '#ffd0d8'); s.r(8, 7, 3, 1, '#d42a4a'); s.r(7, 8, 2, 1, '#d42a4a');
+  s.outline(); s.put(72, 213);
+  [[69, 217], [87, 219], [85, 211], [72, 210]].forEach(([x, y], i) => { const c = i % 2 ? '#ffd23f' : '#ffffff'; P(x, y, c); if (i < 2){ P(x - 1, y, c); P(x + 1, y, c); P(x, y - 1, c); P(x, y + 1, c); } });
+})();
+coin(134, 154);
+text('+8', 145, 154, C.gold, { outline: '#3a2216', bold: true });
+text('+2 TIP', 140, 141, '#9ef07a', { outline: '#1f3a14' });
+[[131, 150], [163, 151], [179, 139]].forEach(([x, y]) => { P(x, y, '#ffffff'); P(x - 1, y, '#fff6c8'); P(x + 1, y, '#fff6c8'); P(x, y - 1, '#fff6c8'); P(x, y + 1, '#fff6c8'); });
+
+/* =========================================================
+   HUD (site tones: umber panel, cream text, gold accents)
+   ========================================================= */
+(function(){
+  R(0, 0, W, 29, C.umber);
+  R(0, 0, W, 1, '#4a3a28');
+  R(0, 29, W, 2, C.orange); R(0, 31, W, 1, C.ink); R(0, 32, W, 2, 'rgba(20,14,8,0.35)');
+  const s = S(16, 16);
+  s.r(1, 2, 14, 13, C.cream); s.r(1, 2, 14, 4, C.orange); s.r(3, 1, 2, 3, '#7a7a7a'); s.r(11, 1, 2, 3, '#7a7a7a');
+  s.r(13, 6, 2, 9, '#c9b894'); s.r(1, 14, 14, 1, '#c9b894');
+  glyphs(s.x, '3', 6, 7, '#2a2015', false);
+  s.outline([20, 14, 10]); s.put(3, 6);
+  text('WEEK 3', 22, 4, C.gold, { bold: true, shadow: C.ink });
+  text('CHURCH PICNIC', 22, 16, C.cream, { shadow: C.ink });
+  R(108, 3, 84, 12, C.ink); R(109, 2, 82, 1, C.ink); R(109, 15, 82, 1, C.ink);
+  coin(111, 5);
+  text('CASH', 122, 5, '#bfae8a');
+  text('240', 190 - textW('240', true) - 2, 5, C.gold, { bold: true });
+  text('FANS', 109, 19, '#bfae8a');
+  for (let i = 0; i < 5; i++) star(137 + i * 11, 18, i < 4);
+})();
+
+/* =========================================================
+   MEAT BUTTONS (Cafeland style dish cards)
+   ========================================================= */
+(function(){
+  R(0, 341, W, 3, 'rgba(20,14,8,0.3)');
+  R(0, 344, W, H - 344, C.umber); R(0, 344, W, 2, C.orange); R(0, 346, W, 1, C.ink);
+  for (let x = 0; x < W; x += 6) R(x, 347, 3, 1, '#3a2c1d');
+  const items = [['SAUSAGE', sausageIcon, 6, 23], ['CHICKEN', chickenIcon, 4, 22], ['RIBS', ribsIcon, 3, 22], ['BRISKET', brisketIcon, 5, 22]];
+  items.forEach(([name, icon, n, iw], i) => {
+    const sel = i === 0;
+    const bw = 45, bh = 58, bx = 3 + i * 48, by = sel ? 350 : 353;
+    const s = S(bw + 4, bh + 6);
+    s.r(3, 5, bw, bh, 'rgba(20,12,6,0.55)');
+    s.r(1, 1, bw, bh, '#b8661c'); s.r(2, 2, bw - 2, bh - 2, sel ? '#ffe27a' : C.gold); s.r(2, 2, bw - 2, 1, '#fff2b8');
+    s.r(2, bh - 2, bw - 2, 1, C.goldSh); s.r(bw - 1, 2, 1, bh - 3, C.goldSh);
+    s.r(4, 4, bw - 6, bh - 6, '#c8781e');
+    s.r(5, 5, bw - 8, bh - 8, '#fff6e2'); s.r(5, 5, bw - 8, 1, '#ffffff'); s.r(5, bh - 13, bw - 8, 10, '#f3e2bf');
+    s.e(6, 14, 35, 18, '#c7d1dd'); s.e(6, 13, 35, 17, '#ffffff'); s.e(10, 15, 27, 12, '#eef2f7');
+    icon(s, Math.round(1 + bw / 2 - iw / 2), 14);
+    const tw = name.length * 4 - 1;
+    mini(s.x, name, 1 + Math.round((bw - tw) / 2), bh - 10, '#5a3a1e');
+    s.outline();
+    s.put(bx, by);
+    const b = S(16, 12); b.r(1, 1, 14, 10, sel ? C.orange : '#2a2015'); b.r(1, 1, 14, 1, sel ? '#ee8248' : '#4a3a28');
+    glyphs(b.x, 'x' + n, 3, 3, '#ffffff', false); b.outline([27, 23, 20]); b.put(bx + bw - 15, by - 3);
+    if (sel){ [[bx + 3, by + 4], [bx + 40, by + 50]].forEach(([x, y]) => { P(x, y, '#ffffff'); P(x - 1, y, '#fff6c8'); P(x + 1, y, '#fff6c8'); P(x, y - 1, '#fff6c8'); P(x, y + 1, '#fff6c8'); }); }
+  });
+})();
+</script>
+</body>
+</html>

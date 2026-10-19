@@ -1,0 +1,513 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Your Pit Season</title>
+<style>
+  html, body { margin: 0; padding: 0; background: #3a6df0; }
+  body { display: flex; justify-content: center; }
+  canvas { display: block; width: 390px; height: 844px; image-rendering: pixelated; }
+</style>
+</head>
+<body>
+<canvas id="c" width="780" height="1688" aria-label="Your Pit season screen mock: Season 1 week strip, two booking offers, cash, fans, roster and gear"></canvas>
+<script>
+// Mock only: a picture of the Season screen. No game logic, deterministic drawing.
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+ctx.scale(2, 2);
+ctx.imageSmoothingEnabled = false;
+const R = (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(x, y, w, h); };
+
+// ---------- palette ----------
+const K = '#1b1714', UMBER = '#2a2015', UMBER2 = '#3a2c1d', CREAM = '#E6D8B8', ORANGE = '#D06129',
+      GOLD = '#F3CF6D', WHITE = '#ffffff';
+const BLUE = '#3a6df0', BLUE_D = '#2550c9', BLUE_DD = '#1a3a96', BLUE_L = '#a9c2ff', INK = '#13235c';
+
+// ---------- 5x7 bitmap font (rows 7-8 are descenders) ----------
+const G = {
+A:['.###.','#...#','#...#','#####','#...#','#...#','#...#'],
+B:['####.','#...#','#...#','####.','#...#','#...#','####.'],
+C:['.###.','#...#','#....','#....','#....','#...#','.###.'],
+D:['####.','#...#','#...#','#...#','#...#','#...#','####.'],
+E:['#####','#....','#....','####.','#....','#....','#####'],
+F:['#####','#....','#....','####.','#....','#....','#....'],
+G:['.###.','#...#','#....','#.###','#...#','#...#','.####'],
+H:['#...#','#...#','#...#','#####','#...#','#...#','#...#'],
+I:['###','.#.','.#.','.#.','.#.','.#.','###'],
+J:['..###','...#.','...#.','...#.','...#.','#..#.','.##..'],
+K:['#...#','#..#.','#.#..','##...','#.#..','#..#.','#...#'],
+L:['#....','#....','#....','#....','#....','#....','#####'],
+M:['#...#','##.##','#.#.#','#.#.#','#...#','#...#','#...#'],
+N:['#...#','#...#','##..#','#.#.#','#..##','#...#','#...#'],
+O:['.###.','#...#','#...#','#...#','#...#','#...#','.###.'],
+P:['####.','#...#','#...#','####.','#....','#....','#....'],
+Q:['.###.','#...#','#...#','#...#','#.#.#','#..#.','.##.#'],
+R:['####.','#...#','#...#','####.','#.#..','#..#.','#...#'],
+S:['.####','#....','#....','.###.','....#','....#','####.'],
+T:['#####','..#..','..#..','..#..','..#..','..#..','..#..'],
+U:['#...#','#...#','#...#','#...#','#...#','#...#','.###.'],
+V:['#...#','#...#','#...#','#...#','#...#','.#.#.','..#..'],
+W:['#...#','#...#','#...#','#.#.#','#.#.#','#.#.#','.#.#.'],
+X:['#...#','#...#','.#.#.','..#..','.#.#.','#...#','#...#'],
+Y:['#...#','#...#','.#.#.','..#..','..#..','..#..','..#..'],
+Z:['#####','....#','...#.','..#..','.#...','#....','#####'],
+a:['.....','.....','.###.','....#','.####','#...#','.####'],
+b:['#....','#....','####.','#...#','#...#','#...#','####.'],
+c:['.....','.....','.###.','#....','#....','#....','.###.'],
+d:['....#','....#','.####','#...#','#...#','#...#','.####'],
+e:['.....','.....','.###.','#...#','#####','#....','.###.'],
+f:['..##','.#..','####','.#..','.#..','.#..','.#..'],
+g:['.....','.....','.####','#...#','#...#','#...#','.####','....#','.###.'],
+h:['#....','#....','####.','#...#','#...#','#...#','#...#'],
+i:['.#.','...','##.','.#.','.#.','.#.','###'],
+j:['...#','....','..##','...#','...#','...#','...#','#..#','.##.'],
+k:['#...','#...','#..#','#.#.','##..','#.#.','#..#'],
+l:['##.','.#.','.#.','.#.','.#.','.#.','###'],
+m:['.....','.....','##.#.','#.#.#','#.#.#','#.#.#','#.#.#'],
+n:['.....','.....','####.','#...#','#...#','#...#','#...#'],
+o:['.....','.....','.###.','#...#','#...#','#...#','.###.'],
+p:['.....','.....','####.','#...#','#...#','#...#','####.','#....','#....'],
+q:['.....','.....','.####','#...#','#...#','#...#','.####','....#','....#'],
+r:['.....','.....','#.##.','##..#','#....','#....','#....'],
+s:['.....','.....','.####','#....','.###.','....#','####.'],
+t:['.#..','.#..','####','.#..','.#..','.#.#','..#.'],
+u:['.....','.....','#...#','#...#','#...#','#..##','.##.#'],
+v:['.....','.....','#...#','#...#','#...#','.#.#.','..#..'],
+w:['.....','.....','#...#','#...#','#.#.#','#.#.#','.#.#.'],
+x:['.....','.....','#...#','.#.#.','..#..','.#.#.','#...#'],
+y:['.....','.....','#...#','#...#','#...#','#...#','.####','....#','.###.'],
+z:['.....','.....','#####','...#.','..#..','.#...','#####'],
+'0':['.###.','#...#','#..##','#.#.#','##..#','#...#','.###.'],
+'1':['.#.','##.','.#.','.#.','.#.','.#.','###'],
+'2':['.###.','#...#','....#','...#.','..#..','.#...','#####'],
+'3':['####.','....#','....#','.###.','....#','....#','####.'],
+'4':['...#.','..##.','.#.#.','#..#.','#####','...#.','...#.'],
+'5':['#####','#....','####.','....#','....#','#...#','.###.'],
+'6':['.###.','#....','#....','####.','#...#','#...#','.###.'],
+'7':['#####','....#','...#.','..#..','.#...','.#...','.#...'],
+'8':['.###.','#...#','#...#','.###.','#...#','#...#','.###.'],
+'9':['.###.','#...#','#...#','.####','....#','....#','.###.'],
+'.':['.','.','.','.','.','.','#'],
+',':['..','..','..','..','..','.#','.#','#.'],
+':':['.','.','#','.','.','#','.'],
+'/':['....#','....#','...#.','..#..','.#...','#....','#....'],
+'!':['#','#','#','#','#','.','#'],
+'?':['.###.','#...#','....#','..##.','..#..','.....','..#..'],
+'+':['.....','..#..','..#..','#####','..#..','..#..','.....'],
+"'":['#','#','.','.','.','.','.'],
+' ':['..','..','..','..','..','..','..'],
+};
+const gw = ch => (G[ch] ? G[ch][0].length : 3);
+function textW(s, sc, bold) { let w = 0; for (const ch of s) w += (gw(ch) + (bold ? 1 : 0) + 1) * sc; return w - sc; }
+function text(s, x, y, sc, col, o = {}) {
+  const bold = !!o.bold;
+  if (o.align === 'center') x = Math.round(x - textW(s, sc, bold) / 2);
+  else if (o.align === 'right') x = Math.round(x - textW(s, sc, bold));
+  const u = o.thin ? 1 : sc; // thin = 1 px outline instead of one glyph pixel
+  const pass = (dx, dy, c) => {
+    let cx = x;
+    for (const ch of s) {
+      const g = G[ch];
+      if (g) for (let r = 0; r < g.length; r++) for (let i = 0; i < g[r].length; i++)
+        if (g[r][i] === '#') R(cx + i * sc + dx * u, y + r * sc + dy * u, sc * (bold ? 2 : 1), sc, c);
+      cx += (gw(ch) + (bold ? 1 : 0) + 1) * sc;
+    }
+  };
+  if (o.outline) {
+    for (const [dx, dy] of [[-1,-1],[0,-1],[1,-1],[-1,0],[1,0],[-1,1],[0,1],[1,1],[-1,2],[0,2],[1,2]]) pass(dx, dy, o.outline);
+  } else if (o.shadow) pass(0, 1, o.shadow);
+  pass(0, 0, col);
+  return textW(s, sc, bold);
+}
+
+// ---------- sprites from maps ----------
+function spr(map, x, y, s, pal) {
+  for (let r = 0; r < map.length; r++) for (let i = 0; i < map[r].length; i++) {
+    const c = pal[map[r][i]]; if (c) R(x + i * s, y + r * s, s, s, c);
+  }
+}
+const STAR = ['....k....','...kyk...','kkkyyykkk','kyoyyyyyk','.kyyyyyk.','..kyyyk..','.kyykyyk.','.kyk.kyk.','.kk...kk.'];
+const STAR_ON = { k: K, y: GOLD, o: '#fff6c9' };
+const STAR_OFF = { k: K, y: '#5b5f7a', o: '#5b5f7a' };
+function starHalf(x, y, s) { // left half gold, right half grey
+  for (let r = 0; r < 9; r++) for (let i = 0; i < 9; i++) {
+    const ch = STAR[r][i]; if (ch === '.') continue;
+    const c = ch === 'k' ? K : (i <= 4 ? (ch === 'o' ? '#fff6c9' : GOLD) : '#5b5f7a');
+    R(x + i * s, y + r * s, s, s, c);
+  }
+}
+const MINI = ['..y..','.yyy.','yyyyy','.yyy.','.y.y.'];
+const COIN = ['..kkkk..','.kyyyyk.','kyoyyyYk','kyoYYyYk','kyoYYyYk','kyoyyyYk','.kyYYYk.','..kkkk..'];
+const COIN_P = { k: K, y: GOLD, Y: '#c9962e', o: '#fff3c4' };
+const PEOPLE = ['.ww...ww.','wwww.wwww','.ww...ww.','.........','wwww.wwww','wwww.wwww','wwww.wwww'];
+const MEAT = ['..mmm....','.mmmmm...','mmoommm..','mmommmm..','mmmmmmm..','.mmmmm...','...mmbb..','.....bbbb','......bb.'];
+const MEAT_P = { m: '#b5562a', o: '#e08a52', b: '#f4efe2' };
+const PIN = ['.rrrrr.','rrrrrrr','rrwwwrr','rrwwwrr','rrrrrrr','.rrrrr.','..rrr..','..rrr..','...r...'];
+const PIN_P = { r: '#ef4b3f', w: '#fff4dc' };
+const PEPPER = ['....g...','...gg...','..kggk..','.krrrrk.','.krorrk.','.krorrk.','.krrrrk.','..krrrk.','...krk..','....k...'];
+const PEP_ON = { g: '#58c03c', k: K, r: '#e8332a', o: '#ff8a70' };
+const PEP_OFF = { g: '#4a3a2a', k: '#4a3a2a', r: '#3a2c1d', o: '#3a2c1d' };
+const FOOTBALL = ['...kkkk...','.kkmmmmkk.','kmmmwmwmmk','kmmwwwwwmk','kmmmwmwmmk','.kkmmmmkk.','...kkkk...'];
+const FB_P = { k: K, m: '#a0522d', w: WHITE };
+const TROPHY = ['..kkkkkkkk..','kkkyoyyyYkkk','k.kyoyyyYk.k','k.kyoyyyYk.k','.kkyoyyyYkk.','...kyyyYk...','....kyYk....','....kyYk....','....kyyk....','...kYYYYk...','...kkkkkk...'];
+const TROPHY_P = { k: K, y: GOLD, Y: '#c9962e', o: '#fff3c4' };
+const FACE = ['..kkkkk..','.kyyyyyk.','kyyyyyyyk','kyykykyyk','kyyyyyyyk','kykyyykyk','kyykkkyyk','.kyyyyyk.','..kkkkk..'];
+const FACE_P = { k: K, y: '#ffb52e' };
+const CREW = ['..kkkkk..','.kOOOOOk.','kOOOOOOOk','.ksssssk.','.ksksksk.','.ksssssk.','..ksssk..','.kWWWWWk.','kWWWWWWWk'];
+const CREW_P = { k: K, O: ORANGE, s: '#f2c08f', W: WHITE };
+const SMOKER = ['......w.....','.....w.w....','......kk....','..kkkkkkkk..','.kGGGGGGGGk.','.kGgGGGGGGk.','.kkkkkkkkkk.','.kGgGGGGGGk.','.kGGGGGGGGk.','..kkkkkkkk..','..k......k..','.k........k.'];
+const SMOKER_P = { k: K, G: '#4b5163', g: '#9aa3b8', w: '#ffffff' };
+const CHECK = ['......w','.....ww','w...ww.','ww.ww..','.www...','..w....'];
+const FACE_MEH = ['..kkkkk..','.kyyyyyk.','kyyyyyyyk','kyykykyyk','kyyyyyyyk','kyyyyyyyk','kykkkkkyk','.kyyyyyk.','..kkkkk..'];
+const FACE_MEH_P = { k: K, y: '#ff9a3a' };
+const SAUSAGE = ['.kkk.kkk.','kosswossk','ksssksssk','.kkk.kkk.'];
+const SAUSAGE_P = { k: K, s: '#b5562a', o: '#e08a52', w: '#f4efe2' };
+const RIBS = ['.w.w.w.w.','kkkkkkkkk','kmmmmmmmk','kmomomomk','kmmmmmmmk','kkkkkkkkk','.w.w.w.w.'];
+const RIBS_P = { k: K, m: '#8a3a1a', o: '#d9703a', w: '#f4efe2' };
+const BRISKET = ['..kkkkk..','.kbbbbbkk','kbbbbbbbk','kpppppppk','kmmmmmmmk','kmmwmmmmk','.kkkkkkk.'];
+const BRISKET_P = { k: K, b: '#3a2318', p: '#e0604a', m: '#c98a5a', w: '#f0d2b0' };
+const TRUCK = ['.kkkkk....','kwwwwwkkk.','kwwwwwkbbk','kwwwwwkwwk','kkkkkkkkkk','.kgk..kgk.','..k....k..'];
+const TRUCK_P = { k: K, w: ORANGE, b: '#bfe6ff', g: '#cfcfcf' };
+const KETTLE = ['....k....','..kkkkk..','.kGgGGGk.','kGgGGGGGk','kkkkkkkkk','kGGGGGGGk','.kGGGGGk.','..kkkkk..','..k.k.k..','.k..k..k.'];
+const KETTLE_P = { k: K, G: '#3b3f4a', g: '#8f98ab' };
+const GUEST = ['.kkkkk.','khhhhhk','ksesesk','.ksssk.','kccccck','kscccsk','.kpppk.','.kpkpk.','.kk.kk.'];
+const GUEST_F = ['.kkkkk.','khhhhhk','khesehk','khssshk','kccccck','kscccsk','.kpppk.','.kpkpk.','.kk.kk.'];
+
+// ---------- pixel art helpers ----------
+const grid = (ox, oy, s) => (x, y, w, h, c) => R(ox + x * s, oy + y * s, w * s, h * s, c);
+
+function guest(x, y, o) {
+  spr(o.f ? GUEST_F : GUEST, x, y, 2, { k: K, h: o.h, s: o.s, e: K, c: o.c, p: o.p || '#3a4a7a' });
+  if (o.cap) { R(x + 2, y, 10, 2, K); R(x + 2, y + 2, 10, 2, o.cap); R(x + 12, y + 2, 4, 2, K); }
+  if (o.hat) { R(x + 6, y - 8, 2, 2, WHITE); R(x + 5, y - 6, 4, 2, o.hat); R(x + 4, y - 4, 6, 2, o.hat); R(x + 4, y - 4, 2, 2, '#fff4dc'); }
+}
+function smoke(x, y) { // rising puffs, drifting right
+  const puffs = [[0, 18, 6, 4, '#dfe4ea'], [3, 11, 8, 6, '#f1f4f7'], [7, 3, 10, 6, WHITE], [12, -5, 8, 6, '#f1f4f7']];
+  for (const [dx, dy, w, h, c] of puffs) R(x + dx, y + dy, w, h, c);
+}
+function table(x, y, w, cloth, check) {
+  R(x - 2, y - 2, w + 4, 8, K);
+  R(x, y, w, 4, cloth);
+  if (check) for (let i = 0; i * 4 < w; i++) R(x + i * 4, y + (i % 2) * 2, 2, 2, check);
+  R(x + 4, y + 6, 2, 8, K); R(x + w - 6, y + 6, 2, 8, K);
+}
+
+function church(ox, oy, s) {
+  const P = grid(ox, oy, s);
+  const wall = '#f6f1e4', shade = '#d9cfbb', roof = '#c2574a', roofD = '#8e3a30', door = '#7a4a2a', win = '#5fb0ff';
+  P(12, 0, 2, 5, GOLD); P(10, 1, 6, 2, GOLD);
+  for (let i = 0; i < 4; i++) { P(5 - i, 10 + i, 16 + 2 * i, 1, K); P(6 - i, 10 + i, 14 + 2 * i, 1, i === 0 ? roofD : roof); }
+  P(1, 14, 24, 1, K);
+  P(2, 15, 22, 11, K); P(3, 15, 20, 10, wall); P(20, 15, 3, 10, shade);
+  P(5, 18, 3, 4, K); P(5, 18, 2, 3, win); P(18, 18, 3, 4, K); P(18, 18, 2, 3, win);
+  P(9, 8, 8, 18, K); P(10, 9, 6, 16, wall); P(14, 9, 2, 16, shade);
+  for (let i = 0; i < 4; i++) { P(12 - i, 4 + i, 2 + 2 * i, 1, K); if (i > 0) P(13 - i, 4 + i, 2 * i, 1, i < 2 ? roofD : roof); }
+  P(9, 8, 8, 1, K);
+  P(12, 11, 2, 3, K); P(12, 11, 2, 2, GOLD);
+  P(11, 19, 4, 6, K); P(12, 19, 2, 6, door); P(12, 18, 2, 1, K);
+  P(10, 25, 6, 1, '#b9b2a2');
+}
+
+function cake(ox, oy, s) {
+  const P = grid(ox, oy, s);
+  const sponge = '#c98a4b', spongeD = '#a86c34', pink = '#ff9ccb', pinkL = '#ffd0e6', candle = '#7fd3ff';
+  for (const cx of [8, 11, 14]) { P(cx, 0, 1, 2, '#ffd23a'); P(cx, 1, 1, 1, '#ff8a2a'); P(cx, 2, 1, 4, candle); P(cx, 3, 1, 1, WHITE); }
+  P(5, 6, 12, 7, K); P(6, 7, 10, 5, sponge); P(14, 7, 2, 5, spongeD);
+  P(6, 6, 10, 3, pink); P(6, 6, 10, 1, pinkL); P(7, 9, 1, 1, pink); P(10, 9, 2, 2, pink); P(14, 9, 1, 1, pink);
+  P(5, 6, 1, 1, K); P(16, 6, 1, 1, K);
+  P(1, 12, 20, 9, K); P(2, 13, 18, 7, sponge); P(17, 13, 3, 7, spongeD);
+  P(2, 12, 18, 3, pink); P(2, 12, 18, 1, pinkL);
+  P(4, 15, 2, 2, pink); P(9, 15, 2, 3, pink); P(14, 15, 2, 2, pink); P(18, 15, 1, 2, pink);
+  P(5, 17, 1, 1, '#ff5c8a'); P(12, 18, 1, 1, '#ffd23a'); P(16, 17, 1, 1, '#7fd3ff');
+  P(-1, 21, 24, 2, K); P(0, 21, 22, 1, '#eef0f6');
+}
+
+function rings(ox, oy, s, lite) {
+  const P = grid(ox, oy, s);
+  const ring = (x, y, c) => { P(x + 1, y, 4, 1, c); P(x, y + 1, 1, 4, c); P(x + 5, y + 1, 1, 4, c); P(x + 1, y + 5, 4, 1, c); };
+  ring(6, 4, K); ring(1, 4, K);
+  ring(5, 3, lite ? '#ffe9a8' : '#ffe08a');
+  ring(0, 3, GOLD);
+  P(2, 1, 2, 2, '#bff1ff'); P(2, 1, 1, 1, WHITE);
+}
+
+// ---------- host portraits, Retro Bowl style busts (20 x 22 units at 2 px) ----------
+function bustShoulders(P, shirt, shirtD, hi) {
+  P(2, 16, 16, 1, K); P(1, 17, 18, 5, K);
+  P(2, 17, 16, 5, shirt); P(14, 17, 4, 5, shirtD); P(2, 17, 12, 1, hi);
+}
+function bustJune(ox, oy) {
+  const P = grid(ox, oy, 2);
+  const hair = '#e6e6f0', hairD = '#a9a9bc', skin = '#f2c08f', skinD = '#d99a66', cardi = '#f07aa8', cardiD = '#c4528a';
+  bustShoulders(P, cardi, cardiD, '#ff9cc4');
+  P(8, 14, 4, 4, skinD);
+  P(7, 16, 2, 3, WHITE); P(11, 16, 2, 3, WHITE); P(9, 17, 2, 1, skin); P(9, 18, 2, 2, cardiD);
+  P(10, 20, 1, 1, K);
+  P(8, 0, 4, 1, K); P(7, 1, 6, 3, K); P(8, 1, 4, 2, hair); P(10, 1, 2, 1, hairD);
+  P(4, 3, 12, 1, K); P(3, 4, 14, 10, K); P(4, 14, 12, 1, K); P(5, 15, 10, 1, K);
+  P(4, 4, 12, 10, skin); P(5, 14, 10, 1, skin); P(14, 6, 2, 8, skinD);
+  P(4, 4, 12, 3, hair); P(4, 7, 2, 4, hair); P(14, 7, 2, 4, hair); P(12, 4, 4, 2, hairD); P(14, 7, 2, 4, hairD);
+  P(5, 8, 4, 3, K); P(11, 8, 4, 3, K); P(9, 8, 2, 1, K);
+  P(6, 9, 2, 1, '#cfe9ff'); P(12, 9, 2, 1, '#cfe9ff'); P(7, 9, 1, 1, K); P(13, 9, 1, 1, K);
+  P(10, 11, 1, 1, skinD);
+  P(5, 11, 2, 1, '#f59a8a'); P(13, 11, 2, 1, '#f59a8a');
+  P(7, 12, 1, 1, '#8a2f2a'); P(12, 12, 1, 1, '#8a2f2a'); P(8, 13, 4, 1, '#8a2f2a');
+  P(3, 11, 1, 1, WHITE);
+}
+function bustMarcus(ox, oy) {
+  const P = grid(ox, oy, 2);
+  const hair = '#2b1d15', hairL = '#4a3424', skin = '#8d5a3b', skinD = '#6e4129', shirt = '#3e9a4a', shirtD = '#2b6e34';
+  bustShoulders(P, shirt, shirtD, '#6cc46a');
+  P(8, 14, 4, 4, skinD); P(7, 16, 6, 1, shirtD); P(8, 17, 4, 1, skinD);
+  P(4, 1, 12, 1, K); P(3, 2, 14, 12, K); P(4, 14, 12, 1, K); P(5, 15, 10, 1, K);
+  P(4, 2, 12, 12, skin); P(5, 14, 10, 1, skin); P(14, 6, 2, 8, skinD);
+  P(4, 2, 12, 4, hair); P(5, 2, 6, 1, hairL); P(4, 6, 1, 4, hair); P(15, 6, 1, 4, hair);
+  P(6, 7, 3, 1, hair); P(11, 6, 3, 1, hair);
+  P(6, 8, 2, 2, WHITE); P(7, 8, 1, 2, K); P(11, 8, 2, 2, WHITE); P(12, 8, 1, 2, K);
+  P(9, 10, 2, 1, skinD);
+  P(4, 10, 1, 4, hair); P(15, 10, 1, 4, hair); P(5, 12, 10, 3, hair); P(7, 11, 6, 1, hair);
+  P(8, 12, 4, 1, '#5a2c22');
+  P(2, 8, 1, 3, K); P(17, 8, 1, 3, K);
+}
+
+// ---------- UI helpers ----------
+function box(x, y, w, h, fill, border, bw = 2) { R(x, y, w, h, border); R(x + bw, y + bw, w - 2 * bw, h - 2 * bw, fill); }
+function chunky(x, y, w, h, face, edge, hi, edgeH = 5) {
+  R(x, y + edgeH, w, h, BLUE_DD);
+  R(x, y, w, h, K);
+  R(x + 2, y + 2, w - 4, h - 4, edge);
+  R(x + 2, y + 2, w - 4, h - 4 - edgeH, face);
+  R(x + 2, y + 2, w - 4, 2, hi);
+}
+function labelBox(x, y, w, h, label) {
+  R(x, y, w, h, WHITE); R(x + 2, y + 2, w - 4, h - 4, BLUE_D);
+  const lw = textW(label, 2, false);
+  R(Math.round(x + w / 2 - lw / 2) - 6, y - 6, lw + 12, 10, BLUE_D);
+  text(label, x + w / 2, y - 6, 2, WHITE, { align: 'center', shadow: INK });
+}
+
+// ================= SCREEN =================
+R(0, 0, 390, 844, BLUE);
+for (let y = 0; y < 844; y += 8) R(0, y, 390, 2, '#3667e8');
+
+// ---- top bar ----
+chunky(14, 12, 36, 30, BLUE, BLUE_D, '#6a92ff', 4);
+R(23, 19, 18, 3, WHITE); R(23, 25, 18, 3, WHITE); R(23, 31, 18, 3, WHITE);
+chunky(340, 12, 36, 30, BLUE, BLUE_D, '#6a92ff', 4);
+R(356, 18, 4, 4, WHITE); R(354, 24, 8, 2, WHITE); R(356, 24, 4, 10, WHITE); R(354, 32, 8, 2, WHITE);
+
+text('SEASON 1', 195, 14, 3, INK, { bold: true, align: 'center' , shadow: INK });
+text('SEASON 1', 195, 12, 3, WHITE, { bold: true, align: 'center' });
+const starRow = (x, cols) => cols.forEach((c, i) => spr(STAR, x + i * 15, 18, 1.5, c));
+const S_RED = { k: K, y: '#ef4b3f', o: '#ff9a8f' }, S_WHT = { k: K, y: WHITE, o: WHITE }, S_GLD = STAR_ON;
+starRow(62, [S_RED, S_WHT, S_GLD]);
+starRow(285, [S_GLD, S_WHT, S_RED]);
+text('Week 7 of 12', 195, 46, 2, '#dbe6ff', { align: 'center', shadow: INK });
+
+// ---- week strip ----
+const TW = 46, TH = 52, GAP = 6, SX = 16, SY1 = 82, SY2 = SY1 + TH + 8;
+const tileX = c => SX + c * (TW + GAP);
+const results = [3, 2, 3, 1, 3, 2];
+function pastTile(n, x, y, stars) {
+  R(x, y + 3, TW, TH, BLUE_DD);
+  box(x, y, TW, TH, BLUE_D, WHITE);
+  text(String(n), x + TW / 2, y + 8, 2, WHITE, { align: 'center', shadow: INK });
+  for (let i = 0; i < 3; i++) {
+    const sx = x + 6 + i * 12, sy = y + 30;
+    spr(MINI, sx, sy + 2, 2, { y: INK });
+    spr(MINI, sx, sy, 2, { y: i < stars ? GOLD : '#5d7bd6' });
+  }
+  const bx = x + TW - 12, by = y - 6;
+  R(bx, by, 18, 18, K); R(bx + 2, by + 2, 14, 14, '#3fbf4f'); R(bx + 2, by + 2, 14, 2, '#7fe08a');
+  spr(CHECK, bx + 2, by + 4, 2, { w: WHITE });
+}
+for (let i = 0; i < 6; i++) pastTile(i + 1, tileX(i), SY1, results[i]);
+
+{
+  const x = tileX(6), y = SY1;
+  R(x, y + 5, TW, TH, BLUE_DD);
+  R(x - 2, y - 2, TW + 4, TH + 4, K);
+  R(x, y, TW, TH, WHITE); R(x + 3, y + 3, TW - 6, TH - 6, GOLD); R(x + 3, y + TH - 9, TW - 6, 6, '#d9a93e');
+  text('7', x + TW / 2, y + 8, 2, K, { align: 'center' });
+  text('NOW', x + TW / 2, y + 28, 2, K, { align: 'center', bold: false });
+  const px = x + TW / 2;
+  for (let i = 0; i < 4; i++) R(px - 8 + i * 2, y - 14 + i * 2, 16 - i * 4, 2, WHITE);
+}
+
+// future weeks: 9 tailgate and 11 wedding booked; 8 and 10 are open slots
+function futureTile(n, x, y, icon) {
+  R(x, y + 3, TW, TH, BLUE_DD);
+  if (!icon) {
+    box(x, y, TW, TH, '#2c56d4', '#6f92f5');
+    text(String(n), x + TW / 2, y + 8, 2, '#a9c2ff', { align: 'center', shadow: INK });
+    text('?', x + TW / 2, y + 26, 3, '#a9c2ff', { align: 'center', shadow: INK });
+    return;
+  }
+  box(x, y, TW, TH, '#3463e6', '#86a6ff');
+  text(String(n), x + TW / 2, y + 8, 2, '#c4d4ff', { align: 'center', shadow: INK });
+  if (icon === 'football') spr(FOOTBALL, x + TW / 2 - 10, y + 29, 2, FB_P);
+  if (icon === 'rings') rings(x + TW / 2 - 11, y + 26, 2);
+}
+futureTile(8, tileX(0), SY2, null);
+futureTile(9, tileX(1), SY2, 'football');
+futureTile(10, tileX(2), SY2, null);
+futureTile(11, tileX(3), SY2, 'rings');
+
+{
+  const x = tileX(4), y = SY2, w = TW * 3 + GAP * 2;
+  R(x, y + 4, w, TH, BLUE_DD);
+  R(x, y, w, TH, K); R(x + 2, y + 2, w - 4, TH - 4, GOLD); R(x + 5, y + 5, w - 10, TH - 10, ORANGE);
+  R(x + 5, y + 5, w - 10, 2, '#e98a52');
+  spr(TROPHY, x + 18, y + 7, 2, TROPHY_P);
+  text('Week 12', x + 52, y + 10, 2, GOLD, { outline: K, thin: true });
+  text('Competition', x + w / 2, y + 30, 2, GOLD, { align: 'center', outline: K, thin: true });
+}
+
+// ---- this week ----
+const TY = SY2 + TH + 16;
+text('THIS WEEK', 16, TY + 2, 3, INK, { bold: true, shadow: INK });
+text('THIS WEEK', 16, TY, 3, WHITE, { bold: true });
+text('Pick one', 374, TY + 5, 2, '#dbe6ff', { align: 'right', shadow: INK });
+
+const CW = 174, CY = TY + 30, CH = 404;
+function card(x, o) {
+  const H = CH;
+  R(x + 2, CY + 6, CW, H, BLUE_DD);
+  R(x, CY, CW, H, K);
+  R(x + 2, CY + 2, CW - 4, H - 4, UMBER);
+  R(x + 2, CY + 2, CW - 4, 2, '#4a3926');
+  // art panel: the event with its guests
+  const ax = x + 6, ay = CY + 6, aw = CW - 12, ah = 84;
+  R(ax, ay, aw, ah, K);
+  o.art(ax + 2, ay + 2, aw - 4, ah - 4);
+  R(ax + 4, ay + 4, 42, 20, K); R(ax + 6, ay + 6, 38, 16, UMBER);
+  text(o.day, ax + 25, ay + 7, 2, GOLD, { align: 'center' });
+  let y = ay + ah + 8;
+  text(o.title, x + 9, y, 2, '#fff4dc', { shadow: K });
+  y += 22;
+  // host portrait with the mood face attached, like a Retro Bowl player card
+  const px = x + 8, py = y;
+  R(px, py, 48, 48, K); R(px + 2, py + 2, 44, 44, o.bg);
+  R(px + 2, py + 2, 44, 2, o.bgHi); R(px + 2, py + 30, 44, 16, o.bgLo);
+  o.bust(px + 4, py + 2);
+  R(px + 34, py - 6, 20, 20, K); spr(o.face, px + 35, py - 5, 2, o.facePal);
+  text('Host', x + 66, py + 1, 2, '#c9b48a', { shadow: K });
+  text(o.host, x + 66, py + 17, 2, '#fff4dc', { bold: true, shadow: K });
+  text(o.mood, x + 66, py + 33, 2, o.moodCol, { shadow: K });
+  y = py + 54;
+  for (let i = 0; i < 37; i++) R(x + 9 + i * 4, y, 2, 2, '#5a4630');
+  y += 8;
+  const row = (icon, str) => { icon(x + 10, y); text(str, x + 34, y, 2, CREAM, { shadow: K }); y += 22; };
+  row((ix, iy) => spr(PEOPLE, ix, iy, 2, { w: '#9fd0ff' }), o.people);
+  for (const [ic, label] of o.food) row(ic, label);
+  row((ix, iy) => spr(PIN, ix + 2, iy - 2, 2, PIN_P), o.place);
+  row((ix, iy) => spr(TRUCK, ix, iy, 2, TRUCK_P), o.miles);
+  y += 2;
+  for (let i = 0; i < 3; i++) spr(PEPPER, x + 8 + i * 18, y - 2, 2, i < o.heat ? PEP_ON : PEP_OFF);
+  text(o.heatWord, x + 66, y + 2, 2, o.heat >= 3 ? '#ff8a70' : '#ffc27a', { shadow: K });
+  y += 28;
+  text('Pay', x + 10, y + 5, 2, CREAM, { shadow: K });
+  spr(COIN, x + 50, y + 3, 2, COIN_P);
+  text(o.pay, x + 74, y, 3, GOLD, { bold: true, outline: K });
+  y += 34;
+  const bx = x + 8, bw = CW - 16, bh = 44;
+  R(bx, y + 4, bw, bh, '#120d0a');
+  R(bx, y, bw, bh, K);
+  R(bx + 2, y + 2, bw - 4, bh - 4, '#8a3a14');
+  R(bx + 2, y + 2, bw - 4, bh - 10, '#e0702f');
+  R(bx + 2, y + 2, bw - 4, 3, '#f59a60');
+  text('BOOK', x + CW / 2, y + 10, 3, '#fff4dc', { bold: true, align: 'center', outline: '#5a230a' });
+}
+
+const PIT = { h: ORANGE, s: '#f2c08f', c: WHITE, p: '#3a4a7a', cap: ORANGE };
+const churchArt = (x, y, w, h) => {
+  R(x, y, w, h, '#7ccaf5');
+  R(x + 54, y + 12, 22, 6, WHITE); R(x + 58, y + 8, 12, 4, WHITE);
+  const gy = y + h - 24;
+  R(x, gy, w, 24, '#5fbf4a'); R(x, gy, w, 2, '#86dc6a');
+  for (let i = 0; i < 20; i++) R(x + 4 + i * 8, gy + 8 + (i % 3) * 4, 2, 2, '#47a336');
+  church(x + w - 58, gy - 52, 2);
+  R(x + 50, gy - 8, 4, 10, '#7a4a2a');
+  R(x + 46, gy - 28, 12, 22, K); R(x + 42, gy - 24, 20, 14, K); R(x + 44, gy - 26, 16, 18, K);
+  R(x + 46, gy - 26, 12, 18, '#3f9d3a'); R(x + 44, gy - 24, 16, 14, '#3f9d3a'); R(x + 46, gy - 24, 6, 4, '#6bc455'); R(x + 54, gy - 14, 4, 4, '#2f7d2c');
+  guest(x + 44, gy - 4, { h: '#6b3e1f', s: '#f2c08f', c: '#58a8f0', f: true });
+  guest(x + 60, gy - 6, { h: '#2b1d15', s: '#a06a44', c: '#f3cf6d' });
+  guest(x + 76, gy - 4, { h: '#e6e6f0', s: '#f2c08f', c: '#f07aa8', f: true });
+  table(x + 40, y + h - 12, 52, '#ffffff', '#5a9ae8');
+  R(x + 54, y + h - 18, 22, 6, K); R(x + 56, y + h - 16, 18, 2, '#c9ccd4'); R(x + 58, y + h - 18, 14, 2, '#a8562a'); R(x + 60, y + h - 18, 4, 2, '#d9884a');
+  smoke(x + 10, y + 32);
+  spr(KETTLE, x + 6, y + h - 26, 2, KETTLE_P);
+  R(x + 12, y + h - 26, 6, 2, '#ff8a2a');
+  guest(x + 24, y + h - 24, PIT);
+};
+const partyArt = (x, y, w, h) => {
+  R(x, y, w, h, '#ffd29a'); R(x, y + 22, w, 8, '#ffbf8a');
+  R(x, y + 28, w, 4, '#3f8f4a');
+  for (let i = 0; i < 14; i++) R(x + i * 12, y + 25 + (i % 2) * 2, 8, 4, '#3f8f4a');
+  R(x, y + 32, w, 10, '#5aaee8'); R(x + 10, y + 35, 14, 2, '#bfe6ff'); R(x + 70, y + 38, 18, 2, '#bfe6ff'); R(x + 120, y + 35, 12, 2, '#bfe6ff');
+  const gy = y + 42;
+  R(x, gy, w, h - 42, '#6cc24f'); R(x, gy, w, 2, '#94e070');
+  for (let i = 0; i < 20; i++) R(x + 2 + i * 8, gy + 10 + (i % 3) * 6, 2, 2, '#4aa63a');
+  const conf = ['#F3CF6D', WHITE, '#7fd3ff', '#ff9ccb', '#86dc6a'];
+  R(x, y + 3, w, 1, '#6e4a2a');
+  for (let i = 0; i < 9; i++) { const bx = x + 2 + i * 18; R(bx + 3, y + 4, 10, 3, conf[i % 5]); R(bx + 5, y + 7, 6, 3, conf[i % 5]); R(bx + 7, y + 10, 2, 2, conf[i % 5]); }
+  const balloon = (bx, by, c, cl) => { R(bx + 2, by, 8, 12, K); R(bx, by + 2, 12, 8, K); R(bx + 2, by + 2, 8, 8, c); R(bx + 3, by + 3, 2, 3, cl); R(bx + 5, by + 12, 2, 2, K); R(bx + 6, by + 14, 1, 30, '#fff4dc'); };
+  balloon(x + 6, y + 18, '#F3CF6D', '#fff3c4');
+  balloon(x + 20, y + 26, '#7fd3ff', '#d6f3ff');
+  guest(x + 38, gy + 2, { h: '#d9a23a', s: '#f2c08f', c: '#9a6ae0', f: true, hat: '#7fd3ff' });
+  guest(x + 92, gy, { h: '#2b1d15', s: '#8d5a3b', c: '#3e9a4a', hat: '#ff9ccb' });
+  table(x + 40, y + h - 16, 64, '#ffb3d6', '#ffffff');
+  cake(x + 55.5, y + h - 16 - 34.5, 1.5);
+  smoke(x + 118, y + 30);
+  spr(KETTLE, x + 116, y + h - 24, 2, KETTLE_P);
+  R(x + 122, y + h - 24, 6, 2, '#ff8a2a');
+  guest(x + 136, y + h - 22, PIT);
+};
+
+card(16, { art: churchArt, day: 'SAT', title: 'Church picnic', host: 'June', mood: 'Relaxed', moodCol: '#86dc6a',
+  bust: bustJune, bg: '#8fd3f5', bgHi: '#c4ecff', bgLo: '#6fbde6', face: FACE, facePal: FACE_P,
+  people: '60 people',
+  food: [[(ix, iy) => spr(MEAT, ix, iy - 2, 2, MEAT_P), 'Pulled pork'], [(ix, iy) => spr(SAUSAGE, ix, iy + 2, 2, SAUSAGE_P), 'Sausage']],
+  place: 'Church lot', miles: '6 miles', heat: 2, heatWord: 'Medium', pay: '420' });
+card(200, { art: partyArt, day: 'SUN', title: 'Birthday', host: 'Marcus', mood: 'Picky', moodCol: '#ffc27a',
+  bust: bustMarcus, bg: '#f3b04a', bgHi: '#ffd890', bgLo: '#dd9634', face: FACE_MEH, facePal: FACE_MEH_P,
+  people: '35 people',
+  food: [[(ix, iy) => spr(BRISKET, ix, iy, 2, BRISKET_P), 'Brisket'], [(ix, iy) => spr(RIBS, ix, iy, 2, RIBS_P), 'Ribs']],
+  place: 'Lake park', miles: '14 miles', heat: 3, heatWord: 'Hard', pay: '610' });
+
+// ---- bottom HUD ----
+const HY = CY + CH + 16;
+labelBox(16, HY, 171, 46, 'CASH');
+spr(COIN, 34, HY + 15, 2, COIN_P);
+text('1,240', 58, HY + 14, 3, INK, { bold: true });
+text('1,240', 58, HY + 12, 3, WHITE, { bold: true });
+labelBox(203, HY, 171, 46, 'FANS');
+for (let i = 0; i < 5; i++) {
+  const sx = 218 + i * 29, sy = HY + 13;
+  if (i < 3) spr(STAR, sx, sy, 2, STAR_ON); else if (i === 3) starHalf(sx, sy, 2); else spr(STAR, sx, sy, 2, STAR_OFF);
+}
+{
+  const py = HY + 60;
+  labelBox(16, py, 358, 38, 'PAYROLL 180 / 300');
+  R(28, py + 12, 334, 16, K);
+  R(30, py + 14, 330, 12, '#11131f');
+  R(30, py + 14, 198, 12, '#c8d82a'); R(30, py + 14, 198, 3, '#e8f27a');
+}
+const BY = HY + 112;
+function navBtn(x, label, icon) {
+  const w = 171, h = 52;
+  chunky(x, BY, w, h, BLUE, BLUE_D, '#6a92ff', 5);
+  R(x + 2, BY + 2, w - 4, 2, WHITE);
+  const tw = textW(label, 2, true), total = 30 + 10 + tw, sx = Math.round(x + w / 2 - total / 2);
+  icon(sx, BY + 7);
+  text(label, sx + 40, BY + 17, 2, INK, { bold: true });
+  text(label, sx + 40, BY + 15, 2, WHITE, { bold: true });
+}
+navBtn(16, 'ROSTER', (ix, iy) => spr(CREW, ix + 3, iy + 4, 2.5, CREW_P));
+navBtn(203, 'GEAR', (ix, iy) => spr(SMOKER, ix, iy, 2.5, SMOKER_P));
+R(170, BY - 8, 20, 20, K); R(172, BY - 6, 16, 16, '#ef4b3f'); text('!', 179, BY - 3, 2, WHITE);
+</script>
+</body>
+</html>

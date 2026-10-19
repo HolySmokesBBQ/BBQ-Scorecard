@@ -1,0 +1,605 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Your Pit Creator</title>
+<style>
+  html, body { margin: 0; padding: 0; background: #3a6df0; }
+  body { display: flex; justify-content: center; }
+  canvas { display: block; width: 390px; height: 844px; image-rendering: pixelated; }
+</style>
+</head>
+<body>
+<canvas id="c" width="780" height="1688" aria-label="Your Pit character creator mock: pit sign, pitmaster preview by a kettle, name fields, look options, Fire it up button"></canvas>
+<script>
+// Mock only: a picture of the "Make your pitmaster" screen shown after the tutorial day.
+// No game logic, deterministic drawing.
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+ctx.scale(2, 2);
+ctx.imageSmoothingEnabled = false;
+const R = (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(x, y, w, h); };
+
+// ---------- palette (shared with the sibling screens) ----------
+const K = '#1b1714', UMBER = '#2a2015', UMBER2 = '#3a2c1d', CREAM = '#E6D8B8', ORANGE = '#D06129',
+      GOLD = '#F3CF6D', WHITE = '#ffffff';
+const BLUE = '#3a6df0', BLUE_D = '#2550c9', BLUE_DD = '#1a3a96', BLUE_L = '#a9c2ff', INK = '#13235c';
+
+// ---------- 5x7 bitmap font (same table as the sibling screens) ----------
+const G = {
+A:['.###.','#...#','#...#','#####','#...#','#...#','#...#'],
+B:['####.','#...#','#...#','####.','#...#','#...#','####.'],
+C:['.###.','#...#','#....','#....','#....','#...#','.###.'],
+D:['####.','#...#','#...#','#...#','#...#','#...#','####.'],
+E:['#####','#....','#....','####.','#....','#....','#####'],
+F:['#####','#....','#....','####.','#....','#....','#....'],
+G:['.###.','#...#','#....','#.###','#...#','#...#','.####'],
+H:['#...#','#...#','#...#','#####','#...#','#...#','#...#'],
+I:['###','.#.','.#.','.#.','.#.','.#.','###'],
+J:['..###','...#.','...#.','...#.','...#.','#..#.','.##..'],
+K:['#...#','#..#.','#.#..','##...','#.#..','#..#.','#...#'],
+L:['#....','#....','#....','#....','#....','#....','#####'],
+M:['#...#','##.##','#.#.#','#.#.#','#...#','#...#','#...#'],
+N:['#...#','#...#','##..#','#.#.#','#..##','#...#','#...#'],
+O:['.###.','#...#','#...#','#...#','#...#','#...#','.###.'],
+P:['####.','#...#','#...#','####.','#....','#....','#....'],
+Q:['.###.','#...#','#...#','#...#','#.#.#','#..#.','.##.#'],
+R:['####.','#...#','#...#','####.','#.#..','#..#.','#...#'],
+S:['.####','#....','#....','.###.','....#','....#','####.'],
+T:['#####','..#..','..#..','..#..','..#..','..#..','..#..'],
+U:['#...#','#...#','#...#','#...#','#...#','#...#','.###.'],
+V:['#...#','#...#','#...#','#...#','#...#','.#.#.','..#..'],
+W:['#...#','#...#','#...#','#.#.#','#.#.#','#.#.#','.#.#.'],
+X:['#...#','#...#','.#.#.','..#..','.#.#.','#...#','#...#'],
+Y:['#...#','#...#','.#.#.','..#..','..#..','..#..','..#..'],
+Z:['#####','....#','...#.','..#..','.#...','#....','#####'],
+a:['.....','.....','.###.','....#','.####','#...#','.####'],
+b:['#....','#....','####.','#...#','#...#','#...#','####.'],
+c:['.....','.....','.###.','#....','#....','#....','.###.'],
+d:['....#','....#','.####','#...#','#...#','#...#','.####'],
+e:['.....','.....','.###.','#...#','#####','#....','.###.'],
+f:['..##','.#..','####','.#..','.#..','.#..','.#..'],
+g:['.....','.....','.####','#...#','#...#','#...#','.####','....#','.###.'],
+h:['#....','#....','####.','#...#','#...#','#...#','#...#'],
+i:['.#.','...','##.','.#.','.#.','.#.','###'],
+j:['...#','....','..##','...#','...#','...#','...#','#..#','.##.'],
+k:['#...','#...','#..#','#.#.','##..','#.#.','#..#'],
+l:['##.','.#.','.#.','.#.','.#.','.#.','###'],
+m:['.....','.....','##.#.','#.#.#','#.#.#','#.#.#','#.#.#'],
+n:['.....','.....','####.','#...#','#...#','#...#','#...#'],
+o:['.....','.....','.###.','#...#','#...#','#...#','.###.'],
+p:['.....','.....','####.','#...#','#...#','#...#','####.','#....','#....'],
+q:['.....','.....','.####','#...#','#...#','#...#','.####','....#','....#'],
+r:['.....','.....','#.##.','##..#','#....','#....','#....'],
+s:['.....','.....','.####','#....','.###.','....#','####.'],
+t:['.#..','.#..','####','.#..','.#..','.#.#','..#.'],
+u:['.....','.....','#...#','#...#','#...#','#..##','.##.#'],
+v:['.....','.....','#...#','#...#','#...#','.#.#.','..#..'],
+w:['.....','.....','#...#','#...#','#.#.#','#.#.#','.#.#.'],
+x:['.....','.....','#...#','.#.#.','..#..','.#.#.','#...#'],
+y:['.....','.....','#...#','#...#','#...#','#...#','.####','....#','.###.'],
+z:['.....','.....','#####','...#.','..#..','.#...','#####'],
+'0':['.###.','#...#','#..##','#.#.#','##..#','#...#','.###.'],
+'1':['.#.','##.','.#.','.#.','.#.','.#.','###'],
+'2':['.###.','#...#','....#','...#.','..#..','.#...','#####'],
+'3':['####.','....#','....#','.###.','....#','....#','####.'],
+'4':['...#.','..##.','.#.#.','#..#.','#####','...#.','...#.'],
+'5':['#####','#....','####.','....#','....#','#...#','.###.'],
+'6':['.###.','#....','#....','####.','#...#','#...#','.###.'],
+'7':['#####','....#','...#.','..#..','.#...','.#...','.#...'],
+'8':['.###.','#...#','#...#','.###.','#...#','#...#','.###.'],
+'9':['.###.','#...#','#...#','.####','....#','....#','.###.'],
+'.':['.','.','.','.','.','.','#'],
+',':['..','..','..','..','..','.#','.#','#.'],
+':':['.','.','#','.','.','#','.'],
+'/':['....#','....#','...#.','..#..','.#...','#....','#....'],
+'!':['#','#','#','#','#','.','#'],
+'?':['.###.','#...#','....#','..##.','..#..','.....','..#..'],
+'+':['.....','..#..','..#..','#####','..#..','..#..','.....'],
+"'":['#','#','.','.','.','.','.'],
+' ':['..','..','..','..','..','..','..'],
+};
+const gw = ch => (G[ch] ? G[ch][0].length : 3);
+function textW(s, sc, bold) { let w = 0; for (const ch of s) w += (gw(ch) + (bold ? 1 : 0) + 1) * sc; return w - sc; }
+function text(s, x, y, sc, col, o = {}) {
+  const bold = !!o.bold;
+  if (o.align === 'center') x = Math.round(x - textW(s, sc, bold) / 2);
+  else if (o.align === 'right') x = Math.round(x - textW(s, sc, bold));
+  const pass = (dx, dy, c) => {
+    let cx = x;
+    for (const ch of s) {
+      const g = G[ch];
+      if (g) for (let r = 0; r < g.length; r++) for (let i = 0; i < g[r].length; i++)
+        if (g[r][i] === '#') R(cx + (i + dx) * sc, y + (r + dy) * sc, sc * (bold ? 2 : 1), sc, c);
+      cx += (gw(ch) + (bold ? 1 : 0) + 1) * sc;
+    }
+  };
+  if (o.outline) {
+    for (const [dx, dy] of [[-1,-1],[0,-1],[1,-1],[-1,0],[1,0],[-1,1],[0,1],[1,1],[-1,2],[0,2],[1,2]]) pass(dx, dy, o.outline);
+  } else if (o.shadow) pass(0, 1, o.shadow);
+  pass(0, 0, col);
+  return textW(s, sc, bold);
+}
+
+// ---------- sprites from maps ----------
+function spr(map, x, y, s, pal, W) {
+  for (let r = 0; r < map.length; r++) {
+    if (W && map[r].length !== W) console.warn('map row ' + r + ' is ' + map[r].length + ' wide, want ' + W + ': ' + map[r]);
+    for (let i = 0; i < map[r].length; i++) { const c = pal[map[r][i]]; if (c) R(x + i * s, y + r * s, s, s, c); }
+  }
+}
+const STAR = ['....k....','...kyk...','kkkyyykkk','kyoyyyyyk','.kyyyyyk.','..kyyyk..','.kyykyyk.','.kyk.kyk.','.kk...kk.'];
+const STAR_ON = { k: K, y: GOLD, o: '#fff6c9' };
+const CHECK = ['......w','.....ww','w...ww.','ww.ww..','.www...','..w....'];
+const DICE = ['.kkkkkkk.','kwwwwwwwk','kwkwwwkwk','kwwwwwwwk','kwwwkwwwk','kwwwwwwwk','kwkwwwkwk','kgggggggk','.kkkkkkk.'];
+const DICE_P = { k: K, w: WHITE, g: '#c9d6f2' };
+const FLAME = ['...r...','..rr...','..ryr..','.rryrr.','.ryyyr.','rryWyrr','ryyWWyr','ryWWWyr','.ryWyr.','..rrr..'];
+const FLAME_P = { r: '#5a230a', y: GOLD, W: '#fff4dc' };
+const ARROW_L = ['...##','..###','.####','#####','.####','..###','...##'];
+const ARROW_R = ['##...','###..','####.','#####','####.','###..','##...'];
+
+// ---------- UI helpers ----------
+function chunky(x, y, w, h, face, edge, hi, edgeH, shadow) {
+  R(x, y + edgeH, w, h, shadow);                // drop shadow
+  R(x, y, w, h, K);                             // outline
+  R(x + 2, y + 2, w - 4, h - 4, edge);          // pressed edge colour
+  R(x + 2, y + 2, w - 4, h - 4 - edgeH, face);  // face
+  R(x + 2, y + 2, w - 4, 2, hi);                // top highlight
+}
+function notch(x, y, w, h, label, top, col, border, fill) { // label set into a border, like the sibling screens
+  const lw = textW(label, 2, false);
+  const nx = top ? Math.round(x + 14) : Math.round(x + w - 14 - lw);
+  const ny = top ? y - 6 : y + h - 8;
+  R(nx - 6, ny, lw + 12, 10 + 4, fill);
+  text(label, nx, ny, 2, col, { shadow: INK });
+}
+
+// =====================================================================
+// BACKGROUND + HEADER
+// =====================================================================
+R(0, 0, 390, 844, BLUE);
+for (let y = 0; y < 844; y += 8) R(0, y, 390, 2, '#3667e8');
+
+// title: YOUR PITMASTER with flanking stars (gear screen pattern)
+text('YOUR PITMASTER', 195, 14, 3, INK, { bold: true, align: 'center', shadow: INK });
+const tw = text('YOUR PITMASTER', 195, 12, 3, WHITE, { bold: true, align: 'center' });
+spr(STAR, 195 - tw / 2 - 26, 15, 2, STAR_ON);
+spr(STAR, 195 + tw / 2 + 8, 15, 2, STAR_ON);
+// subtitle: where we are in the new-game flow
+{
+  const s1 = 'Tutorial done.', s2 = ' Make it yours.';
+  const w1 = textW(s1, 2, false), w2 = textW(s2, 2, false), cw = 14 + 6;
+  let x = Math.round(195 - (cw + w1 + 12 + w2) / 2);
+  // green check badge, same as finished weeks on the season screen
+  R(x, 42, 16, 16, K); R(x + 2, 44, 12, 12, '#3fae4a'); spr(CHECK, x + 2, 46, 1.5, { w: WHITE });
+  x += cw;
+  text(s1, x, 44, 2, '#9ff0a8', { shadow: INK });
+  text(s2, x + w1 + 12, 44, 2, '#dbe6ff', { shadow: INK });
+}
+
+// =====================================================================
+// PREVIEW: backyard patch, pitmaster, kettle, smoke
+// =====================================================================
+const PVX = 16, PVY = 98, PVW = 358, PVH = 266;
+R(PVX + 2, PVY + 6, PVW, PVH, BLUE_DD);
+R(PVX, PVY, PVW, PVH, K);
+R(PVX + 2, PVY + 2, PVW - 4, PVH - 4, WHITE);
+const AX = PVX + 3, AY = PVY + 3, AS = 4;          // art origin, 4 css px per art pixel
+const ACOLS = 88, AROWS = 65;                       // 352 x 260 css
+const A = (x, y, w, h, c) => R(AX + x * AS, AY + y * AS, w * AS, h * AS, c);
+ctx.save(); ctx.beginPath(); ctx.rect(AX, AY, ACOLS * AS, AROWS * AS); ctx.clip();
+
+// deterministic rng
+let seed = 20261018;
+const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+
+// grass
+const GR = '#79c34a', GR_L = '#9ad866', GR_D = '#5ea83a';
+A(0, 0, ACOLS, AROWS, GR);
+// hedge behind the fence
+A(0, 0, ACOLS, 6, '#3d7a33');
+for (let x = -2; x < ACOLS; x += 6) {
+  A(x + 1, 0, 5, 3, '#4c9140'); A(x, 1, 7, 2, '#4c9140'); A(x + 2, 0, 2, 1, '#69ad4e'); A(x + 1, 1, 1, 1, '#69ad4e');
+}
+// fence boards
+for (let bx = 0; bx < ACOLS; bx += 7) {
+  A(bx, 5, 6, 13, '#c98f55');
+  A(bx + 1, 4, 4, 1, '#c98f55'); A(bx + 1, 4, 1, 1, '#e2b072');
+  A(bx, 5, 1, 13, '#ddaa6c');
+  A(bx + 5, 5, 1, 13, '#a06c3c');
+  A(bx + 6, 4, 1, 14, '#5e3a20');
+  A(bx, 17, 6, 1, '#a06c3c');
+  A(bx + 2, 9, 1, 1, '#7a5030'); A(bx + 2, 14, 1, 1, '#7a5030');
+}
+// shadow line under the fence
+A(0, 18, ACOLS, 1, GR_D); A(0, 19, ACOLS, 1, '#6cb044');
+// bunting along the fence
+{
+  const flagCols = ['#e8542e', GOLD, '#f6f0e2', '#3e9ad0'];
+  for (let x = 0; x < ACOLS; x++) {
+    const y = 6 + Math.round(2 * Math.sin(Math.PI * ((x % 44) / 44)));
+    A(x, y, 1, 1, '#3a2a1c');
+    if (x % 6 === 2) {
+      const c = flagCols[(x / 6 | 0) % 4];
+      A(x - 1, y + 1, 4, 1, c); A(x, y + 2, 2, 1, c); A(x, y + 3, 2, 1, c === '#f6f0e2' ? '#d8cfbb' : c);
+    }
+  }
+}
+// grass tufts and specks
+for (let y = 21; y < AROWS; y++) for (let x = 0; x < ACOLS; x++) {
+  const r = rnd();
+  if (r < 0.035) { A(x, y, 1, 1, GR_L); A(x - 1, y - 1, 1, 1, GR_L); A(x + 1, y - 1, 1, 1, GR_L); }
+  else if (r < 0.06) A(x, y, 1, 1, GR_D);
+}
+// patio of pavers
+{
+  const x0 = 16, x1 = 84, y0 = 39, y1 = 65;
+  A(x0, y0, x1 - x0, y1 - y0, '#8e7a54');
+  for (let r = 0, y = y0 + 1; y < y1; y += 5, r++) {
+    const off = (r % 2) * 4;
+    for (let x = x0 + 1 - off; x < x1; x += 8) {
+      const sx = Math.max(x, x0 + 1), ex = Math.min(x + 7, x1 - 1);
+      if (ex <= sx) continue;
+      const ey = Math.min(y + 4, y1);
+      A(sx, y, ex - sx, ey - y, '#dccba4');
+      A(sx, y, ex - sx, 1, '#ecdfc0');
+      A(ex - 1, y + 1, 1, ey - y - 1, '#bca67c');
+      if (ey - y >= 4) A(sx, y + 3, ex - sx, 1, '#c9b48a');
+    }
+  }
+  // rounded corners, grass bites back
+  A(x0, y0, 1, 1, GR); A(x1 - 1, y0, 1, 1, GR);
+  A(x0, y0 - 1, x1 - x0, 1, '#6aa840');
+}
+// flowers
+const flower = (x, y, c) => { A(x, y - 1, 1, 1, c); A(x - 1, y, 1, 1, c); A(x + 1, y, 1, 1, c); A(x, y + 1, 1, 1, c); A(x, y, 1, 1, '#ffe27a'); };
+[[4, 24, '#ff7eb6'], [11, 29, WHITE], [3, 33, '#ffcf3a'], [14, 22, '#ff7eb6'], [52, 23, WHITE], [44, 21, '#ff7eb6'],
+ [86, 41, '#ffcf3a'], [5, 58, '#ff7eb6'], [11, 62, WHITE], [57, 27, '#ffcf3a'], [30, 22, '#ffcf3a']].forEach(f => flower(...f));
+
+// woodpile on the left
+{
+  const LOG = ['..ooo..','.oEEEo.','oEEeEEo','oEeReEo','oEEeEEo','.oEEEo.','..ooo..'];
+  const LP = { o: '#4a2c16', E: '#e2b277', e: '#c48c52', R: '#9a6234' };
+  A(0, 50, 15, 1, 'rgba(30,40,10,0.25)');
+  [[0, 43], [6, 43], [3, 37]].forEach(([x, y]) => spr(LOG, AX + x * AS, AY + y * AS, AS, LP));
+  // a hatchet leaning on the pile
+  A(14, 42, 1, 8, '#8a5a2c'); A(14, 42, 1, 1, '#5a3a1c'); A(13, 40, 3, 2, '#9aa3b0'); A(13, 40, 1, 1, WHITE);
+}
+
+// sunflower in a pot on the right
+{
+  A(80, 30, 7, 1, '#4a2c16'); A(81, 31, 5, 4, '#c9653a'); A(81, 31, 5, 1, '#e2875a'); A(85, 32, 1, 3, '#a24d2a');
+  A(83, 22, 1, 8, '#3f8a2e'); A(81, 26, 2, 1, '#58b03c'); A(84, 27, 2, 1, '#58b03c');
+  A(81, 18, 5, 4, '#ffcf3a'); A(80, 19, 7, 2, '#ffcf3a'); A(82, 17, 3, 1, '#ffcf3a'); A(82, 22, 3, 1, '#e8a820');
+  A(82, 19, 3, 2, '#7a4a20'); A(82, 19, 1, 1, '#a06a30');
+}
+
+// ---------------- the pitmaster ----------------
+const SKINS = [
+  { s: '#f7d9c4', S: '#e2b79c', h: '#ffeadb', c: '#f2a493' },
+  { s: '#edc29b', S: '#d3a278', h: '#f8d7b6', c: '#e8957c' },
+  { s: '#d9a06e', S: '#bc8052', h: '#e8b98c', c: '#d57e62' },
+  { s: '#b87a4b', S: '#985e35', h: '#cc9264', c: '#c0604a' },
+  { s: '#8e5634', S: '#714227', h: '#a46a45', c: '#a04a36' },
+  { s: '#5f3a25', S: '#4a2c1b', h: '#734932', c: '#7e3a2a' },
+];
+const HAIRS = [
+  { H: '#2a1c14', G: '#170f0a', I: '#4a3426' },
+  { H: '#5a3620', G: '#3a2212', I: '#86573a' },
+  { H: '#9a4424', G: '#6e2e16', I: '#c0603a' },
+  { H: '#e2b65a', G: '#b88c38', I: '#f4d488' },
+  { H: '#e07a32', G: '#b0561c', I: '#f4a060' },
+  { H: '#b9b4ae', G: '#8e8984', I: '#e2ded8' },
+];
+const APRONS = [
+  { A: '#d2412f', B: '#a8301f', C: '#7e2016' },
+  { A: '#e8862e', B: '#c0661c', C: '#8a4410' },
+  { A: '#3f9a42', B: '#2e7a32', C: '#1e5a22' },
+  { A: '#2f6ac0', B: '#22509a', C: '#183a72' },
+  { A: '#4a423c', B: '#38312c', C: '#24201c' },
+  { A: '#e0609a', B: '#b8467a', C: '#8a305a' },
+];
+const PICK = { skin: 3, hair: 1, apron: 0 };      // what the mock shows selected
+
+const BODY = [
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '...........oooooooooo...........',
+  '.........oossssssssssoo.........',
+  '........oshhsssssssssSSo........',
+  '.......oshhsssssssssssSSo.......',
+  '.......oshssssssssssssSSo.......',
+  '.......ossGGGssssssGGGSSo.......',
+  '.......ossssssssssssssSSo.......',
+  '.....ooossswksssssswksSSooo.....',
+  '.....osSssskksssssskksSSSSo.....',
+  '.....ooossssssssSsssssSSooo.....',
+  '.......osccssssssssssccSo.......',
+  '.......osssssmttttmsssSSo.......',
+  '.......ossssssmmmmssssSSo.......',
+  '........osssssssssssSSSo........',
+  '.........oosssssssSSSoo.........',
+  '...........oooooooooo...........',
+  '.......ooooooSSSSSSoooooo.......',
+  '......oTTTTCTUUUUUUTCTTTTo......',
+  '.....oTTTTTAAAAAAAAAATTTTTo.....',
+  '.....oTTUTTAAAAAAAAAATTUTTo.....',
+  '.....oTTUTTAAAAAAAAAATTUTTo.....',
+  '.....oUUUTTAACCCCCCAATTUUUo.....',
+  '.....ossoTTAABBBBBBAATTosso.....',
+  '.....ossoTTAAAAAAAAAATTosso.....',
+  '.....ossoCCCCCCCCCCCCCCosso.....',
+  '.....ossoAAAAAAAAAAAABBosso.....',
+  '....osssoAAAAAAAAAAAABBossso....',
+  '....osssoAAAAAAAAAAAABBossso....',
+  '.....oSSoAAAAAAAAAAAABBoSSo.....',
+  '......oooAAAAAAAAAAAABBooo......',
+  '........oAAAAAAAAAAAABBo........',
+  '........oAAAAAAAAAAAABBo........',
+  '........oBBBBBBBBBBBBBBo........',
+  '........oooooooooooooooo........',
+  '.........oPPPPQooPPPPQo.........',
+  '.........oPPPPQooPPPPQo.........',
+  '.........oPPPPQooPPPPQo.........',
+  '........ofFFFFFoofFFFFFo........',
+  '........oFFFFFFooFFFFFFo........',
+  '........oooooooooooooooo........',
+];
+const HAT_SHADE = [];
+for (let i = 0; i < 12; i++) HAT_SHADE.push(i === 12 ? '' : '................................');
+HAT_SHADE.push('........SSSSSSSSSSSSSSSS........');
+const CURLY = [
+  '................................','................................','................................',
+  '................................','................................','................................',
+  '................................','................................','................................',
+  '....oooo................oooo....',
+  '...oHHHHo..............oHHHHo...',
+  '...oHGHHHHGHHGHHGHHGHHGHHHGHo...',
+  '...oHIGHHGHo.oHIHHo.oHGHGHIHo...',
+  '...oHGIHo..............oHIGHo...',
+  '...oIHGHo..............oHGHIo...',
+  '....oGHHo..............oHHGo....',
+  '...oHI....................IHo...',
+  '...oGH....................HGo...',
+  '....oo....................oo....',
+];
+const MUSTACHE = [];
+for (let i = 0; i < 17; i++) MUSTACHE.push('................................');
+MUSTACHE.push('.............MMMMMM.............');
+MUSTACHE.push('...........MMMMMMMMMM...........');
+MUSTACHE.push('...........MM......MM...........');
+const COWBOY = [
+  '................................',
+  '...........ooo....ooo...........',
+  '..........oyYYooooYYZo..........',
+  '..........oyYYYZZYYYZo..........',
+  '..........oyYYYYYYYYZo..........',
+  '.........oyYYYYYYYYYZZo.........',
+  '..oo.....oyYYYYYYYYYZZo.....oo..',
+  '..oyooooooXXXXXggXXXXXooooooYo..',
+  '..oyYYYYYYZZZZZZZZZZZZYYYYYYZo..',
+  '..oyYYYYYYYYYYYYYYYYYYYYYYYYZo..',
+  '...oZZZZZZZZZZZZZZZZZZZZZZZZo...',
+  '....oooooooooooooooooooooooo....',
+];
+
+function pitmaster(px, py, s) {
+  const sk = SKINS[PICK.skin], hr = HAIRS[PICK.hair], ap = APRONS[PICK.apron];
+  const pal = {
+    o: '#2a1810', s: sk.s, S: sk.S, h: sk.h, c: sk.c,
+    G: hr.G, w: WHITE, k: '#1e1410', m: '#6a2a1c', t: '#fff6ea',
+    T: '#5fb4c9', U: '#3f8ea6', A: ap.A, B: ap.B, C: ap.C,
+    P: '#3b4f7a', Q: '#2c3b5e', F: '#4a2e1e', f: '#76503a',
+  };
+  // tongs held in the right hand (drawn first so the fist sits on top)
+  const T = (x, y, c) => R(px + x * s, py + y * s, s, s, c);
+  for (let i = 0; i < 9; i++) {
+    const y = 35 + i, xa = 25 + Math.floor(i / 2), xb = xa + 1 + (i > 5 ? 1 : 0);
+    T(xa + 1, y, '#2a1810'); T(xb + 1, y, '#2a1810');
+    T(xa, y, '#e4e8ec'); T(xb, y, '#8a9098');
+  }
+  T(29, 44, '#2a1810'); T(31, 44, '#2a1810');
+  spr(BODY, px, py, s, pal, 32);
+  spr(HAT_SHADE, px, py, s, { S: sk.S }, 32);
+  spr(CURLY, px, py, s, { o: '#2a1810', H: hr.H, G: hr.G, I: hr.I }, 32);
+  spr(MUSTACHE, px, py, s, { M: hr.G }, 32);
+  spr(COWBOY, px, py, s, { o: '#2a1810', Y: '#c9934f', y: '#e2b373', Z: '#97672f', X: '#5a2a1a', g: GOLD }, 32);
+}
+
+// ---------------- kettle ----------------
+const KETTLE = [
+  '.........oooo.........',
+  '........oWWWWo........',
+  '......oooooooooo......',
+  '....ooLJJLKKKKKNoo....',
+  '...oLJLLKKKKKJKKKNo...',
+  '..oLLKKKKKKKKKKKKKNo..',
+  '.oMMMMMMMMMMMMMMMMMMo.',
+  'oLLKKKKKKKKKKKKKKKKNNo',
+  'oLJKKKKKKKKKKKKKKKKNNo',
+  'oLLKKKKKKKKKKKKKKKKNNo',
+  '.oLKKKKKKKKKKKKKKKNNo.',
+  '..oKKKKKKKKKKKKKKNNo..',
+  '....ooNNNNNNNNNNoo....',
+  '......oooooooooo......',
+];
+function kettle(kx, ky) {
+  const P = (x, y, w, h, c) => A(kx + x, ky + y, w, h, c);
+  // legs, ash pan, wheels
+  const leg = '#4a4752', legD = '#2a2830';
+  P(10, 14, 2, 8, legD);
+  for (let i = 0; i < 8; i++) { const d = Math.floor(i / 2); P(7 - d, 14 + i, 1, 1, leg); P(14 + d, 14 + i, 1, 1, leg); }
+  P(6, 17, 10, 1, '#6a6876'); P(6, 18, 10, 1, '#141216');
+  P(3, 21, 3, 3, '#141216'); P(4, 22, 1, 1, '#6a6876');
+  P(16, 21, 3, 3, '#141216'); P(17, 22, 1, 1, '#6a6876');
+  spr(KETTLE, AX + kx * AS, AY + ky * AS, AS,
+      { o: '#141216', W: '#c98f55', K: '#2e2c33', L: '#4a4752', J: '#9a97a8', N: '#1e1c22', M: '#7a7884' }, 22);
+  // little thermometer dial on the lid
+  P(13, 4, 2, 1, '#e8e4dc');
+  // ember glow at the lid seam vent
+  P(4, 6, 2, 1, '#ff8a2a'); P(5, 6, 1, 1, '#ffd23a');
+}
+
+// shadows
+const SH = 'rgba(40,30,10,0.28)';
+A(26, 60, 22, 1, SH); A(28, 61, 18, 1, SH); A(30, 59, 14, 1, SH);
+A(59, 53, 20, 1, SH); A(61, 54, 16, 1, SH);
+
+kettle(58, 30);
+// smoke rising from the lid vent, drifting right
+function puff(cx, cy, r, a) {
+  for (let y = -Math.ceil(r); y <= Math.ceil(r); y++) for (let x = -Math.ceil(r); x <= Math.ceil(r); x++) {
+    if (x * x + y * y > r * r) continue;
+    const c = (x + y > r * 0.55) ? `rgba(214,210,204,${a})` : (x + y < -r * 0.5 ? `rgba(255,255,255,${a})` : `rgba(244,242,238,${a})`);
+    A(cx + x, cy + y, 1, 1, c);
+  }
+}
+[[85, 2, 3.6, 0.85], [80, 7.5, 3.4, 0.95], [77, 13.5, 3, 1], [73.5, 19, 2.6, 1], [71, 24, 2, 1], [69, 28, 1.5, 1]].forEach(p => puff(...p));
+pitmaster(AX + 20 * AS, AY + 13 * AS, AS);
+
+// speech bubble
+{
+  const bx = 28, by = 166, bw = 80, bh = 30;
+  R(bx, by, bw, bh, K); R(bx + 2, by - 2, bw - 4, bh + 4, K);
+  R(bx + 2, by + 2, bw - 4, bh - 4, WHITE); R(bx + 4, by, bw - 8, bh, WHITE);
+  R(bx + 4, by + bh - 4, bw - 8, 2, '#dfe6f2');
+  // tail toward the face
+  R(bx + bw - 2, by + 14, 4, 8, K); R(bx + bw + 2, by + 18, 4, 6, K); R(bx + bw + 6, by + 22, 4, 4, K);
+  R(bx + bw - 4, by + 14, 4, 6, WHITE); R(bx + bw, by + 18, 4, 4, WHITE); R(bx + bw + 4, by + 22, 2, 2, WHITE);
+  text('Howdy!', bx + bw / 2, by + 8, 2, K, { align: 'center' });
+}
+
+// Random button, bottom right of the preview
+{
+  const bw = 116, bh = 34, bx = AX + ACOLS * AS - bw - 6, by = AY + AROWS * AS - bh - 8;
+  chunky(bx, by, bw, bh, BLUE, BLUE_D, '#6a92ff', 4, 'rgba(20,30,60,0.45)');
+  spr(DICE, bx + 10, by + 5, 2, DICE_P);
+  text('RANDOM', bx + 36, by + 8, 2, WHITE, { shadow: INK });
+}
+ctx.restore();
+
+// =====================================================================
+// PIT SIGN (shows the pit name live as typed)
+// =====================================================================
+{
+  const name = "MARTY'S PIT";
+  const lw = textW(name, 3, true);
+  const sw = lw + 44, sh = 52, sx = Math.round(195 - sw / 2), sy = 62;
+  // posts
+  for (const px of [sx + 22, sx + sw - 30]) {
+    R(px, sy + sh - 4, 8, 28, K); R(px + 2, sy + sh - 4, 4, 26, '#7a4522'); R(px + 2, sy + sh - 4, 1, 26, '#9c5e2e');
+  }
+  R(sx + 2, sy + 6, sw, sh, 'rgba(20,30,80,0.45)');
+  R(sx, sy, sw, sh, K);
+  R(sx + 2, sy + 2, sw - 4, sh - 4, '#9c5a2c');
+  R(sx + 2, sy + 2, sw - 4, 2, '#c98048');
+  R(sx + 2, sy + sh - 6, sw - 4, 4, '#6e3a1a');
+  R(sx + 8, sy + 8, sw - 16, sh - 16, K);
+  R(sx + 10, sy + 10, sw - 20, sh - 20, '#3a2416');
+  // wood grain on the board face
+  for (let i = 0; i < 6; i++) R(sx + 16 + i * ((sw - 40) / 5 | 0), sy + 12 + (i % 2) * 22, 10, 2, '#46301e');
+  // nails
+  for (const [nx, ny] of [[sx + 4, sy + 4], [sx + sw - 6, sy + 4], [sx + 4, sy + sh - 8], [sx + sw - 6, sy + sh - 8]]) { R(nx, ny, 2, 2, '#f0dfb4'); }
+  text(name, 195, sy + 16, 3, '#fff0c8', { bold: true, align: 'center', shadow: '#120c08' });
+  // small sparkle: it updates live
+  const sp = (x, y) => { R(x, y - 4, 2, 10, GOLD); R(x - 4, y, 10, 2, GOLD); R(x, y, 2, 2, WHITE); };
+  sp(sx + sw + 10, sy + 8);
+}
+
+// =====================================================================
+// NAME FIELDS
+// =====================================================================
+function field(x, y, w, h, label, value, count, focus) {
+  const bc = focus ? GOLD : WHITE;
+  R(x, y, w, h, bc); R(x + 2, y + 2, w - 4, h - 4, BLUE_D);
+  R(x + 6, y + 8, w - 12, h - 14, INK);                   // input well
+  R(x + 6, y + 8, w - 12, 2, '#0c1640');
+  text(value, x + 12, y + 15, 2, WHITE);
+  if (focus) { const cx = x + 12 + textW(value, 2, false) + 3; R(cx, y + 13, 2, 18, GOLD); }
+  // label set into the top border, counter set into the bottom border
+  const lw = textW(label, 2, false);
+  R(x + 10, y - 6, lw + 12, 12, BLUE);
+  text(label, x + 16, y - 6, 2, focus ? GOLD : WHITE, { shadow: INK });
+  const cw = textW(count, 2, false);
+  R(x + w - cw - 22, y + h - 7, cw + 12, 12, BLUE);
+  text(count, x + w - cw - 16, y + h - 6, 2, BLUE_L, { shadow: INK });
+}
+field(16, 384, 171, 48, 'YOUR NAME', 'Marty', '5/14', false);
+field(203, 384, 171, 48, 'PIT NAME', "Marty's Pit", '11/14', true);
+
+// =====================================================================
+// LOOK OPTIONS CARD
+// =====================================================================
+const CX = 16, CY = 452, CW = 358, CH = 252;
+R(CX + 2, CY + 6, CW, CH, BLUE_DD);
+R(CX, CY, CW, CH, K);
+R(CX + 2, CY + 2, CW - 4, CH - 4, UMBER);
+R(CX + 2, CY + 2, CW - 4, 2, '#4a3926');
+
+const ROW0 = CY + 8, RSTEP = 40, CTRL = 142;
+function rowLabel(i, label) {
+  const y = ROW0 + i * RSTEP;
+  text(label, CX + 12, y + 10, 2, CREAM, { shadow: K });
+  if (i > 0) for (let d = 0; d < 84; d++) R(CX + 12 + d * 4, y - 4, 2, 2, '#4a3926');
+}
+function swatches(i, cols, sel) {
+  const y = ROW0 + i * RSTEP + 3;
+  cols.forEach((c, j) => {
+    const x = CTRL + j * 38;
+    if (j === sel) { R(x - 3, y - 3, 34, 34, GOLD); }
+    R(x, y, 28, 28, K);
+    R(x + 2, y + 2, 24, 24, c);
+    R(x + 2, y + 2, 24, 3, 'rgba(255,255,255,0.28)');
+    R(x + 2, y + 21, 24, 5, 'rgba(0,0,0,0.18)');
+    if (j === sel) { // check badge
+      R(x + 18, y - 7, 16, 16, K); R(x + 20, y - 5, 12, 12, '#3fae4a'); spr(CHECK, x + 20, y - 3, 1.5, { w: WHITE });
+    }
+  });
+}
+function chooser(i, value, n, sel) {
+  const y = ROW0 + i * RSTEP + 1;
+  const sh = 'rgba(0,0,0,0.5)';
+  chunky(CTRL, y, 38, 32, BLUE, BLUE_D, '#6a92ff', 4, sh);
+  spr(ARROW_L, CTRL + 14, y + 7, 2, { '#': WHITE });
+  chunky(CX + CW - 12 - 38, y, 38, 32, BLUE, BLUE_D, '#6a92ff', 4, sh);
+  spr(ARROW_R, CX + CW - 12 - 38 + 15, y + 7, 2, { '#': WHITE });
+  const vx = CTRL + 44, vw = CX + CW - 12 - 38 - 6 - vx;
+  R(vx, y, vw, 32, '#5a4630'); R(vx + 2, y + 2, vw - 4, 28, K);
+  text(value, vx + vw / 2, y + 5, 2, GOLD, { align: 'center' });
+  // position pips
+  const pw = n * 4 + (n - 1) * 4, px0 = Math.round(vx + vw / 2 - pw / 2);
+  for (let k = 0; k < n; k++) R(px0 + k * 8, y + 23, 4, 4, k === sel ? GOLD : '#5a4630');
+}
+
+rowLabel(0, 'Skin');       swatches(0, SKINS.map(s => s.s), PICK.skin);
+rowLabel(1, 'Hair');       chooser(1, 'CURLY', 6, 1);
+rowLabel(2, 'Hair color'); swatches(2, HAIRS.map(h => h.H), PICK.hair);
+rowLabel(3, 'Face');       chooser(3, 'MUSTACHE', 4, 1);
+rowLabel(4, 'Hat');        chooser(4, 'COWBOY HAT', 4, 1);
+rowLabel(5, 'Apron');      swatches(5, APRONS.map(a => a.A), PICK.apron);
+
+// =====================================================================
+// FIRE IT UP
+// =====================================================================
+{
+  const bx = 16, by = 718, bw = 358, bh = 54;
+  R(bx + 2, by + 6, bw, bh, BLUE_DD);
+  R(bx, by, bw, bh, K);
+  R(bx + 2, by + 2, bw - 4, bh - 4, '#8a3a14');
+  R(bx + 2, by + 2, bw - 4, bh - 10, '#e0702f');
+  R(bx + 2, by + 2, bw - 4, 3, '#f59a60');
+  const w = text('FIRE IT UP', 195, by + 12, 3, '#fff4dc', { bold: true, align: 'center', outline: '#5a230a' });
+  spr(FLAME, 195 - w / 2 - 36, by + 9, 3, FLAME_P);
+  spr(FLAME, 195 + w / 2 + 15, by + 9, 3, FLAME_P);
+}
+text('Names stay in this browser.', 195, 794, 2, '#dbe6ff', { align: 'center', shadow: INK });
+</script>
+</body>
+</html>

@@ -1,0 +1,472 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Your Pit: Hiring</title>
+<style>
+  html, body { margin: 0; padding: 0; background: #2F68EE; }
+  body { width: 390px; height: 844px; overflow: hidden; }
+  canvas { display: block; width: 390px; height: 844px; image-rendering: pixelated; }
+</style>
+</head>
+<body>
+<canvas id="c" width="780" height="1688"></canvas>
+<script>
+// Your Pit v3 mock: crew hiring screen, modeled on the Retro Bowl draft screen.
+// Static picture. Everything is drawn here: bitmap font, portraits, icons.
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+ctx.scale(2, 2);                 // work in CSS px; 1 CSS px = 2 device px
+ctx.imageSmoothingEnabled = false;
+
+// ---------- palette (Retro Bowl style bold blue UI) ----------
+const C = {
+  bg: '#2F68EE', bgDark: '#1E4CC4', navy: '#10215E', ink: '#0B1640',
+  white: '#FFFFFF', pale: '#CFDEFF', card: '#E6EAF2', cardEdge: '#9AA6C4',
+  panel: '#585C6C', panelTop: '#6E7284', gold: '#FFD23F', goldDark: '#C98E12',
+  yellow: '#E9E23A', yellowHi: '#F7F27A', black: '#0A0A12', red: '#E8503A',
+};
+const ROLE = {
+  PIT:   { bg: '#F0603C', hi: '#F7835F' },
+  PREP:  { bg: '#5CC653', hi: '#7DD875' },
+  SERVE: { bg: '#4EC2F5', hi: '#79D3FA' },
+  DRIVE: { bg: '#F5B83A', hi: '#F9CC66' },
+};
+
+function rect(x, y, w, h, col) { ctx.fillStyle = col; ctx.fillRect(x, y, w, h); }
+function shade(hex, f) {
+  const n = parseInt(hex.slice(1), 16);
+  let r = n >> 16, g = (n >> 8) & 255, b = n & 255;
+  if (f < 0) { r *= 1 + f; g *= 1 + f; b *= 1 + f; }
+  else { r += (255 - r) * f; g += (255 - g) * f; b += (255 - b) * f; }
+  const h = v => Math.round(Math.max(0, Math.min(255, v))).toString(16).padStart(2, '0');
+  return '#' + h(r) + h(g) + h(b);
+}
+
+// ---------- 5x7 bitmap font, drawn bold (thick verticals like Retro Bowl) ----------
+const G = {
+A:['.###.','#...#','#...#','#####','#...#','#...#','#...#'],
+B:['####.','#...#','#...#','####.','#...#','#...#','####.'],
+C:['.###.','#...#','#....','#....','#....','#...#','.###.'],
+D:['####.','#...#','#...#','#...#','#...#','#...#','####.'],
+E:['#####','#....','#....','####.','#....','#....','#####'],
+F:['#####','#....','#....','####.','#....','#....','#....'],
+G:['.###.','#...#','#....','#.###','#...#','#...#','.####'],
+H:['#...#','#...#','#...#','#####','#...#','#...#','#...#'],
+I:['.###.','..#..','..#..','..#..','..#..','..#..','.###.'],
+J:['..###','...#.','...#.','...#.','#..#.','#..#.','.##..'],
+K:['#...#','#..#.','#.#..','##...','#.#..','#..#.','#...#'],
+L:['#....','#....','#....','#....','#....','#....','#####'],
+M:['#...#','##.##','#.#.#','#.#.#','#...#','#...#','#...#'],
+N:['#...#','##..#','#.#.#','#..##','#...#','#...#','#...#'],
+O:['.###.','#...#','#...#','#...#','#...#','#...#','.###.'],
+P:['####.','#...#','#...#','####.','#....','#....','#....'],
+Q:['.###.','#...#','#...#','#...#','#.#.#','#..#.','.##.#'],
+R:['####.','#...#','#...#','####.','#.#..','#..#.','#...#'],
+S:['.####','#....','#....','.###.','....#','....#','####.'],
+T:['#####','..#..','..#..','..#..','..#..','..#..','..#..'],
+U:['#...#','#...#','#...#','#...#','#...#','#...#','.###.'],
+V:['#...#','#...#','#...#','#...#','#...#','.#.#.','..#..'],
+W:['#...#','#...#','#...#','#.#.#','#.#.#','##.##','#...#'],
+X:['#...#','#...#','.#.#.','..#..','.#.#.','#...#','#...#'],
+Y:['#...#','#...#','.#.#.','..#..','..#..','..#..','..#..'],
+Z:['#####','....#','...#.','..#..','.#...','#....','#####'],
+'0':['.###.','#...#','#..##','#.#.#','##..#','#...#','.###.'],
+'1':['..#..','.##..','..#..','..#..','..#..','..#..','.###.'],
+'2':['.###.','#...#','....#','...#.','..#..','.#...','#####'],
+'3':['####.','....#','....#','.###.','....#','....#','####.'],
+'4':['...#.','..##.','.#.#.','#..#.','#####','...#.','...#.'],
+'5':['#####','#....','####.','....#','....#','#...#','.###.'],
+'6':['.###.','#....','#....','####.','#...#','#...#','.###.'],
+'7':['#####','....#','...#.','..#..','.#...','.#...','.#...'],
+'8':['.###.','#...#','#...#','.###.','#...#','#...#','.###.'],
+'9':['.###.','#...#','#...#','.####','....#','....#','.###.'],
+'/':['....#','...#.','...#.','..#..','.#...','.#...','#....'],
+',':['.....','.....','.....','.....','.....','..#..','.#...'],
+'.':['.....','.....','.....','.....','.....','.....','..#..'],
+' ':['.....','.....','.....','.....','.....','.....','.....'],
+};
+function textW(s, u) { return s.length * 6 * u - u + 1; }
+function glyphs(s, x, y, u, col) {
+  ctx.fillStyle = col;
+  for (let i = 0; i < s.length; i++) {
+    const g = G[s[i]] || G[' '];
+    for (let r = 0; r < 7; r++) for (let c = 0; c < 5; c++)
+      if (g[r][c] === '#') ctx.fillRect(x + i * 6 * u + c * u, y + r * u, u + 1, u);
+  }
+}
+// opts: align 'l'|'c'|'r', shadow color, sh (shadow depth in px)
+function text(s, x, y, u, col, o = {}) {
+  const w = textW(s, u);
+  const x0 = o.align === 'c' ? Math.round(x - w / 2) : o.align === 'r' ? x - w : x;
+  if (o.shadow) glyphs(s, x0, y + (o.sh || u), u, o.shadow);
+  glyphs(s, x0, y, u, col);
+  return w;
+}
+
+// ---------- tiny pixel icons ----------
+function bitmap(rows, x, y, s, map) {
+  for (let r = 0; r < rows.length; r++) for (let c = 0; c < rows[r].length; c++) {
+    const col = map[rows[r][c]]; if (col) rect(x + c * s, y + r * s, s, s, col);
+  }
+}
+const STAR = ['...#...','..###..','#######','.#####.','.#####.','.##.##.','.#...#.'];
+function star(x, y, s, col, half) {
+  const dark = shade(col, -0.35);
+  for (let r = 0; r < 7; r++) for (let c = 0; c < 7; c++) {
+    if (STAR[r][c] !== '#') continue;
+    let k = col;
+    if (r >= 5) k = dark;
+    if (half && c > 3) k = '#3B4058';
+    if (half && c === 3) k = r >= 5 ? dark : col;
+    rect(x + c * s, y + r * s + 1, s, s, '#1A1C2C');   // drop edge
+    rect(x + c * s, y + r * s, s, s, k);
+  }
+}
+// rating star: 9x9 body plus a 1 px dark outline = 11x11 CSS px, drawn 2 px apart so each star reads alone
+const STAR9 = ['....#....','...###...','...###...','#########','.#######.','..#####..','..#####..','.###.###.','.##...##.'];
+function rateStar(x, y, half) {
+  const on = (r, c) => r >= 0 && r < 9 && c >= 0 && c < 9 && STAR9[r][c] === '#';
+  for (let r = -1; r <= 9; r++) for (let c = -1; c <= 9; c++) {
+    let k = null;
+    if (on(r, c)) {
+      const dim = half && c >= 5;
+      if (dim) k = r >= 7 ? '#6E7386' : '#8C91A4';
+      else if (r >= 7) k = '#D9961A';
+      else if ((r === 1 && c === 3) || (r === 3 && (c === 1 || c === 2)) || (r === 2 && c === 3)) k = '#FFF6B8';
+      else k = '#FFD23F';
+    } else if (on(r - 1, c) || on(r + 1, c) || on(r, c - 1) || on(r, c + 1)) k = '#120E1C';
+    if (k) rect(x + 1 + c, y + 1 + r, 1, 1, k);
+  }
+}
+const COIN = ['.####.','#yyyy#','#yWyy#','#yWyy#','#yyyd#','.####.'];
+function coin(x, y, s) { bitmap(COIN, x, y, s, { '#': '#8A5A08', y: C.gold, W: '#FFF4B8', d: C.goldDark }); }
+
+function moodFace(x, y, s, mood) {
+  const fill = mood === 'happy' ? '#FFD23F' : mood === 'okay' ? '#F6A623' : '#EE5A3A';
+  const shape = ['..######..','.#oooooo#.','#oooooooo#','#oooooooo#','#oooooooo#','#oooooooo#','#oooooooo#','#oooooooo#','.#oooooo#.','..######..'];
+  bitmap(shape, x, y, s, { '#': '#2A1406', o: fill });
+  const k = '#2A1406';
+  const p = (cx, cy) => rect(x + cx * s, y + cy * s, s, s, k);
+  p(3, 4); p(3, 5); p(6, 4); p(6, 5);
+  if (mood === 'happy') { p(2, 6); p(7, 6); p(3, 7); p(4, 7); p(5, 7); p(6, 7); }
+  if (mood === 'okay') { p(3, 7); p(4, 7); p(5, 7); p(6, 7); }
+  if (mood === 'grumpy') { p(2, 2); p(3, 3); p(7, 2); p(6, 3); p(3, 6); p(4, 6); p(5, 6); p(6, 6); p(2, 7); p(7, 7); }
+}
+
+// ---------- portraits: 26x22 grid, chest up ----------
+function portrait(px, py, s, ch) {
+  const W = 26, H = 22;
+  const g = Array.from({ length: H }, () => Array(W).fill(null));
+  const set = (x, y, col) => { if (x >= 0 && x < W && y >= 0 && y < H) g[y][x] = col; };
+  const span = (y, x0, x1, col) => { for (let x = x0; x <= x1; x++) set(x, y, col); };
+  const sk = ch.skin, skS = shade(sk, -0.18), skH = shade(sk, 0.18);
+  const hc = ch.hc, hS = shade(hc, -0.3), hH = shade(hc, 0.25);
+
+  // behind-head hair (pony)
+  if (ch.hair === 'pony') { for (let y = 5; y <= 12; y++) span(y, 18, 19, y > 9 ? hS : hc); set(20, 6, hc); set(20, 7, hc); }
+
+  // torso: shoulders sit high and wide so the bust fills the bottom of the card
+  const T = 14;
+  const sc = ch.shirt, scS = shade(sc, -0.22), scH = shade(sc, 0.2);
+  span(T, 6, 19, sc); span(T + 1, 4, 21, sc);
+  for (let y = T + 2; y < H; y++) span(y, 2, 23, sc);
+  for (let y = T + 1; y < H; y++) { set(20, y, scS); set(21, y, scS); set(5, y, scH); }
+  for (let y = T + 2; y < H; y++) { set(22, y, scS); set(23, y, scS); set(2, y, scH); set(3, y, scH); }
+  // neck
+  for (let y = 12; y <= T + 1; y++) span(y, 11, 14, skS);
+
+  // clothing styles: the outfit says the role, not only the background
+  const WH = '#F6F6F2';
+  if (ch.style === 'apron') {                       // PIT: work apron with neck strap and pocket
+    const a = ch.apron || '#4A3020', aS = shade(a, -0.3), aH = shade(a, 0.28);
+    for (let y = T + 1; y < H; y++) span(y, 8, 17, a);
+    for (let y = T + 2; y < H; y++) span(y, 7, 18, a);
+    set(9, T, a); set(16, T, a); set(10, T, a); set(15, T, a);   // neck strap
+    for (let y = T + 1; y < H; y++) { set(17, y, aS); set(18, y, aS); }
+    span(T + 1, 9, 16, aH);                        // top hem
+    span(T + 3, 10, 15, aS); set(10, T + 2, aS); set(15, T + 2, aS);   // chest pocket
+    set(13, T + 2, '#E8E2D2'); set(13, T + 1, '#C8C2B2');               // thermometer in the pocket
+  } else if (ch.style === 'chef') {                  // PREP: white double breasted chef coat
+    span(T, 7, 9, scH); span(T, 16, 18, scH);       // stand collar
+    span(T + 1, 10, 15, ch.kerchief || '#E8503A');  // neckerchief
+    set(12, T + 2, ch.kerchief || '#E8503A');
+    for (let y = T + 2; y < H; y++) set(15, y, scS);
+    [[9, T + 2], [9, T + 3], [17, T + 2], [17, T + 3]].forEach(([x, y]) => set(x, y, '#6E7890'));
+  } else if (ch.style === 'polo') {                  // SERVE: polo with white collar and name tag
+    span(T, 7, 9, WH); span(T, 16, 18, WH); span(T + 1, 9, 10, WH); span(T + 1, 15, 16, WH);
+    span(T + 1, 11, 14, skS);
+    for (let y = T + 2; y < H; y++) set(12, y, scS);
+    set(13, T + 2, scS); set(12, T + 2, WH);
+    span(T + 2, 16, 19, WH); span(T + 3, 16, 19, WH); set(17, T + 2, '#3A3A48'); set(18, T + 2, '#3A3A48');
+  } else if (ch.style === 'jacket') {                // DRIVE: work jacket, zipper, key ring on the chest
+    span(T, 6, 9, scS); span(T, 16, 19, scS); span(T + 1, 9, 10, scS); span(T + 1, 15, 16, scS);
+    span(T + 1, 11, 14, ch.under || '#E8E2D2');
+    for (let y = T + 2; y < H; y++) { set(12, y, '#C8CCD6'); set(13, y, scS); }
+    if (ch.patch) { span(T + 2, 16, 19, ch.patch); span(T + 3, 16, 19, ch.patch); set(17, T + 2, shade(ch.patch, -0.35)); }
+    // key ring hanging from the left chest
+    set(8, T + 1, '#3A3A48'); set(7, T + 2, '#3A3A48'); set(9, T + 2, '#3A3A48');
+    set(7, T + 3, '#F3CF6D'); set(9, T + 3, '#E2E6EE'); set(8, T + 3, '#B8BECB');
+  }
+
+  // head
+  span(3, 9, 16, sk);
+  for (let y = 4; y <= 12; y++) span(y, 8, 17, sk);
+  span(13, 9, 16, sk); span(14, 10, 15, sk);
+  for (let y = 4; y <= 12; y++) set(17, y, skS);
+  set(16, 13, skS); set(15, 14, skS);
+  set(9, 5, skH); set(9, 6, skH);
+  // ears
+  for (let y = 8; y <= 10; y++) { set(7, y, sk); set(18, y, skS); }
+  set(7, 9, skS);
+  // face
+  const eye = '#1A1020';
+  set(10, 8, eye); set(10, 9, eye); set(15, 8, eye); set(15, 9, eye);
+  if (ch.deep) { set(11, 9, '#F2ECE6'); set(14, 9, '#F2ECE6'); }   // eye whites so deep skin tones keep readable eyes
+  if (ch.female) { set(10, 7, hS); set(15, 7, hS); set(9, 8, eye); set(16, 8, eye); }
+  else { span(7, 9, 10, ch.brow || hS); span(7, 15, 16, ch.brow || hS); }
+  set(13, 10, skS); set(12, 11, skS);
+  const mouth = ch.female ? '#B23A4A' : '#7A2A2A';
+  if (ch.smile) { span(12, 11, 14, mouth); set(12, 12, '#F4EEE8'); set(13, 12, '#F4EEE8'); set(10, 11, skS); set(15, 11, skS); }
+  else span(12, 11, 14, mouth);
+  if (ch.blush) { set(9, 11, '#E99A8E'); set(16, 11, '#E99A8E'); }
+  if (ch.old) { set(10, 10, skS); set(15, 10, skS); set(9, 12, skS); set(16, 12, skS); }
+  if (ch.freckles) { set(9, 10, '#C9875E'); set(11, 11, '#C9875E'); set(14, 11, '#C9875E'); set(16, 10, '#C9875E'); }
+
+  // facial hair
+  const bc = ch.bc || hc, bS = shade(bc, -0.25);
+  if (ch.beard === 'mustache') { span(11, 10, 15, bc); set(10, 12, bc); set(15, 12, bS); }
+  if (ch.beard === 'full') {
+    span(11, 11, 14, bc); set(8, 11, bc); set(9, 11, bc); set(16, 11, bS); set(17, 11, bS);
+    span(12, 8, 10, bc); span(12, 15, 17, bS);
+    span(13, 9, 16, bc); span(14, 10, 15, bS); set(16, 13, bS);
+    for (let y = 8; y <= 10; y++) { set(8, y, bc); set(17, y, bS); }
+  }
+
+  // hair on top
+  const H1 = (y, a, b) => span(y, a, b, hc);
+  switch (ch.hair) {
+    case 'short':
+      H1(2, 9, 16); H1(3, 8, 17); span(4, 8, 17, hS);
+      for (let y = 5; y <= 7; y++) { set(8, y, hc); set(17, y, hS); }
+      set(10, 2, hH); set(11, 2, hH); break;
+    case 'fade':
+      H1(3, 9, 16); span(4, 8, 17, hc); set(8, 5, hS); set(17, 5, hS); set(8, 6, hS); set(17, 6, hS);
+      span(2, 10, 15, hc); break;
+    case 'bald':
+      for (let y = 6; y <= 8; y++) { set(8, y, hc); set(17, y, hS); }
+      set(10, 4, skH); set(11, 4, skH); set(10, 3, skH); break;
+    case 'bun':
+      span(0, 12, 13, hc); span(1, 11, 14, hc); span(2, 9, 16, hc); H1(3, 8, 17); span(4, 8, 17, hc);
+      set(12, 0, hH); set(11, 1, hH); span(4, 11, 14, hS);
+      for (let y = 5; y <= 9; y++) { set(8, y, hc); set(17, y, hS); }
+      set(7, 6, hc); set(18, 6, hS); break;
+    case 'bob':
+      span(2, 9, 16, hc); for (let y = 3; y <= 4; y++) span(y, 7, 18, hc);
+      span(5, 8, 17, hc); set(12, 5, sk); set(13, 5, sk);
+      span(6, 8, 9, hc); span(6, 16, 17, hc);
+      for (let y = 5; y <= 12; y++) { set(7, y, hc); set(18, y, hS); }
+      for (let y = 11; y <= 12; y++) { set(8, y, hc); set(17, y, hS); }
+      set(10, 2, hH); set(11, 2, hH); set(9, 3, hH); break;
+    case 'puff':
+      span(0, 8, 17, hc); span(1, 6, 19, hc); for (let y = 2; y <= 4; y++) span(y, 5, 20, hc);
+      span(5, 5, 7, hc); span(5, 18, 20, hc); span(5, 8, 17, ch.band); set(17, 5, shade(ch.band, -0.3));
+      span(6, 6, 8, hc); span(6, 17, 19, hS);
+      for (let y = 7; y <= 9; y++) { set(7, y, hc); set(18, y, hS); }
+      set(9, 1, hH); set(8, 2, hH); set(10, 1, hH); set(7, 3, hH);
+      [[11, 2], [14, 1], [17, 3], [9, 4], [15, 4], [6, 4], [19, 2]].forEach(([x, y]) => set(x, y, hS)); break;
+    case 'long':
+      span(2, 9, 16, hc); for (let y = 3; y <= 4; y++) span(y, 8, 17, hc);
+      span(5, 8, 12, hc); span(5, 15, 17, hS); set(8, 6, hc); set(17, 6, hS); set(8, 7, hc); set(17, 7, hS);
+      for (let y = 4; y <= 18; y++) { span(y, 6, 7, hc); span(y, 18, 19, hS); }
+      set(5, 17, hc); set(5, 18, hc); set(20, 17, hS); set(20, 18, hS);
+      set(10, 2, hH); set(11, 2, hH); set(9, 3, hH); set(6, 8, hH); set(6, 9, hH);
+      if (ch.clip) { set(15, 4, ch.clip); set(16, 4, ch.clip); set(16, 3, ch.clip); }
+      break;
+    case 'curly':
+      span(1, 9, 16, hc); for (let y = 2; y <= 4; y++) span(y, 7, 18, hc);
+      [7, 10, 13, 16].forEach(x => set(x, 1, hc));
+      for (let y = 5; y <= 9; y++) { set(7, y, hc); set(18, y, hS); if (y < 8) { set(8, y, hc); set(17, y, hS); } }
+      span(5, 9, 11, hc); span(5, 14, 16, hc);
+      [[9, 2], [12, 3], [15, 2], [10, 4], [14, 4], [8, 6], [17, 7]].forEach(([x, y]) => set(x, y, hS));
+      set(6, 5, hc); set(19, 5, hS); set(6, 7, hc); set(19, 7, hS); break;
+    case 'cap': {
+      const cp = ch.cap, cS = shade(cp, -0.3);
+      for (let y = 6; y <= 9; y++) { set(8, y, hc); set(17, y, hS); }
+      // plain cap, no mark on the front
+      span(1, 10, 15, cp); for (let y = 2; y <= 4; y++) span(y, 8, 17, cp);
+      set(10, 2, shade(cp, 0.3)); set(11, 2, shade(cp, 0.3)); set(9, 3, shade(cp, 0.3));
+      for (let y = 2; y <= 4; y++) { set(16, y, cS); set(17, y, cS); }
+      set(12, 1, shade(cp, 0.3)); set(13, 1, cp);
+      span(5, 7, 18, cS); span(6, 8, 17, shade(sk, -0.3));
+      break; }
+    case 'wavy':
+      span(1, 10, 15, hc); span(2, 8, 17, hc); for (let y = 3; y <= 4; y++) span(y, 7, 18, hc);
+      span(5, 7, 10, hc); span(5, 15, 18, hc); set(11, 5, hc); set(14, 6, hc);
+      for (let y = 6; y <= 8; y++) { set(7, y, hc); set(18, y, hS); }
+      set(11, 2, hH); set(12, 2, hH); set(10, 3, hH); set(15, 3, hS); set(16, 4, hS); break;
+    case 'pony':
+      span(2, 9, 16, hc); for (let y = 3; y <= 4; y++) span(y, 8, 17, hc);
+      span(5, 8, 11, hc); set(17, 5, hS); set(8, 6, hc); set(17, 6, hS); set(8, 7, hc);
+      span(4, 15, 17, ch.tie || '#E85A8A');
+      set(10, 2, hH); set(11, 2, hH); set(9, 3, hH); break;
+  }
+  if (ch.toque) {                                   // short chef hat
+    const tw = '#FAFAF6', ts = '#D6DAE4';
+    span(0, 9, 16, tw); span(1, 8, 17, tw); span(2, 8, 17, tw); span(3, 8, 17, ts);
+    set(11, 0, ts); set(14, 0, ts); set(16, 1, ts); set(17, 1, ts); set(17, 2, ts);
+    set(9, 1, '#FFFFFF');
+  }
+  if (ch.earring) set(7, 11, C.gold);
+  if (ch.glasses) {
+    const f = ch.glasses;
+    span(7, 9, 11, f); span(7, 14, 16, f); span(10, 9, 11, f); span(10, 14, 16, f);
+    set(9, 8, f); set(9, 9, f); set(11, 8, f); set(11, 9, f);
+    set(14, 8, f); set(14, 9, f); set(16, 8, f); set(16, 9, f);
+    set(12, 8, f); set(13, 8, f);
+  }
+
+  // outline pass
+  const out = Array.from({ length: H }, (_, y) => g[y].slice());
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    if (g[y][x]) continue;
+    const n = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => g[y + dy] && g[y + dy][x + dx]);
+    if (n) out[y][x] = '#1A1426';
+  }
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++)
+    if (out[y][x]) rect(px + x * s, py + y * s, s, s, out[y][x]);
+}
+
+// ---------- chunky UI pieces ----------
+function frame(x, y, w, h, face, border, edge) {
+  // pressed-edge button: dark ink outline, white border, face, darker bottom lip
+  rect(x, y, w, h + 4, C.ink);
+  rect(x + 1, y + 1, w - 2, h + 2, edge);
+  rect(x + 1, y + 1, w - 2, h - 2, border);
+  rect(x + 4, y + 4, w - 8, h - 8, face);
+  rect(x + 4, y + 4, w - 8, 2, shade(face, 0.18));
+}
+
+// ---------- crew data ----------
+const CREW = [
+  { name: 'DALE',   role: 'PIT',   stars: 4.5, wage: 60, mood: 'okay',   rookie: false, skin: '#F0C6A2', hair: 'short', hc: '#B9BAC4', beard: 'mustache', bc: '#D4D4DA', old: true, shirt: '#3A6FB0', style: 'apron' },
+  { name: 'ROSA',   role: 'PREP',  stars: 3.5, wage: 40, mood: 'happy',  rookie: true,  skin: '#C98C5E', hair: 'long',  hc: '#3A2016', clip: '#FF8FB0', female: true, smile: true, shirt: '#F4F4EE', style: 'chef' },
+  { name: 'MARCUS', deep: true, role: 'SERVE', stars: 4,   wage: 50, mood: 'happy',  rookie: false, skin: '#6B4128', hair: 'fade',  hc: '#151010', beard: 'full', smile: true, shirt: '#F2C230', style: 'polo' },
+  { name: 'JUNE',   role: 'DRIVE', stars: 3,   wage: 30, mood: 'happy',  rookie: true,  skin: '#F2CFA6', hair: 'bob',   hc: '#1C1620', female: true, blush: true, shirt: '#2F9E5A', style: 'jacket' },
+  { name: 'KEISHA', deep: true, role: 'PIT',   stars: 4,   wage: 55, mood: 'grumpy', rookie: false, skin: '#4A2C1C', hair: 'puff',  hc: '#1A1210', band: '#F3CF6D', female: true, earring: true, shirt: '#E8E2D2', apron: '#2A2A34', style: 'apron' },
+  { name: 'TOMAS',  role: 'PREP',  stars: 3,   wage: 35, mood: 'okay',   rookie: false, skin: '#B47C50', hair: 'bald',  hc: '#3A2A22', beard: 'full', bc: '#4E4440', toque: true, kerchief: '#2F68EE', shirt: '#F4F4EE', style: 'chef' },
+  { name: 'BEA',    role: 'SERVE', stars: 3.5, wage: 35, mood: 'happy',  rookie: false, skin: '#F5D6BE', hair: 'curly', hc: '#ECECF2', female: true, old: true, glasses: '#C0392B', smile: true, blush: true, shirt: '#8E5BC8', style: 'polo' },
+  { name: 'HANK',   role: 'DRIVE', stars: 2.5, wage: 25, mood: 'grumpy', rookie: true,  skin: '#E6B088', hair: 'cap',   hc: '#B5562A', cap: '#C0392B', beard: 'full', brow: '#8A3E1E', shirt: '#3B4A6B', patch: '#F5B83A', under: '#C8463A', style: 'jacket' },
+  { name: 'OMAR',   role: 'PIT',   stars: 2,   wage: 20, mood: 'happy',  rookie: true,  skin: '#A86E48', hair: 'wavy',  hc: '#17100E', smile: true, shirt: '#C04848', apron: '#5A3A22', style: 'apron' },
+  { name: 'LILY',   role: 'SERVE', stars: 1.5, wage: 15, mood: 'okay',   rookie: true,  skin: '#F8DCC8', hair: 'pony',  hc: '#E6BC58', female: true, freckles: true, shirt: '#E86A9A', tie: '#2F68EE', style: 'polo' },
+];
+
+// ---------- draw ----------
+rect(0, 0, 390, 844, C.bg);
+for (let y = 0; y < 844; y += 8) rect(0, y, 390, 2, '#2C63E6');   // very faint scan stripes
+
+// top row: cash chip + info button
+frame(12, 8, 112, 30, C.bg, C.white, '#B9C8EE');
+coin(22, 14, 3);
+text('1,800', 46, 16, 2, C.white, { shadow: C.navy });
+frame(346, 8, 32, 30, C.bg, C.white, '#B9C8EE');
+bitmap(['.##.', '.##.', '....', '###.', '.##.', '.##.', '.##.', '####'], 356, 14, 2, { '#': C.white });
+
+// title with stars, like DRAFT ROUND 1
+const title = 'HIRING WEEK 3';
+const tw = textW(title, 3);
+const tx = Math.round(195 - tw / 2);
+text(title, tx, 50, 3, C.white, { shadow: C.navy, sh: 3 });
+const sc3 = [C.red, C.white, C.navy];
+for (let i = 0; i < 3; i++) {
+  star(tx - 54 + i * 16, 53, 2, sc3[i]);
+  star(tx + tw + 8 + i * 16, 53, 2, sc3[2 - i]);
+}
+// page line with page arrows
+text('PAGE 1/2', 195, 81, 2, C.pale, { align: 'c', shadow: C.bgDark, sh: 2 });
+bitmap(['...#', '..##', '.###', '####', '.###', '..##', '...#'], 128, 81, 2, { '#': '#6F94F2' });
+bitmap(['#...', '##..', '###.', '####', '###.', '##..', '#...'], 254, 81, 2, { '#': C.white });
+
+// crew cards: 2 columns x 5 rows (the 5 by 2 board turned for a portrait phone)
+const GX = 12, GY = 102, CW = 179, GAPX = 8, GAPY = 4;
+const WH_ = 74, IH = 39, CH = 4 + WH_ + IH + 5;
+CREW.forEach((ch, i) => {
+  const col = i % 2, row = Math.floor(i / 2);
+  const x = GX + col * (CW + GAPX), y = GY + row * (CH + GAPY);
+  const R = ROLE[ch.role];
+  rect(x + 3, y + 3, CW, CH, C.bgDark);          // drop shadow
+  rect(x, y, CW, CH, C.ink);
+  rect(x + 1, y + 1, CW - 2, CH - 2, C.card);
+  rect(x + 1, y + CH - 4, CW - 2, 3, C.cardEdge);
+  // portrait window
+  const wx = x + 4, wy = y + 4, ww = CW - 8, wh = WH_;
+  rect(wx, wy, ww, wh, R.bg);
+  rect(wx, wy, ww, 3, R.hi);
+  ctx.save(); ctx.beginPath(); ctx.rect(wx, wy, ww, wh); ctx.clip();
+  portrait(wx + 42, wy, 4, ch);
+  ctx.restore();
+  // role badge (top left)
+  const bw = textW(ch.role, 2) + 8;
+  rect(wx + 3, wy + 3, bw, 20, C.ink);
+  text(ch.role, wx + 7, wy + 6, 2, C.white);
+  // rookie badge under it
+  if (ch.rookie) {
+    rect(wx + 3, wy + 26, 20, 20, C.ink);
+    rect(wx + 4, wy + 27, 18, 18, C.gold);
+    rect(wx + 6, wy + 29, 14, 14, C.ink);
+    text('R', wx + 8, wy + 30, 2, C.gold);
+  }
+  // mood (top right)
+  moodFace(wx + ww - 23, wy + 3, 2, ch.mood);
+  // info panel
+  const iy = wy + wh;
+  rect(wx, iy, ww, IH, C.panel);
+  rect(wx, iy, ww, 2, C.panelTop);
+  rect(wx, iy, ww, 1, C.ink);
+  text(ch.name, x + CW / 2, iy + 4, 2, C.white, { align: 'c', shadow: '#2A2C38' });
+  const full = Math.floor(ch.stars), half = ch.stars % 1 !== 0;
+  for (let k = 0; k < full; k++) rateStar(wx + 5 + k * 13, iy + 23, false);
+  if (half) rateStar(wx + 5 + full * 13, iy + 23, true);
+  // wage: WAGE, coin, number (right aligned)
+  const ws = String(ch.wage);
+  const nx = wx + ww - 5 - textW(ws, 2);
+  text(ws, nx, iy + 22, 2, '#FFF1B0', { shadow: '#2A2C38' });
+  coin(nx - 15, iy + 23, 2);
+  text('WAGE', nx - 19, iy + 22, 2, C.pale, { align: 'r', shadow: '#2A2C38' });
+});
+
+// payroll bar, like the salary cap box
+const PY = GY + 5 * CH + 4 * GAPY + 10;
+rect(12, PY, 366, 38, C.ink);
+rect(13, PY + 1, 364, 36, C.white);
+rect(16, PY + 4, 358, 30, C.bg);
+const lab = 'PAYROLL 160 / 300 A WEEK';
+const lw = textW(lab, 2);
+rect(Math.round(195 - lw / 2) - 8, PY - 6, lw + 16, 14, C.bg);
+text(lab, 195, PY - 6, 2, C.white, { align: 'c', shadow: C.navy });
+rect(24, PY + 12, 342, 18, C.black);
+const fillW = Math.round(338 * 160 / 300);
+rect(26, PY + 14, fillW, 14, C.yellow);
+rect(26, PY + 14, fillW, 3, C.yellowHi);
+rect(26, PY + 25, fillW, 3, '#B9B21E');
+for (let t = 50; t < 300; t += 50) rect(26 + Math.round(338 * t / 300), PY + 14, 1, 14, t * 338 / 300 < fillW ? '#9C9618' : '#2A2A36');
+
+// bottom row: Crew button, hires left, next arrow (lifted clear of the gesture bar)
+const BY = PY + 38 + 10, BH = 40;
+frame(12, BY, 132, BH, C.bg, C.white, '#9FB4E8');
+bitmap(['..##....##..', '.####..####.', '.####..####.', '..##....##..', '.####..####.', '######.#####', '######.#####'], 28, BY + 13, 2, { '#': C.white });
+text('CREW', 62, BY + 13, 2, C.white, { shadow: C.navy });
+
+text('HIRES LEFT', 233, BY, 2, C.white, { align: 'c', shadow: C.navy });
+rect(199, BY + 18, 68, 24, C.ink);
+rect(200, BY + 19, 66, 22, C.white);
+rect(203, BY + 22, 60, 16, C.bg);
+text('1', 233, BY + 23, 2, C.white, { align: 'c' });
+
+frame(318, BY, 60, BH, C.bg, C.white, '#9FB4E8');
+bitmap(['.....#...', '.....##..', '########.', '#########', '########.', '.....##..', '.....#...'], 335, BY + 10, 3, { '#': C.white });
+window.__layout = { gridEnd: GY + 5 * CH + 4 * GAPY, PY, BY, bottom: BY + BH + 4 };
+</script>
+</body>
+</html>

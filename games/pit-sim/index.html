@@ -92,6 +92,9 @@
 
     @media (max-width: 899px) { #wrap { margin: 0 -8px; width: auto; } }
 
+    .tut-pulse { box-shadow: 0 0 0 3px var(--y); animation: tut-pulse 1.2s ease-in-out infinite; }
+    @keyframes tut-pulse { 50% { box-shadow: 0 0 0 3px var(--c); } }
+
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { transition: none !important; animation: none !important; }
     }

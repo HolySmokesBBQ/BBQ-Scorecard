@@ -1,9 +1,10 @@
 'use strict';
 /*
- * games/pit-sim/sprites.js  (Art builder, v2)
+ * games/pit-sim/sprites.js  (Art builder, v2.1)
  * Attaches PitSim.art as defined in docs/superpowers/specs/2026-10-18-pit-sim-contract.md,
  * section 3 as amended by the v2 delta D11, with the rules of [V2.10] (palette) and
- * [V2.11] (sprites) of docs/superpowers/specs/2026-10-18-pit-sim-design.md.
+ * [V2.11] (sprites) of docs/superpowers/specs/2026-10-18-pit-sim-design.md, and for v2.1 the
+ * contract section K9 with section 4 of docs/superpowers/specs/2026-10-18-pit-sim-v2-1-tutorial.md.
  *
  * Deviations
  * - build() pre-renders a mirrored canvas for every frame, plus one tinted font strip per COLOR
@@ -22,6 +23,15 @@
  *   with tilled soil, no flowers). cooler frame 0 is repainted as a small red cooler with a white
  *   lid and a white band, so it reads as the meat cooler on day 1; frames 1 and 2 stay the blue
  *   gear cooler. 113 names, 268 frames.
+ * - v2.1 (2026-10-18, late, contract K9): pile (16x16, 4 frames) and hand_charcoal (8x8) are
+ *   redrawn in place as black pillow briquettes beside a paper sack, and a scoop of briquettes;
+ *   piece_* gain frame 4 (about to burn); font gains frames 38 "." and 39 ","; arrow (8x12, 4)
+ *   and bubble_warn (8x10, 2) are new. 115 names, 281 frames. No palette entry, no charcoal icon.
+ *   Two choices inside the rules of [T 4]: the pile's shadow row is a checker of paverD and
+ *   outline brown (paverD alone vanishes into the paver joint row the pile sits on), and the low
+ *   frame's sack slumps four rows so the four frames read apart at a glance.
+ *   Piece frame 4 also paints the inner shade cells outline brown and the light cells done red, so
+ *   the char reads along the bottom right as well; bones and the brisket fat cap stay cream.
  * Nothing else is added to the shared surface: PitSim.art only.
  *
  * LEGEND (D11): one character per pixel, the palette index in base 32.
@@ -623,10 +633,42 @@ const PIECE_SHAPE = {
 const CHECK_AT = { sausage: [5, 1], chicken: [3, 3], ribs: [3, 4], butt: [3, 4], brisket: [3, 4] };
 const CHECK = ['...k', 'k.k.', '.k..'];
 
+// v2.1 frame 4, about to burn ([T 4]): the done shape charred at the rim, the outline near black
+// ('1'), the meat cells next to it umber ('2'), the shade side black, so a black and umber band
+// rings a red center; no check mark, two smoke wisps above. Round 2: a thin piece (the sausage)
+// whose rim band would leave under 4 red cells chars only its side neighbors, so it never reads
+// as the burnt frame.
+const WISP_AT = { sausage: [7, 0], chicken: [5, 0], ribs: [6, 0], butt: [7, 0], brisket: [6, 1] };
+function warnRows(meat) {
+  const shape = PIECE_SHAPE[meat];
+  const isQ = function (x, y) { return y >= 0 && y < shape.length && x >= 0 && x < shape[y].length && shape[y][x] === 'Q'; };
+  function rim(vertical) {
+    return shape.map(function (r, y) {
+      let o = '';
+      for (let x = 0; x < r.length; x++) {
+        const near = isQ(x - 1, y) || isQ(x + 1, y) || (vertical && (isQ(x, y - 1) || isQ(x, y + 1)));
+        o += r[x] === 'X' && near ? '2' : r[x];
+      }
+      return o;
+    });
+  }
+  let sym = rim(true);
+  if (sym.join('').split('X').length - 1 < 4) sym = rim(false);
+  const rows = paint(sym, { Q: '1', X: 'r', Y: '1', L: '2', B: '3' });
+  const w = WISP_AT[meat];
+  const out = stamp(rows, ['v'], w[0], w[1]);
+  // The second wisp goes one row up when there is room, else to the first clear cell on the same row.
+  const spots = [[w[0] + 1, w[1] - 1], [w[0] - 3, w[1]], [w[0] + 2, w[1]], [w[0] - 2, w[1]]];
+  for (let i = 0; i < spots.length; i++) {
+    const x = spots[i][0], y = spots[i][1];
+    if (y >= 0 && y < out.length && x >= 0 && x < out[y].length && out[y][x] === '0') return stamp(out, ['v'], x, y);
+  }
+  return out;
+}
 function pieceFrames(meat) {
   const shape = PIECE_SHAPE[meat];
   const done = stamp(paint(shape, MEAT_STATE.done), CHECK, CHECK_AT[meat][0], CHECK_AT[meat][1]);
-  return [paint(shape, MEAT_STATE.raw), paint(shape, MEAT_STATE.cooking), done, paint(shape, MEAT_STATE.burnt)];
+  return [paint(shape, MEAT_STATE.raw), paint(shape, MEAT_STATE.cooking), done, paint(shape, MEAT_STATE.burnt), warnRows(meat)];
 }
 
 // 6x2 toppings for an 8x6 plate, in cooked colors.
@@ -651,7 +693,10 @@ function trayRows(meat) {
 }
 const HAND_TRAY_EMPTY = paint(['........', '........', '........', '........', '55555555', '58888885', '57777775', '55555555']);
 
-const HAND_CHARCOAL = paint(['..5555..', '.585575.', '.588875.', '58111175', '58111175', '58888775', '58887775', '.555555.']);
+// v2.1 ([T 4], round 2): a steel scoop heaped with black briquettes, single pixel grey glints and
+// one ember, no cream, so it reads as coals over the head and on the chest alike. The steel is only
+// the scoop rim ('s') and bowl ('t'); the charcoal itself never uses 't'.
+const HAND_CHARCOAL = paint(['..1111..', '.1v2111.', '1211v211', '12214221', '5ssssss5', '.5tttt5.', '..5555..', '........']);
 const HAND_BURNT = paint(['........', '..5555..', '.5v1115.', '5vv11115', '51111115', '51111115', '.511115.', '..5555..']);
 const HAND_TOGO = paint(['...55...', '..5..5..', '.555555.', '5hhhhhu5', '5ooooor5', '5hhhhhu5', '5uuuuuu5', '.555555.']);
 
@@ -845,25 +890,95 @@ function clothTable(w, leftCap, rightCap) {
   return g.done();
 }
 
-const PALLET = [
-  '.55555555555555.',
-  inner('886886886886'),
-  inner('666666666666'),
-  '.555.555555.555.'
+// v2.1 charcoal ([T 4], round 2 repaint). The heap is pillow briquettes, each a warm near black body
+// ('2', U) ringed in near black ('1') with one grey glint ('v') on its top left corner, glints
+// staggered course to course so no two line up into a pattern, and no 't' (the kettle's steel). Every
+// frame keeps a mound with a single peak. One ember with a yellow core ('4', 'k') glows low on the
+// right of the full and half heaps. The paper sack stands behind on the right: kraft brown, wider
+// than tall, a crimped rolled top, and a black flame with an orange core printed straight on the
+// brown (no cream label). The heap stands in front of the sack's lower left corner. The shadow falls
+// on the paver joint row (row 15) as solid outline brown with paverD ends.
+const SACK_UP = [
+  '.5.5.5.5.',
+  '.5878785.',
+  '.5666665.',
+  '588888775',
+  '588818775',
+  '588111775',
+  '581141775',
+  '581111775',
+  '588111765',
+  '587777665',
+  '.5555555.'
 ];
-// A paper charcoal sack: rolled top, crease, black label.
-const SACK = ['.5555.', '598875', '555555', '581175', '581175', '588775', '.5555.'];
+// Low pile: the same sack slumped, a shorter body under the same rolled top.
+const SACK_SLUMP = [
+  '.5.5.5.5.',
+  '.5878785.',
+  '.5666665.',
+  '588818775',
+  '581141775',
+  '581111765',
+  '587777665',
+  '.5555555.'
+];
+const HEAP = {
+  full: [
+    '.....11.....',
+    '....1v21....',
+    '..1112211...',
+    '.1v211v211..',
+    '.1222122211.',
+    '1v2114v21v21',
+    '122214k22221',
+    '111111111111'
+  ],
+  half: [
+    '............',
+    '...11.111...',
+    '..1v21v221..',
+    '.11221122211',
+    '1v2114v21v21',
+    '122214k22221',
+    '111111111111'
+  ],
+  // A small mound of three pillows plus one loose crumb.
+  low: [
+    '............',
+    '..111.......',
+    '.1v2211.....',
+    '1v211v21....',
+    '12221222111.',
+    '11111111.1v1'
+  ]
+};
+// Empty: the sack folded flat on the pavers, crimped ends, the rolled end on the left, a small black
+// flame lying on the kraft brown, and a loose crumb on the pavers to the right (no grey glint and no
+// ember: the empty frame carries no t, v, u, 4 or k, contract K11 step 14).
+const SACK_FLAT = [
+  '................',
+  '..5.5.5.5555....',
+  '.5876888888885..',
+  '58766881118775..',
+  '.5776811118875.1',
+  '..555555555555.1'
+];
+const PILE_SHADOW = '.a555555555555a.';
 function pileFrames() {
-  const base = blank(16, 12).concat(PALLET);
-  function put(rows, spots) {
-    let out = rows;
-    spots.forEach(function (p) { out = stamp(out, SACK, p[0], p[1]); });
-    return out;
+  function frame(sack, sackY, heap) {
+    let rows = blank(16, 16);
+    rows = stamp(rows, sack, 7, sackY);
+    if (heap) rows = stamp(rows, heap, 0, 15 - heap.length);
+    rows[15] = PILE_SHADOW;
+    return paint(rows);
   }
-  const full = put(base, [[0, 6], [5, 6], [10, 6], [3, 1], [8, 1]]);
-  const half = put(base, [[2, 6], [8, 6], [5, 1]]);
-  const low = put(base, [[5, 6]]);
-  return [paint(full), paint(half), paint(low), paint(base)];
+  const empty = paint(patch(stamp(blank(16, 16), SACK_FLAT, 0, 9), { 15: '.a55555555555a..' }));
+  return [
+    frame(SACK_UP, 4, HEAP.full),
+    frame(SACK_UP, 4, HEAP.half),
+    frame(SACK_SLUMP, 7, HEAP.low),
+    empty
+  ];
 }
 
 const TRASH = paint([
@@ -1409,6 +1524,43 @@ const SMOKE = [
 ];
 const SMOKE_DARK = SMOKE.map(function (f) { return recolor(f, { u: 'v', h: 's', s: 't' }); });
 
+// v2.1 tutorial arrow ([T 2.6], [T 4]): chunky gold, one white glint, outline brown, 8 wide and
+// 9 tall. Frame 1 is frame 0 two rows lower (the bob toward the target); frames 2 and 3 are
+// frames 0 and 1 with the row order reversed, pointing up.
+const ARROW_DOWN = paint([
+  '..5555..',
+  '..5hk5..',
+  '..5kk5..',
+  '..5kk5..',
+  '555kk555',
+  '5kkkkkk5',
+  '.5kkkk5.',
+  '..5kk5..',
+  '...55...',
+  '........',
+  '........',
+  '........'
+]);
+const ARROW_BOB = blank(8, 2).concat(ARROW_DOWN.slice(0, 10));
+const ARROW = [ARROW_DOWN, ARROW_BOB, ARROW_DOWN.slice().reverse(), ARROW_BOB.slice().reverse()];
+
+// v2.1 about to burn bubble ([T 3.4], [T 4]), round 2: a red card ('o') with a white '!' ('h'), a
+// cream glint on its lit top left corner and a short tail at the bottom center, so it pops against
+// the pavers and the cream and orange sign. The blink frame turns the card yellow and the mark dark.
+const BUBBLE_WARN_RED = paint([
+  '.555555.',
+  '53ooooo5',
+  '5oohhoo5',
+  '5oohhoo5',
+  '5oohhoo5',
+  '5oooooo5',
+  '5oohhoo5',
+  '5oooooo5',
+  '.555o55.',
+  '....5...'
+]);
+const BUBBLE_WARN = [BUBBLE_WARN_RED, recolor(BUBBLE_WARN_RED, { o: 'k', h: '5' })];
+
 const FIRE = [
   paint(['........', '...4....', '...44...', '..4k4...', '..4kk4..', '.44khk4.', '.4kkkk4.', '..4444..']),
   paint(['....4...', '...44...', '...4k4..', '..4kk4..', '.44khk4.', '.4khhk4.', '.4kkkk4.', '..4444..']),
@@ -1434,7 +1586,7 @@ function zFrame(spots) {
 }
 const ZZZ = [zFrame([[2, 4]]), zFrame([[0, 4], [4, 1]]), zFrame([[0, 5], [3, 2], [5, -1]])];
 
-// 4x6 glyphs: 0 to 9, A to Z, +, :
+// 4x6 glyphs: 0 to 9, A to Z, +, :, and (v2.1) . and ,
 const FONT_GLYPHS = [
   ['.##.', '#..#', '#.##', '##.#', '#..#', '.##.'],   // 0 (slashed, so it never reads as O)
   ['.#..', '##..', '.#..', '.#..', '.#..', '###.'],   // 1
@@ -1473,7 +1625,9 @@ const FONT_GLYPHS = [
   ['#..#', '#..#', '.##.', '.#..', '.#..', '.#..'],   // Y
   ['####', '...#', '..#.', '.#..', '#...', '####'],   // Z
   ['....', '.#..', '###.', '.#..', '....', '....'],   // +
-  ['....', '.#..', '....', '....', '.#..', '....']    // :
+  ['....', '.#..', '....', '....', '.#..', '....'],   // :
+  ['....', '....', '....', '....', '....', '.#..'],   // . (v2.1)
+  ['....', '....', '....', '....', '.#..', '#...']    // , (v2.1)
 ];
 const FONT_MAP = { '#': '3' };
 
@@ -1483,10 +1637,12 @@ function glyphIndex(ch) {
   if (c >= 65 && c <= 90) return 10 + (c - 65);
   if (ch === '+') return 36;
   if (ch === ':') return 37;
+  if (ch === '.') return 38;
+  if (ch === ',') return 39;
   return -1;
 }
 
-/* ------------------------------------------------------------------ the set (D11, 113 names) */
+/* ------------------------------------------------------------------ the set (K9, 115 names, 281 frames) */
 
 const SPRITES = {};
 function add(name, w, h, frames) { SPRITES[name] = sprite(w, h, frames); }
@@ -1514,7 +1670,7 @@ MEAT_IDS.forEach(function (m) { add('hand_tray_' + m, 8, 8, [trayRows(m)]); });
 add('hand_tray', 8, 8, [HAND_TRAY_EMPTY]);
 add('hand_togo', 8, 8, [HAND_TOGO]);
 
-// Food, icons and marks: 16 names, 31 frames
+// Food, icons and marks: 16 names, 36 frames
 MEAT_IDS.forEach(function (m) { add('icon_' + m, 8, 8, [ICON[m]]); });
 MEAT_IDS.forEach(function (m) { add('plate_' + m, 8, 6, [plateRows(m)]); });
 MEAT_IDS.forEach(function (m) { add('piece_' + m, 10, 10, pieceFrames(m)); });
@@ -1563,7 +1719,7 @@ add('lights_string', 66, 10, [lightsStringFrame(0), lightsStringFrame(1)]);
 add('birdbath', 16, 24, [birdbathFrame(false), birdbathFrame(true)]);
 add('canopy', 40, 32, [canopyRows()]);
 
-// Effects and text: 10 names, 60 frames
+// Effects and text: 12 names, 68 frames
 add('bubble', 16, 12, [BUBBLE]);
 add('heart', 8, 8, HEART);
 add('sparkle', 7, 7, SPARKLE);
@@ -1574,13 +1730,15 @@ add('coin', 8, 8, COIN);
 add('sweat', 4, 6, SWEAT);
 add('zzz', 8, 8, ZZZ);
 add('font', 4, 6, FONT_GLYPHS.map(function (g) { return paint(g, FONT_MAP); }));
+add('arrow', 8, 12, ARROW);
+add('bubble_warn', 8, 10, BUBBLE_WARN);
 
 /* ------------------------------------------------------------------ build and draw */
 
 let built = false;
 const cache = {};      // name -> canvas per frame
 const flipCache = {};  // name -> mirrored canvas per frame
-const tintCache = {};  // COLOR key -> one strip canvas holding all 38 glyphs in that color
+const tintCache = {};  // COLOR key -> one strip canvas holding all 40 glyphs in that color
 
 function validate() {
   Object.keys(SPRITES).forEach(function (name) {

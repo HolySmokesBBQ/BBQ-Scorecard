@@ -37,7 +37,7 @@
       if (!art) { err.textContent = 'PitSim.art is missing.'; return; }
       try { art.build(); } catch (e) { err.textContent = String(e && e.message || e); return; }
 
-      // Contract D11, verbatim: [name, w, h, frames].
+      // Contract K9 (v2.1), verbatim: [name, w, h, frames].
       var REQUIRED_SPRITES = [
         ['player_down', 16, 24, 3], ['player_up', 16, 24, 3], ['player_side', 16, 24, 3], ['player_slice', 16, 24, 2],
         ['buddy_down', 16, 24, 3], ['buddy_up', 16, 24, 3], ['buddy_side', 16, 24, 3], ['tender_down', 16, 24, 3],
@@ -54,8 +54,8 @@
         ['hand_tray_butt', 8, 8, 1], ['hand_tray_brisket', 8, 8, 1], ['hand_tray', 8, 8, 1], ['hand_togo', 8, 8, 1],
         ['icon_sausage', 8, 8, 1], ['icon_chicken', 8, 8, 1], ['icon_ribs', 8, 8, 1], ['icon_butt', 8, 8, 1],
         ['icon_brisket', 8, 8, 1], ['plate_sausage', 8, 6, 1], ['plate_chicken', 8, 6, 1], ['plate_ribs', 8, 6, 1],
-        ['plate_butt', 8, 6, 1], ['plate_brisket', 8, 6, 1], ['piece_sausage', 10, 10, 4], ['piece_chicken', 10, 10, 4],
-        ['piece_ribs', 10, 10, 4], ['piece_butt', 10, 10, 4], ['piece_brisket', 10, 10, 4], ['mark_x', 8, 8, 1],
+        ['plate_butt', 8, 6, 1], ['plate_brisket', 8, 6, 1], ['piece_sausage', 10, 10, 5], ['piece_chicken', 10, 10, 5],
+        ['piece_ribs', 10, 10, 5], ['piece_butt', 10, 10, 5], ['piece_brisket', 10, 10, 5], ['mark_x', 8, 8, 1],
         ['kettle', 16, 24, 4], ['drum', 16, 32, 4], ['cooler', 16, 16, 3], ['board', 16, 16, 2],
         ['counter', 32, 24, 2], ['counter_ext', 16, 24, 1], ['pile', 16, 16, 4], ['trash', 16, 16, 1],
         ['paver', 16, 16, 2], ['lawn_a', 16, 16, 2], ['lawn_b', 16, 16, 2], ['fence_h', 16, 24, 1],
@@ -66,21 +66,24 @@
         ['chair', 16, 24, 1], ['lights_post', 16, 32, 1], ['lights_string', 66, 10, 2], ['birdbath', 16, 24, 2],
         ['canopy', 40, 32, 1], ['bubble', 16, 12, 1], ['heart', 8, 8, 2], ['sparkle', 7, 7, 3],
         ['smoke', 8, 8, 3], ['smoke_dark', 8, 8, 3], ['fire', 8, 8, 3], ['coin', 8, 8, 2],
-        ['sweat', 4, 6, 2], ['zzz', 8, 8, 3], ['font', 4, 6, 38]
+        ['sweat', 4, 6, 2], ['zzz', 8, 8, 3], ['font', 4, 6, 40],
+        ['arrow', 8, 12, 4], ['bubble_warn', 8, 10, 2]
       ];
-      // Frame meanings from contract D11, shown in the captions.
+      // Frame meanings from contract D11 and K9, shown in the captions.
       var MEANING = {
         person: ['stand', 'walk a', 'walk b', 'unhappy a', 'unhappy b'],
         side: ['stand', 'walk a', 'walk b', 'unhappy'],
         sit: ['eat a', 'eat b', 'content'], slice: ['knife up', 'knife down'],
-        dog: ['walk a', 'walk b', 'sit', 'nap'], piece: ['raw', 'cooking', 'done', 'burnt'],
+        dog: ['walk a', 'walk b', 'sit', 'nap'], piece: ['raw', 'cooking', 'done', 'burnt', 'about to burn'],
         kettle: ['out', 'low', 'good', 'hot'], drum: ['out', 'low', 'good', 'hot'],
         cooler: ['crate', 'shut', 'open'], board: ['empty', 'slicing'], counter: ['both caps', 'right cap'],
-        pile: ['full', 'half', 'low', 'bare'], gate: ['shut', 'open'], bed: ['pink', 'yellow', 'mixed'],
+        pile: ['full', 'half', 'low', 'empty'], gate: ['shut', 'open'], bed: ['pink', 'yellow', 'mixed', 'soil'],
         paver: ['plain', 'alt'], lawn_a: ['plain', 'clover'], lawn_b: ['plain', 'clover'],
         birdbath: ['empty', 'bird'], lights_string: ['twinkle a', 'twinkle b'], heart: ['big', 'small'],
         sparkle: ['small', 'large', 'fading'], smoke: ['small', 'medium', 'large'], smoke_dark: ['small', 'medium', 'large'],
-        coin: ['face', 'edge'], sweat: ['drop', 'splash'], zzz: ['z', 'zz', 'zzz']
+        coin: ['face', 'edge'], sweat: ['drop', 'splash'], zzz: ['z', 'zz', 'zzz'],
+        arrow: ['down', 'down bob', 'up', 'up bob'], bubble_warn: ['red', 'yellow'],
+        hedge: ['plain', 'blossom'], fence_back: ['rail', 'corner']
       };
       function meaning(name, f) {
         var key = name;
@@ -101,7 +104,7 @@
         ['Ground, fence and hedge', /^(paver|lawn_a|lawn_b|fence_h|fence_v|fence_corner|fence_back|gate|hedge|bed)$/],
         ['Fixed props', /^(shed|sign|tree|woodpile|hose|tools|pot|planter|shelf|mailbox|picnic|picnic_bench)$/],
         ['Decor and gear props', /^(chair|lights_post|lights_string|birdbath|canopy)$/],
-        ['Effects and text', /^(bubble|heart|sparkle|smoke|smoke_dark|fire|coin|sweat|zzz|font)$/]
+        ['Effects and text', /^(bubble|heart|sparkle|smoke|smoke_dark|fire|coin|sweat|zzz|font|arrow|bubble_warn)$/]
       ];
       var root = document.getElementById('sheet');
       var bg = 'paver';
@@ -120,8 +123,20 @@
         });
         Object.keys(art.SPRITES).forEach(function (n) { if (!want[n]) bad.push('extra ' + n); });
         if (art.PALETTE.length !== 32) bad.push('palette has ' + art.PALETTE.length + ' entries, want 32');
+        if (art.textWidth('.,') !== 9) bad.push('textWidth of ., is ' + art.textWidth('.,') + ', want 9');
+        // K11 step 14 charcoal rules, from the grids.
+        function count(rows, ch) { return rows.join('').split(ch).length - 1; }
+        art.SPRITES.pile.frames.forEach(function (fr, i) {
+          var dark = count(fr, '1') + count(fr, 't'), light = count(fr, 'v') + count(fr, 's') + count(fr, 'u');
+          if (i <= 2 && (count(fr, 's') || count(fr, 'u') > 3 || dark < 4 * light)) bad.push('pile frame ' + i + ' reads too grey');
+          if (i <= 1 && (count(fr, '4') < 1 || count(fr, '4') > 3)) bad.push('pile frame ' + i + ' wants 1 to 3 embers');
+          if (i === 3 && /[tvu4k]/.test(fr.join(''))) bad.push('pile frame 3 must be the folded sack only');
+          if (fr.join('').indexOf('8') < 0 || fr[15].indexOf('a') < 0) bad.push('pile frame ' + i + ' wants the sack and the row 15 shadow');
+        });
+        var hc = art.SPRITES.hand_charcoal.frames[0];
+        if (count(hc, '1') < 6 || count(hc, '1') + count(hc, 't') < 2 * (count(hc, 'v') + count(hc, 's') + count(hc, 'u'))) bad.push('hand_charcoal reads too grey');
         if (bad.length) err.textContent = bad.join('\n');
-        else document.getElementById('ok').textContent = 'Contract D11 check: all ' + REQUIRED_SPRITES.length + ' names, sizes and frame counts match, nothing extra, palette 32.';
+        else document.getElementById('ok').textContent = 'Contract K9 check: all ' + REQUIRED_SPRITES.length + ' names, sizes and frame counts match, nothing extra, palette 32, charcoal rules of K11 step 14 hold.';
       })();
 
       function figure(name, f) {
@@ -191,7 +206,47 @@
         art.textTinted(tctx, '+2 TIP', 16, 10, 'C');
         art.textTinted(tctx, '+1 TIP', 50, 10, 'magenta');
         set3.appendChild(wrap(tc, 'text and textTinted, width ' + art.textWidth('GATE OPENS IN 10 +5:30')));
+        // The v2.1 tutorial banner: near black box, cream border, two lines at most.
+        var bc = document.createElement('canvas');
+        bc.width = 176 * SCALE; bc.height = 25 * SCALE;
+        var bctx = bc.getContext('2d');
+        bctx.imageSmoothingEnabled = false;
+        bctx.scale(SCALE, SCALE);
+        bctx.fillStyle = art.COLOR.paver; bctx.fillRect(0, 0, 176, 25);
+        bctx.fillStyle = art.COLOR.C; bctx.fillRect(2, 2, 172, 21);
+        bctx.fillStyle = art.COLOR.K; bctx.fillRect(3, 3, 170, 19);
+        art.text(bctx, 'WATCH THE BOX FILL. PULL IT WHEN', 5, 5);
+        art.text(bctx, 'IT TURNS GREEN.', 5, 13);
+        set3.appendChild(wrap(bc, 'tutorial banner, line width ' + art.textWidth('WATCH THE BOX FILL. PULL IT WHEN') + ' of 164'));
         root.appendChild(set3);
+        // Charcoal in place: each pile frame on pavers beside a lit kettle, and the scoop in hand.
+        var h4 = document.createElement('h2');
+        h4.textContent = 'Charcoal beside the kettle (v2.1)';
+        root.appendChild(h4);
+        var set4 = document.createElement('div');
+        set4.className = 'set';
+        [0, 1, 2, 3].forEach(function (f) {
+          var c = document.createElement('canvas');
+          c.width = 32 * SCALE; c.height = 32 * SCALE;
+          var ctx = c.getContext('2d');
+          ctx.imageSmoothingEnabled = false;
+          ctx.scale(SCALE, SCALE);
+          art.draw(ctx, 'paver', 0, 16, 0); art.draw(ctx, 'paver', 16, 16, 1);
+          art.draw(ctx, 'paver', 0, 0, 1); art.draw(ctx, 'paver', 16, 0, 0);
+          art.draw(ctx, 'pile', 0, 16, f);
+          art.draw(ctx, 'kettle', 16, 8, f === 3 ? 0 : 2);
+          set4.appendChild(wrap(c, 'pile [' + f + '] ' + meaning('pile', f) + ' and kettle'));
+        });
+        var hc2 = document.createElement('canvas');
+        hc2.width = 16 * SCALE; hc2.height = 28 * SCALE;
+        var hctx = hc2.getContext('2d');
+        hctx.imageSmoothingEnabled = false;
+        hctx.scale(SCALE, SCALE);
+        art.draw(hctx, 'shadow', 2, 23, 0);
+        art.draw(hctx, 'player_down', 0, 2, 0);
+        art.draw(hctx, 'hand_charcoal', 4, 12, 0);
+        set4.appendChild(wrap(hc2, 'hand_charcoal on the pitmaster'));
+        root.appendChild(set4);
         document.getElementById('count').textContent = names.length + ' sprites, ' + total + ' frames, drawn at ' + SCALE + 'x.';
       }
 
@@ -274,10 +329,12 @@
         // overhead, smoke and bubbles
         art.draw(ctx, 'lights_string', 71, 80, 0);
         art.draw(ctx, 'piece_brisket', 78, 25, 1); art.draw(ctx, 'piece_ribs', 88, 25, 2);
-        art.draw(ctx, 'piece_sausage', 110, 25, 3);
+        art.draw(ctx, 'piece_sausage', 110, 25, 4);
         art.draw(ctx, 'piece_butt', 110, 44, 1); art.draw(ctx, 'piece_chicken', 120, 44, 2);
         art.draw(ctx, 'smoke', 91, 14, 1); art.draw(ctx, 'smoke', 94, 6, 2);
         art.draw(ctx, 'smoke_dark', 112, 14, 1); art.draw(ctx, 'smoke', 119, 36, 0);
+        art.draw(ctx, 'bubble_warn', 116, 13, 0);
+        art.draw(ctx, 'arrow', 68, 48, 2);
         art.draw(ctx, 'fire', 84, 20, 1);
         [[98, 92, 'plate_ribs'], [108, 92, 'plate_brisket'], [108, 91, 'plate_brisket'], [118, 92, 'plate_butt'], [88, 92, 'plate_sausage']]
           .forEach(function (p) { art.draw(ctx, p[2], p[0], p[1]); });
@@ -322,7 +379,7 @@
 </head>
 <body>
   <h1>Pit sim sprite sheet</h1>
-  <p>Dev only. Loads ../sprites.js and draws every sprite and frame with its name and frame meaning under it. <span id="count"></span></p>
+  <p>Dev only. Loads ../sprites.js and draws every sprite and frame with its name and frame meaning under it, checked against the v2.1 list of contract K9. <span id="count"></span></p>
   <div id="bar">
     <span>Background:</span>
     <button type="button" data-bg="paver" aria-pressed="true">Paver</button>
@@ -336,7 +393,7 @@
   </div>
   <pre id="err"></pre>
   <div id="ok"></div>
-  <h2>Yard mock (contract D4 positions, all decor owned, static)</h2>
+  <h2>Yard mock (contract D4 positions, all decor owned, static; v2.1 arrow under the pile, warning on kettle 2)</h2>
   <canvas id="yard" width="528" height="576"></canvas>
   <div id="sheet"></div>
 </body>

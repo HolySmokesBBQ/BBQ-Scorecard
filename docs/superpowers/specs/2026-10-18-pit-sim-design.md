@@ -6,10 +6,57 @@
 **Ships as (prototype):** `games/pit-sim/index.html` and `games/pit-sim/pit-sim.js`, nothing else. Standalone HTML document, `pit-sim.js` loaded with `defer`, zero inline script, zero inline event handlers, no external resources, no build step, vanilla ES2020 in strict mode.
 **Status:** spec for the builder. Prototype of the backyard rung only. Joel plays it on his Android phone; if it is fun in the first three minutes it goes on to iteration, then a11y and security lenses, then wiring and deploy. None of that is in this document.
 **Economy:** every number in section 19 was tuned with a headless Node simulation of the day loop (section 20). A builder who changes a number in the `C` block should rerun it.
+**Revision 2026-10-18, v2.1:** the section "v2.1 (2026-10-18, late)" below governs a guided day 1 tutorial in place of the how to card, wider done windows with a warning stage and a hot fire that burns at the good rate, and new charcoal art; rules in `docs/superpowers/specs/2026-10-18-pit-sim-v2-1-tutorial.md`. It supersedes the done window numbers (sections 5.5, 8.1, 19) and the how to card (sections 7, 12, 18).
 **Revision 2026-10-18, v2 review round 2:** the canvas scale is picked in device pixels (`k = floor(target * dpr)`, CSS scale `k / dpr`), so every game pixel is a whole number of device pixels on Android widths and DPRs, and desktop 3x needs room for the controls under the canvas (V2.13); three props fill dead tiles (pot3 (4,8), pot4 (2,2), woodpile4 (9,4)) and (4,8) leaves the dog roam list; kettle grate slots move inside the kettle; ghosts of unowned gear and decor show only in the morning and evening; the unbought flower bed shows tilled soil; the hedge alternates a blossom frame; the day 1 cooler is a red cooler; floating numbers are outlined text over the served customer, the tip above the cash, the seat tip over the heart, and overlapping numbers wait their turn; sparkles are 2x; order bubbles sit 2 px higher; fire gauges draw with their cooker in the y-sort; the dog does not stand behind a seated customer; the till's bold row reads Take today. 113 sprites, 268 frames. The amended rows are marked "(round 2)". No economy number changed.
 **Revision 2026-10-18, v2 review round 1:** four props fill dead pavers (woodpile2 (4,1), woodpile3 (5,1), planter2 (1,4), shelf (2,3)); unowned gear and decor draw a see-through ghost under the dashed outline, which is outline colored on pavers; the customer route from the gate to the line is drawn with pavers (render only); the back fence row uses a 16 px `fence_back` sprite inside the canvas; floating numbers sit in boxed pills and last longer; the heart is 2x on the seat's column. 113 sprites, 266 frames. The amended rows are marked "(round 1)" in V2.2, V2.2.2, V2.9 and V2.11. No economy number changed.
 **Revision 2026-10-18, v2:** the section "v2 (2026-10-18): dense yard, seating, feedback" below is the governing amendment for the v2 build; it supersedes sections 4, 13 and 14.1 and the canvas scale of 14.2, and amends others where it says so.
 **Revision 2026-10-18 (same day):** twenty-five builder questions answered in place; section 22 indexes where each ruling lives. The sim was rerun with the rule changes the rulings imply (cold band, cash floor, Broke test, one distance) and the tables in section 20 are from that rerun.
+
+---
+
+## v2.1 (2026-10-18, late): tutorial, gentler burn, charcoal
+
+**Status:** governing amendment for the v2.1 build. It sits above the v2 section and wins where they disagree. The rules in full are in `docs/superpowers/specs/2026-10-18-pit-sim-v2-1-tutorial.md` ([T n]); the interface is the contract section "v2.1 tutorial, burn warning, charcoal" (K0 to K12). Everything not named here stands as v2 has it.
+
+**Why:** Joel played v2 on his Android phone on 2026-10-18: "Game is pretty cute. I think a tutorial might do better than a 'how to play'. I also think the game itself can be challenging with the sausage burning pretty easily. The charcoal doesn't look like charcoal." The Overseer's three calls, and nothing else: a guided tutorial on day 1, a gentler burn with a warning, and charcoal art that reads as charcoal.
+
+### V21.1 Supersedes: the meat window numbers
+
+The done window column of sections 8.1 and 19 and the Hot paragraph of section 5.5 are replaced:
+
+| Meat | Cook at good fire | Done window (prog), was | Done window (prog), v2.1 | Warning (last 40 percent) starts after done |
+|---|---|---|---|---|
+| Sausage | 14 s | 6 | 14 | 8.4 |
+| Chicken thighs | 22 s | 8 | 16 | 9.6 |
+| Pork ribs | 32 s | 10 | 18 | 10.8 |
+| Pork butt | 40 s | 14 | 22 | 13.2 |
+| Brisket | 50 s | 18 | 26 | 15.6 |
+
+Cooking keeps the band multipliers (hot cooks at 1.2). A done piece advances at `HOT_BURN_MULT` 1.0 in the hot band and at the band multiplier otherwise, so a window lasts its number of seconds at good or hot fire and longer on a low fire ([T 3.2]). Section 5.5's "Hot cooks faster and burns faster" and its 5 real seconds example no longer apply; hot is a speed gain paid in charcoal. In the last `WARN_FRAC` (0.4) of the window the piece shows its about to burn frame, a "!" bubble pops over the cooker, its smoke turns dark, the action button reads Pull it now, and the live region says The sausage is about to burn. once per piece ([T 3.3], [T 3.4]). Burnt is unchanged and still costs the unit at the till. No shop effect line names a window, so no line changes. Ruling 9 of section 22 reads: prog units; hot cooks faster, and in v2.1 burns at the good fire rate.
+
+### V21.2 Supersedes: the how to card
+
+The v2 clipboard's How to play button and its day 1 hint (sections 7 and 18: Light the kettle, get sausage on..., and game.js's longer day 1 line) are no longer what a new player gets. A new game runs a guided tutorial on day 1 ([T 2]): one plain instruction at a time in a banner on the canvas (at the top, or along the bottom while the arrow points at the pile, a kettle or the cooler; contract K13), a bouncing gold arrow on the station to tap, a pulsing outline on the DOM button to press, each step advancing on the action that proves it was done, the gate opening when the first plate lands, one scripted customer, no burning, no walk-outs and a fire that cannot go out until the last banner. Skip tutorial sits on the clipboard and the pause panel. The day 1 hint now shows only to a player who skipped. The key list stays as the Controls card: its button is renamed Controls (`#howto-btn`), the pause panel gains a Controls button, and the card no longer opens by itself beside the pause panel (amends section 12's pause line). The desktop side column still lists Controls during service.
+
+### V21.3 Charcoal
+
+The pile and the carried charcoal are redrawn at their current sizes ([T 4]): warm near black pillow briquettes with grey glints and one or two embers, in a mound with a single peak, beside a brown paper sack with a crumpled rolled top and a cream label carrying a black flame mark, on the pavers with a solid shadow; the empty pile is the sack folded flat with two loose crumbs. The hand holds a mini bag of briquettes that matches the sack, carried over the head when the pitmaster faces up. Review round 2: the sack is kraft brown with a crimped top and the flame printed on the brown (no cream label), the glints are single staggered pixels with one ember low on the right, the hand holds a steel scoop of black briquettes drawn clear of the hair when facing up, and the full heap shows from 5 bags (half at 3 or 4), so day 1 opens on a full pile. No palette entry is added. 115 sprites, 281 frames (the `arrow`, `bubble_warn`, piece frame 4 and the `.` and `,` font glyphs are the other additions).
+
+### V21.4 Save, constants, strings
+
+- Save version 3: the v2 shape plus `tutorial: { done }`; v1 and v2 saves load with the tutorial done ([T 2.8]; amends V2.14).
+- New constants: `WARN_FRAC` 0.4, `HOT_BURN_MULT` 1.0, `TUTORIAL_FIRE_FLOOR` 30, `TUTORIAL_END_S` 6, `C.FX.ARROW_BOB_S` 0.3, `C.FX.WARN_BLINK_S` 0.25 (amends V2.17 and section 19).
+- New strings (amends V2.16 and section 18): the eleven tutorial lines of [T 2.2], Skip tutorial, Controls, Pull it now, and the five about to burn sentences of [T 3.4]. How to play is retired.
+
+### V21.5 Economy
+
+The Sim builder reruns `dev/econ.mjs` (with `skipTutorial()` on day 1) on the built `sim.js`; the result is recorded here by the Overseer. Pre build estimate, from a scratch copy of v2 `sim.js` with only the windows and the hot burn rate patched ([T 3.5]): the bot's one burnt piece a day from day 4 drops to none; seed 1 buys the second kettle on day 3, the cooler on day 5, the buddy on day 7 and the bigger table on day 9 as before, with 215 cash after day 10 against 233; over seeds 1 to 8 the second kettle stays on day 3 (seed 5 day 4) and the drum moves from days 13 to 15 to days 14 to 17. Nothing lands earlier than day 9; not retuned.
+
+**Built result (integration, 2026-10-18, late):** the built `sim.js` lands exactly on the estimate. Seed 1, 10 days, tutorial skipped: burnt 0 every day (v2: 1 a day from day 4); second kettle day 3, cooler day 5, buddy day 7, bigger table day 9, the same days as v2; cash after day 10 is 215 (v2 233). Seeds 1 to 8 over 25 days: second kettle on day 3 (seed 5: day 4); drum on days 15, 15, 15, 16, 15, 15, 14, 17 (v2, rerun on b48e1be: 14, 15, 14, 15, 14, 14, 13, 15); the driveway price is not reached and nobody goes broke. With `--decor`: seed 1 is the same through day 9 and buys chair1 on day 10 (cash 182); drum on days 17, 18, 18, 18, 17, 16, 16, 18; driveway and broke never. Nothing lands earlier than day 9; not retuned. The bot caveat of the v2 integration record (sausage and chicken only) still applies.
+
+### V21.6 Acceptance
+
+[T 6] for Joel's next play and contract K11 (45 steps) for the build.
 
 ---
 
@@ -860,6 +907,8 @@ A piece on a grate has `prog` in cook-seconds. Per tick `prog += m(fire) * dt`. 
 - done: `cook <= prog < cook + window`
 - burnt: `prog >= cook + window`
 
+> **Superseded by v2.1 (V21.1):** windows 14, 16, 18, 22, 26; a done piece burns at 1.0 in the hot band; a warning stage in the last 40 percent of the window. The paragraph below is the v2 rule.
+
 The done window is in prog units, exactly as written, not real seconds. A Hot fire (m 1.2) cooks faster and burns faster: sausage's 6 s window lasts 5 real seconds at Hot, 6 at Good, longer at Low. That is the trade-off that keeps Hot from being a pure upgrade. The shop effect lines quote good-fire times. A burnt piece's `prog` stops advancing; the game records the second it burnt for the pull order.
 
 Visual: a 10 px disc per slot that goes pink (raw), browning (two tints across the cooking range), brown with a one-pixel cream ring and a check mark (done), black with a smoke puff (burnt). A thin arc around the slot fills across the cooking range, turns green during the window and shrinks as the window runs out, then turns black. Entering done fires {meat} is done on {cooker}; entering burnt fires {meat} burnt on {cooker} and, without reduced motion, a 120 ms screen shake of 1 px.
@@ -990,6 +1039,8 @@ Two kinds of purchase, decided:
 - Gear and hires are immediate. Cash drops on the tap, the save is written, Bought {item} (or Hired / Let go) is announced, and there is no undo. Gear buys redraw the yard behind the panel at once. Cash after on the cart line already reflects them.
 
 ### 8.1 Meat, by the unit
+
+> **Superseded by v2.1 (V21.1)** for the done window column: 14, 16, 18, 22, 26. Every other column stands.
 
 | Meat | Price per unit | Plates per unit | Cook at good fire | Done window | Sell price per plate | Slots | Slice | Needs |
 |---|---|---|---|---|---|---|---|---|
@@ -1122,6 +1173,8 @@ It is part of the clipboard, not a dialog of its own: Keep running the backyard 
 > **Amended by v2 (V2.14):** save version 2 with `decor` and `stats.seated`; v1 saves migrate.
 
 New game is offered on the clipboard, the till, the pause panel and the Broke card. It opens a confirm panel: Start over? This wipes the save. [Start over] [Keep playing]. Start over removes the key and loads day 1. Escape on the confirm panel acts as Keep playing.
+
+> **Amended by v2.1 (V21.2):** the pause panel is Keep playing, Controls, Skip tutorial (while the tutorial runs), New game; the Controls card opens from its button and no longer shows by itself.
 
 Pause: Escape or P during prep or service, or the tab going hidden during prep or service. The pause panel: Paused. [Keep playing] [New game] and a Controls list (section 15). The world does not advance while paused. Escape on the pause panel resumes. Escape does nothing on the clipboard, the till or the Broke card; a hidden tab while one of those is open does not stack a pause panel on top, the open panel simply stays.
 
@@ -1410,6 +1463,8 @@ Broke and Coming next: as written in section 11.
 Cooker names: Kettle 1, Kettle 2, Drum smoker. Meat names: Sausage, Chicken thighs, Pork ribs, Pork butt, Brisket. Plates of pork butt are called pulled pork on the plate icon's aria-label only.
 
 ## 19. Pinned numbers
+
+> **Amended by v2.1 (V21.1, V21.4):** the meat windows are 14, 16, 18, 22, 26; new constants WARN_FRAC 0.4, HOT_BURN_MULT 1.0, TUTORIAL_FIRE_FLOOR 30, TUTORIAL_END_S 6; save version 3.
 
 > **Amended by v2 (V2.17):** `WALK_TILES_PER_S` is 6; new seating and charm constants; decor prices in V2.7. Nothing else here moves.
 

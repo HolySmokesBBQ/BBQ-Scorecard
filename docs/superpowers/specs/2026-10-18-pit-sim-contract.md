@@ -1,6 +1,6 @@
 # Pit sim, backyard rung: module contract
 
-**Date:** 2026-10-18. v1 contract written in the morning; v2 interface delta (the section right below) rewritten the same evening for four parallel builders. Read the delta first.
+**Date:** 2026-10-18. v1 contract written in the morning; v2 interface delta (the section right below) rewritten the same evening for four parallel builders. Read the delta first. **v2.1 (2026-10-18, late):** the section "v2.1 tutorial, burn warning, charcoal" right below this header is law for the v2.1 round (guided tutorial, gentler burn with a warning, new charcoal art; rules in `docs/superpowers/specs/2026-10-18-pit-sim-v2-1-tutorial.md`). Read it first, then the v2 delta.
 **Design spec:** `docs/superpowers/specs/2026-10-18-pit-sim-design.md` (the rules). Its top section "v2 (2026-10-18): dense yard, seating, feedback" is cited here as [V2.n]; older sections are cited as [spec n]. Where this document and the design spec disagree on a name or a signature, this document wins; where they disagree on a rule of play, the design spec wins and the builder notes it under Deviations in their own file header.
 **Files:** `games/pit-sim/index.html` (shared shell), `games/pit-sim/sprites.js`, `games/pit-sim/sim.js`, `games/pit-sim/game.js`, `games/pit-sim/dev/smoke.mjs` (harness, never shipped), `games/pit-sim/dev/sheet.html` (sprite sheet viewer, never shipped), optionally `games/pit-sim/dev/econ.mjs` (economy rerun, never shipped).
 **Load order:** `sprites.js`, `sim.js`, `game.js`, each with `defer`, in that order, from `index.html`. Deferred scripts run in document order after parsing, so `game.js` may assume both other modules are present on `window.PitSim` when it runs.
@@ -10,7 +10,299 @@ Every rule of play (numbers, step order, order rule, pull order, strings) lives 
 
 ---
 
+## v2.1 tutorial, burn warning, charcoal
+
+**Date:** 2026-10-18, late. **Rules:** `docs/superpowers/specs/2026-10-18-pit-sim-v2-1-tutorial.md`, cited here as [T n]. This section is law for the v2.1 builders exactly as the v2 delta was for v2: where it and anything below disagree, this section wins. Everything below it stands unless a K section names it. Builder deviations are listed in each file header as before.
+
+### K0. Who owns what (v2.1)
+
+Replaces the v2 table below for this round.
+
+| Builder | Owns (may edit) | Writes against | Must not touch |
+|---|---|---|---|
+| **Art** | `sprites.js`, `dev/sheet.html` | K9, [T 4] | everything else |
+| **Sim** | `sim.js`, `dev/econ.mjs` | K1 to K8, [T 2], [T 3], [T 5] | everything else |
+| **Game** | `game.js`; in `index.html` exactly the v2 `#wrap` rule and the two `.tut-pulse` rules of K8 | K7 sentences, K8, K9 (calls only), K10, [T 2.6], [T 3.4] | everything else, and every other line of `index.html` |
+| **Harness** | `dev/smoke.mjs` | K11, every public name in this document | everything else |
+| Overseer | the four spec docs | | the builders' files |
+
+The harness reads only public names (the `PitSim.*` surface, `sim.state`, DOM ids, the `PitSim.game` hooks of K10). Its Node steps may write a headless sim's state as a test fixture (K11 step 10 holds a fire hot); the browser steps never write sim state. Every builder runs `node --check` on each script they edited and scans each edited file for U+2014 and U+2013.
+
+### K1. Names
+
+| Name | Meaning |
+|---|---|
+| `state.tutorial` | `{ step: TutorialStepId \| null, done: boolean }`, exactly these two keys |
+| `TutorialStepId` | `'open' \| 'charcoal' \| 'light' \| 'meat' \| 'puton' \| 'cook' \| 'slice' \| 'plate' \| 'customer' \| 'seated' \| 'end'`, always in this order (`STRINGS.tutorialOrder`) |
+| target | a `StationId` (canvas arrow), the DOM id `'open'` (pulse), or `null`; from `sim.tutorialStep()`, never stored in state |
+| `Piece.warn` | the warning flag of [T 3.3] |
+| `burn_warning.station` | a `CookerId`; the field is named `station` as the v2.1 brief named it, although `piece_done` and `piece_burnt` call the same value `cooker` |
+| save version | `C.SAVE_VERSION` 3; the game version is v2.1 and `PitSim.game.version` is `'0.4.0'` |
+
+No new top level name on `PitSim`. `burnMult` and the tutorial's `endAt` are internal to `sim.js`.
+
+### K2. `PitSim.C` and `PitSim.MEATS`
+
+New keys, read by name, never hard coded: `WARN_FRAC: 0.4`, `HOT_BURN_MULT: 1.0`, `TUTORIAL_FIRE_FLOOR: 30`, `TUTORIAL_END_S: 6`; in `C.FX`: `ARROW_BOB_S: 0.3`, `WARN_BLINK_S: 0.25`. Changed: `SAVE_VERSION: 3`. `MEATS[m].window`: sausage 14, chicken 16, ribs 18, butt 22, brisket 26 (was 6, 8, 10, 14, 18). Every other key and every other `MEATS` field keeps its v2 value, including `HOT_MULT: 1.2`.
+
+### K3. State
+
+```ts
+state.tutorial: { step: TutorialStepId | null, done: boolean };   // [T 2.1]; step is null exactly when done
+Piece: v2 Piece & { warn: boolean };                              // false when put on; set once by [T 3.3]
+```
+
+`game.js` reads both and never writes them.
+
+### K4. Methods
+
+New, own properties of the sim object (destructuring works), fresh results each call:
+
+| Method | Returns | Semantics |
+|---|---|---|
+| `skipTutorial()` | `boolean` | [T 2.5]. Running: ends it, emits `tutorial_done { skipped: true }`, plus `save_wanted { reason: 'tutorial' }` in the morning; in service resumes the held clock and sets `spawnAt` to `C.GATE_OPENS` when `clock < C.GATE_OPENS`, else `clock`; returns `true`. Not running: `false`, no change, no event. Legal in any phase, paused or not. |
+| `tutorialStep()` | `null \| { id: TutorialStepId, text: string, target: string \| null }` | `null` when `state.tutorial.done`; else the current step, `text === STRINGS.tutorial[id]`, target per [T 2.2] for the current state |
+
+Changed:
+- `verbAt()` and `interact()`: at a cooker, when the pull order picks a `done` piece with `warn === true`, the label is `STRINGS.pullNow` instead of `'Pull ' + MEATS[m].label`; the action is unchanged.
+- `openGate()`: `spawnAt = Infinity` while the tutorial runs ([T 2.4] C).
+- `reset()`: the new game starts the tutorial at `open`; event order `save_clear`, then the morning's events, then `tutorial_step { id: 'open', ... }`.
+- `createSim(saved, seed)`: `state.tutorial` from the save ([T 2.1]); when running, emits `tutorial_step` for `open` after the morning's events.
+
+### K5. Rules the interface depends on
+
+- **Where the step is checked** ([T 2.3]): at the end of `tick()`, `interact()`, `openGate()`, `skipTutorial()`, `reset()`, and when `createSim` returns. `tutorial_step` is emitted whenever the (id, target) pair differs from the last one emitted, so one step can emit more than once (on the happy path only `cook`, with target `null` then `'kettle1'`).
+- **Order of events on the happy path:** `yard_open`, `tutorial_step charcoal`; at the pile `tutorial_step light`; at the light `tutorial_step meat`; at the cooler `tutorial_step puton`; at the put on `tutorial_step cook` (target null); `piece_done`, `tutorial_step cook` (target kettle1); at the pull `tutorial_step slice`; `slice_done`, `tutorial_step plate`; `set_down`, `tutorial_step customer`, `gate_open`, `customer_arrived`; `served`, `seat_taken`, `tutorial_step seated`; `seat_done`, `tutorial_step end`; then `tutorial_done { skipped: false }` `C.TUTORIAL_END_S` later. `gate_soon` is never emitted on a tutorial day.
+- **Clock** ([T 2.4] A, B): `state.clock` stays 0 in service until the step becomes `customer`, then is exactly `C.GATE_OPENS` and counts on; stored clocks (`putOn`, plate `times`) shift with it.
+- **Tick stages while running:** stage 3 (fire) applies the floor of [T 2.4] G; stage 4 (pieces) holds done pieces ([T 2.4] E); stage 5 skips patience, `wait` and mood for waiting customers ([T 2.4] D); stage 6 spawns nothing while `spawnAt` is `Infinity` ([T 2.4] C). The scripted spawn of [T 2.4] F draws no `rng()`.
+- **Done rate and warning** ([T 3.2], [T 3.3]): in stage 4, a `done` piece advances by `burnMult(fire) * TICK_SECONDS` (`HOT_BURN_MULT` in the hot band, `fireMult` otherwise); per piece and tick the order is the done check, then the warning check (`burn_warning` once), then the burnt check.
+- **Day end** ([T 2.4] H): a till that runs while the tutorial runs first emits `tutorial_done { skipped: false }`.
+
+### K6. Save and `validateSave`
+
+`SAVE_KEY` unchanged. The version 3 shape is [T 2.8]: the v2 keys plus `tutorial: { done: boolean }`. `validateSave(obj)`:
+
+- `v === 3`: every v2 rule; `tutorial.done` is `false` only when `obj.tutorial` is a plain object with `done === false` and the validated `day === 1`, else `true`; unknown keys in `tutorial` dropped.
+- `v === 2`: the v2 rules, returned as `v: 3` with `tutorial: { done: true }`.
+- `v === 1`: the v1 rules and the v2 defaults, returned as `v: 3` with `tutorial: { done: true }`.
+- Anything else: `null`. Never throws.
+
+`serialize()` always writes `v: 3` and `tutorial: { done }`. `game.js` keeps the v1 notice on `parsed.v === 1` only (D9); a v2 save migrates silently.
+
+### K7. Events (rows added to the D10 table)
+
+| type | payload | when | sentence (`#live`) | status |
+|---|---|---|---|---|
+| `tutorial_step` | `id, text, target` | K5 | `text`, only when `id` differs from the last spoken step id | **new** |
+| `tutorial_done` | `skipped: boolean` | the tutorial ended: `end` ran out, `skipTutorial()`, or the till of [T 2.4] H | none | **new** |
+| `burn_warning` | `station, slot, meat` | a done piece entered the warning stage, once per piece | `STRINGS.burnWarn[meat]` | **new** |
+| `save_wanted` | `reason` gains `'tutorial'` | `skipTutorial()` in the morning | none | `'tutorial'` **new** |
+| `yard_open` | | unchanged | no sentence while the tutorial runs; v2 sentence otherwise | changed |
+
+Every other D10 row is unchanged.
+
+### K8. `PitSim.STRINGS` additions and the shell rule
+
+```js
+tutorial: Object.freeze({
+  open: 'This is your morning. The cart is already filled. Tap Open the yard.',
+  charcoal: 'Grab charcoal from the pile.',
+  light: 'Tap the kettle to light it.',
+  meat: 'Grab meat from the cooler.',
+  puton: 'Put it on the kettle.',
+  cook: 'Watch the box fill. Pull it when it turns green.',
+  slice: 'Slice it at the board.',
+  plate: 'Set the plate on the counter.',
+  customer: 'Here comes your first customer.',
+  seated: 'Served. They will sit and eat, then tip a little more.',
+  end: 'You have the hang of it. Keep the fire fed and keep them happy.'
+}),
+tutorialOrder: Object.freeze(['open', 'charcoal', 'light', 'meat', 'puton', 'cook', 'slice', 'plate', 'customer', 'seated', 'end']),
+pullNow: 'Pull it now',
+burnWarn: Object.freeze({
+  sausage: 'The sausage is about to burn.',
+  chicken: 'The chicken is about to burn.',
+  ribs: 'The ribs are about to burn.',
+  butt: 'The pork butt is about to burn.',
+  brisket: 'The brisket is about to burn.'
+})
+```
+
+Strings owned by `game.js` (section 4.9 gains): `Controls` (the renamed `#howto-btn` and the new `#pause-controls`) and `Skip tutorial` (`#tut-skip`, `#pause-skip`). "How to play" is retired.
+
+`index.html` gains exactly these two rules, added by the Game builder inside the existing `<style>` right before the `@media (prefers-reduced-motion: reduce)` block (that block already stops the animation, which leaves a static gold ring):
+
+```css
+.tut-pulse { box-shadow: 0 0 0 3px var(--y); animation: tut-pulse 1.2s ease-in-out infinite; }
+@keyframes tut-pulse { 50% { box-shadow: 0 0 0 3px var(--c); } }
+```
+
+### K9. `PitSim.art` (amends D11)
+
+`PALETTE` (32), `COLOR` (31 keys) and the legend are unchanged. `art.text` maps `.` to `font` frame 38 and `,` to frame 39; `art.textWidth` counts both as glyphs; every other mapping is unchanged. Replaced in place (same name, size, frame count and frame meanings): `pile` 16x16 4 and `hand_charcoal` 8x8 1. Changed frame counts: `piece_*` 5 (frame 4 added), `font` 40. New: `arrow` 8x12 4, `bubble_warn` 8x10 2. The look and the grid rules are [T 4]; the harness checks the rules of K11 step 14. No `icon_charcoal`. **REQUIRED SPRITES v2.1**, 115 names, 281 frames; the harness copies this literal verbatim and it replaces the D11 literal:
+
+```js
+const REQUIRED_SPRITES = [   // [name, w, h, frames]
+  ['player_down', 16, 24, 3], ['player_up', 16, 24, 3], ['player_side', 16, 24, 3], ['player_slice', 16, 24, 2],
+  ['buddy_down', 16, 24, 3], ['buddy_up', 16, 24, 3], ['buddy_side', 16, 24, 3], ['tender_down', 16, 24, 3],
+  ['tender_up', 16, 24, 3], ['tender_side', 16, 24, 3], ['cust0_down', 16, 24, 5], ['cust0_up', 16, 24, 3],
+  ['cust0_side', 16, 24, 4], ['cust0_sit', 16, 24, 3], ['cust1_down', 16, 24, 5], ['cust1_up', 16, 24, 3],
+  ['cust1_side', 16, 24, 4], ['cust1_sit', 16, 24, 3], ['cust2_down', 16, 24, 5], ['cust2_up', 16, 24, 3],
+  ['cust2_side', 16, 24, 4], ['cust2_sit', 16, 24, 3], ['cust3_down', 16, 24, 5], ['cust3_up', 16, 24, 3],
+  ['cust3_side', 16, 24, 4], ['cust3_sit', 16, 24, 3], ['shadow', 12, 4, 1], ['dog', 16, 16, 4],
+  ['hand_charcoal', 8, 8, 1], ['hand_raw_sausage', 8, 8, 1], ['hand_raw_chicken', 8, 8, 1], ['hand_raw_ribs', 8, 8, 1],
+  ['hand_raw_butt', 8, 8, 1], ['hand_raw_brisket', 8, 8, 1], ['hand_cooked_sausage', 8, 8, 1], ['hand_cooked_chicken', 8, 8, 1],
+  ['hand_cooked_ribs', 8, 8, 1], ['hand_cooked_butt', 8, 8, 1], ['hand_cooked_brisket', 8, 8, 1], ['hand_burnt', 8, 8, 1],
+  ['hand_plate_sausage', 8, 8, 1], ['hand_plate_chicken', 8, 8, 1], ['hand_plate_ribs', 8, 8, 1], ['hand_plate_butt', 8, 8, 1],
+  ['hand_plate_brisket', 8, 8, 1], ['hand_tray_sausage', 8, 8, 1], ['hand_tray_chicken', 8, 8, 1], ['hand_tray_ribs', 8, 8, 1],
+  ['hand_tray_butt', 8, 8, 1], ['hand_tray_brisket', 8, 8, 1], ['hand_tray', 8, 8, 1], ['hand_togo', 8, 8, 1],
+  ['icon_sausage', 8, 8, 1], ['icon_chicken', 8, 8, 1], ['icon_ribs', 8, 8, 1], ['icon_butt', 8, 8, 1],
+  ['icon_brisket', 8, 8, 1], ['plate_sausage', 8, 6, 1], ['plate_chicken', 8, 6, 1], ['plate_ribs', 8, 6, 1],
+  ['plate_butt', 8, 6, 1], ['plate_brisket', 8, 6, 1], ['piece_sausage', 10, 10, 5], ['piece_chicken', 10, 10, 5],
+  ['piece_ribs', 10, 10, 5], ['piece_butt', 10, 10, 5], ['piece_brisket', 10, 10, 5], ['mark_x', 8, 8, 1],
+  ['kettle', 16, 24, 4], ['drum', 16, 32, 4], ['cooler', 16, 16, 3], ['board', 16, 16, 2],
+  ['counter', 32, 24, 2], ['counter_ext', 16, 24, 1], ['pile', 16, 16, 4], ['trash', 16, 16, 1],
+  ['paver', 16, 16, 2], ['lawn_a', 16, 16, 2], ['lawn_b', 16, 16, 2], ['fence_h', 16, 24, 1],
+  ['fence_v', 16, 24, 1], ['fence_corner', 16, 24, 1], ['fence_back', 16, 16, 2], ['gate', 16, 24, 2], ['hedge', 16, 24, 2],
+  ['bed', 16, 20, 4], ['shed', 48, 32, 1], ['sign', 44, 12, 1], ['tree', 32, 48, 1],
+  ['woodpile', 16, 16, 1], ['hose', 16, 16, 1], ['tools', 16, 24, 1], ['pot', 16, 16, 1],
+  ['planter', 16, 24, 1], ['shelf', 16, 24, 1], ['mailbox', 16, 24, 1], ['picnic', 32, 24, 1], ['picnic_bench', 32, 8, 1],
+  ['chair', 16, 24, 1], ['lights_post', 16, 32, 1], ['lights_string', 66, 10, 2], ['birdbath', 16, 24, 2],
+  ['canopy', 40, 32, 1], ['bubble', 16, 12, 1], ['heart', 8, 8, 2], ['sparkle', 7, 7, 3],
+  ['smoke', 8, 8, 3], ['smoke_dark', 8, 8, 3], ['fire', 8, 8, 3], ['coin', 8, 8, 2],
+  ['sweat', 4, 6, 2], ['zzz', 8, 8, 3], ['font', 4, 6, 40],
+  ['arrow', 8, 12, 4], ['bubble_warn', 8, 10, 2]
+];
+```
+
+Frame indexes added to the D11 list: `piece_*` 4 about to burn; `arrow` 0 down, 1 down bobbed 2 px lower, 2 up (frame 0 mirrored top to bottom), 3 up bobbed 2 px higher (frame 1 mirrored); `bubble_warn` 0 red card with a white mark, 1 yellow card with a dark mark (review round 2, was red and orange marks on cream); `font` 38 `.`, 39 `,`; `pile` 0 full (5 or more), 1 half (3 or 4), 2 low (1 or 2), 3 empty (review round 2, was full over 6 and half 3 to 6, so day 1's 5 bags show the full heap).
+
+### K10. `game.js` (amends D12 and D14)
+
+**Render order** (D12 additions): pass 2 draws `piece_*` frame 4 for a `done` piece with `warn`, and the cooking arc red `o` in the warning stage; **round 1:** pass 2 also draws a cooker's `fire` right after its gauge and before its pieces (it no longer draws in pass 4), and draws the pieces on one cooker in two runs, every piece that is not a `done` piece with `warn` first, then the warning pieces with their red rings, so the overlapping kettle slots never hide a warning; pass 4 draws a warning cooker's chimney puffs with `smoke_dark`; pass 5 draws `bubble_warn` at (draw.x - 2, draw.y - 11) per cooker with a warning piece (round 1: left of the vent, was draw.x + 4), frames by `C.FX.WARN_BLINK_S`; pass 6 draws the `arrow` last ([T 2.6] placement: x = draw.x + floor(w / 2) - 4, above at draw.y - 12 with frames 0 and 1 when draw.y - 12 >= 22, else below at draw.y + h with frames 2 and 3, and, review round 2, not at all while the center of its 8x12 box falls on the player's drawn 16x24 body, above or below alike, since it would sit on the player and the `#act` pulse carries the step (this replaces round 1's rule, not drawn when below and `sim.reach()` is the target station); a tap on the drawn arrow is a tap on its station (round 2, [T 2.6]); frames swap every `C.FX.ARROW_BOB_S` of the effect clock); pass 8 draws the tutorial banner in service ([T 2.6] box, wrap and placement, the placement as amended at integration in K13 item 1) and then skips the clock box and the GATE OPENS IN text. Positions on this map: pile (68, 48), kettle 1 (84, 48), cooler (100, 32) below; board (84, 52), table (108, 76) above.
+
+**DOM** (section 4.4 gains):
+
+| id | where | what |
+|---|---|---|
+| `howto-btn` | `#clip-foot` row | label `Controls` (was How to play); opens `#howto` |
+| `tut-clip` | `#clip-top`, right after the header line | `p.card`, `STRINGS.tutorial.open`; present only while the step is `open` |
+| `tut-skip` | `#clip-top`, right after `#tut-clip` | `button.alt` `Skip tutorial`; calls `sim.skipTutorial()`, pumps, rebuilds the clipboard; present only while the tutorial runs |
+| `pause-controls` | `#pause-body`, after `#resume` | `button.alt` `Controls`; opens `#howto` in place of the pause panel, Back and Escape return to it |
+| `pause-skip` | `#pause-body`, after `#pause-controls` | `button.alt` `Skip tutorial`; present only while the tutorial runs; skips and stays on the pause panel |
+| class `tut-pulse` | the DOM target (`#open`), and `#act` when the target station is in reach and `verbAt().enabled` | K8 CSS |
+
+`#howto` shows only after `#howto-btn` or `#pause-controls`, or in the desktop side column during service with no panel open; it no longer shows beside the pause panel. The day 1 muted hint of v2 shows only when `state.tutorial.done`. While the tutorial runs the status line never shows `Gate opens in {n}`.
+
+**`PitSim.game` v2.1** (every D14 member kept):
+
+```ts
+version: '0.4.0',
+banner: null | { lines: string[], target: string | null }   // live, read only outside game.js: the banner lines as drawn (uppercase), null when none is drawn
+FxEntry.kind gains 'warn'                                   // logged at the bubble position when a cooker's bubble starts
+```
+
+`captureFrame()` records the `arrow` and `bubble_warn` draws like any sprite; the banner box is procedural and its glyphs are `font` records.
+
+**aria-live:** K7. **Reduced motion** (D14 gains): the arrow shows frame 0 (above) or 2 (below) only; `bubble_warn` frame 0 only; `.tut-pulse` is static (CSS); no warning puffs (no puffs at all, as v2).
+
+### K11. Harness v2.1 (amends D15)
+
+`GAME_VERSION '0.4.0'`; `C_EXPECT.SAVE_VERSION 3`; the K9 literal; `Object.keys(SPRITES).length === 115`; `SURFACE_COUNTS` unchanged; screenshots add `tutorial.png` and `warning.png`. 45 steps, the 38 v2 steps in order with seven inserted (**new**) and the amended ones marked:
+
+| # | step | asserts |
+|---|---|---|
+| 1 | files present | as v2 (fatal) |
+| 2 to 4 | node --check sprites.js, sim.js, game.js | exit 0 |
+| 5 | sim.js loads headless with the full surface | v2 checks with `C.SAVE_VERSION === 3`; **added:** `C.WARN_FRAC === 0.4`, `C.HOT_BURN_MULT === 1`, `C.TUTORIAL_FIRE_FLOOR === 30`, `C.TUTORIAL_END_S === 6`, `C.FX.ARROW_BOB_S === 0.3`, `C.FX.WARN_BLINK_S === 0.25`; windows 14, 16, 18, 22, 26 in `MEAT_IDS` order and cook times unchanged; `STRINGS.tutorial` has exactly the 11 ids with the K8 text, `STRINGS.tutorialOrder` deep equals the K1 order, `STRINGS.pullNow === 'Pull it now'`, `STRINGS.burnWarn` has the five K8 sentences; `typeof sim.skipTutorial === 'function'` and `typeof sim.tutorialStep === 'function'` on `createSim(null, 1)` |
+| 6 | validateSave rejects, clamps and migrates | v2 checks, every result now `v: 3`; **added:** `{ v: 4 }` gives `null`; the section 2.8 v1 sample gives `tutorial.done === true`; a v2 sample (day 1) gives `v: 3`, `tutorial.done === true`; `{ v: 3, day: 1, tutorial: { done: false, bogus: 1 } }` gives `done === false` and no `bogus`; the same with `day: 3` gives `done === true`; `{ v: 3 }` with no `tutorial` gives `done === true`; `createSim(null, 1).serialize()` has `v === 3` and `tutorial.done === false` and round trips through `validateSave` unchanged |
+| 7 | seat reachability | as v2 |
+| 8 | **new** tutorial rules, headless | `createSim(null, 1)`: `tutorialStep().id === 'open'` and target `'open'`; `openGate()` with the default cart; 800 ticks with no input: `clock === 0`, step `charcoal`, no `gate_soon`, `gate_open` or `customer_arrived`, `kettle1.fire === 0`. Then by `walkTo` and ticks (each wait at most 5 s unless noted): pile (4,2) gives step `light`; kettle 1 (5,2) gives `meat` and fire 60; cooler (6,1) gives `puton`; kettle 1 gives `cook` with target `null`; tick until `piece_done` (at most 20 s) then the next `tutorial_step` is `cook` with target `'kettle1'`; 1200 more ticks: the piece is still `done` with `prog` unchanged, `warn === false`, no `burn_warning` or `piece_burnt`, `kettle1.fire === C.TUTORIAL_FIRE_FLOOR`, no `fire_low`; kettle 1 again gives `slice` and cooked sausage in hand; board (5,4) and `slice_done` give `plate` with target `'table'`; table (6,6) gives, in this order in one drain, `set_down`, `tutorial_step customer`, `gate_open`, `customer_arrived { id: 1, meat: 'sausage' }`, and `clock === C.GATE_OPENS`; no second `customer_arrived` before `tutorial_step end`; `served` then `tutorial_step seated`; `seat_done` (at most 20 s) then `tutorial_step end`; a `customer_arrived` within 2 ticks of `end`, whose customer keeps `patience === patienceMax` until `tutorial_done`; `tutorial_done { skipped: false }` within `C.TUTORIAL_END_S + 0.1` s of `end`; then `state.tutorial` deep equals `{ step: null, done: true }`, `tutorialStep() === null`, and a waiting customer's patience drops on the next tick. The distinct consecutive `tutorial_step` ids over the run equal `STRINGS.tutorialOrder` minus `open` (emitted at creation, before the drain started) or equal it whole; `gate_soon` never fired |
+| 9 | **new** skipTutorial, headless | (a) `createSim(null, 2)`: `skipTutorial() === true`, the drain holds `tutorial_done { skipped: true }` and `save_wanted { reason: 'tutorial' }`, `state.tutorial` is `{ step: null, done: true }`, `serialize().tutorial.done === true`, a second `skipTutorial() === false` with no event; `openGate()`: `spawnAt === C.GATE_OPENS`, then ticks: `gate_soon` at clock 20, `gate_open` and the first `customer_arrived` at clock 30. (b) `createSim(null, 3)`: `openGate()`, 100 ticks (clock 0), `skipTutorial() === true` with `tutorial_done` and no `save_wanted`; `spawnAt === C.GATE_OPENS`; the next tick has `clock === C.TICK_SECONDS`; `gate_open` at clock 30. (c) on that sim, `reset()` gives `state.tutorial` `{ step: 'open', done: false }` and a `tutorial_step` with id `open`. (d) `createSim(validateSave({ v: 3, day: 1, tutorial: { done: false } }), 4)` runs the tutorial at `open` |
+| 10 | **new** burn warning at hot fire, headless | `createSim(null, 5)`, `skipTutorial()`, `openGate()`; pile, kettle 1, cooler, kettle 1 by `walkTo` and ticks; from the put on, before every tick the fixture sets `state.stations.kettle1.fire = C.FIRE_MAX` (hot band). Record clocks: put on, `piece_done`, `burn_warning`, `piece_burnt` for the slot 0 piece. Assert: done minus put on is `MEATS.sausage.cook / C.HOT_MULT` within 0.1 s (hot still cooks faster); exactly one `burn_warning` deep equal to `{ type: 'burn_warning', station: 'kettle1', slot: 0, meat: 'sausage' }`, at done plus `window * (1 - WARN_FRAC)` (8.4 s) within 0.1 s; `warn === true` from then on; burnt minus done is at least `MEATS.sausage.window - 0.1` (13.9 s) and at most 14.1 s; `burn_warning` came before `piece_burnt`; with the player on a kettle 1 use tile facing it and empty hands, `verbAt().label` is `'Pull Sausage'` one tick before the warning and `STRINGS.pullNow` one tick after. A second run with the fixture at fire 70 (good band) gives burnt minus done within 0.1 s of 14 |
+| 11 | Chrome launched and CDP connected | as v2 (fatal) |
+| 12 | page loaded with zero errors | as v2 with `game.version === '0.4.0'` and `'banner' in PitSim.game` (fatal) |
+| 13 | only the four file:// requests | as v2 |
+| 14 | sprite list and palette | the K9 literal; 115 names; palette and `COLOR` as v2. **Added, from `art.SPRITES` grids:** `pile` frames 0 to 2 contain no `s`, at most 3 `u` each, and `count('1') + count('t') >= 4 * (count('v') + count('s') + count('u'))`; frames 0 and 1 contain 1 to 3 `4` pixels; frame 3 contains no `t`, `v`, `u`, `4` or `k`; every frame contains `8` (the sack) and its row 15 contains `a`; `hand_charcoal` has at least 6 `1` and `count('1') + count('t') >= 2 * (count('v') + count('s') + count('u'))`; each `piece_*` frame 4 differs from frame 2 and has at least 4 more `1` pixels; `arrow` frame 1 is frame 0 shifted down 2 rows, frames 2 and 3 are frames 0 and 1 reversed row order, and its pixels are only `0`, `5`, `k`, `h`; `bubble_warn` frame 0 contains `o` and `3`; `art.textWidth('.,') === 9` |
+| 15 | canvas scale is an integer | as v2 |
+| 16 | canvas is device pixel exact on Android and laptop sizes | as v2 |
+| 17 | clipboard: morning, day 1, start cash | v2 checks; **added** before the cart is emptied: `tutorialStep().id === 'open'`; `#tut-clip` text is `STRINGS.tutorial.open`; `#tut-skip` visible with text `Skip tutorial`; `#open` has class `tut-pulse`; `#howto-btn` text `Controls`; `#howto` hidden; the day 1 hint absent; `PitSim.game.banner === null` (fatal) |
+| 18 | controls | was "how to": `#howto` hidden; click `#howto-btn`; `#howto` visible; Escape returns to the clipboard |
+| 19 | bought | as v2 (fatal) |
+| 20 | gate open | was v2's: phase service, cash, clipboard hidden, `#act` `Walk`, one `yard_open`; **changed:** `#status` does not start with `Gate opens in` (it reads `Hands empty`); `tutorialStep()` is `charcoal` with target `'pile'`; `PitSim.game.banner.lines` deep equals `['GRAB CHARCOAL FROM THE PILE.']`; `captureFrame()` holds an `arrow` at (68,48) with frame 2 or 3; `advance(25)` leaves `clock === 0` and no `gate_soon`; screenshot `tutorial.png` (fatal) |
+| 21 | fire raised | **added:** before each tap the step's target is the station tapped (`pile`, then `kettle1`); after them the step is `meat` (fatal) |
+| 22 | meat on | the target is `cooler`, then `kettle1`; **changed:** one unit only while the tutorial runs (the second goes on in step 29); after it the step is `cook` with target `null` (fatal) |
+| 23 | piece done | as v2; **added:** the target turns `'kettle1'`; `advance(20)` leaves the piece `done`, `warn` false, no `burn_warning`, `kettle1.fire >= C.TUTORIAL_FIRE_FLOOR` (fatal) |
+| 24 | sliced | the target is `kettle1` for the pull and `board` for the slice; after `slice_done` the step is `plate` with target `'table'` (fatal) |
+| 25 | carried | as v2 (the slice already put a plate in hand) (fatal) |
+| 26 | served with cash up and a served event | the target is `table`; **added:** right after the set down, step `customer`, `clock === C.GATE_OPENS`, one `gate_open`, customer 1 wants `sausage`; the `served` event is for customer 1 (fatal) |
+| 27 | a served customer sits and a heart fires | as v2; **added:** step `seated` after `served`, step `end` after `seat_done` |
+| 28 | **new** tutorial walked in order | until `tutorial_done` (at most `C.TUTORIAL_END_S + 1` s): `skipped === false`; the distinct consecutive `tutorial_step` ids seen equal `STRINGS.tutorialOrder` (with or without the leading `open`); the `cook` events carry targets `null` then `'kettle1'`; every `tutorial_step.text` equals `STRINGS.tutorial[id]`; `PitSim.game.banner === null` and no `arrow` record after; no `burn_warning`, `walk_out` or `fire_low` on day 1 before `tutorial_done`; `#live` showed the text of every step from `charcoal` on at least once (from this step on, the probe records each new `#live` text after every advance; steps 39 and later read that record) |
+| 29 | rest of the day cooked and carried | as v2 |
+| 30 | day over | as v2 |
+| 31 | a walk-out with rep down, or the day sold out early | as v2 |
+| 32 | till shown | as v2 |
+| 33 | save key present and valid | as v2 with raw `v === 3` and `tutorial.done === true` |
+| 34 | reload persists | as v2; **added:** day 2 with `tutorial.done`, no `#tut-clip` |
+| 35 | decor purchase shows the sprite | as v2 (its v2 save migrates); the stored save validates with `v === 3` |
+| 36 | v1 save migrates | as v2 with the stored save at `v === 3` and `tutorial.done === true` |
+| 37 | **new** v2 save loads with the tutorial done | reload into a v2 save with `day: 1`, `cash: 80`, `charcoal: 5`, `stock.sausage: 3`, the rest default: `state.tutorial` is `{ step: null, done: true }`; `tutorialStep() === null`; no `#tut-clip`, `#tut-skip` or `tut-pulse`; the day 1 hint present; no Your save was updated notice; open the yard: `#status` starts with `Gate opens in`, `PitSim.game.banner === null`, no `arrow` record; `sim.serialize()` has `v === 3`, `tutorial.done === true` |
+| 38 | **new** skip tutorial | step 37 left the yard open, so Escape, click `pause-new`, `confirm-yes`: a day 1 morning, step `open`, `#tut-skip` visible; click `#tut-skip`: one `tutorial_done { skipped: true }`, `#tut-skip` and `#tut-clip` gone, `#open` without `tut-pulse`, the day 1 hint present, `localStorage` save validates with `tutorial.done === true`. Again `clip-new`, `confirm-yes`; open the yard; Escape: `#pause` visible, `#pause-skip` visible, `#howto` hidden; click `#pause-skip`: `tutorial_done { skipped: true }`, `#pause-skip` gone, still paused; click `#resume`; `advance(31)`: `gate_soon` and `gate_open` fired at clock 20 and 30, `PitSim.game.banner === null` |
+| 39 | **new** burn warning in the page | on step 38's day, by real taps: pile, kettle 1, cooler, kettle 1 (one sausage); wait for `piece_done` (feeding the fire as step 23 does); until `burn_warning` (at most `0.6 * 14 + 2` s); if `sim.reach() !== 'kettle1'`, `sim.walkTo(5, 3)`, settle, `sim.move('up')`; then, all inside the 5.6 s warning: `#act` text `Pull it now`; `captureFrame()` holds `piece_sausage` frame 4 at (80,25) and `bubble_warn` at (78,13); after `advance(1)` a `smoke_dark` record with 80 <= x <= 100 and y <= 24; `fxLog` has a `warn` at (78,13); screenshot `warning.png`; tap kettle 1: cooked sausage in hand, no `piece_burnt`. Then the probe's `#live` record holds `The sausage is about to burn.` within 6 s of the warning (advancing in 0.5 s steps) |
+| 40 | pause and resume | **changed:** Escape shows `#pause` with `#howto` hidden and no `#pause-skip`; click `#pause-controls`: `#howto` visible, `#pause` hidden; Escape: `#pause` back; Escape resumes; P pauses and resumes as v2 |
+| 41 | no sprite drawn outside the canvas | as v2, over the morning, mid service, step 20 and step 39 captures (the arrow and `bubble_warn` records included) |
+| 42 | dog never on a station use tile | as v2 |
+| 43 | layout and keyboard at 375 by 740 | as v2; **added:** the morning check is made with the tutorial running (after the reload, if `tutorialStep()` is null, start a new game with `clip-new` and `confirm-yes`), so `#tut-skip` is measured, and one pause in service measures `#pause-controls` and `#pause-skip` (44 by 44 or larger) |
+| 44 | reduced motion | as v2, with the tutorial running (a new game first if `tutorialStep()` is null after the reload): in the morning `getComputedStyle(#open).animationName === 'none'` while it has `tut-pulse`; open the yard: `captureFrame()` arrow at (68,48) frame 2, and frame 2 again after `advance(0.6)` |
+| 45 | zero console errors across the run | as v2 |
+
+Fatal steps: 1, 11, 12, 17, 19 to 26, 30 and 34 (the v2 fatal set renumbered). `dev/econ.mjs` is still not a harness step.
+
+### K12. Decisions made in this section
+
+1. The step is worked out from the state (the table of [T 2.3]) up to the plate, then latched. A fixed script would strand a player who taps the cooler first.
+2. Step j waits for `seat_done`, not `seat_taken`, which fires in the same tick as `served` ([T 2.2]).
+3. The yard clock holds at 0 until the plate lands, then jumps to `GATE_OPENS`; plate ages shift with it so the first serve keeps its hot plate tip.
+4. Every done piece holds while the tutorial runs, not only the first, so a second piece cannot surprise a new player.
+5. `TUTORIAL_FIRE_FLOOR` is 30 (`FIRE_LOW_WARN`): never out, no fire low message during the tutorial, still cooking at 0.6.
+6. The target lives in `sim.tutorialStep()`, so `state.tutorial` stays exactly `{ step, done }`.
+7. Four pile frames stay (the brief named three; v2 already models four).
+8. Warning puffs reuse `smoke_dark`; no charcoal icon is added because none existed; no palette entry is added.
+9. `burn_warning` names its cooker `station`, as the brief did.
+10. The how to card is kept as the Controls card, renamed and opened only on request; the id `#howto-btn` is kept so nothing else moves.
+11. The save is version 3; v1 and v2 saves load with the tutorial done.
+12. `.` and `,` join the pixel font so the banner keeps its sentences.
+
+### K13. Integration record (v2.1, 2026-10-18, late)
+
+The four v2.1 builds were integrated against K0 to K12 the same night. Result: `node games/pit-sim/dev/smoke.mjs` passes 45 of 45 steps in phone mode (seed 1), in `--desktop` mode and in phone mode with `--seed 7`, each with zero console messages, exceptions or log errors and only the four file:// requests (boredom 14 percent of service, 7 taps a plate). A seam diff (sprites.js and sim.js loaded in Node with a canvas stub, against the same files at b48e1be) found the surface exactly as K1 to K9 say: 13 top level names, none added; the 14 `art` members unchanged; 115 sprites, 281 frames, 32 palette entries, 31 `COLOR` keys; `C` adds exactly the four K2 keys and `C.FX` the two; `STRINGS` adds exactly `tutorial`, `tutorialOrder`, `pullNow` and `burnWarn`; of every other `C`, `C.FX`, `MAP`, `MEATS` and `CATALOG` value only the five windows moved (14, 16, 18, 22, 26); the sim object gains exactly `skipTutorial` and `tutorialStep` and the state exactly `tutorial`; `sim.js` emits 33 event types (the 30 D10 types plus `tutorial_step`, `tutorial_done` and `burn_warning`) and `game.js` has a case for every type with a sentence; every `C`, `C.FX`, `STRINGS`, `MAP`, `art` and sim member `game.js` reads exists; `game.js` never writes `state.tutorial` or `Piece.warn`; `index.html` differs from b48e1be by exactly the two K8 rules. `dev/sheet.html` loads headless with its K9 and K11 step 14 checks green. `dev/econ.mjs` is recorded in the design spec (V21.5 Built result). No builder file needed a change at integration.
+
+Amended at integration (the K10 render order and [T 2.6] already carry this):
+
+1. Banner placement, Game deviation 19 accepted. The banner keeps the [T 2.6] box, colors, wrap and text inset, and sits at (2, 2) except while the target is a station drawn in the top third of the canvas (the pile, the kettles, the cooler), when it sits on the bottom edge; a step with no target keeps the last placement. On the happy path that is the bottom from charcoal to cook and the top from slice to end: one move, at a step change. It keeps the chimney puffs in view while the player lights the kettle and watches the ring, keeps the banner well away from the arrow, and the top placement for the customer steps leaves the gate and the seats clear. No harness step reads the position. Reversing it is one assignment in `drawBanner`.
+
+Builder deviations kept as written in each file header: Sim 24 to 27; Game 19 to 24 and its defensive guards (`typeof` checks on the two new methods, `art.has` checks on the two new sprites, fallbacks for the two new `C.FX` keys); Art (the pile shadow row in paver shade and outline brown, the slumped sack in pile frame 2 and the flat sack in frame 3, charred inner cells in piece frame 4, the scoop drawn as three briquettes on a steel scoop, the warning bubble glint and tail, the sheet additions); Harness 5 to 11 (browser clocks within 0.1 s, the fire after the light within 1, the `#live` record from probe install, real time pauses for the live queue, the two extra screenshots `tutorial-cook.png` and `tutorial-customer.png`, the `interact()` fallback that was never needed, the step 39 fire feed) plus its step 23 no feed rule, the step 26 `servedBefore >= 1` read and `INVALID_SAVES` holding `{ v: 4 }` and `{ v: '3' }`.
+
+Checked by eye at integration (the harness screenshots from all three runs, plus headless zooms at 412 by 915 and DPR 2.625): the clipboard shows the tutorial card, Skip tutorial, the gold ring on Open the yard and Controls; the arrow bobs gold with a dark outline under the pile, kettle 1 and the cooler and over the board and the counter; the two line cook banner sits on the bottom edge clear of the kettle and its smoke; the first customer walks in under a top banner; the about to burn piece, the blinking red and orange "!" bubble over kettle 1 and Pull it now show together; the pile reads as a dark heap of pillow briquettes with grey faces, one ash speck and one ember beside a brown sack with a black flame mark, in four clearly different states (full, half, low with a slumped sack, the sack folded flat), and the pitmaster facing down holds a dark scoop of briquettes. The briquette faces are the same dark grey as the kettle body, so the heap reads darker than the kettle mainly through its near black outlines.
+
+Known issues left open, for the Overseer (none is a contract violation):
+
+1. Full grate during the tutorial. A player who puts two pieces on kettle 1 and then takes a third from the cooler holds raw meat over a full grate. The step is `cook` (row 8) with target `null`, or `puton` (row 4) pointing at the full kettle if it was never lit, so neither the arrow nor the pulse leads anywhere, and the held clock means the day does not move on. The way out exists (the cooler's button only "Put Sausage back", the trash, or Skip tutorial in the pause panel) but nothing points at it. A headless random tapper (walk to taps only, 400 seeds, random small carts) was stranded this way 50 times; allowed to press the action button too, 399 of 400 finished the tutorial (the last one hit the time cap during `end`), with no clock movement, burn, walk-out, fire low or gate warning before `tutorial_done` in any run. Suggested rule: while the hands hold a raw piece and kettle 1 has no free slot for it, the target is `'cooler'`. Not changed here: it is a rule of play in [T 2.3].
+2. Trashing the only meat or the only bag of charcoal during the tutorial (both are button only actions) leaves a step that cannot be done; the same Skip tutorial way out applies.
+3. The economy bot buys the drum 0 to 2 days later than v2 and ends day 10 with 18 less cash, as the pre build estimate said; the bot caveat of the v2 integration record still applies.
+4. Joel's other two notes from the same play (he likes the play of the arcade sports game he named and the modern 8-bit look of the restaurant reference) are direction for later rungs, not part of v2.1.
+
+### K14. Review round 2 (v2.1, 2026-10-18)
+
+Changed, and carried into [T 2.6], [T 4] and K9 to K10 above: a tap on the drawn tutorial arrow is a tap on its station; the arrow hides when its center falls on the player's body, above or below the station; the facing up charcoal draws at y - 17, clear of the hair; `hand_charcoal` is a steel scoop of black briquettes; the sack is kraft brown with a crimped top and a flame printed on the brown, no cream label; the heap glints are single staggered pixels and the ember sits low on the right; `piece_*` frame 4 chars a 2 px rim; `bubble_warn` is a red card with a white mark that blinks yellow; the pile shows full at 5 bags; a two line banner is 21 tall. No name, size, frame count, palette entry or K11 grid rule changed, and no rule of play moved.
+
+Left for the Overseer: the tutorial hands over kettle 1 at the fire floor (30) with the first normal customer already queued, and `fire_low` lands about a second after `tutorial_done`, before the player has added a bag to a lit kettle. The options named in review (an add a bag line during the idle part of `cook`, topping kettle 1 to `FIRE_LIGHT` when the step becomes `end`, or lifting the floor at `end`; the last one breaks K11 step 28's no `fire_low` before `tutorial_done`) are rules of play in [T 2.4] G and are not changed here.
+
+---
+
 ## Who owns what (v2)
+
+> **Superseded for the v2.1 round by K0** (the Game builder also adds the two `.tut-pulse` rules to `index.html`). Kept as the v2 record.
 
 Four builders work at the same time and do not talk. Each owns only the files in their row.
 
@@ -419,7 +711,7 @@ const REQUIRED_SPRITES = [   // [name, w, h, frames]
 ];
 ```
 
-Frame indexes `game.js` relies on: people `_down`, `_up`, `_side` frame 0 stand, 1 and 2 walk; `cust{n}_down` 3 and 4 unhappy walk; `cust{n}_side` 3 stand unhappy; `cust{n}_sit` 0 eat a, 1 eat b, 2 content; `dog` 0 and 1 walk, 2 sit, 3 nap; `piece_*` 0 raw, 1 cooking, 2 done, 3 burnt; `kettle` and `drum` by `fireBand`: out 0, low 1, good 2, hot 3; `cooler` 0 crate (since round 2 painted as a small red cooler), 1 shut, 2 open; `board` 0 empty, 1 slicing; `counter` 0 both caps, 1 right cap only; `pile` 0 full (over 6), 1 half (3 to 6), 2 low (1 to 2), 3 bare; `gate` 0 shut, 1 open; `fence_back` 0 rail, 1 corner; `bed` 0 pink, 1 yellow, 2 mixed, 3 tilled soil (round 2); `hedge` 0 plain, 1 blossoms (round 2); `paver` and `lawn_*` 0 plain, 1 alternate; `birdbath` 0 empty, 1 bird; `lights_string` 0 and 1 twinkle; `heart` 0 big, 1 small; `sparkle` 0 small, 1 large, 2 fading; `smoke`, `smoke_dark` 0 small, 1 medium, 2 large; `coin` 0 face, 1 edge; `sweat` 0 drop, 1 splash; `zzz` 0 z, 1 zz, 2 zzz. The v1 sprites `outline`, `grass`, `path`, `table_mid`, `table_end` and `canopy_pole` are retired. Procedural, drawn by `game.js` with `COLOR`: dashed outlines (the boxes of [V2.11]; outline color on pavers, cream on lawn and hedge), the patience bar, fire gauges, cooking arcs, the slice bar, the tap ring, rain, canvas text boxes.
+Frame indexes `game.js` relies on: people `_down`, `_up`, `_side` frame 0 stand, 1 and 2 walk; `cust{n}_down` 3 and 4 unhappy walk; `cust{n}_side` 3 stand unhappy; `cust{n}_sit` 0 eat a, 1 eat b, 2 content; `dog` 0 and 1 walk, 2 sit, 3 nap; `piece_*` 0 raw, 1 cooking, 2 done, 3 burnt; `kettle` and `drum` by `fireBand`: out 0, low 1, good 2, hot 3; `cooler` 0 crate (since round 2 painted as a small red cooler), 1 shut, 2 open; `board` 0 empty, 1 slicing; `counter` 0 both caps, 1 right cap only; `pile` 0 full (5 or more since v2.1 review round 2, was over 6), 1 half (3 or 4, was 3 to 6), 2 low (1 to 2), 3 bare; `gate` 0 shut, 1 open; `fence_back` 0 rail, 1 corner; `bed` 0 pink, 1 yellow, 2 mixed, 3 tilled soil (round 2); `hedge` 0 plain, 1 blossoms (round 2); `paver` and `lawn_*` 0 plain, 1 alternate; `birdbath` 0 empty, 1 bird; `lights_string` 0 and 1 twinkle; `heart` 0 big, 1 small; `sparkle` 0 small, 1 large, 2 fading; `smoke`, `smoke_dark` 0 small, 1 medium, 2 large; `coin` 0 face, 1 edge; `sweat` 0 drop, 1 splash; `zzz` 0 z, 1 zz, 2 zzz. The v1 sprites `outline`, `grass`, `path`, `table_mid`, `table_end` and `canopy_pole` are retired. Procedural, drawn by `game.js` with `COLOR`: dashed outlines (the boxes of [V2.11]; outline color on pavers, cream on lawn and hedge), the patience bar, fire gauges, cooking arcs, the slice bar, the tap ring, rain, canvas text boxes.
 
 ### D12. Render order and the y-sort (replaces section 4.3)
 
@@ -694,6 +986,8 @@ Fire bands, from these: out is `fire < COLD_UNDER`, low is `COLD_UNDER <= fire <
 
 ### 2.2 `PitSim.MEATS` and `PitSim.MEAT_IDS`
 
+> **v2.1:** the windows are K2 (14, 16, 18, 22, 26); the block below is the v2 record.
+>
 > **v2:** unchanged; the shipped sausage 10 and chicken 16 cook times revert to the 14 and 22 below (D2, [V2.19] item 1).
 
 ```js
@@ -1296,7 +1590,7 @@ Stations.
 | `table_end` | 16 by 16 | 1 | left end; `flip` for the right end. With the small table the three tiles are end, mid, end; with the big table, end, mid, mid, mid, end |
 | `canopy` | 80 by 24 | 1 | cream canvas with the two back poles; drawn at pixel (64, 74) before any person or station sprite |
 | `canopy_pole` | 4 by 20 | 1 | a front pole; drawn at (65, 98) and (139, 98) after every person and station, before bubbles and bars |
-| `pile` | 16 by 16 | 4 | full (bags over 6), half (3 to 6), low (1 to 2), bare (0) |
+| `pile` | 16 by 16 | 4 | full (bags over 6), half (3 to 6), low (1 to 2), bare (0); v2.1 review round 2: full at 5 or more, half 3 or 4 (K9) |
 | `trash` | 16 by 16 | 1 | |
 | `gate` | 16 by 16 | 2 | shut, open |
 | `fence_h` | 16 by 16 | 1 | boards running left to right, rows 0 and 14 |
