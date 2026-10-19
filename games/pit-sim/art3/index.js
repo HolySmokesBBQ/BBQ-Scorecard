@@ -6,7 +6,11 @@
 // 2026-10-18-pit-sim-art3-bible.md. Not loaded by the game until v3.4.
 //
 // Load order (each file adds to PitSim.art3, none replaces another):
-//   palette.js, proj.js, people.js, kit.js, yard.js, fx.js, index.js
+//   palette.js, proj.js, people.js, kit.js, yard.js, fx.js, [rule.js], index.js
+// rule.js is optional: the size rule redraw (spec 2026-10-19-pit-sim-angle-redo.md section B). When
+// it is loaded, art3.sizes('rule') swaps its sprites in under the same names (default 'v3' keeps
+// the art the game draws today), its new names (plus, barn_window, window_box) are always on, and
+// art3.SIZE and art3.verifySizes() check every redrawn sprite against the rule.
 //
 // API added here (window.PitSim.art3):
 //   build(opts)                     builds kit, yard and fx, then the looks named in opts.looks
@@ -44,6 +48,9 @@ if (missing.length) {
 const PAL = art3.PAL, proj = art3.proj, people = art3.people;
 const SETS = { kit: art3.kit, yard: art3.yard, fx: art3.fx };
 const SET_ORDER = ['kit', 'yard', 'fx'];
+const RULE = art3.rule || null;     // optional (rule.js)
+if (RULE) SETS.rule = RULE;
+let SIZES = 'v3';                   // 'v3' | 'rule': which art answers the shared names
 const TILE = proj.TILE, VW = proj.VW, VH = proj.VH;
 // Render px above row 0: the sky band (yard 'backdrop' is exactly this tall), which also holds the
 // art that rises past row 0 (barn roof 22, tree canopy about 30, back fence pickets 28). The
@@ -168,6 +175,28 @@ const MANIFEST = Object.freeze([
   ['rain', 'fx', 32, 36, 3, 16, 36, 0],
   ['rain_splash', 'fx', 9, 5, 3, 4, 5, 0]
 ].map(function (r) { return Object.freeze(r); }));
+// The size rule set (rule.js), same row shape. Checked only when rule.js is loaded.
+const RULE_MANIFEST = Object.freeze([
+  ['kettle', 'rule', 36, 40, 5, 18, 33, 0], ['drum', 'rule', 32, 50, 4, 16, 46, 0], ['cabinet', 'rule', 36, 76, 4, 18, 60, 0],
+  ['stick_burner', 'rule', 84, 72, 4, 40, 58, 0], ['trailer_rig', 'rule', 96, 84, 4, 46, 66, 0], ['pile', 'rule', 32, 38, 4, 16, 24, 0],
+  ['woodpile', 'rule', 44, 38, 3, 22, 24, 0], ['cooler', 'rule', 32, 38, 6, 16, 24, 0], ['board', 'rule', 40, 36, 2, 20, 26, 0],
+  ['counter', 'rule', 94, 63, 1, 47, 38, 0], ['counter_long', 'rule', 118, 75, 1, 59, 44, 0], ['trash', 'rule', 28, 32, 2, 13, 26, 0],
+  ['prep_table', 'rule', 44, 40, 3, 22, 26, 0], ['warmer', 'rule', 36, 44, 3, 18, 34, 0], ['plate_sausage', 'rule', 18, 13, 1, 9, 9, 0],
+  ['plate_chicken', 'rule', 18, 13, 1, 9, 9, 0], ['plate_ribs', 'rule', 18, 13, 1, 9, 9, 0], ['plate_butt', 'rule', 18, 13, 1, 9, 9, 0],
+  ['plate_brisket', 'rule', 18, 13, 1, 9, 9, 0], ['plate_empty', 'rule', 18, 13, 1, 9, 9, 0], ['platter_sausage', 'rule', 22, 16, 1, 11, 11, 0],
+  ['platter_chicken', 'rule', 22, 16, 1, 11, 11, 0], ['platter_ribs', 'rule', 22, 16, 1, 11, 11, 0], ['platter_butt', 'rule', 22, 16, 1, 11, 11, 0],
+  ['platter_brisket', 'rule', 22, 16, 1, 11, 11, 0], ['platter_empty', 'rule', 22, 16, 1, 11, 11, 0], ['paver', 'rule', 48, 24, 4, 24, 12, 0],
+  ['lawn_a', 'rule', 48, 24, 3, 24, 12, 0], ['lawn_b', 'rule', 48, 24, 3, 24, 12, 0], ['stone_step', 'rule', 48, 24, 2, 24, 12, 0],
+  ['wall_barn', 'rule', 356, 284, 1, 8, 146, 0], ['shed', 'rule', 36, 76, 1, 18, 66, 0], ['barn_window', 'rule', 44, 82, 1, 22, 76, 0],
+  ['window_box', 'rule', 56, 56, 1, 27, 50, 0], ['sign', 'rule', 68, 80, 3, 34, 76, 0], ['fence_diag', 'rule', 294, 186, 1, 290, 38, 0],
+  ['fence_back', 'rule', 30, 52, 2, 14, 44, 0], ['fence_front', 'rule', 30, 34, 1, 14, 26, 0], ['fence_side', 'rule', 30, 34, 2, 14, 26, 0],
+  ['fence_corner', 'rule', 12, 24, 4, 6, 20, 0], ['gate', 'rule', 40, 44, 2, 18, 34, 0], ['tree', 'rule', 92, 140, 1, 46, 134, 0],
+  ['tree_trunk', 'rule', 92, 140, 1, 46, 134, 0], ['tree_canopy', 'rule', 92, 140, 1, 46, 134, 0], ['pot', 'rule', 20, 24, 3, 10, 20, 0],
+  ['lights_post', 'rule', 24, 84, 1, 12, 78, 0], ['picnic', 'rule', 76, 56, 2, 38, 36, 0], ['picnic_bench', 'rule', 76, 56, 2, 38, 36, 0],
+  ['flower_box', 'rule', 52, 38, 1, 26, 24, 0], ['chair', 'rule', 32, 42, 2, 16, 28, 0], ['canopy', 'rule', 152, 144, 3, 76, 106, 0],
+  ['birdbath', 'rule', 24, 30, 2, 12, 26, 0], ['mailbox', 'rule', 28, 38, 2, 14, 32, 0], ['tools', 'rule', 32, 34, 1, 16, 30, 0],
+  ['shelf', 'rule', 32, 54, 1, 16, 40, 0], ['hose', 'rule', 36, 30, 1, 16, 22, 0], ['plus', 'rule', 32, 18, 1, 16, 9, 0]
+].map(function (r) { return Object.freeze(r); }));
 
 const CELL = people.CELL;
 const POSE_NAMES = Object.freeze({
@@ -188,8 +217,20 @@ SET_ORDER.forEach(function (key) {
     OWNER[name] = key;
   });
 });
+if (RULE) RULE.names().forEach(function (name) { if (!OWNER[name]) OWNER[name] = 'rule'; });
 const MAN_BY_NAME = Object.create(null);
 MANIFEST.forEach(function (r) { MAN_BY_NAME[r[0]] = r; });
+const RULE_MAN_BY_NAME = Object.create(null);
+RULE_MANIFEST.forEach(function (r) { RULE_MAN_BY_NAME[r[0]] = r; });
+// Which art answers a name both sets draw: 'v3' (default) or 'rule'. Returns the current mode.
+function sizes(mode) {
+  if (mode !== undefined) {
+    if (mode !== 'v3' && mode !== 'rule') throw new Error('art3: sizes() takes "v3" or "rule"');
+    if (mode === 'rule' && !RULE) throw new Error('art3: load rule.js before index.js to use the size rule');
+    SIZES = mode;
+  }
+  return SIZES;
+}
 
 /* ================================================================ people names */
 const LOOK_IDS = [];
@@ -221,6 +262,7 @@ function parsePerson(name) {
 
 /* ================================================================ lookups */
 function setOf(name) {
+  if (SIZES === 'rule' && RULE && RULE.has(name)) return 'rule';
   if (OWNER[name]) return OWNER[name];
   return parsePerson(name) ? 'people' : null;
 }
@@ -248,6 +290,7 @@ function anchor(name, frame) {
   if (s === 'kit') { const a = SETS.kit.anchor(name); return { w: a.w, h: a.h, ax: a.ax, ay: a.ay }; }
   if (s === 'yard') { const z = SETS.yard.size(name), a = SETS.yard.anchor(name); return { w: z[0], h: z[1], ax: a.ax, ay: a.ay }; }
   if (s === 'fx') { const a = SETS.fx.anchor(name, frame); return { w: a.w, h: a.h, ax: a.ax, ay: a.ay }; }
+  if (s === 'rule') { const a = RULE.anchor(name); return { w: a.w, h: a.h, ax: a.ax, ay: a.ay }; }
   const p = parsePerson(name);
   if (p.pose === 'bust') return { w: CELL.bust, h: CELL.bust, ax: CELL.bust / 2, ay: CELL.bust };
   const h = p.pose === 'sit' || p.pose === 'sitUp' ? CELL.sitH : CELL.h;
@@ -268,6 +311,7 @@ function mirrorOf(src) {
 function frameCanvas(name, frame, flip) {
   const s = need(name), f = wrapFrame(name, frame), fl = flip === true;
   if (s === 'fx') return SETS.fx.canvasOf(name, f, fl);
+  if (s === 'rule') return RULE.frameCanvas(name, f, fl);
   if (s === 'people') {
     const p = parsePerson(name);
     if (p.pose !== 'bust') return art3.person(p.who, p.pose, f, fl);
@@ -323,7 +367,7 @@ function drawTile(ctx, name, tx, ty, frame, flip) {
 function drawScaled(ctx, name, x, y, w, h, frame, flip) {
   if (!(w >= 1) || !(h >= 1)) return;
   const s = need(name);
-  if (s === 'kit' || s === 'yard') { SETS[s].drawScaled(ctx, name, x, y, w, h, frame, flip === true); return; }
+  if (s === 'kit' || s === 'yard' || s === 'rule') { SETS[s].drawScaled(ctx, name, x, y, w, h, frame, flip === true); return; }
   const src = frameCanvas(name, frame, flip === true);
   const prev = ctx.imageSmoothingEnabled;
   ctx.imageSmoothingEnabled = false;
@@ -380,10 +424,14 @@ function screenToTile(clientX, clientY, rect, headroom) {
 function ysort(items) { return items.sort(proj.compare); }
 
 /* ================================================================ manifest and build */
-function names() { return MANIFEST.map(function (r) { return r[0]; }); }
+function names() {
+  const out = MANIFEST.map(function (r) { return r[0]; });
+  RULE_MANIFEST.forEach(function (r) { if (RULE && !MAN_BY_NAME[r[0]]) out.push(r[0]); });
+  return out;
+}
 function entry(r) { return { name: r[0], set: r[1], w: r[2], h: r[3], frames: r[4], ax: r[5], ay: r[6], vary: r[7] === 1 }; }
 function manifest() {
-  const list = MANIFEST.concat(PEOPLE_MANIFEST).map(entry);
+  const list = MANIFEST.concat(PEOPLE_MANIFEST, RULE ? RULE_MANIFEST : []).map(entry);
   const totals = { names: MANIFEST.length, frames: 0, bySet: {} };
   MANIFEST.forEach(function (r) {
     totals.frames += r[4];
@@ -394,7 +442,8 @@ function manifest() {
 }
 // Compares MANIFEST with the category files. Returns a list of problems (empty when they agree).
 function verify() {
-  const out = [];
+  const out = [], mode = SIZES;
+  SIZES = 'v3';   // MANIFEST rows describe the v3 sets; the rule set is checked below
   MANIFEST.forEach(function (r) {
     const name = r[0];
     if (OWNER[name] !== r[1]) { out.push(name + ': listed under ' + r[1] + ', owned by ' + (OWNER[name] || 'nobody')); return; }
@@ -404,7 +453,18 @@ function verify() {
       out.push(name + ': ' + a.w + 'x' + a.h + ' anchor ' + a.ax + ',' + a.ay + ', manifest says ' + r[2] + 'x' + r[3] + ' anchor ' + r[5] + ',' + r[6]);
     }
   });
-  Object.keys(OWNER).forEach(function (name) { if (!MAN_BY_NAME[name]) out.push(name + ': not in the manifest'); });
+  Object.keys(OWNER).forEach(function (name) { if (!MAN_BY_NAME[name] && OWNER[name] !== 'rule') out.push(name + ': not in the manifest'); });
+  if (RULE) {
+    RULE_MANIFEST.forEach(function (r) {
+      const name = r[0];
+      if (!RULE.has(name)) { out.push(name + ': in the rule manifest, not in rule.js'); return; }
+      const a = RULE.anchor(name);
+      if (RULE.frames(name) !== r[4]) out.push(name + ' (rule): ' + RULE.frames(name) + ' frames, manifest says ' + r[4]);
+      if (a.w !== r[2] || a.h !== r[3] || a.ax !== r[5] || a.ay !== r[6]) out.push(name + ' (rule): ' + a.w + 'x' + a.h + ' anchor ' + a.ax + ',' + a.ay + ', manifest says ' + r[2] + 'x' + r[3] + ' anchor ' + r[5] + ',' + r[6]);
+    });
+    RULE.names().forEach(function (name) { if (!RULE_MAN_BY_NAME[name]) out.push(name + ': not in the rule manifest'); });
+  }
+  SIZES = mode;
   return out;
 }
 
@@ -421,6 +481,7 @@ function build(opts) {
     SETS[key].build();
     parts[key] = r1(now() - t);
   });
+  if (RULE) { const t = now(); RULE.build(); parts.rule = r1(now() - t); }
   const ids = o.looks || LOOK_IDS.filter(function (id) { return id === 'player' || /^crew/.test(id); });
   const tp = now();
   ids.forEach(function (id) { people.buildLook(id); });
@@ -448,7 +509,9 @@ const api = {
   rowKey: proj.rowKey, moverKey: proj.moverKey, compare: proj.compare, ysort: ysort,
   tileToScreen: tileToScreen, tileAnchor: tileAnchor, moverFoot: moverFoot,
   screenToTile: screenToTile, scaleFor: proj.scaleFor,
-  names: names, manifest: manifest, verify: verify
+  names: names, manifest: manifest, verify: verify,
+  sizes: sizes, RULE_MANIFEST: RULE_MANIFEST, SIZE: RULE ? RULE.SIZE : null,
+  verifySizes: function (opts) { if (!RULE) throw new Error('art3: load rule.js before index.js to verify the size rule'); return RULE.verifySizes(opts); }
 };
 Object.keys(api).forEach(function (k) { art3[k] = api[k]; });
 Object.defineProperty(art3, 'built', { enumerable: true, configurable: true, get: function () { return built; } });

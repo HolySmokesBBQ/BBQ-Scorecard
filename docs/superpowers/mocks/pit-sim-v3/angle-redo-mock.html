@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=780, initial-scale=1">
+<title>Pit Angle Redo</title>
+<style>
+  html, body { margin: 0; padding: 0; background: #1b1714; }
+  body { display: flex; width: 780px; }
+  canvas { display: block; width: 390px; height: 844.5px; image-rendering: pixelated; image-rendering: crisp-edges; }
+</style>
+</head>
+<body>
+<!-- Angle redo mock (spec 2026-10-19-pit-sim-angle-redo.md), two phone frames side by side.
+     Left: the near home view, 260 by 563 render px at 1.5 CSS px per render px (3 device px at DPR 2).
+     Right: the same scene in far view (whole world fit to the width), then the creator preview patch
+     next to a yard crop of the same pitmaster, both at 2 device px per render px.
+     Tiles are 48 by 24 render px diamonds. Everything is drawn 1:1: people from art3, every kit, yard,
+     barn, fence, ground and "+" sprite from the size rule redraw (art3/rule.js, art3.sizes('rule')). -->
+<canvas id="c" width="260" height="563"></canvas>
+<canvas id="c2" width="780" height="1689"></canvas>
+<script src="../../../../games/pit-sim/art3/palette.js"></script>
+<script src="../../../../games/pit-sim/art3/proj.js"></script>
+<script src="../../../../games/pit-sim/art3/people.js"></script>
+<script src="../../../../games/pit-sim/art3/kit.js"></script>
+<script src="../../../../games/pit-sim/art3/yard.js"></script>
+<script src="../../../../games/pit-sim/art3/fx.js"></script>
+<script src="../../../../games/pit-sim/art3/rule.js"></script>
+<script src="../../../../games/pit-sim/art3/index.js"></script>
+<script>
+'use strict';
+const art3 = PitSim.art3, PAL = art3.PAL, A = PAL.ANCHOR, UI = PAL.UI, kit = art3.kit, fx = art3.fx;
+const cv = document.getElementById('c'), cv2 = document.getElementById('c2');
+let g = cv.getContext('2d');
+const VW = 260, VH = 563, HUD = 48, DOCK = 76, VIEW_H = VH - HUD - DOCK;
+
+/* world: 11 x 12 tiles, 48 x 24 diamonds; tile (tx, ty) top vertex at (OX + 24 (tx - ty), OY + 12 (tx + ty)).
+   WORLD 576 x 424: it ends 8 rp below the front corner of the picket (416), no street band. */
+const OX = 300, OY = 140, MW = 11, MH = 12, WW = 576, WH = 424;
+/* home: centre X on the bounds of every station sprite plus q0 and q1 (OX - 108 to OX + 132, so OX + 12);
+   the world (424) is shorter than the view (439), so it is anchored to the view bottom and sky fills the top. */
+const CAM = { x0: OX + 12 - VW / 2, y0: WH - VIEW_H };
+function vtx(tx, ty) { return [OX + (tx - ty) * 24, OY + (tx + ty) * 12]; }
+function ctr(tx, ty) { return [OX + (tx - ty) * 24, OY + (tx + ty + 1) * 12]; }
+
+const GROUND = [
+  'FFFFFFFFFFF', 'FPPPPSSSSLF', 'FPPPPLLLSLF', 'FPPPPLLLSLF', 'FPPPPLLLSLF', 'FPPPPLLLSLF',
+  'FPPPPLLLSLF', 'FPPPPLLLSLF', 'FPPPPLLLSLF', 'FLLLLLLLSLF', 'FLLLLLLLSLF', 'FFFFFFFFGFF'];
+
+function px(x, y, w, h, c) { g.fillStyle = c; g.fillRect(Math.round(x), Math.round(y), w, h); }
+function diamond(cx, cy, hw, h, col) {
+  g.fillStyle = col;
+  for (let r = 0; r < h; r++) {
+    const w = r < h / 2 ? (r + 1) * 2 * hw / h : (h - r) * 2 * hw / h;
+    g.fillRect(Math.round(cx - w), cy + r, Math.round(w * 2), 1);
+  }
+}
+
+/* ---------- looks: the pitmaster is the same sprite the creator preview draws ---------- */
+art3.look('player', { body: 'A', skin: 1, hair: 'short', hairColor: 1, face: 'none', hat: 'cap', shirt: 'white', pants: 0, apron: 1, tongs: true });
+const LOOKS = {
+  g1: { body: 'A', skin: 3, hair: 'short', hairColor: 1, shirt: 'purple' },
+  g2: { body: 'A', skin: 0, hair: 'long', hairColor: 3, shirt: 'red', pants: 1 },
+  g3: { body: 'B', skin: 5, hair: 'buzz', hairColor: 0, shirt: 'teal', pants: 2 },
+  g4: { body: 'A', skin: 4, hair: 'curly', hairColor: 0, shirt: 'yellow' },
+  g5: { body: 'old', skin: 0, hair: 'bun', hairColor: 5, face: 'glasses', shirt: 'green' },
+  g6: { body: 'A', skin: 2, hair: 'bun', hairColor: 1, shirt: 'pink' }
+};
+Object.keys(LOOKS).forEach(function (k) { art3.look(k, LOOKS[k]); });
+art3.sizes('rule');
+art3.build();
+art3.verifySizes();
+function at1(name, frame, x, y, flip) { art3.drawAt(g, name, Math.round(x), Math.round(y), frame || 0, !!flip); }
+function on(name, frame, tx, ty) { const c = ctr(tx, ty); at1(name, frame, c[0], c[1]); return c; }
+function wallAt(u) { return [OX + u, OY + u / 2]; }
+
+/* ---------- HUD and dock (render px; both frames) ---------- */
+function hud(label) {
+  px(0, 0, VW, HUD, A.U); px(0, HUD - 3, VW, 2, A.O); px(0, HUD - 1, VW, 1, A.K);
+  px(4, 4, 46, 15, A.O); art3.textTinted(g, 'WEEK 3', 7, 8, UI.white, { bold: true });
+  art3.textTinted(g, label || 'CHURCH PICNIC', 56, 8, A.C, { bold: true });
+  px(6, 25, 7, 7, UI.gold); px(8, 27, 3, 3, UI.goldD);
+  art3.textTinted(g, '240', 17, 25, A.C, { bold: true });
+  for (let i = 0; i < 5; i++) {
+    const c = i < 4 ? UI.gold : UI.starOff, x = 198 + i * 11;
+    px(x + 3, 24, 3, 9, c); px(x, 27, 9, 3, c); px(x + 1, 25, 7, 6, c);
+  }
+  art3.textTinted(g, 'SERVED 6/20', 6, 37, A.C);
+  px(72, 37, 140, 7, A.K); px(73, 38, 42, 5, A.O);
+  art3.textTinted(g, '1:50', 254, 37, A.C, { align: 'right' });
+}
+function dock() {
+  const y0 = VH - DOCK;
+  px(0, y0, VW, DOCK, A.U); px(0, y0, VW, 2, A.O); px(0, y0 + 2, VW, 1, UI.tray);
+  const BW = 56, BH = 62, gap = (VW - 4 * BW) / 5;
+  ['sausage', 'chicken', 'ribs', 'brisket'].forEach(function (m, k) { kit.dishCard(g, Math.round(gap + k * (BW + gap)), y0 + 9, BW, BH, m, { selected: k === 0 }); });
+}
+function zoomButton(far) {
+  const bx0 = VW - 26, by0 = HUD + 6;
+  px(bx0, by0, 20, 20, A.K); px(bx0 + 1, by0 + 1, 18, 17, A.U);
+  const R = far ? [[4, 7, 4, 1], [7, 4, 1, 4], [12, 7, 4, 1], [12, 4, 1, 4], [4, 12, 4, 1], [7, 12, 1, 4], [12, 12, 4, 1], [12, 12, 1, 4]]
+                : [[4, 4, 4, 1], [4, 4, 1, 4], [12, 4, 4, 1], [15, 4, 1, 4], [4, 15, 4, 1], [4, 12, 1, 4], [12, 15, 4, 1], [15, 12, 1, 4]];
+  R.forEach(function (r) { px(bx0 + r[0], by0 + r[1], r[2], r[3], A.C); });
+}
+
+/* ---------- backdrop, ground, barn, fences ---------- */
+function backdrop() {
+  px(-10, -60, WW + 20, WH + 80, '#9fd8f2');
+  [[40, 18], [150, 6], [236, 26], [470, 14]].forEach(function (c) { px(c[0], c[1], 26, 5, '#ffffff'); px(c[0] + 5, c[1] - 4, 14, 4, '#ffffff'); });
+  for (let x = 0; x < 330; x += 2) {
+    const h = 16 + Math.round(6 * Math.sin(x / 9) + 4 * Math.sin(x / 4.3));
+    const baseY = OY + (OX - x) / 2 - 30;
+    px(x, baseY - h, 2, h + 34, (x / 2) % 7 < 3 ? '#3f8a3a' : '#357a33');
+  }
+}
+function groundTiles() {
+  // outside the two front edges: a plain lawn verge to the world edge (no sidewalk, no street)
+  const L0 = vtx(0, MH), B0 = vtx(MW, MH), R0 = vtx(MW, 0);
+  g.fillStyle = '#5a9c3c'; g.beginPath();
+  g.moveTo(-10, L0[1]); g.lineTo(L0[0], L0[1]); g.lineTo(B0[0], B0[1]); g.lineTo(R0[0], R0[1]); g.lineTo(WW + 10, R0[1]);
+  g.lineTo(WW + 10, WH + 60); g.lineTo(-10, WH + 60); g.closePath(); g.fill();
+  for (let ty = 0; ty < MH + 3; ty++) for (let tx = 0; tx < MW + 3; tx++) {
+    if (tx < MW && ty < MH) continue;
+    const t = vtx(tx, ty); if (t[1] > WH) continue;
+    diamond(t[0], t[1], 24, 24, (tx + ty) & 1 ? '#56983a' : '#5c9f3e');
+  }
+  for (let ty = 0; ty < MH; ty++) for (let tx = 0; tx < MW; tx++) {
+    const ch = GROUND[ty][tx];
+    if (ch === 'P') on('paver', (tx * 3 + ty) % 4, tx, ty);
+    else {
+      on((tx + ty) & 1 ? 'lawn_a' : 'lawn_b', (tx + 2 * ty) % 3, tx, ty);
+      if (ch === 'S' || ch === 'G') on('stone_step', (tx + ty) & 1, tx, ty);
+    }
+  }
+}
+function barn() {
+  const T = vtx(0, 0);
+  at1('wall_barn', 0, T[0], T[1]);
+  [48, 168].forEach(function (u) { const w = wallAt(u); at1('barn_window', 0, w[0], w[1]); at1('window_box', 0, w[0], w[1]); });
+  const d = wallAt(132); at1('shed', 0, d[0], d[1]);
+  const sg = wallAt(96); at1('sign', 0, sg[0], sg[1]);
+  const tb = art3.rule.meta('sign').text, a = art3.anchor('sign');
+  art3.textTinted(g, 'YOUR PIT', sg[0] - a.ax + tb.x + tb.w / 2, sg[1] - a.ay + tb.y + 4, UI.gold, { bold: true, align: 'center' });
+}
+function backFence() { const T = vtx(0, 0); at1('fence_diag', 0, T[0], T[1]); }
+function frontFence(which) {
+  const mid2 = function (a, b) { return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]; };
+  if (which === 'right') {
+    for (let ty = 0; ty < MH; ty++) { const m = mid2(vtx(MW, ty), vtx(MW, ty + 1)); at1('fence_side', ty === 0 ? 1 : 0, m[0], m[1]); }
+  } else {
+    for (let tx = 0; tx < MW; tx++) { const m = mid2(vtx(tx, MH), vtx(tx + 1, MH)); at1(tx === 8 ? 'gate' : 'fence_front', 0, m[0], m[1]); }
+  }
+}
+
+/* the "+" for-sale marker (spec D): 28 x 14 dark diamond at 30 percent, 15 x 15 cream plus with an
+   umber outline, at the centroid of the marker tiles. Hit target = the whole marker tile footprint. */
+function plus(tiles) {
+  let sx = 0, sy = 0;
+  tiles.forEach(function (t) { const c = ctr(t[0], t[1]); sx += c[0]; sy += c[1]; });
+  at1('plus', 0, sx / tiles.length, sy / tiles.length);
+}
+
+/* ---------- scene (world coordinates) ---------- */
+const MARK = {};
+function person(who, pose, tx, ty, flip, dx, dy) {
+  const c = ctr(tx, ty), x = c[0] + (dx || 0), y = c[1] + 4 + (dy || 0), sit = pose === 'sit' || pose === 'sitUp';
+  if (!sit) art3.drawPersonShadow(g, x, y);
+  art3.drawPerson(g, who, pose, 0, x, y, !!flip);
+  return { x: x, y: y, head: y - (sit ? 37 : 47) };
+}
+function mid(t) { let x = 0, y = 0; t.forEach(function (q) { const c = ctr(q[0], q[1]); x += c[0]; y += c[1]; }); return [x / t.length, y / t.length]; }
+function scene() {
+  backdrop(); groundTiles(); backFence(); barn();
+  // unbought spots: counter extension (4, 4), canopy (7, 2), chair1 (9, 3), chair2 (9, 4)
+  plus([[4, 4]]); plus([[7, 2]]); plus([[9, 3]]); plus([[9, 4]]);
+  const items = [], vents = [];
+  function at(k, fn) { items.push({ k: k, fn: fn }); }
+  // aprons: (0, 0) to (0, 6) and (0, 0) to (2, 0) stay clear (the hat rule); tall things on row 0 or column 0
+  at(3.1, function () { on('tools', 0, 3, 0); });
+  at(7.1, function () { on('lights_post', 0, 0, 7); });
+  at(8.1, function () { on('woodpile', 0, 0, 8); });
+  at(9.05, function () { on('tree', 0, 0, 9); });
+  at(10.1, function () { on('woodpile', 1, 0, 10); });
+  at(11.1, function () { on('pot', 0, 1, 10); });
+  at(12.1, function () { on('woodpile', 0, 1, 11); });
+  at(13.1, function () { on('woodpile', 1, 2, 11); });
+  // right picket apron (column 10): pots and planters, never in front of a seat
+  [[10, 2, 0], [10, 6, 1], [10, 7, 2], [10, 8, 1], [10, 10, 0]].forEach(function (p) { at(p[0] + p[1] + 0.1, function () { on('pot', p[2], p[0], p[1]); }); });
+  at(8.15, function () { on('hose', 0, 8, 0); });
+  at(9.15, function () { on('shelf', 0, 9, 0); });
+  // back side of the lane (x = 2): trash, board, drum on (2, 5) (2, 6)
+  at(4.2, function () { on('trash', 0, 2, 2); });
+  at(6.2, function () { on('board', 1, 2, 4); });
+  at(8.2, function () { const c = mid([[2, 5], [2, 6]]); at1('drum', 2, c[0], c[1]); vents.push(['smoke_column', c[0] + 5, c[1] - 38]); });
+  // the pitmaster at the counter (spawn (3, 2))
+  at(5.5, function () { MARK.pm = person('player', 'down', 3, 2, true, 0, 0); });
+  // front side of the lane (x = 4): the counter on (4, 1) to (4, 3), one plate per tile
+  at(7.9, function () {
+    const c = ctr(4, 2), a = art3.anchor('counter');
+    at1('counter', 0, c[0], c[1]);
+    art3.rule.slots('counter').forEach(function (sl, k) { at1('plate_' + ['brisket', 'ribs', 'sausage'][k], 0, c[0] - a.ax + sl[0], c[1] - a.ay + sl[1]); });
+  });
+  at(9.3, function () { const c = on('kettle', 2, 4, 5); vents.push(['smoke_column_short', c[0], c[1] - 21]); });
+  at(10.3, function () { on('cooler', 0, 4, 6); });
+  at(11.3, function () { const c = on('kettle', 3, 4, 7); vents.push(['smoke_column_short', c[0], c[1] - 21]); });
+  at(12.3, function () { on('pile', 0, 4, 8); });
+  // the line along the barn
+  at(6, function () { MARK.q0 = person('g1', 'side', 5, 1); });
+  at(7, function () { person('g2', 'up', 6, 1); });
+  at(8, function () { person('g3', 'side', 7, 1); });
+  // picnic tables: the far bench, the sitters on its seats, then the table and near bench
+  function picnicAt(k, tiles, who, plates) {
+    const c = mid(tiles), st = art3.rule.seats('picnic_bench');
+    at(k, function () { at1('picnic_bench', 0, c[0], c[1]); });
+    who.forEach(function (w, i) { if (w) at(k + 0.1 + i * 0.1, function () { const x = c[0] + st[i][0], y = c[1] + st[i][1]; art3.drawPerson(g, w, 'sit', 0, x, y, false); if (w === 'g5') MARK.s1 = { x: x, y: y, head: y - 37 }; }); });
+    at(k + 2, function () { at1('picnic', 0, c[0], c[1]); plates.forEach(function (p) { at1('plate_' + p[0], 0, c[0] + p[1], c[1] + p[2]); }); });
+  }
+  picnicAt(10.4, [[6, 5], [7, 5]], ['g4', 'g5'], [['ribs', -2, -13], ['chicken', 20, -2]]);
+  picnicAt(13.4, [[6, 8], [7, 8]], ['g6', null], [['brisket', -2, -13]]);
+  at(13.2, function () { on('birdbath', 0, 3, 10); });
+  at(17.2, function () { const c = mid([[6, 10], [7, 10]]); at1('flower_box', 0, c[0], c[1]); });
+  at(19.8, function () { frontFence('right'); });
+  at(19.9, function () { frontFence('left'); });
+  at(20.2, function () { on('mailbox', 0, 9, 11); });
+  items.sort(function (a, b) { return a.k - b.k; }).forEach(function (it) { it.fn(); });
+  // overhead 1: smoke from every lit cooker
+  g.save(); g.globalAlpha = 0.85;
+  vents.forEach(function (v, i) { fx.drawAt(g, v[0], v[1], v[2], i % 3); });
+  g.restore();
+  // overhead 2: string lights from the post on (0, 7) along the fence top to the back corner, then along the eave to (8, 0)
+  const p0 = ctr(0, 7), cA = [p0[0] + 2, p0[1] - 66], cB = [vtx(0, 0)[0], vtx(0, 0)[1] - 76], cC = [vtx(8, 0)[0] + 12, vtx(8, 0)[1] + 6 - 76];
+  [[cA, cB, 14], [cB, cC, 6]].forEach(function (seg, si) {
+    const a = seg[0], b = seg[1], n = Math.round(Math.hypot(b[0] - a[0], b[1] - a[1]));
+    for (let i = 0; i <= n; i++) {
+      const u = i / n, x = a[0] + (b[0] - a[0]) * u, y = a[1] + (b[1] - a[1]) * u + seg[2] * 4 * u * (1 - u);
+      px(x, y, 1, 1, '#3a2a20');
+      if (i % 14 === 7) px(x - 1, y + 1, 3, 3, ['#f6d26a', '#ef6b4a', '#8fd25c', '#6fc3f0'][((i / 14 | 0) + si) % 4]);
+    }
+  });
+  // marks
+  fx.bubbleAt(g, MARK.q0.x, MARK.q0.head - 2, 6, 'ribs', 'done');
+  fx.drawAt(g, 'heart', MARK.s1.x + 1, MARK.s1.head - 4, 0);
+  art3.floatNum(g, '+2 TIP', MARK.pm.x - 84, MARK.pm.head - 22, 'tip');
+  art3.floatNum(g, '+8', MARK.pm.x - 70, MARK.pm.head - 8, 'cash');
+}
+
+/* ---------- frame 1: near home view ---------- */
+g.imageSmoothingEnabled = false;
+px(0, 0, VW, VH, A.K);
+g.save(); g.beginPath(); g.rect(0, HUD, VW, VIEW_H); g.clip();
+g.translate(-CAM.x0, HUD - CAM.y0);
+scene();
+g.restore();
+zoomButton(false); hud(); dock();
+
+/* ---------- the world at 1:1 for frame 2 ---------- */
+const wc = document.createElement('canvas'); wc.width = WW; wc.height = WH;
+g = wc.getContext('2d'); g.imageSmoothingEnabled = false;
+scene();
+
+/* ---------- frame 2: far view, then one pitmaster (creator preview patch next to a yard crop) ---------- */
+const h2 = cv2.getContext('2d'); g = h2; h2.imageSmoothingEnabled = false;
+h2.setTransform(3, 0, 0, 3, 0, 0);
+px(0, 0, VW, VH, A.K);
+const FAR_H = Math.round(WH * 780 / WW);
+h2.setTransform(1, 0, 0, 1, 0, 0);
+h2.drawImage(wc, 0, 0, WW, WH, 0, HUD * 3, 780, FAR_H);
+// the near home view's box, drawn on the far view
+const kf = 780 / WW;
+h2.strokeStyle = '#f6d26a'; h2.lineWidth = 3; h2.setLineDash([12, 8]);
+h2.strokeRect(CAM.x0 * kf, HUD * 3 + Math.max(0, CAM.y0) * kf, VW * kf, (WH - Math.max(0, CAM.y0)) * kf - 2);
+h2.setLineDash([]);
+h2.setTransform(3, 0, 0, 3, 0, 0);
+zoomButton(true); hud('FAR VIEW'); dock();
+// panel, 2 device px per render px
+h2.setTransform(2, 0, 0, 2, 0, 0);
+const PY = Math.round((HUD * 3 + FAR_H) / 2) + 10;
+art3.textTinted(g, 'ONE PITMASTER, SAME SCALE', 195, PY, A.C, { bold: true, align: 'center' });
+function frameBox(x, y, w, h, title) {
+  px(x - 2, y - 2, w + 4, h + 4, A.O); px(x, y, w, h, '#9fd8f2');
+  art3.textTinted(g, title, x + w / 2, y + h + 7, A.C, { align: 'center' });
+}
+const BY = PY + 16, BW2 = 176, BH2 = 176;
+// left: the creator preview, a three by three paver patch, the player look, a kettle at rule size
+frameBox(10, BY, BW2, BH2, 'CREATOR PREVIEW');
+g.save(); g.beginPath(); g.rect(10, BY, BW2, BH2); g.clip();
+(function () {
+  const c0x = 10 + BW2 / 2, c0y = BY + 64;
+  px(10, BY + 76, BW2, BH2, '#6fb842');
+  for (let j = 0; j < 3; j++) for (let i = 0; i < 3; i++) {
+    const tx = c0x + 24 * (i - j), ty = c0y + 12 * (i + j);
+    at1('paver', (i + 2 * j) % 4, tx, ty + 12);
+  }
+  at1('kettle', 2, c0x + 48, c0y + 36);
+  const fy = c0y + 36 + 4;
+  art3.drawPersonShadow(g, c0x, fy); art3.drawPerson(g, 'player', 'down', 0, c0x, fy, true);
+})();
+g.restore();
+// right: the same pitmaster cropped from the yard, 1:1 render px
+frameBox(204, BY, BW2, BH2, 'IN THE YARD');
+g.drawImage(wc, Math.round(MARK.pm.x - BW2 / 2), Math.round(MARK.pm.y - 116), BW2, BH2, 204, BY, BW2, BH2);
+// the "+" at near scale (3 device px per render px): its tap area is the whole marker tile, not the plus
+h2.setTransform(3, 0, 0, 3, 0, 0);
+(function () {
+  const y = Math.round((BY + BH2 + 22) * 2 / 3), cx = 40, t = [cx, y];
+  diamond(t[0], t[1], 24, 24, '#6fb842');
+  const c = [cx, y + 12];
+  diamond(c[0], c[1] - 7, 14, 14, 'rgba(42,32,21,0.30)');
+  px(c[0] - 2, c[1] - 7, 5, 15, A.U); px(c[0] - 7, c[1] - 2, 15, 5, A.U);
+  px(c[0] - 1, c[1] - 6, 3, 13, A.C); px(c[0] - 6, c[1] - 1, 13, 3, A.C);
+  for (let r = 0; r < 24; r += 2) { const w = r < 12 ? (r + 1) * 2 : (24 - r) * 2; px(cx - w, y + r, 1, 1, '#f6d26a'); px(cx + w - 1, y + r, 1, 1, '#f6d26a'); }
+  art3.textTinted(g, 'FOR SALE SPOT AT NEAR SCALE', 76, y + 2, A.C, { bold: true });
+  art3.textTinted(g, 'TAP AREA IS THE WHOLE TILE, 72 CSS PX', 76, y + 13, A.C);
+})();
+</script>
+</body>
+</html>
