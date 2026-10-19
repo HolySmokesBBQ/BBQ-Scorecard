@@ -3,14 +3,16 @@
 // no browser storage. Randomness only through the seeded generator on the sim object. Runs in
 // Node under vm.runInThisContext and in the browser as a classic deferred script.
 //
-// Contract: docs/superpowers/specs/2026-10-18-pit-sim-contract.md (section 2).
-// Rules:    docs/superpowers/specs/2026-10-18-pit-sim-design.md.
+// Contract: docs/superpowers/specs/2026-10-18-pit-sim-contract.md (the v2 delta D0 to D10, then
+//           section 2 read with v2 coordinates).
+// Rules:    docs/superpowers/specs/2026-10-18-pit-sim-design.md, top section "v2" first.
+//
+// Version: v2 (2026-10-18). 11 by 12 yard, seats, decor and charm, save version 2.
 //
 // Deviations
-// 1. The file body is wrapped in a function expression so that `const PitSim` is not a global
-//    lexical binding. Three classic scripts that each declare a top level `const PitSim` would
-//    throw a redeclaration SyntaxError in the browser; the wrapper keeps the contract's line as
-//    the first statement after 'use strict' and still attaches every name to globalThis.PitSim.
+// 1. (Now the contract rule, section 1 as corrected; kept so the numbers below stay stable.) The
+//    file body is wrapped in a function expression so `const PitSim` is not a global lexical
+//    binding shared with the other two scripts.
 // 2. The buddy's handling pause (C.BUDDY_HANDLE) is also used as the fire tender's grab and add
 //    pause, since the spec gives the tender no handling number of its own.
 // 3. The Coming next test (drum owned and cash at or above the driveway price) is re-evaluated
@@ -27,44 +29,66 @@
 // 7. interact() on a row the table marks as no-op returns { ok: false, verb, message } with
 //    message equal to the row label, as the contract says; outside service, paused or while
 //    slicing it returns ok false with verb and message equal to the verbAt() label in effect.
-// 8. Round 1 review: the day also ends the moment the yard is sold out (clock at or past
-//    GATE_OPENS, no stock, no raw or done piece on any grate, nothing on the board or table, no
-//    slice running, nothing but charcoal or a burnt piece in anyone's hands). Burnt pieces do
-//    not hold the day open: they are not sellable and the till lists them under Left on the
-//    grate. Anyone in line is counted Left at close.
-// 9. Round 1 review: order rule 4 no longer invents a meat. A hands rule between rules 3 and 4
-//    orders from what the player or the buddy is carrying (raw, cooked or plates) and a running
-//    slice counts as a board stack; when nothing is anywhere rollOrder returns null and the
-//    customer walks to the pass stop and leaves at no cost, with walk_past { id, reason: 'soldout' }.
-//    The full line case carries reason: 'full'. The reason field is new on walk_past.
-// 10. Round 1 review: a slice that finishes hands the player the first plate (or two with the
-//    tray) from the stack chooseBoardStack() picks, so the next tap is not always Take.
-// 11. Round 1 review: walkTo() during a slice stores the tap in state.player.queued (a new
-//    player field, { tx, ty }), returns true and emits tap_queued (a new event with no payload);
-//    the walk starts the tick the slice completes.
-// 12. Round 1 review: on a day 1 morning with an empty cooler and no charcoal the cart starts at
-//    3 sausage, 2 chicken and 5 bags instead of empty, so the first screen has a sensible default.
-// 13. Round 1 review: sim.expectedCrowd() is new on the sim surface. It returns
-//    round((LAST_CALL - GATE_OPENS) / spawnInterval()) for today's rep and weather.
-// 14. Round 1 review: C gains PATIENCE_MID_FRAC (0.5, the bar turns gold under it) and
-//    GEAR_RESERVE (30, the clipboard warns when a gear buy leaves less than this).
-// 15. Round 1 review: KETTLE_SLOT_PX is [(-5,1),(5,1)] and DRUM_SLOT_PX is
-//    [(-5,5),(5,5),(-5,17),(5,17)] instead of the contract's -1 and 7, so two 10 px pieces on
-//    one cooker share no column and raw reads apart from done.
+// 8. Sold out (clock at or past GATE_OPENS, no stock, no raw or done piece on any grate, nothing
+//    on the board or table, no slice running, nothing but charcoal or a burnt piece in anyone's
+//    hands) closes out the line and stops arrivals on every such tick (v2: V2.5 step 9); the day
+//    ends on the first such tick with no customer in toSeat or eating.
+// 9. Order rule 4 never invents a meat. A hands rule orders from what the player or the buddy is
+//    carrying; when nothing is anywhere rollOrder returns null and the customer walks to the pass
+//    stop and leaves at no cost, with walk_past { id, reason: 'soldout' } ('full' otherwise).
+// 10. A slice that finishes hands the player the first plate (or two with the tray) from the
+//    stack chooseBoardStack() picks, so the next tap is not always Take.
+// 11. walkTo() during a slice stores the tap in state.player.queued ({ tx, ty }), returns true
+//    and emits tap_queued (no payload); the walk starts the tick the slice completes.
+// 12. On a day 1 morning with an empty cooler and no charcoal the cart starts at 3 sausage,
+//    2 chicken and 5 bags instead of empty, so the first screen has a sensible default.
+// 13. sim.expectedCrowd() returns round((LAST_CALL - GATE_OPENS) / spawnInterval()) for today's
+//    rep and weather.
+// 14. (Now contract D2.) C carries PATIENCE_MID_FRAC 0.5 and GEAR_RESERVE 30.
+// 15. Retired in v2: grate slot pixels are contract D4's slotPx again.
+// 16. v2: a mover carries the distance left over after reaching a tile into the next tile of its
+//    path within the same tick. At 6 tiles a second a step is 4.8 px and a tile is 16 px, so
+//    snapping to the tile and dropping the rest (the v1 mover) would walk at 5 tiles a second.
+//    NPCs at 4 tiles a second (3.2 px, 5 ticks a tile) move exactly as before.
+// 17. v2: at the hard end, after the seat bonuses are paid with atClose true, every customer still
+//    in toSeat or eating is set to leaving (reason 'seated', mood happy, seat freed, route to the
+//    spawn), so no customer is left in toSeat or eating once the till is up. The yard is frozen
+//    in the evening, so they do not walk; the next open clears the yard.
+// 18. v2: a passing customer keeps reason null, as v1 shipped it ('past' stays unused).
+// 19. v2: player and customer walkability are computed from state on every call (no cached grid),
+//    so they always follow state.gear and state.decor.
+// 20. v2: the dog is not in the sim (contract D0 and D14: it lives in game.js as PitSim.game.dog).
+//    The sim gives it MAP.dogHome, MAP.dogRoam and sim.custWalkable(x, y, -1, -1).
+// 21. Integration, 2026-10-18 (now contract D4): (5,1) is dropped from the use tiles of kettle1
+//    and the cooler. It sits in a closed pocket with (4,1), boxed in by the shed, the pile,
+//    kettle 1, the cooler and the back fence, so no BFS could ever reach it. Play is unchanged.
+// 22. Review round 1, 2026-10-18 (now contract D4 and D2): four props fill dead pavers. woodpile2
+//    (4,1) and woodpile3 (5,1) close the pocket of deviation 21 so it no longer reads as empty
+//    floor; planter2 (1,4) and shelf (2,3) fill a dead end and a spare tile in the cook area. With
+//    every gear and decor state, every station use tile, buddyIdle and tenderIdle stay reachable
+//    from the spawn. C.FX: NUMBER_S 1.4, NUMBER_FADE_AT 1.0, NUMBER_RISE_PX 14, TIP_GAP_PX 11
+//    (the cash and tip pills no longer overlap), HEART_S 1.4, HEART_RISE_PX 12. Cosmetic only.
+// 23. Review round 2, 2026-10-18 (now contract D4 and D2): three more props fill dead tiles. pot3
+//    (4,8) sits in the lawn nook between the two picnic tables, pot4 (2,2) under the shed window
+//    and woodpile4 (9,4) by the right fence; none is a seat, footprint, queue, spawn, idle or use
+//    tile, and every seat still reaches the customer spawn with every gear and decor state. (4,8)
+//    leaves MAP.dogRoam. C.FX.TIP_GAP_PX is -11, so the tip number stacks above the cash number.
+//    KETTLE_SLOT_PX is (0,-7) (6,-7): the two grate pieces stay inside the kettle's 16 px and
+//    overlap 4 px in the middle. Cosmetic only; no rule or economy number changed.
 
 (function () {
 'use strict';
 const PitSim = globalThis.PitSim || (globalThis.PitSim = {});
 
 // ---------------------------------------------------------------------------------------------
-// 2.1 Constants
+// 2.1 Constants (contract 2.1 with the v2 delta D2)
 // ---------------------------------------------------------------------------------------------
 
 const C = Object.freeze({
   // day and world
   DAY_SECONDS: 125, GATE_OPENS: 30, LAST_CALL: 110,
   START_CASH: 80, START_REP: 20,
-  WALK_TILES_PER_S: 5, NPC_TILES_PER_S: 4,
+  WALK_TILES_PER_S: 6, NPC_TILES_PER_S: 4,
   TICK_SECONDS: 0.05, MAX_FRAME_DT: 0.05,
   // fire
   FIRE_LIGHT: 60, COLD_UNDER: 10, FIRE_ADD: 30, FIRE_MAX: 100,
@@ -90,30 +114,59 @@ const C = Object.freeze({
   // weather
   RAIN_FROM_DAY: 4, RAIN_CHANCE: 0.15, RAIN_ARRIVALS: 0.6,
   // save clamps
-  SAVE_VERSION: 1, MAX_DAY: 999, MAX_CASH: 999999, MAX_STAT: 9999999
+  SAVE_VERSION: 2, MAX_DAY: 999, MAX_CASH: 999999, MAX_STAT: 9999999,
+  // seating and charm [V2.5], [V2.6]
+  EAT_MIN: 8, EAT_MAX: 12,            // seconds a seated customer eats: EAT_MIN + (EAT_MAX - EAT_MIN) * rng()
+  HEART_SECONDS: 0.6,                 // seated pause after the bonus is paid, before standing up
+  SEAT_BONUS_BASE: 1, SEAT_BONUS_MAX: 3,
+  CHARM_STEP: 10, CHARM_MAX: 30,      // seatBonus = min(MAX, BASE + floor(charm / STEP)); repMax = REP_DAY_MAX + floor(charm / STEP)
+  REP_TOGO_QUICK: 1,                  // word of mouth for a quick serve taken to go
+  // cues the sim does not act on but game.js reads [V2.9]
+  SWEAT_FRAC: 0.25,                   // sweat drop at or under this fraction of patience, mode 'waiting' only
+  ZZZ_AFTER: 3,                       // sim clock seconds the buddy spends in task 'idle' before zzz
+  FX: Object.freeze({
+    NUMBER_S: 1.4, NUMBER_RISE_PX: 14, NUMBER_FADE_AT: 1.0, TIP_GAP_PX: -11,
+    SPARKLE_S: 0.45, SPARKLE_FRAME_S: 0.15, SPARKLE_STAGGER_S: 0.05,
+    HEART_S: 1.4, HEART_FRAME_S: 0.4, HEART_RISE_PX: 12, HEART_FADE_S: 0.3,
+    EAT_FRAME_S: 0.35,
+    PUFF_EVERY_LOW: 0.9, PUFF_EVERY_GOOD: 0.45, PUFF_EVERY_HOT: 0.3,
+    PUFF_LIFE_MIN: 1.1, PUFF_LIFE_MAX: 1.4, PUFF_RISE_PX_S: 8, PUFF_DRIFT_PX_S: 3,
+    BURNT_BURST_S: 0.5, BURNT_RISE_PX_S: 12, SHAKE_MS: 120,
+    BURNT_COLUMN_EVERY: 0.35, BURNT_COLUMN_LIFE: 1.2, BURNT_COLUMN_RISE_PX_S: 10, BURNT_COLUMN_SWAY_PX: 2,
+    SWEAT_EVERY: 1.2, SWEAT_SLIDE_S: 0.6, SWEAT_SLIDE_PX: 3, SWEAT_SPLASH_S: 0.15,
+    ZZZ_FRAME_S: 0.5, ZZZ_DRIFT_PX: 4,
+    SQUASH_S: 0.12,
+    WALKOUT_MARK_S: 0.6, TAP_RING_S: 0.35, FIRE_FPS: 6, TWINKLE_S: 0.5,
+    BIRD_SHOW_S: 2, BIRD_GAP_MIN: 8, BIRD_GAP_MAX: 14,
+    DOG_TILES_PER_S: 2, DOG_WAIT_MIN: 2, DOG_WAIT_SPREAD: 3,
+    NOTICE_S: 4
+  })
 });
 
 const SAVE_KEY = 'hs.pitsim.save';
 const SERVED_HOP = 0.3;
 
 // ---------------------------------------------------------------------------------------------
-// 2.2 Meats
+// 2.2 Meats (sausage 14 and chicken 22, contract D2 and [V2.19] item 1)
 // ---------------------------------------------------------------------------------------------
 
 const MEAT_IDS = Object.freeze(['sausage', 'chicken', 'ribs', 'butt', 'brisket']);
 
 const MEATS = Object.freeze({
-  sausage: Object.freeze({ id: 'sausage', label: 'Sausage', plateLabel: 'Sausage', unit: 4, plates: 2, cook: 10, window: 6, price: 5, slots: 1, slice: 3, drumOnly: false, key: '1' }),
-  chicken: Object.freeze({ id: 'chicken', label: 'Chicken thighs', plateLabel: 'Chicken thighs', unit: 6, plates: 2, cook: 16, window: 8, price: 8, slots: 1, slice: 4, drumOnly: false, key: '2' }),
+  sausage: Object.freeze({ id: 'sausage', label: 'Sausage', plateLabel: 'Sausage', unit: 4, plates: 2, cook: 14, window: 6, price: 5, slots: 1, slice: 3, drumOnly: false, key: '1' }),
+  chicken: Object.freeze({ id: 'chicken', label: 'Chicken thighs', plateLabel: 'Chicken thighs', unit: 6, plates: 2, cook: 22, window: 8, price: 8, slots: 1, slice: 4, drumOnly: false, key: '2' }),
   ribs: Object.freeze({ id: 'ribs', label: 'Pork ribs', plateLabel: 'Pork ribs', unit: 12, plates: 3, cook: 32, window: 10, price: 11, slots: 1, slice: 5, drumOnly: false, key: '3' }),
   butt: Object.freeze({ id: 'butt', label: 'Pork butt', plateLabel: 'Pulled pork', unit: 20, plates: 5, cook: 40, window: 14, price: 14, slots: 2, slice: 6, drumOnly: false, key: '4' }),
   brisket: Object.freeze({ id: 'brisket', label: 'Brisket', plateLabel: 'Brisket', unit: 38, plates: 7, cook: 50, window: 18, price: 18, slots: 2, slice: 7, drumOnly: true, key: '5' })
 });
 
 const GEAR_IDS = Object.freeze(['kettle2', 'cooler', 'bigtable', 'tray', 'canopy', 'drum']);
+const DECOR_IDS = Object.freeze(['chair1', 'chair2', 'flowers', 'birdbath', 'lights', 'picnic2']);
+const SEAT_IDS = Object.freeze(['pt1b', 'pt1a', 'chair1', 'chair2', 'pt2b', 'pt2a']);
 const HIRE_IDS = Object.freeze(['buddy', 'tender']);
 const COOKER_IDS = Object.freeze(['kettle1', 'kettle2', 'drum']);
-const STAT_IDS = Object.freeze(['days', 'served', 'walkouts', 'past', 'burnt']);
+const STAT_IDS_V1 = Object.freeze(['days', 'served', 'walkouts', 'past', 'burnt']);
+const STAT_IDS = Object.freeze(['days', 'served', 'walkouts', 'past', 'burnt', 'seated']);
 const GOAL_ORDER = Object.freeze(['kettle2', 'buddy', 'bigtable', 'drum', 'driveway']);
 const DIRS = Object.freeze({
   up: Object.freeze({ dx: 0, dy: -1 }),
@@ -124,27 +177,36 @@ const DIRS = Object.freeze({
 const DIR_ORDER = Object.freeze(['up', 'down', 'left', 'right']);
 
 // ---------------------------------------------------------------------------------------------
-// 2.3 Map
+// D4 Map (replaces contract 2.3)
 // ---------------------------------------------------------------------------------------------
 
-const MAP_W = 13;
-const MAP_H = 15;
+const MAP_W = 11;
+const MAP_H = 12;
+const GRID_H = MAP_H + 1;   // BFS rows: the map plus row 12, where only the customer spawn (9,12) lives
 const TILE = 16;
-const T = Object.freeze({ GRASS: 0, FENCE: 1, GATE: 2, PATH: 3, LAWN: 4, HEDGE: 5, QUEUE: 6 });
+const T = Object.freeze({ PAVER: 0, FENCE: 1, GATE: 2, LAWN: 3, HEDGE: 4, BED: 5 });
+
+// Ground only, row by row, [V2.2] and contract D4. P paver, F fence, G gate, L lawn, H hedge, B bed.
+const GROUND_ROWS = Object.freeze([
+  'FPPPFFFFFFF',   // y0: (1..3, 0) are pavers under the shed, which blocks them
+  'FPPPPPPPPPF',   // y1
+  'FPPPPPPPPPF',   // y2
+  'FPPPPPPPPPF',   // y3
+  'FPPPPPPPPPF',   // y4
+  'FPPPPPPPPPF',   // y5
+  'FHHHHPPPHHF',   // y6: (4,6) (8,6) hedge under the light posts; (5,6) (6,6) (7,6) pavers under the counter
+  'FBLLLLLLLLF',   // y7
+  'FBLLLLLLLLF',   // y8
+  'FBLLLLLLLLF',   // y9
+  'FBBBBBBLLLF',   // y10: (7,10) (8,10) lawn under the decor flower bed footprint
+  'FFFFFFFFFGF'    // y11: (8,11) fence with the mailbox prop over it
+]);
+const GROUND_CHAR = Object.freeze({ P: T.PAVER, F: T.FENCE, G: T.GATE, L: T.LAWN, H: T.HEDGE, B: T.BED });
 
 function buildTiles() {
-  const tiles = new Array(MAP_W * MAP_H).fill(T.GRASS);
+  const tiles = new Array(MAP_W * MAP_H);
   for (let y = 0; y < MAP_H; y++) {
-    for (let x = 0; x < MAP_W; x++) {
-      let v;
-      if (y === 0) v = x === 6 ? T.GATE : T.FENCE;
-      else if (y === MAP_H - 1) v = T.FENCE;
-      else if (x === 0 || x === MAP_W - 1) v = T.FENCE;
-      else if (y >= 1 && y <= 4) v = x === 6 ? T.PATH : T.LAWN;
-      else if (y === 5) v = (x >= 4 && x <= 8) ? T.QUEUE : T.HEDGE;
-      else v = T.GRASS;
-      tiles[y * MAP_W + x] = v;
-    }
+    for (let x = 0; x < MAP_W; x++) tiles[y * MAP_W + x] = GROUND_CHAR[GROUND_ROWS[y][x]];
   }
   return Object.freeze(tiles);
 }
@@ -160,42 +222,128 @@ function use(x, y, face, gear) {
   return Object.freeze(o);
 }
 function px(x, y) { return Object.freeze({ x, y }); }
+function list(a) { return Object.freeze(a); }
 
-const KETTLE_SLOT_PX = Object.freeze([px(-5, 1), px(5, 1)]);
-const DRUM_SLOT_PX = Object.freeze([px(-5, 5), px(5, 5), px(-5, 17), px(5, 17)]);
+const KETTLE_SLOT_PX = list([px(0, -7), px(6, -7)]);
+const DRUM_SLOT_PX = list([px(-2, -4), px(8, -4), px(-2, 7), px(8, 7)]);
 
-const STATIONS = Object.freeze([
+// Stations, in the v1 order with v1 ids and types and the v2 data of [V2.3] and contract D4.
+const STATIONS = list([
   Object.freeze({ id: 'kettle1', type: 'cooker', label: 'Kettle 1', spoken: 'kettle 1', gear: null,
-    tiles: Object.freeze([xy(8, 9)]),
-    use: Object.freeze([use(7, 9, 'right'), use(8, 8, 'down'), use(9, 9, 'left'), use(8, 10, 'up')]),
-    slots: C.KETTLE_SLOTS, decay: C.KETTLE_DECAY, slotPx: KETTLE_SLOT_PX }),
+    tiles: list([xy(5, 2)]),
+    use: list([use(6, 2, 'left'), use(5, 3, 'up')]),
+    slots: C.KETTLE_SLOTS, decay: C.KETTLE_DECAY,
+    sprite: 'kettle', draw: px(80, 24), sortRow: 2, slotPx: KETTLE_SLOT_PX }),
   Object.freeze({ id: 'kettle2', type: 'cooker', label: 'Kettle 2', spoken: 'kettle 2', gear: 'kettle2',
-    tiles: Object.freeze([xy(8, 11)]),
-    use: Object.freeze([use(7, 11, 'right'), use(8, 12, 'up'), use(9, 11, 'left')]),
-    slots: C.KETTLE_SLOTS, decay: C.KETTLE_DECAY, slotPx: KETTLE_SLOT_PX }),
+    tiles: list([xy(7, 2)]),
+    use: list([use(6, 2, 'right'), use(8, 2, 'left'), use(7, 1, 'down')]),
+    slots: C.KETTLE_SLOTS, decay: C.KETTLE_DECAY,
+    sprite: 'kettle', draw: px(112, 24), sortRow: 2, slotPx: KETTLE_SLOT_PX }),
   Object.freeze({ id: 'drum', type: 'cooker', label: 'Drum smoker', spoken: 'the drum', gear: 'drum',
-    tiles: Object.freeze([xy(10, 10), xy(10, 11)]),
-    use: Object.freeze([use(9, 10, 'right'), use(9, 11, 'right'), use(10, 12, 'up'), use(11, 10, 'left'), use(11, 11, 'left')]),
-    slots: C.DRUM_SLOTS, decay: C.DRUM_DECAY, slotPx: DRUM_SLOT_PX }),
+    tiles: list([xy(7, 3), xy(7, 4)]),
+    use: list([use(6, 3, 'right'), use(6, 4, 'right'), use(8, 3, 'left'), use(8, 4, 'left'), use(7, 5, 'up')]),
+    slots: C.DRUM_SLOTS, decay: C.DRUM_DECAY,
+    sprite: 'drum', draw: px(112, 48), sortRow: 4, slotPx: DRUM_SLOT_PX }),
   Object.freeze({ id: 'board', type: 'board', label: 'Cutting board', spoken: '', gear: null,
-    tiles: Object.freeze([xy(4, 9)]),
-    use: Object.freeze([use(5, 9, 'left'), use(4, 8, 'down'), use(4, 10, 'up'), use(3, 9, 'right')]) }),
+    tiles: list([xy(5, 4)]),
+    use: list([use(6, 4, 'left'), use(5, 3, 'down'), use(5, 5, 'up'), use(4, 4, 'right')]),
+    sprite: 'board', draw: px(80, 64), sortRow: 4 }),
   Object.freeze({ id: 'cooler', type: 'cooler', label: 'Cooler', spoken: '', gear: null,
-    tiles: Object.freeze([xy(3, 11)]),
-    use: Object.freeze([use(4, 11, 'left'), use(3, 10, 'down'), use(3, 12, 'up'), use(2, 11, 'right')]) }),
+    tiles: list([xy(6, 1)]),
+    use: list([use(6, 2, 'up'), use(7, 1, 'left')]),
+    sprite: 'cooler', draw: px(96, 16), sortRow: 1 }),
   Object.freeze({ id: 'table', type: 'table', label: 'Serving table', spoken: '', gear: null,
-    tiles: Object.freeze([xy(5, 6), xy(6, 6), xy(7, 6), xy(4, 6, { gear: 'bigtable' }), xy(8, 6, { gear: 'bigtable' })]),
-    use: Object.freeze([use(5, 7, 'up'), use(6, 7, 'up'), use(7, 7, 'up'), use(4, 7, 'up', 'bigtable'), use(8, 7, 'up', 'bigtable')]) }),
+    tiles: list([xy(6, 6), xy(7, 6), xy(5, 6, { gear: 'bigtable' })]),
+    use: list([use(6, 5, 'down'), use(7, 5, 'down'), use(5, 5, 'down', 'bigtable')]),
+    sprite: 'counter', draw: px(96, 88), sortRow: 6,
+    spotPx: list([px(98, 92), px(108, 92), px(118, 92), xy(88, 92, { gear: 'bigtable' }), xy(80, 92, { gear: 'bigtable' })]) }),
   Object.freeze({ id: 'pile', type: 'pile', label: 'Charcoal pile', spoken: '', gear: null,
-    tiles: Object.freeze([xy(8, 13)]),
-    use: Object.freeze([use(8, 12, 'down'), use(7, 13, 'right'), use(9, 13, 'left')]) }),
+    tiles: list([xy(4, 2)]),
+    use: list([use(4, 3, 'up')]),
+    sprite: 'pile', draw: px(64, 32), sortRow: 2 }),
   Object.freeze({ id: 'trash', type: 'trash', label: 'Trash', spoken: '', gear: null,
-    tiles: Object.freeze([xy(2, 13)]),
-    use: Object.freeze([use(3, 13, 'left'), use(2, 12, 'down'), use(1, 13, 'right')]) })
+    tiles: list([xy(3, 4)]),
+    use: list([use(4, 4, 'left'), use(3, 3, 'down'), use(3, 5, 'up'), use(2, 4, 'right')]),
+    sprite: 'trash', draw: px(48, 64), sortRow: 4 })
+]);
+
+function prop(id, sprite, frame, tx, ty, dx, dy, blocks, sortRow) {
+  return Object.freeze({ kind: 'prop', id, sprite, frame, tile: px(tx, ty), draw: px(dx, dy),
+    blocks: list(blocks.map((b) => px(b[0], b[1]))), sortRow });
+}
+
+// Fixed props, [V2.2.2] and contract D4, in this order.
+const PROPS = list([
+  prop('shed', 'shed', 0, 1, 1, 16, 0, [[1, 0], [2, 0], [3, 0], [1, 1], [2, 1], [3, 1]], 1),
+  prop('sign', 'sign', 0, 4, 0, 68, 2, [], 0),
+  prop('tree', 'tree', 0, 9, 2, 128, 0, [[9, 2]], 2),
+  prop('woodpile', 'woodpile', 0, 9, 1, 144, 16, [[9, 1]], 1),
+  prop('tools', 'tools', 0, 1, 2, 16, 24, [[1, 2]], 2),
+  prop('pot1', 'pot', 0, 1, 3, 16, 48, [[1, 3]], 3),
+  prop('pot2', 'pot', 0, 9, 3, 144, 48, [[9, 3]], 3),
+  prop('hose', 'hose', 0, 1, 5, 16, 80, [[1, 5]], 5),
+  prop('planter', 'planter', 0, 9, 5, 144, 72, [[9, 5]], 5),
+  prop('mailbox', 'mailbox', 0, 8, 11, 128, 168, [], 11),
+  prop('picnic1', 'picnic', 0, 5, 9, 80, 136, [[5, 9], [6, 9]], 9),
+  prop('bench1', 'picnic_bench', 0, 5, 8, 80, 136, [], 8),
+  prop('woodpile2', 'woodpile', 0, 4, 1, 64, 16, [[4, 1]], 1),
+  prop('woodpile3', 'woodpile', 0, 5, 1, 80, 16, [[5, 1]], 1),
+  prop('planter2', 'planter', 0, 1, 4, 16, 56, [[1, 4]], 4),
+  prop('shelf', 'shelf', 0, 2, 3, 32, 40, [[2, 3]], 3),
+  prop('pot3', 'pot', 0, 4, 8, 64, 128, [[4, 8]], 8),
+  prop('pot4', 'pot', 0, 2, 2, 32, 32, [[2, 2]], 2),
+  prop('woodpile4', 'woodpile', 0, 9, 4, 144, 64, [[9, 4]], 4)
+]);
+
+function decorDraw(sprite, frame, x, y, sortRow, overhead) {
+  const o = { sprite, frame, x, y, sortRow };
+  if (overhead) o.overhead = true;
+  return Object.freeze(o);
+}
+function decorSpot(id, tiles, blocks, seats, draws) {
+  return Object.freeze({ kind: 'decor', id,
+    tiles: list(tiles.map((t) => px(t[0], t[1]))),
+    blocks: list(blocks.map((t) => px(t[0], t[1]))),
+    seats: list(seats.slice()), draws: list(draws) });
+}
+
+// Decor spots, [V2.7] and contract D4, in DecorId order.
+const DECOR = list([
+  decorSpot('chair1', [[7, 9]], [], ['chair1'], [decorDraw('chair', 0, 112, 136, 9)]),
+  decorSpot('chair2', [[8, 9]], [], ['chair2'], [decorDraw('chair', 0, 128, 136, 9)]),
+  decorSpot('flowers', [[7, 10], [8, 10]], [[7, 10], [8, 10]], [],
+    [decorDraw('bed', 0, 112, 156, 10), decorDraw('bed', 1, 128, 156, 10)]),
+  decorSpot('birdbath', [[4, 9]], [[4, 9]], [], [decorDraw('birdbath', 0, 64, 136, 9)]),
+  decorSpot('lights', [[4, 6], [8, 6]], [], [],
+    [decorDraw('lights_post', 0, 64, 80, 6), decorDraw('lights_post', 0, 128, 80, 6), decorDraw('lights_string', 0, 71, 80, 6, true)]),
+  decorSpot('picnic2', [[2, 9], [3, 9]], [[2, 9], [3, 9]], ['pt2b', 'pt2a'],
+    [decorDraw('picnic_bench', 0, 32, 136, 8), decorDraw('picnic', 0, 32, 136, 9)])
+]);
+
+function seat(id, x, y, decor) {
+  return Object.freeze({ kind: 'seat', id, x, y, face: 'down', decor });
+}
+
+// Seats, [V2.2.4] and contract D4, in SeatId order. Every seat faces down.
+const SEATS = list([
+  seat('pt1b', 6, 8, null),
+  seat('pt1a', 5, 8, null),
+  seat('chair1', 7, 9, 'chair1'),
+  seat('chair2', 8, 9, 'chair2'),
+  seat('pt2b', 3, 8, 'picnic2'),
+  seat('pt2a', 2, 8, 'picnic2')
 ]);
 
 const STATION_BY_ID = Object.freeze(STATIONS.reduce((acc, s) => { acc[s.id] = s; return acc; }, {}));
+const SEAT_BY_ID = Object.freeze(SEATS.reduce((acc, s) => { acc[s.id] = s; return acc; }, {}));
 const TILES = buildTiles();
+
+// Tiles a fixed prop blocks, for everyone. Static.
+const PROP_BLOCKED = (function () {
+  const a = new Uint8Array(MAP_W * MAP_H);
+  for (const p of PROPS) for (const b of p.blocks) a[b.y * MAP_W + b.x] = 1;
+  return a;
+})();
 
 const MAP = Object.freeze({
   W: MAP_W, H: MAP_H, TILE,
@@ -205,36 +353,53 @@ const MAP = Object.freeze({
     if (!(x >= 0 && x < MAP_W && y >= 0 && y < MAP_H)) return T.FENCE;
     return TILES[y * MAP_W + x];
   },
+  stripe(x) { return (x & 1) === 0 ? 'a' : 'b'; },
   stations: STATIONS,
   station(id) { return STATION_BY_ID[id]; },
-  spawn: Object.freeze({ x: 6, y: 9, face: 'up' }),
-  gate: px(6, 0),
-  custSpawn: px(6, -1),
-  passStop: px(6, 4),
-  queue: Object.freeze([
-    Object.freeze({ x: 6, y: 5, gear: null }), Object.freeze({ x: 5, y: 5, gear: null }), Object.freeze({ x: 7, y: 5, gear: null }),
-    Object.freeze({ x: 4, y: 5, gear: 'bigtable' }), Object.freeze({ x: 8, y: 5, gear: 'bigtable' })
+  props: PROPS,
+  decor: DECOR,
+  seats: SEATS,
+  SEAT_ORDER: SEAT_IDS,
+  spawn: Object.freeze({ x: 6, y: 3, face: 'up' }),
+  gate: px(9, 11),
+  custSpawn: px(9, 12),
+  passStop: px(9, 10),
+  queue: list([
+    Object.freeze({ x: 7, y: 7, face: 'up', gear: null }),
+    Object.freeze({ x: 8, y: 7, face: 'left', gear: null }),
+    Object.freeze({ x: 9, y: 7, face: 'left', gear: null }),
+    Object.freeze({ x: 9, y: 8, face: 'up', gear: 'bigtable' }),
+    Object.freeze({ x: 9, y: 9, face: 'up', gear: 'bigtable' })
   ]),
-  buddyIdle: px(5, 9),
-  tenderIdle: px(7, 13),
-  canopy: Object.freeze({ x: 4, y: 5, w: 5, h: 3 })
+  buddyIdle: Object.freeze({ x: 4, y: 5, face: 'up' }),
+  tenderIdle: Object.freeze({ x: 3, y: 2, face: 'right' }),
+  dogHome: px(4, 7),
+  dogRoam: list([px(2, 7), px(3, 7), px(4, 7), px(5, 7), px(6, 7), px(7, 8), px(8, 8)]),
+  overhead: Object.freeze({ lights: px(71, 80), canopy: px(76, 106) }),
+  signText: px(70, 5)
 });
 
-function tileOwned(entry, gear) {
-  return !entry.gear || gear[entry.gear] === true;
+// Contract D4: works on stations, footprint tiles, use tiles, queue entries and seats. The v1
+// two argument call still works for every entry without a decor field.
+function tileOwned(entry, gear, decor) {
+  return (!entry.gear || gear[entry.gear] === true)
+    && (!entry.decor || (decor !== undefined && decor !== null && decor[entry.decor] === true));
 }
 
 // ---------------------------------------------------------------------------------------------
-// 2.4 Catalog
+// 2.4 Catalog (contract 2.4 with D5)
 // ---------------------------------------------------------------------------------------------
 
 function row(id, kind, label, price, effect, needs, needsText, sets) {
   return Object.freeze({ id, kind, label, price, effect, needs: needs ? Object.freeze(needs) : null, needsText, sets });
 }
+function decorRow(id, label, price, seats, charm, effect, needs, needsText, sets) {
+  return Object.freeze({ id, kind: 'decor', label, price, effect, needs: needs ? Object.freeze(needs) : null, needsText, sets, seats, charm });
+}
 
 const CATALOG = Object.freeze([
   row('sausage', 'meat', 'Sausage', 4, 'Sausage: 2 plates a unit, quickest cook, sells for 5.', null, '', 'cart.meat.sausage, then stock.sausage on open'),
-  row('chicken', 'meat', 'Chicken thighs', 6, 'Chicken thighs: 2 plates, 16 seconds on good fire, sells for 8.', null, '', 'cart.meat.chicken'),
+  row('chicken', 'meat', 'Chicken thighs', 6, 'Chicken thighs: 2 plates, 22 seconds on good fire, sells for 8.', null, '', 'cart.meat.chicken'),
   row('ribs', 'meat', 'Pork ribs', 12, 'Pork ribs: 3 plates, 32 seconds, sells for 11.', null, '', 'cart.meat.ribs'),
   row('butt', 'meat', 'Pork butt', 20, 'Pork butt: 5 plates of pulled pork, 40 seconds, both grate slots, sells for 14.', null, '', 'cart.meat.butt'),
   row('brisket', 'meat', 'Brisket', 38, 'Brisket: 7 plates, 50 seconds on the drum, sells for 18.', { gear: 'drum' }, 'Needs the drum smoker.', 'cart.meat.brisket'),
@@ -245,6 +410,12 @@ const CATALOG = Object.freeze([
   row('tray', 'gear', 'Serving tray', 50, 'Carry two plates at a time.', null, '', 'gear.tray'),
   row('canopy', 'gear', 'Canopy', 80, 'Rain days run at full crowd.', null, '', 'gear.canopy'),
   row('drum', 'gear', 'Drum smoker', 280, 'Four grate slots, holds heat longer, and the only cooker that takes brisket.', { gear: 'kettle2' }, 'Needs the second kettle.', 'gear.drum, stations.drum active, brisket and tender rows unlock'),
+  decorRow('chair1', 'Lawn chair', 25, 1, 3, 'One more seat by the line. Charm 3.', null, '', 'decor.chair1, seat chair1'),
+  decorRow('chair2', 'Second lawn chair', 25, 1, 3, 'One more seat by the line. Charm 3.', { decor: 'chair1' }, 'Needs the first lawn chair.', 'decor.chair2, seat chair2'),
+  decorRow('flowers', 'Flower bed', 30, 0, 4, 'Flowers along the fence by the gate. Charm 4.', null, '', 'decor.flowers'),
+  decorRow('birdbath', 'Bird bath', 40, 0, 4, 'Birds stop by between the tables. Charm 4.', null, '', 'decor.birdbath'),
+  decorRow('lights', 'String lights', 60, 0, 10, 'Lights strung over the serving table. Charm 10.', null, '', 'decor.lights'),
+  decorRow('picnic2', 'Second picnic table', 80, 2, 6, 'Two more seats on the lawn. Charm 6.', null, '', 'decor.picnic2, seats pt2b and pt2a'),
   row('buddy', 'hire', 'Buddy', 20, 'Runs plates from the board to the table so you can stay on the fire. Paid each evening.', { day: 2 }, 'From day 2.', 'hires.buddy'),
   row('tender', 'hire', 'Fire tender', 30, "Keeps every cooker above 55 as long as there are bags in the pile. Buy about seven bags a cooker when he's on.", { gear: 'drum' }, 'Needs the drum smoker.', 'hires.tender'),
   row('driveway', 'goal', 'Driveway pop-up', 1000, 'The next rung. Not built in this prototype.', { gear: 'drum' }, 'Needs the drum smoker.', 'nothing; goal line and Coming next card only')
@@ -253,7 +424,7 @@ const CATALOG = Object.freeze([
 const CATALOG_BY_ID = Object.freeze(CATALOG.reduce((acc, r) => { acc[r.id] = r; return acc; }, {}));
 
 // ---------------------------------------------------------------------------------------------
-// 2.10 Strings
+// 2.10 Strings (with decorLabel, D5)
 // ---------------------------------------------------------------------------------------------
 
 const STRINGS = Object.freeze({
@@ -262,6 +433,7 @@ const STRINGS = Object.freeze({
   hire: Object.freeze({ buddy: 'the buddy', tender: 'the fire tender' }),
   hireLabel: Object.freeze({ buddy: 'Buddy', tender: 'Fire tender' }),
   gearLabel: Object.freeze({ kettle2: 'Second kettle', cooler: 'Cooler', bigtable: 'Bigger table', tray: 'Serving tray', canopy: 'Canopy', drum: 'Drum smoker', driveway: 'Driveway pop-up' }),
+  decorLabel: Object.freeze({ chair1: 'Lawn chair', chair2: 'Second lawn chair', flowers: 'Flower bed', birdbath: 'Bird bath', lights: 'String lights', picnic2: 'Second picnic table' }),
   walk: 'Walk', handsFull: 'Hands full', nothing: 'Nothing to do here', slicing: 'Slicing',
   cantGetThere: "Can't get there", handsEmpty: 'Hands empty',
   gateOpensIn: 'Gate opens in ', lastCall: 'Last call'
@@ -291,7 +463,7 @@ function fireMult(fire) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// 2.8 Save validation
+// D9 Save validation: accepts v 1 and v 2, always returns v 2
 // ---------------------------------------------------------------------------------------------
 
 function isPlainObject(v) {
@@ -319,7 +491,8 @@ function toBool(v) {
 function validateSave(obj) {
   try {
     if (!isPlainObject(obj)) return null;
-    if (readKey(obj, 'v') !== C.SAVE_VERSION) return null;
+    const v = readKey(obj, 'v');
+    if (v !== 1 && v !== 2) return null;
     const out = { v: C.SAVE_VERSION };
     out.day = toInt(readKey(obj, 'day'), 1, 1, C.MAX_DAY);
     out.cash = toInt(readKey(obj, 'cash'), C.START_CASH, 0, C.MAX_CASH);
@@ -332,6 +505,11 @@ function validateSave(obj) {
     out.gear = {};
     for (const g of GEAR_IDS) out.gear[g] = toBool(readKey(gearIn, g));
     if (!out.gear.kettle2) out.gear.drum = false;
+    // A v1 save had no decor, so it migrates with none.
+    const decorIn = v === 2 ? readKey(obj, 'decor') : undefined;
+    out.decor = {};
+    for (const d of DECOR_IDS) out.decor[d] = toBool(readKey(decorIn, d));
+    if (!out.decor.chair1) out.decor.chair2 = false;
     const hiresIn = readKey(obj, 'hires');
     out.hires = {};
     for (const h of HIRE_IDS) out.hires[h] = toBool(readKey(hiresIn, h));
@@ -339,7 +517,8 @@ function validateSave(obj) {
     if (!out.gear.drum) out.stock.brisket = 0;
     const statsIn = readKey(obj, 'stats');
     out.stats = {};
-    for (const s of STAT_IDS) out.stats[s] = toInt(readKey(statsIn, s), 0, 0, C.MAX_STAT);
+    for (const s of STAT_IDS_V1) out.stats[s] = toInt(readKey(statsIn, s), 0, 0, C.MAX_STAT);
+    out.stats.seated = v === 2 ? toInt(readKey(statsIn, 'seated'), 0, 0, C.MAX_STAT) : 0;
     out.drivewayShown = toBool(readKey(obj, 'drivewayShown'));
     return out;
   } catch (e) {
@@ -363,6 +542,7 @@ function mulberry32(seed) {
 
 function clamp(n, lo, hi) { return n < lo ? lo : (n > hi ? hi : n); }
 function zeroByMeat() { const o = {}; for (const m of MEAT_IDS) o[m] = 0; return o; }
+function emptySeats() { const o = {}; for (const s of SEAT_IDS) o[s] = null; return o; }
 function sumValues(o) { let s = 0; for (const k in o) s += o[k]; return s; }
 function cheapestUnit() {
   let best = Infinity;
@@ -377,7 +557,6 @@ function quickestInStock(stock) {
   return best;
 }
 function plateWaste(meat) { return Math.round(MEATS[meat].unit / MEATS[meat].plates); }
-function tilePx(t) { return { x: t.x * TILE, y: t.y * TILE }; }
 
 // ---------------------------------------------------------------------------------------------
 // 2.5 createSim
@@ -395,9 +574,9 @@ function createSim(saved, seed) {
   let tickCount = 0;        // ticks since openGate, drives state.clock
   let pieceSeq = 0;         // piece ids within the day
   let custSeq = 0;          // customer ids within the day
-  let buddyPick = null;     // meat reserved by the buddy during his pickup pause
+  let buddyPick = null;     // meat reserved by the buddy during his pickup
+  let gateOpenFired = false;
   const decayAcc = { kettle1: 0, kettle2: 0, drum: 0 };   // seconds since each cooker's last whole second of decay
-  const blocked = new Uint8Array(MAP_W * MAP_H);   // 1 where an active station tile sits
 
   function emit(type, payload) {
     const e = { type };
@@ -420,6 +599,7 @@ function createSim(saved, seed) {
     return {
       revenue: 0, tips: 0, foodCost: 0, bags: 0, wages: 0, spoilCost: 0, wasteCost: 0, wastePlates: 0, wasteBurnt: 0, grateCost: 0,
       customers: 0, served: 0, walkouts: 0, past: 0, close: 0, happy: 0, ok: 0, burnt: 0,
+      seated: 0, togo: 0, togoQuick: 0, seatTips: 0,
       spoiled: zeroByMeat(), grateLeft: zeroByMeat(),
       repStart: state.rep || C.START_REP,
       wageNames: []
@@ -432,6 +612,10 @@ function createSim(saved, seed) {
 
   function queueSpotCount() {
     return state.gear.bigtable ? C.QUEUE_SPOTS_BIG : C.QUEUE_SPOTS;
+  }
+
+  function newPlayer() {
+    return Object.assign(newMover(MAP.spawn.x, MAP.spawn.y, MAP.spawn.face), { carrying: null, busy: null, target: null, queued: null });
   }
 
   function fillState(save) {
@@ -449,10 +633,17 @@ function createSim(saved, seed) {
     state.charcoal = s ? s.charcoal : 0;
     state.gear = {};
     for (const g of GEAR_IDS) state.gear[g] = s ? s.gear[g] === true : false;
+    state.decor = {};
+    for (const d of DECOR_IDS) state.decor[d] = s && s.decor ? s.decor[d] === true : false;
+    if (!state.decor.chair1) state.decor.chair2 = false;
+    state.seats = emptySeats();
     state.hires = {};
     for (const h of HIRE_IDS) state.hires[h] = s ? s.hires[h] === true : false;
     state.stats = {};
-    for (const k of STAT_IDS) state.stats[k] = s ? s.stats[k] : 0;
+    for (const k of STAT_IDS) {
+      const v = s && s.stats ? Number(s.stats[k]) : 0;
+      state.stats[k] = Number.isFinite(v) ? v : 0;
+    }
     state.drivewayShown = s ? s.drivewayShown === true : false;
     state.rain = false;
     state.comingNext = false;
@@ -470,7 +661,7 @@ function createSim(saved, seed) {
       board: { stacks: [], slicing: null },
       table: { spots: new Array(tableSpotCount()).fill(null) }
     };
-    state.player = Object.assign(newMover(MAP.spawn.x, MAP.spawn.y, MAP.spawn.face), { carrying: null, busy: null, target: null, queued: null });
+    state.player = newPlayer();
     state.buddy = null;
     state.tender = null;
     state.customers = [];
@@ -481,34 +672,17 @@ function createSim(saved, seed) {
     pieceSeq = 0;
     custSeq = 0;
     buddyPick = null;
-    rebuildBlocked();
+    gateOpenFired = false;
   }
 
-  // ---- grid ---------------------------------------------------------------------------------
-
-  function stationActive(st) {
-    return tileOwned(st, state.gear);
-  }
-
-  function rebuildBlocked() {
-    blocked.fill(0);
-    for (const st of STATIONS) {
-      if (!stationActive(st)) continue;
-      for (const t of st.tiles) {
-        if (!tileOwned(t, state.gear)) continue;
-        blocked[t.y * MAP_W + t.x] = 1;
-      }
-    }
-  }
+  // ---- grid and walkability ([V2.2.1]) ------------------------------------------------------
 
   function inMap(x, y) {
     return x >= 0 && x < MAP_W && y >= 0 && y < MAP_H;
   }
 
-  function walkable(x, y) {
-    if (!inMap(x, y)) return false;
-    if (TILES[y * MAP_W + x] !== T.GRASS) return false;
-    return blocked[y * MAP_W + x] === 0;
+  function stationActive(st) {
+    return tileOwned(st, state.gear);
   }
 
   // The active station whose active footprint holds (x, y), or null.
@@ -526,12 +700,62 @@ function createSim(saved, seed) {
     return st.use.filter((u) => tileOwned(u, state.gear));
   }
 
-  // Breadth first search over walkable tiles. `goal(x, y)` says whether a tile ends the search.
-  // Returns the path after the start tile (array of {x, y}), [] when the start is a goal, or null.
-  function bfs(sx, sy, goal) {
+  // Player, buddy and tender: ground PAVER, no fixed prop, no active station tile.
+  function walkable(x, y) {
+    x = Math.trunc(Number(x));
+    y = Math.trunc(Number(y));
+    if (!inMap(x, y)) return false;
+    if (TILES[y * MAP_W + x] !== T.PAVER) return false;
+    if (PROP_BLOCKED[y * MAP_W + x] === 1) return false;
+    return stationAt(x, y) === null;
+  }
+
+  function decorOwned(id) {
+    return state.decor[id] === true;
+  }
+
+  // A blocking tile of an owned decor footprint.
+  function decorBlocks(x, y) {
+    for (const d of DECOR) {
+      if (!decorOwned(d.id)) continue;
+      for (const b of d.blocks) if (b.x === x && b.y === y) return true;
+    }
+    return false;
+  }
+
+  function ownedSeatAt(x, y) {
+    for (const s of SEATS) {
+      if (s.x === x && s.y === y && tileOwned(s, state.gear, state.decor)) return s;
+    }
+    return null;
+  }
+
+  // Customers: the spawn, or ground LAWN or GATE; no fixed prop; no blocking tile of owned decor;
+  // no owned seat tile unless it is the BFS goal (gx, gy). The dog calls it with (-1, -1).
+  function custWalkable(x, y, gx, gy) {
+    x = Math.trunc(Number(x));
+    y = Math.trunc(Number(y));
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
+    if (x === MAP.custSpawn.x && y === MAP.custSpawn.y) return true;
+    if (!inMap(x, y)) return false;
+    const g = TILES[y * MAP_W + x];
+    if (g !== T.LAWN && g !== T.GATE) return false;
+    if (PROP_BLOCKED[y * MAP_W + x] === 1) return false;
+    if (decorBlocks(x, y)) return false;
+    if (ownedSeatAt(x, y) !== null && !(x === gx && y === gy)) return false;
+    return true;
+  }
+
+  // Breadth first search, 4 directions, neighbor order up, down, left, right. `goal(x, y)` ends
+  // the search; `passable(x, y)` says whether a tile may be entered. The grid has one row below
+  // the map so the customer spawn (9,12) can be reached. Returns the path after the start tile
+  // (array of {x, y}), [] when the start is a goal, or null.
+  function bfs(sx, sy, goal, passable) {
     if (goal(sx, sy)) return [];
-    const prev = new Int16Array(MAP_W * MAP_H).fill(-1);
-    const seen = new Uint8Array(MAP_W * MAP_H);
+    if (!(sx >= 0 && sx < MAP_W && sy >= 0 && sy < GRID_H)) return null;
+    const n = MAP_W * GRID_H;
+    const prev = new Int16Array(n).fill(-1);
+    const seen = new Uint8Array(n);
     const queue = [];
     const startIdx = sy * MAP_W + sx;
     seen[startIdx] = 1;
@@ -544,9 +768,10 @@ function createSim(saved, seed) {
       for (const d of DIR_ORDER) {
         const nx = cx + DIRS[d].dx;
         const ny = cy + DIRS[d].dy;
-        if (!walkable(nx, ny)) continue;
+        if (!(nx >= 0 && nx < MAP_W && ny >= 0 && ny < GRID_H)) continue;
         const nIdx = ny * MAP_W + nx;
         if (seen[nIdx]) continue;
+        if (!passable(nx, ny)) continue;
         seen[nIdx] = 1;
         prev[nIdx] = idx;
         if (goal(nx, ny)) {
@@ -564,6 +789,10 @@ function createSim(saved, seed) {
       }
     }
     return null;
+  }
+
+  function playerBfs(sx, sy, goal) {
+    return bfs(sx, sy, goal, walkable);
   }
 
   function nearestWalkableTo(x, y) {
@@ -586,43 +815,72 @@ function createSim(saved, seed) {
     return 'up';
   }
 
+  // ---- charm ([V2.6], D7) -------------------------------------------------------------------
+
+  function charm() {
+    let sum = 0;
+    for (const d of DECOR_IDS) if (decorOwned(d)) sum += CATALOG_BY_ID[d].charm;
+    return Math.min(C.CHARM_MAX, sum);
+  }
+
+  function seatBonus() {
+    return Math.min(C.SEAT_BONUS_MAX, C.SEAT_BONUS_BASE + Math.floor(charm() / C.CHARM_STEP));
+  }
+
+  function seatCount() {
+    let n = 2;
+    for (const d of DECOR_IDS) if (decorOwned(d)) n += CATALOG_BY_ID[d].seats;
+    return n;
+  }
+
+  function repMax() {
+    return C.REP_DAY_MAX + Math.floor(charm() / C.CHARM_STEP);
+  }
+
   // ---- movers -------------------------------------------------------------------------------
 
-  // Advance a mover along its path at `speed` tiles per second for `dt` seconds.
-  // Returns true when a tile step completed this call.
+  // Advance a mover along its path at `speed` tiles per second for `dt` seconds. Distance left
+  // over after reaching a tile carries into the next tile of the path (deviation 16).
+  // Returns true when at least one tile step completed this call.
   function advanceMover(m, speed, dt) {
-    let arrived = false;
-    if (m.next === null && m.path.length > 0) {
-      m.next = m.path.shift();
-      m.face = faceToward(m.x, m.y, m.next.x, m.next.y);
-      m.walking = true;
-    }
-    if (m.next === null) {
+    if (m.next === null && m.path.length === 0) {
       m.walking = false;
       m.anim = 0;
       return false;
     }
-    const stepPx = speed * TILE * dt;
-    const tx = m.next.x * TILE;
-    const ty = m.next.y * TILE;
-    const dx = tx - m.px;
-    const dy = ty - m.py;
-    const dist = Math.abs(dx) + Math.abs(dy);
+    let budget = speed * TILE * dt;
+    let arrived = false;
     m.anim += dt;
-    if (dist <= stepPx + 1e-6) {
-      m.px = tx;
-      m.py = ty;
-      m.x = m.next.x;
-      m.y = m.next.y;
-      m.next = null;
-      arrived = true;
-      if (m.path.length === 0) {
-        m.walking = false;
-        m.anim = 0;
+    while (budget > 1e-9) {
+      if (m.next === null) {
+        if (m.path.length === 0) break;
+        m.next = m.path.shift();
+        m.face = faceToward(m.x, m.y, m.next.x, m.next.y);
       }
+      const tx = m.next.x * TILE;
+      const ty = m.next.y * TILE;
+      const dx = tx - m.px;
+      const dy = ty - m.py;
+      const dist = Math.abs(dx) + Math.abs(dy);
+      if (dist <= budget + 1e-6) {
+        m.px = tx;
+        m.py = ty;
+        m.x = m.next.x;
+        m.y = m.next.y;
+        m.next = null;
+        arrived = true;
+        budget -= dist;
+      } else {
+        if (dx !== 0) m.px += Math.sign(dx) * budget;
+        else m.py += Math.sign(dy) * budget;
+        budget = 0;
+      }
+    }
+    if (m.next === null && m.path.length === 0) {
+      m.walking = false;
+      m.anim = 0;
     } else {
-      if (dx !== 0) m.px += Math.sign(dx) * stepPx;
-      else m.py += Math.sign(dy) * stepPx;
+      m.walking = true;
     }
     return arrived;
   }
@@ -661,14 +919,14 @@ function createSim(saved, seed) {
         p.target = { station: st.id, auto: true };
         return true;
       }
-      const path = bfs(anchor.x, anchor.y, (x, y) => uses.some((u) => u.x === x && u.y === y));
+      const path = playerBfs(anchor.x, anchor.y, (x, y) => uses.some((u) => u.x === x && u.y === y));
       if (path === null) { emit('blocked'); return false; }
       p.path = path;
       p.target = { station: st.id, auto: true };
       return true;
     }
     if (walkable(tx, ty)) {
-      const path = bfs(anchor.x, anchor.y, (x, y) => x === tx && y === ty);
+      const path = playerBfs(anchor.x, anchor.y, (x, y) => x === tx && y === ty);
       if (path === null) { emit('blocked'); return false; }
       p.path = path;
       p.target = null;
@@ -816,6 +1074,66 @@ function createSim(saved, seed) {
     else state.stations.board.stacks.push({ meat, times: times.slice() });
   }
 
+  // ---- customers: routes ([V2.5] steps 1 and 11) ---------------------------------------------
+
+  // Customer grid BFS from the customer's anchor tile to (gx, gy).
+  function custRoute(c, gx, gy) {
+    const a = moverAnchor(c);
+    return bfs(a.x, a.y, (x, y) => x === gx && y === gy, (x, y) => custWalkable(x, y, gx, gy));
+  }
+
+  // Give a customer a new route and face its first step; mid step they keep facing the step in
+  // progress, and with an empty route they keep their facing.
+  function setRoute(c, path) {
+    c.path = path;
+    if (c.next === null && path.length > 0) c.face = faceToward(c.x, c.y, path[0].x, path[0].y);
+  }
+
+  function routeToSpot(c) {
+    const spot = MAP.queue[c.queueIndex];
+    setRoute(c, custRoute(c, spot.x, spot.y) || []);
+  }
+
+  // Leaving the yard: route to the spawn, optionally holding LEAVE_TURN_SECONDS first. An empty
+  // route (no way out) removes the customer as soon as nothing holds them (moveCustomers).
+  function sendOut(c, reason, mood, turnPause) {
+    c.mode = 'leaving';
+    c.reason = reason;
+    c.mood = mood;
+    c.eat = 0;
+    c.pause = turnPause ? C.LEAVE_TURN_SECONDS : 0;
+    setRoute(c, custRoute(c, MAP.custSpawn.x, MAP.custSpawn.y) || []);
+  }
+
+  // Remove a customer from the line and shift everyone behind forward one spot.
+  function leaveLine(c) {
+    const idx = c.queueIndex;
+    c.queueIndex = -1;
+    if (idx >= 0) {
+      for (const o of state.customers) {
+        if (o.queueIndex > idx) {
+          o.queueIndex -= 1;
+          if (o.mode === 'arriving' || o.mode === 'waiting') routeToSpot(o);
+        }
+      }
+    }
+  }
+
+  // [V2.5] step 3: the first seat in SEAT_ORDER that is owned, free and reachable from the
+  // customer's anchor tile by customer BFS. Returns { seat, path } or null.
+  function pickSeat(c) {
+    for (const id of SEAT_IDS) {
+      const s = SEAT_BY_ID[id];
+      if (!tileOwned(s, state.gear, state.decor)) continue;
+      if (state.seats[id] !== null) continue;
+      const path = custRoute(c, s.x, s.y);
+      if (path !== null) return { seat: s, path };
+    }
+    return null;
+  }
+
+  // ---- serving ([V2.5] steps 3 to 7, D8) -----------------------------------------------------
+
   // Serve one customer from the table stack of their meat. Returns true when served.
   function serveFromTable(c) {
     const spots = state.stations.table.spots;
@@ -837,12 +1155,30 @@ function createSim(saved, seed) {
     state.today.tips += tip;
     state.today.served += 1;
     state.stats.served += 1;
-    if (quick) state.today.happy += 1; else state.today.ok += 1;
-    const tile = STATION_BY_ID.table.tiles[idx];
-    leaveLine(c, 'served');
+    const spot = STATION_BY_ID.table.spotPx[idx];
+    const pick = pickSeat(c);
+    leaveLine(c);
     c.mood = 'happy';
     c.hop = SERVED_HOP;
-    emit('served', { id: c.id, meat: c.want, price: m.price, tip, quick, x: tile.x * TILE, y: tile.y * TILE });
+    emit('served', { id: c.id, meat: c.want, price: m.price, tip, quick, x: spot.x, y: spot.y });
+    if (pick !== null) {
+      const id = pick.seat.id;
+      state.seats[id] = c.id;
+      c.seat = id;
+      c.eatMax = C.EAT_MIN + (C.EAT_MAX - C.EAT_MIN) * rng();
+      c.eat = 0;
+      c.mode = 'toSeat';
+      c.reason = null;
+      c.pause = C.LEAVE_TURN_SECONDS;
+      setRoute(c, pick.path);
+      if (quick) state.today.happy += 1; else state.today.ok += 1;
+      emit('seat_taken', { id: c.id, seat: id });
+    } else {
+      state.today.togo += 1;
+      if (quick) state.today.togoQuick += 1; else state.today.ok += 1;
+      sendOut(c, 'togo', 'happy', true);
+      emit('to_go', { id: c.id });
+    }
     return true;
   }
 
@@ -1129,63 +1465,7 @@ function createSim(saved, seed) {
     return performAction(false);
   }
 
-  // ---- 2.5.6 customers ----------------------------------------------------------------------
-
-  function queueSpot(index) { return MAP.queue[index]; }
-
-  // Route from the customer's anchor tile to queue spot `index`: down column 6 to row 5, then
-  // along row 5 to the spot. The anchor itself is not in the path.
-  function routeToSpot(c, index) {
-    const spot = queueSpot(index);
-    const a = moverAnchor(c);
-    const path = [];
-    let x = a.x;
-    let y = a.y;
-    if (y < 5) {
-      while (y < 5) { y += 1; path.push({ x, y }); }
-    }
-    while (x !== spot.x) { x += x < spot.x ? 1 : -1; path.push({ x, y }); }
-    c.path = path;
-  }
-
-  // Route out: up the customer's own column to row 1, along row 1 to x 6, out through the gate.
-  function routeOut(c) {
-    const a = moverAnchor(c);
-    const path = [];
-    let x = a.x;
-    let y = a.y;
-    while (y > 1) { y -= 1; path.push({ x, y }); }
-    while (x !== 6) { x += x < 6 ? 1 : -1; path.push({ x, y }); }
-    while (y > -1) { y -= 1; path.push({ x, y }); }
-    c.path = path;
-  }
-
-  function routeToPassStop(c) {
-    const a = moverAnchor(c);
-    const path = [];
-    let y = a.y;
-    while (y < MAP.passStop.y) { y += 1; path.push({ x: 6, y }); }
-    c.path = path;
-  }
-
-  // Remove a customer from the line and shift everyone behind forward one spot.
-  function leaveLine(c, reason) {
-    const idx = c.queueIndex;
-    c.queueIndex = -1;
-    c.mode = 'leaving';
-    c.reason = reason;
-    c.pause = C.LEAVE_TURN_SECONDS;
-    c.face = 'up';
-    c.path = [];
-    if (idx >= 0) {
-      for (const o of state.customers) {
-        if (o.queueIndex > idx) {
-          o.queueIndex -= 1;
-          if (o.mode === 'arriving' || o.mode === 'waiting') routeToSpot(o, o.queueIndex);
-        }
-      }
-    }
-  }
+  // ---- customers: arrival, movement, patience, seats ----------------------------------------
 
   function spawnInterval() {
     let interval = C.SPAWN_MAX - (C.SPAWN_MAX - C.SPAWN_MIN) * state.rep / 100;
@@ -1258,21 +1538,22 @@ function createSim(saved, seed) {
     state.spawnAt = state.clock + spawnInterval() * jitter;
 
     custSeq += 1;
-    const body = state.arrivals % 3;
+    const body = state.arrivals % 4;
     state.arrivals += 1;
     state.today.customers += 1;
     const order = rollOrder(rBranch, rWeight);
     const want = order || 'sausage';
     const patienceMax = C.PATIENCE_BASE + (rPatience * 2 - 1) * C.PATIENCE_SPREAD;
-    const c = Object.assign(newMover(MAP.custSpawn.x, MAP.custSpawn.y, 'down'), {
+    const c = Object.assign(newMover(MAP.custSpawn.x, MAP.custSpawn.y, 'up'), {
       id: custSeq, body, want, patienceMax, patience: patienceMax, wait: 0,
-      queueIndex: -1, mode: 'arriving', mood: 'neutral', reason: null, pause: 0, hop: 0
+      queueIndex: -1, mode: 'arriving', mood: 'neutral', reason: null, pause: 0, hop: 0,
+      seat: null, eat: 0, eatMax: 0, bonusPaid: false
     });
     const inLine = state.customers.filter((o) => o.queueIndex >= 0).length;
     if (order === null || inLine >= queueSpotCount()) {
-      // Nothing left to sell, or no room in line: look in from the path and leave at no cost.
+      // Nothing left to sell, or no room in line: look in from the gate and leave at no cost.
       c.mode = 'passing';
-      routeToPassStop(c);
+      setRoute(c, custRoute(c, MAP.passStop.x, MAP.passStop.y) || []);
       state.customers.push(c);
       state.today.past += 1;
       state.stats.past += 1;
@@ -1280,39 +1561,55 @@ function createSim(saved, seed) {
       return;
     }
     c.queueIndex = inLine;
-    routeToSpot(c, c.queueIndex);
+    routeToSpot(c);
     state.customers.push(c);
     emit('customer_arrived', { id: c.id, meat: c.want });
   }
 
-  // Stage 2 customer walking. Returns nothing; customers reaching a spot switch to waiting.
+  // Stage 2: customers walk. Eaters only count down their hop; everything else about them runs
+  // in stage 5 (D8). Customers who reach the spawn on their way out are removed.
   function moveCustomers(dt) {
     const keep = [];
     for (const c of state.customers) {
       if (c.hop > 0) c.hop = Math.max(0, c.hop - dt);
+      if (c.mode === 'eating') { keep.push(c); continue; }
       if (c.pause > 0) {
         c.pause = Math.max(0, c.pause - dt);
         c.walking = false;
-        if (c.pause === 0) {
-          if (c.mode === 'passing') { routeOut(c); }
-          else if (c.mode === 'leaving') { routeOut(c); }
+        if (c.pause === 0 && c.mode === 'passing' && c.next === null && c.path.length === 0) {
+          // Done looking in: back out through the gate.
+          const out = custRoute(c, MAP.custSpawn.x, MAP.custSpawn.y);
+          if (out === null || out.length === 0) continue;
+          setRoute(c, out);
         }
         keep.push(c);
         continue;
       }
-      advanceMover(c, C.NPC_TILES_PER_S, dt);
+      const stepped = advanceMover(c, C.NPC_TILES_PER_S, dt);
       if (c.next === null && c.path.length === 0) {
-        if (c.mode === 'arriving') {
-          c.mode = 'waiting';
+        if (c.mode === 'arriving' || c.mode === 'waiting') {
+          const spot = c.queueIndex >= 0 ? MAP.queue[c.queueIndex] : null;
+          if (spot && c.x === spot.x && c.y === spot.y) {
+            if (c.mode === 'arriving' || stepped) c.face = spot.face;
+            c.mode = 'waiting';
+          }
+        } else if (c.mode === 'toSeat') {
+          const s = SEAT_BY_ID[c.seat];
+          if (s && c.x === s.x && c.y === s.y) {
+            c.mode = 'eating';
+            c.face = s.face;
+            c.eat = c.eatMax;
+            c.pause = 0;
+          }
         } else if (c.mode === 'passing') {
-          if (c.y === MAP.passStop.y) {
+          if (c.x === MAP.passStop.x && c.y === MAP.passStop.y) {
             c.pause = C.WALK_PAST_PAUSE;
-            c.face = 'down';
-          } else if (c.y <= MAP.custSpawn.y) {
-            continue;   // out of the yard
+            c.face = 'up';
+          } else {
+            continue;   // back at the spawn, out of the yard
           }
         } else if (c.mode === 'leaving') {
-          if (c.y <= MAP.custSpawn.y) continue;
+          continue;     // at the spawn (or no way out): out of the yard
         }
       }
       keep.push(c);
@@ -1320,7 +1617,23 @@ function createSim(saved, seed) {
     state.customers = keep;
   }
 
-  // Stage 5 patience drain, walk outs, close time.
+  // [V2.5] step 5: the seat tip, paid when eating ends or at the hard end.
+  function payBonus(c, atClose) {
+    const bonus = seatBonus();
+    state.cash += bonus;
+    state.today.seatTips += bonus;
+    state.today.seated += 1;
+    state.stats.seated += 1;
+    c.bonusPaid = true;
+    const s = SEAT_BY_ID[c.seat];
+    emit('seat_done', { id: c.id, seat: c.seat, bonus, x: s.x * TILE, y: s.y * TILE, atClose: atClose === true });
+  }
+
+  function freeSeat(c) {
+    if (c.seat && state.seats[c.seat] === c.id) state.seats[c.seat] = null;
+  }
+
+  // Stage 5: serve checks, patience, walk-outs, then eating, the heart pause and standing up.
   function customersStage(dt) {
     serveLine();
     for (const c of waitingCustomers()) {
@@ -1330,68 +1643,126 @@ function createSim(saved, seed) {
         c.patience = 0;
         state.today.walkouts += 1;
         state.stats.walkouts += 1;
-        leaveLine(c, 'walkout');
-        c.mood = 'unhappy';
+        leaveLine(c);
+        sendOut(c, 'walkout', 'unhappy', true);
         emit('walk_out', { id: c.id });
       } else if (c.patience <= c.patienceMax * C.PATIENCE_WARN_FRAC && c.mood === 'neutral') {
         c.mood = 'unhappy';
       }
     }
+    let gone = null;
+    for (const c of state.customers) {
+      if (c.mode !== 'eating') continue;
+      if (c.eat > 0) {
+        c.eat -= dt;
+        if (c.eat <= 1e-9) {
+          c.eat = 0;
+          payBonus(c, false);
+          c.pause = C.HEART_SECONDS;
+        }
+        continue;
+      }
+      c.pause -= dt;
+      if (c.pause <= 1e-9) {
+        c.pause = 0;
+        freeSeat(c);
+        sendOut(c, 'seated', 'happy', false);
+        if (c.next === null && c.path.length === 0) {
+          if (gone === null) gone = new Set();
+          gone.add(c);   // no way out from the seat: removed on the spot
+        }
+      }
+    }
+    if (gone !== null) state.customers = state.customers.filter((c) => !gone.has(c));
   }
 
   function closeOutLine() {
     for (const c of lineCustomers()) {
       state.today.close += 1;
-      leaveLine(c, 'close');
-      c.mood = 'neutral';
+      leaveLine(c);
+      sendOut(c, 'close', 'neutral', true);
       emit('left_at_close', { id: c.id });
     }
   }
 
-  // ---- 5.8 the buddy ------------------------------------------------------------------------
+  // Hard end, after the line closes out: pay every unpaid seat tip (atClose), then stand everyone
+  // up so nobody is left in toSeat or eating (deviation 17).
+  function closeOutSeats() {
+    for (const c of state.customers) {
+      if (c.mode !== 'toSeat' && c.mode !== 'eating') continue;
+      if (!c.bonusPaid) payBonus(c, true);
+      freeSeat(c);
+      sendOut(c, 'seated', 'happy', false);
+    }
+  }
+
+  function seatsBusy() {
+    return state.customers.some((c) => c.mode === 'toSeat' || c.mode === 'eating');
+  }
+
+  // ---- 5.8 the buddy ([V2.4]) -----------------------------------------------------------------
+
+  function buddyRouteTo(b, x, y) {
+    return playerBfs(b.x, b.y, (tx, ty) => tx === x && ty === y);
+  }
 
   function tickBuddy(dt) {
     const b = state.buddy;
     if (!b) return;
+    const boardUse = STATION_BY_ID.board.use[2];    // (5,5), facing up
+    const tableUse = STATION_BY_ID.table.use[0];    // (6,5), facing down
     if (b.task === 'idle') {
       const stack = chooseBoardStack();
       if (stack && tableFits(stack.meat)) {
+        const path = buddyRouteTo(b, boardUse.x, boardUse.y);
+        if (path === null) return;   // cannot reach the board: stay idle
         buddyPick = stack.meat;
         b.task = 'pickup';
+        b.path = path;
         b.t = C.BUDDY_HANDLE;
+        if (path.length === 0) b.face = boardUse.face;
       }
       return;
     }
     if (b.task === 'pickup') {
+      if (b.next !== null || b.path.length > 0) {
+        advanceMover(b, C.NPC_TILES_PER_S, dt);
+        if (b.next === null && b.path.length === 0) {
+          b.face = boardUse.face;
+          b.t = C.BUDDY_HANDLE;   // the handle runs only after he arrives
+        }
+        return;
+      }
       b.t -= dt;
-      if (b.t > 0) return;
+      if (b.t > 1e-9) return;
+      b.t = 0;
       const stack = buddyPick ? boardStackOf(buddyPick) : null;
+      buddyPick = null;
       if (!stack || stack.times.length === 0) {
-        buddyPick = null;
-        b.task = 'idle';
-        b.t = 0;
+        b.path = buddyRouteTo(b, MAP.buddyIdle.x, MAP.buddyIdle.y) || [];
+        b.task = 'return';
         return;
       }
       const times = takeFromBoardStack(stack, 1);
       b.carrying = { kind: 'plates', meat: stack.meat, times };
-      buddyPick = null;
-      const useTile = STATION_BY_ID.table.use[1];
-      const path = bfs(b.x, b.y, (x, y) => x === useTile.x && y === useTile.y);
+      const path = buddyRouteTo(b, tableUse.x, tableUse.y);
       if (path === null) {
-        // Cannot reach the table: put the plate back and idle.
+        // Cannot reach the counter: put the plate back and go home.
         addToBoard(b.carrying.meat, b.carrying.times);
         b.carrying = null;
-        b.task = 'idle';
+        b.path = buddyRouteTo(b, MAP.buddyIdle.x, MAP.buddyIdle.y) || [];
+        b.task = 'return';
         return;
       }
       b.path = path;
       b.task = 'carry';
+      if (path.length === 0) { b.face = tableUse.face; b.task = 'wait'; b.t = 0; }
       return;
     }
     if (b.task === 'carry') {
       advanceMover(b, C.NPC_TILES_PER_S, dt);
       if (b.next === null && b.path.length === 0) {
-        b.face = 'up';
+        b.face = tableUse.face;
         b.task = 'wait';
         b.t = 0;
       }
@@ -1408,17 +1779,15 @@ function createSim(saved, seed) {
         return;
       }
       b.t -= dt;
-      if (b.t > 0) return;
-      const home = MAP.buddyIdle;
-      const path = bfs(b.x, b.y, (x, y) => x === home.x && y === home.y);
-      b.path = path || [];
+      if (b.t > 1e-9) return;
+      b.path = buddyRouteTo(b, MAP.buddyIdle.x, MAP.buddyIdle.y) || [];
       b.task = 'return';
       return;
     }
     if (b.task === 'return') {
       advanceMover(b, C.NPC_TILES_PER_S, dt);
       if (b.next === null && b.path.length === 0) {
-        b.face = 'left';
+        b.face = MAP.buddyIdle.face;
         b.task = 'idle';
         b.t = 0;
       }
@@ -1460,7 +1829,7 @@ function createSim(saved, seed) {
       if (t.t > 0) return;
       const st = STATION_BY_ID[t.cooker];
       const uses = activeUseTiles(st);
-      const path = bfs(t.x, t.y, (x, y) => uses.some((u) => u.x === x && u.y === y));
+      const path = playerBfs(t.x, t.y, (x, y) => uses.some((u) => u.x === x && u.y === y));
       if (path === null) {
         addCharcoal(state.stations[t.cooker]);
         t.carrying = null;
@@ -1490,14 +1859,14 @@ function createSim(saved, seed) {
       t.carrying = null;
       t.cooker = null;
       const home = MAP.tenderIdle;
-      t.path = bfs(t.x, t.y, (x, y) => x === home.x && y === home.y) || [];
+      t.path = playerBfs(t.x, t.y, (x, y) => x === home.x && y === home.y) || [];
       t.task = 'return';
       return;
     }
     if (t.task === 'return') {
       advanceMover(t, C.NPC_TILES_PER_S, dt);
       if (t.next === null && t.path.length === 0) {
-        t.face = 'right';
+        t.face = MAP.tenderIdle.face;
         t.task = 'idle';
         t.t = 0;
       }
@@ -1614,7 +1983,6 @@ function createSim(saved, seed) {
       emit('last_call');
     }
   }
-  let gateOpenFired = false;
 
   function tickSpawns() {
     if (state.clock >= C.LAST_CALL) { state.spawnAt = Infinity; return; }
@@ -1638,11 +2006,13 @@ function createSim(saved, seed) {
     return true;
   }
 
+  // The early end ([V2.5] step 9): sold out, or after last call with nobody in line, and in both
+  // cases nobody walking to a seat or eating.
   function dayShouldEnd() {
     if (state.clock + 1e-9 >= C.DAY_SECONDS) return true;
-    if (state.clock + 1e-9 >= C.GATE_OPENS && soldOut()) return true;
+    if (state.clock + 1e-9 >= C.GATE_OPENS && soldOut()) return !seatsBusy();
     if (state.clock + 1e-9 >= C.LAST_CALL) {
-      return !state.customers.some((c) => c.mode === 'arriving' || c.mode === 'waiting');
+      return !state.customers.some((c) => c.mode === 'arriving' || c.mode === 'waiting') && !seatsBusy();
     }
     return false;
   }
@@ -1662,8 +2032,14 @@ function createSim(saved, seed) {
     customersStage(dt);
     if (state.clock + 1e-9 >= C.DAY_SECONDS) {
       closeOutLine();
+      closeOutSeats();
       endDay();
       return;
+    }
+    if (state.clock + 1e-9 >= C.GATE_OPENS && soldOut()) {
+      // Sold out stays sold out: close the line and stop arrivals while the eaters finish.
+      closeOutLine();
+      state.spawnAt = Infinity;
     }
     tickSpawns();
     if (dayShouldEnd()) {
@@ -1706,12 +2082,14 @@ function createSim(saved, seed) {
       t.wasteCost += plateWaste(sp.meat) * sp.times.length;
     }
     t.wages = (state.buddy ? C.BUDDY_WAGE : 0) + (state.tender ? C.TENDER_WAGE : 0);
-    const rawDelta = t.happy * C.REP_QUICK + t.ok * C.REP_OK + t.walkouts * C.REP_WALKOUT + t.close * C.CLOSE_PENALTY;
-    const repDelta = clamp(rawDelta, C.REP_DAY_MIN, C.REP_DAY_MAX);
+    const maxToday = repMax();
+    const rawDelta = t.happy * C.REP_QUICK + t.togoQuick * C.REP_TOGO_QUICK + t.ok * C.REP_OK
+      + t.walkouts * C.REP_WALKOUT + t.close * C.CLOSE_PENALTY;
+    const repDelta = clamp(rawDelta, C.REP_DAY_MIN, maxToday);
     const repCapped = repDelta !== rawDelta;
     const repEnd = clamp(state.rep + repDelta, 0, 100);
     state.rep = repEnd;
-    const net = t.revenue + t.tips - t.wages - C.DAILY_COSTS;
+    const net = t.revenue + t.tips + t.seatTips - t.wages - C.DAILY_COSTS;
     state.cash = Math.max(C.CASH_FLOOR, state.cash - t.wages - C.DAILY_COSTS);
     if (!state.gear.cooler) {
       for (const m of MEAT_IDS) {
@@ -1734,9 +2112,11 @@ function createSim(saved, seed) {
     till.repEnd = repEnd;
     till.repDelta = repDelta;
     till.repCapped = repCapped;
+    till.repMax = maxToday;
     till.net = net;
     till.cashAfter = state.cash;
     state.till = till;
+    state.seats = emptySeats();
     state.phase = 'evening';
     state.player.busy = null;
     state.stations.board.slicing = null;
@@ -1769,6 +2149,7 @@ function createSim(saved, seed) {
     state.buddy = null;
     state.tender = null;
     state.customers = [];
+    state.seats = emptySeats();
     state.player.busy = null;
     state.player.target = null;
     state.player.queued = null;
@@ -1834,9 +2215,19 @@ function createSim(saved, seed) {
       state.cash -= rowDef.price;
       state.gear[id] = true;
       reconfigureYard();
-      emit('purchase', { id, label: rowDef.label, price: rowDef.price });
+      emit('purchase', { id, label: rowDef.label, price: rowDef.price, kind: 'gear' });
       emit('save_wanted', { reason: 'gear' });
       updateComingNext(false);
+      return { ok: true, message: 'Bought ' + rowDef.label + '.' };
+    }
+    if (rowDef.kind === 'decor') {
+      if (state.decor[id] === true) return { ok: false, message: 'Owned' };
+      if (rowDef.needs && rowDef.needs.decor && state.decor[rowDef.needs.decor] !== true) return { ok: false, message: rowDef.needsText };
+      if (state.cash - cartTotal() < rowDef.price) return { ok: false, message: 'Not enough cash' };
+      state.cash -= rowDef.price;
+      state.decor[id] = true;
+      emit('purchase', { id, label: rowDef.label, price: rowDef.price, kind: 'decor' });
+      emit('save_wanted', { reason: 'decor' });
       return { ok: true, message: 'Bought ' + rowDef.label + '.' };
     }
     if (rowDef.kind === 'goal') return { ok: false, message: 'Not built in this prototype.' };
@@ -1844,7 +2235,6 @@ function createSim(saved, seed) {
   }
 
   function reconfigureYard() {
-    rebuildBlocked();
     const spots = state.stations.table.spots;
     const want = tableSpotCount();
     while (spots.length < want) spots.push(null);
@@ -1883,20 +2273,27 @@ function createSim(saved, seed) {
     const rowDef = CATALOG_BY_ID[id];
     const price = Math.floor(rowDef.price * C.SELL_BACK);
     state.cash += price;
-    state.gear[id] = false;
+    if (rowDef.kind === 'decor') state.decor[id] = false;
+    else state.gear[id] = false;
     emit('sell', { id, label: rowDef.label, price });
     return { label: rowDef.label, price };
   }
 
   function sell(id) {
     if (!(state.phase === 'morning' && state.broke)) return { ok: false, message: '', price: 0 };
-    if (!GEAR_IDS.includes(id) || state.gear[id] !== true) return { ok: false, message: '', price: 0 };
+    const isGear = GEAR_IDS.includes(id);
+    const isDecor = DECOR_IDS.includes(id);
+    if (!isGear && !isDecor) return { ok: false, message: '', price: 0 };
+    if ((isGear ? state.gear[id] : state.decor[id]) !== true) return { ok: false, message: '', price: 0 };
     const sales = [];
     if (id === 'kettle2' && state.gear.drum) {
       sales.push(sellOne('kettle2'));
       sales.push(sellDrum());
     } else if (id === 'drum') {
       sales.push(sellDrum());
+    } else if (id === 'chair1' && state.decor.chair2) {
+      sales.push(sellOne('chair1'));
+      sales.push(sellOne('chair2'));
     } else {
       sales.push(sellOne(id));
     }
@@ -1951,23 +2348,23 @@ function createSim(saved, seed) {
     state.lastCallFired = false;
     state.gateSoonFired = false;
     state.customers = [];
+    state.seats = emptySeats();
     for (const id of COOKER_IDS) { state.stations[id] = newCooker(id); decayAcc[id] = 0; }
     state.stations.board = { stacks: [], slicing: null };
     state.stations.table = { spots: new Array(tableSpotCount()).fill(null) };
-    state.player = Object.assign(newMover(MAP.spawn.x, MAP.spawn.y, MAP.spawn.face), { carrying: null, busy: null, target: null, queued: null });
+    state.player = newPlayer();
     state.today = newToday();
     state.today.repStart = state.rep;
     state.today.wageNames = [];
     if (state.hires.buddy) {
-      state.buddy = Object.assign(newMover(MAP.buddyIdle.x, MAP.buddyIdle.y, 'left'), { carrying: null, task: 'idle', t: 0 });
+      state.buddy = Object.assign(newMover(MAP.buddyIdle.x, MAP.buddyIdle.y, MAP.buddyIdle.face), { carrying: null, task: 'idle', t: 0 });
       state.today.wageNames.push(STRINGS.hireLabel.buddy);
     } else state.buddy = null;
     if (state.hires.tender && state.gear.drum) {
-      state.tender = Object.assign(newMover(MAP.tenderIdle.x, MAP.tenderIdle.y, 'right'), { carrying: null, task: 'idle', t: 0, cooker: null, cooldown: 0 });
+      state.tender = Object.assign(newMover(MAP.tenderIdle.x, MAP.tenderIdle.y, MAP.tenderIdle.face), { carrying: null, task: 'idle', t: 0, cooker: null, cooldown: 0 });
       state.today.wageNames.push(STRINGS.hireLabel.tender);
     } else state.tender = null;
     if (!(state.stock[state.selected] > 0)) autoSelect();
-    rebuildBlocked();
     emit('save_wanted', { reason: 'open' });
     emit('yard_open');
     return { ok: true, message: '' };
@@ -2018,6 +2415,7 @@ function createSim(saved, seed) {
     return out;
   }
 
+  // D9: always version 2. Service state, state.seats and charm are never saved.
   function serialize() {
     const out = { v: C.SAVE_VERSION };
     out.day = clamp(Math.trunc(state.day), 1, C.MAX_DAY);
@@ -2029,6 +2427,9 @@ function createSim(saved, seed) {
     out.gear = {};
     for (const g of GEAR_IDS) out.gear[g] = state.gear[g] === true;
     if (!out.gear.kettle2) out.gear.drum = false;
+    out.decor = {};
+    for (const d of DECOR_IDS) out.decor[d] = state.decor[d] === true;
+    if (!out.decor.chair1) out.decor.chair2 = false;
     out.hires = {};
     for (const h of HIRE_IDS) out.hires[h] = state.hires[h] === true;
     if (!out.gear.drum) out.hires.tender = false;
@@ -2050,7 +2451,8 @@ function createSim(saved, seed) {
     step, tick, walkTo, move, interact, verbAt, holding, walkable, reach,
     selectMeat, cycleMeat, buy, hire, sell, cartTotal, canOpen, openGate,
     continueFromTill, continueFromBroke, dismissComingNext, goal, setPaused, reset,
-    drainEvents, serialize, rng, expectedCrowd
+    drainEvents, serialize, rng, expectedCrowd,
+    charm, seatBonus, seatCount, repMax, custWalkable
   };
   return sim;
 }

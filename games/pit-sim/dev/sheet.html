@@ -5,44 +5,124 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Pit sim sprite sheet</title>
   <style>
-    :root { --k: #1b1714; --u: #2a2015; --c: #E6D8B8; --m: #bfb39a; --h: #3a332c; --y: #F3CF6D; --g: #5f7f4c; }
+    :root { --k: #1b1714; --u: #2a2015; --c: #E6D8B8; --o: #D06129; --m: #bfb39a; --h: #3a332c; --y: #F3CF6D;
+            --lawn: #6cc24a; --paver: #e8c890; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { background: var(--k); color: var(--c); font: 13px/1.4 ui-monospace, Menlo, Consolas, monospace; padding: 16px; }
     h1 { font-size: 16px; margin-bottom: 8px; }
-    p { color: var(--m); margin-bottom: 12px; }
-    #bar { display: flex; gap: 12px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
+    p { color: var(--m); margin-bottom: 12px; max-width: 72ch; }
+    #bar { display: flex; gap: 8px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
     button { font: inherit; min-height: 32px; padding: 0 12px; background: var(--u); color: var(--c); border: 1px solid var(--h); cursor: pointer; }
     button[aria-pressed="true"] { outline: 2px solid var(--y); }
     h2 { font-size: 14px; margin: 20px 0 8px; color: var(--y); }
-    .set { display: flex; flex-wrap: wrap; gap: 12px; }
-    figure { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px; border: 1px solid var(--h); background: var(--k); }
-    figure.grass { background: var(--g); }
+    .set { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+    figure { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px; border: 1px solid var(--h); }
+    figure.lawn { background: var(--lawn); }
+    figure.paver { background: var(--paver); }
+    figure.dark { background: var(--k); }
     figure.cream { background: var(--c); }
-    figure.cream figcaption { color: var(--k); }
+    figure.lawn figcaption, figure.paver figcaption, figure.cream figcaption { color: var(--k); }
     figcaption { font-size: 11px; color: var(--m); white-space: nowrap; }
     canvas { image-rendering: pixelated; image-rendering: crisp-edges; display: block; }
-    #err { color: #ff9a2e; white-space: pre-wrap; }
+    #err { color: var(--o); white-space: pre-wrap; margin-bottom: 8px; }
+    #ok { color: var(--lawn); margin-bottom: 8px; }
+    #yard { border: 1px solid var(--h); }
   </style>
   <script src="../sprites.js" defer></script>
   <script>
+    // Dev only, never shipped: inline script is fine here (the game shell has none).
     document.addEventListener('DOMContentLoaded', function () {
       var art = window.PitSim && window.PitSim.art;
       var err = document.getElementById('err');
       if (!art) { err.textContent = 'PitSim.art is missing.'; return; }
       try { art.build(); } catch (e) { err.textContent = String(e && e.message || e); return; }
 
-      var SCALE = 3;
-      var groups = [
-        ['People', /^(player|buddy|tender|cust\d)_|^shadow$/],
-        ['Hands', /^hand_/],
-        ['Icons, plates, pieces', /^(icon|plate|piece)_|^mark_x$/],
-        ['Stations', /^(kettle|drum|outline|cooler|board|table_mid|table_end|canopy|canopy_pole|pile|trash|gate|fence_h|fence_v|hedge|grass|path)$/],
-        ['Effects and text', /^(bubble|smoke|fire|coin|font)$/]
+      // Contract D11, verbatim: [name, w, h, frames].
+      var REQUIRED_SPRITES = [
+        ['player_down', 16, 24, 3], ['player_up', 16, 24, 3], ['player_side', 16, 24, 3], ['player_slice', 16, 24, 2],
+        ['buddy_down', 16, 24, 3], ['buddy_up', 16, 24, 3], ['buddy_side', 16, 24, 3], ['tender_down', 16, 24, 3],
+        ['tender_up', 16, 24, 3], ['tender_side', 16, 24, 3], ['cust0_down', 16, 24, 5], ['cust0_up', 16, 24, 3],
+        ['cust0_side', 16, 24, 4], ['cust0_sit', 16, 24, 3], ['cust1_down', 16, 24, 5], ['cust1_up', 16, 24, 3],
+        ['cust1_side', 16, 24, 4], ['cust1_sit', 16, 24, 3], ['cust2_down', 16, 24, 5], ['cust2_up', 16, 24, 3],
+        ['cust2_side', 16, 24, 4], ['cust2_sit', 16, 24, 3], ['cust3_down', 16, 24, 5], ['cust3_up', 16, 24, 3],
+        ['cust3_side', 16, 24, 4], ['cust3_sit', 16, 24, 3], ['shadow', 12, 4, 1], ['dog', 16, 16, 4],
+        ['hand_charcoal', 8, 8, 1], ['hand_raw_sausage', 8, 8, 1], ['hand_raw_chicken', 8, 8, 1], ['hand_raw_ribs', 8, 8, 1],
+        ['hand_raw_butt', 8, 8, 1], ['hand_raw_brisket', 8, 8, 1], ['hand_cooked_sausage', 8, 8, 1], ['hand_cooked_chicken', 8, 8, 1],
+        ['hand_cooked_ribs', 8, 8, 1], ['hand_cooked_butt', 8, 8, 1], ['hand_cooked_brisket', 8, 8, 1], ['hand_burnt', 8, 8, 1],
+        ['hand_plate_sausage', 8, 8, 1], ['hand_plate_chicken', 8, 8, 1], ['hand_plate_ribs', 8, 8, 1], ['hand_plate_butt', 8, 8, 1],
+        ['hand_plate_brisket', 8, 8, 1], ['hand_tray_sausage', 8, 8, 1], ['hand_tray_chicken', 8, 8, 1], ['hand_tray_ribs', 8, 8, 1],
+        ['hand_tray_butt', 8, 8, 1], ['hand_tray_brisket', 8, 8, 1], ['hand_tray', 8, 8, 1], ['hand_togo', 8, 8, 1],
+        ['icon_sausage', 8, 8, 1], ['icon_chicken', 8, 8, 1], ['icon_ribs', 8, 8, 1], ['icon_butt', 8, 8, 1],
+        ['icon_brisket', 8, 8, 1], ['plate_sausage', 8, 6, 1], ['plate_chicken', 8, 6, 1], ['plate_ribs', 8, 6, 1],
+        ['plate_butt', 8, 6, 1], ['plate_brisket', 8, 6, 1], ['piece_sausage', 10, 10, 4], ['piece_chicken', 10, 10, 4],
+        ['piece_ribs', 10, 10, 4], ['piece_butt', 10, 10, 4], ['piece_brisket', 10, 10, 4], ['mark_x', 8, 8, 1],
+        ['kettle', 16, 24, 4], ['drum', 16, 32, 4], ['cooler', 16, 16, 3], ['board', 16, 16, 2],
+        ['counter', 32, 24, 2], ['counter_ext', 16, 24, 1], ['pile', 16, 16, 4], ['trash', 16, 16, 1],
+        ['paver', 16, 16, 2], ['lawn_a', 16, 16, 2], ['lawn_b', 16, 16, 2], ['fence_h', 16, 24, 1],
+        ['fence_v', 16, 24, 1], ['fence_corner', 16, 24, 1], ['fence_back', 16, 16, 2], ['gate', 16, 24, 2], ['hedge', 16, 24, 2],
+        ['bed', 16, 20, 4], ['shed', 48, 32, 1], ['sign', 44, 12, 1], ['tree', 32, 48, 1],
+        ['woodpile', 16, 16, 1], ['hose', 16, 16, 1], ['tools', 16, 24, 1], ['pot', 16, 16, 1],
+        ['planter', 16, 24, 1], ['shelf', 16, 24, 1], ['mailbox', 16, 24, 1], ['picnic', 32, 24, 1], ['picnic_bench', 32, 8, 1],
+        ['chair', 16, 24, 1], ['lights_post', 16, 32, 1], ['lights_string', 66, 10, 2], ['birdbath', 16, 24, 2],
+        ['canopy', 40, 32, 1], ['bubble', 16, 12, 1], ['heart', 8, 8, 2], ['sparkle', 7, 7, 3],
+        ['smoke', 8, 8, 3], ['smoke_dark', 8, 8, 3], ['fire', 8, 8, 3], ['coin', 8, 8, 2],
+        ['sweat', 4, 6, 2], ['zzz', 8, 8, 3], ['font', 4, 6, 38]
       ];
-      var names = Object.keys(art.SPRITES);
+      // Frame meanings from contract D11, shown in the captions.
+      var MEANING = {
+        person: ['stand', 'walk a', 'walk b', 'unhappy a', 'unhappy b'],
+        side: ['stand', 'walk a', 'walk b', 'unhappy'],
+        sit: ['eat a', 'eat b', 'content'], slice: ['knife up', 'knife down'],
+        dog: ['walk a', 'walk b', 'sit', 'nap'], piece: ['raw', 'cooking', 'done', 'burnt'],
+        kettle: ['out', 'low', 'good', 'hot'], drum: ['out', 'low', 'good', 'hot'],
+        cooler: ['crate', 'shut', 'open'], board: ['empty', 'slicing'], counter: ['both caps', 'right cap'],
+        pile: ['full', 'half', 'low', 'bare'], gate: ['shut', 'open'], bed: ['pink', 'yellow', 'mixed'],
+        paver: ['plain', 'alt'], lawn_a: ['plain', 'clover'], lawn_b: ['plain', 'clover'],
+        birdbath: ['empty', 'bird'], lights_string: ['twinkle a', 'twinkle b'], heart: ['big', 'small'],
+        sparkle: ['small', 'large', 'fading'], smoke: ['small', 'medium', 'large'], smoke_dark: ['small', 'medium', 'large'],
+        coin: ['face', 'edge'], sweat: ['drop', 'splash'], zzz: ['z', 'zz', 'zzz']
+      };
+      function meaning(name, f) {
+        var key = name;
+        if (/_sit$/.test(name)) key = 'sit';
+        else if (/_side$/.test(name)) key = 'side';
+        else if (/^(player|buddy|tender|cust\d)_(down|up)$/.test(name)) key = 'person';
+        else if (name === 'player_slice') key = 'slice';
+        else if (/^piece_/.test(name)) key = 'piece';
+        var list = MEANING[key];
+        return list && list[f] ? list[f] : '';
+      }
+
+      var groups = [
+        ['People and animals', /^(player|buddy|tender|cust\d)_|^shadow$|^dog$/],
+        ['Hand overlays', /^hand_/],
+        ['Food, icons and marks', /^(icon|plate|piece)_|^mark_x$/],
+        ['Stations', /^(kettle|drum|cooler|board|counter|counter_ext|pile|trash)$/],
+        ['Ground, fence and hedge', /^(paver|lawn_a|lawn_b|fence_h|fence_v|fence_corner|fence_back|gate|hedge|bed)$/],
+        ['Fixed props', /^(shed|sign|tree|woodpile|hose|tools|pot|planter|shelf|mailbox|picnic|picnic_bench)$/],
+        ['Decor and gear props', /^(chair|lights_post|lights_string|birdbath|canopy)$/],
+        ['Effects and text', /^(bubble|heart|sparkle|smoke|smoke_dark|fire|coin|sweat|zzz|font)$/]
+      ];
       var root = document.getElementById('sheet');
-      var bg = 'grass';
-      var total = 0;
+      var bg = 'paver';
+      var SCALE = 3;
+
+      // Contract check: names, sizes, frame counts, nothing extra.
+      (function check() {
+        var bad = [];
+        var want = {};
+        REQUIRED_SPRITES.forEach(function (r) {
+          want[r[0]] = true;
+          var s = art.SPRITES[r[0]];
+          if (!s) { bad.push('missing ' + r[0]); return; }
+          if (s.w !== r[1] || s.h !== r[2]) bad.push(r[0] + ' is ' + s.w + 'x' + s.h + ', want ' + r[1] + 'x' + r[2]);
+          if (art.frames(r[0]) !== r[3]) bad.push(r[0] + ' has ' + art.frames(r[0]) + ' frames, want ' + r[3]);
+        });
+        Object.keys(art.SPRITES).forEach(function (n) { if (!want[n]) bad.push('extra ' + n); });
+        if (art.PALETTE.length !== 32) bad.push('palette has ' + art.PALETTE.length + ' entries, want 32');
+        if (bad.length) err.textContent = bad.join('\n');
+        else document.getElementById('ok').textContent = 'Contract D11 check: all ' + REQUIRED_SPRITES.length + ' names, sizes and frame counts match, nothing extra, palette 32.';
+      })();
 
       function figure(name, f) {
         var fig = document.createElement('figure');
@@ -50,14 +130,16 @@
         fig.appendChild(art.canvasFor(name, f, SCALE));
         var cap = document.createElement('figcaption');
         var s = art.SPRITES[name];
-        cap.textContent = name + (s.frames.length > 1 ? ' [' + f + ']' : '') + ' ' + s.w + 'x' + s.h;
+        var m = meaning(name, f);
+        cap.textContent = name + (s.frames.length > 1 ? ' [' + f + ']' : '') + (m ? ' ' + m : '') + ' ' + s.w + 'x' + s.h;
         fig.appendChild(cap);
         return fig;
       }
 
-      function render() {
+      function renderSheet() {
         root.textContent = '';
-        total = 0;
+        var names = REQUIRED_SPRITES.map(function (r) { return r[0]; }).filter(function (n) { return art.has(n); });
+        var total = 0;
         var seen = {};
         groups.forEach(function (g) {
           var h = document.createElement('h2');
@@ -72,26 +154,13 @@
           });
           root.appendChild(set);
         });
-        var left = names.filter(function (n) { return !seen[n]; });
-        if (left.length) {
-          var h2 = document.createElement('h2');
-          h2.textContent = 'Not grouped';
-          root.appendChild(h2);
-          var set2 = document.createElement('div');
-          set2.className = 'set';
-          left.forEach(function (name) { for (var f = 0; f < art.frames(name); f++) { set2.appendChild(figure(name, f)); total++; } });
-          root.appendChild(set2);
-        }
-
         // Flip and text samples
         var h3 = document.createElement('h2');
-        h3.textContent = 'Flip and text';
+        h3.textContent = 'Flip, squash and text';
         root.appendChild(h3);
         var set3 = document.createElement('div');
         set3.className = 'set';
-        ['player_side', 'cust1_side', 'table_end'].forEach(function (name) {
-          var fig = document.createElement('figure');
-          fig.className = bg;
+        ['player_side', 'cust1_side', 'dog'].forEach(function (name) {
           var s = art.SPRITES[name];
           var c = document.createElement('canvas');
           c.width = s.w * 2 * SCALE; c.height = s.h * SCALE;
@@ -100,29 +169,137 @@
           ctx.scale(SCALE, SCALE);
           art.draw(ctx, name, 0, 0, 0, false);
           art.draw(ctx, name, s.w, 0, 0, true);
-          fig.appendChild(c);
-          var cap = document.createElement('figcaption');
-          cap.textContent = name + ' + flip';
-          fig.appendChild(cap);
-          set3.appendChild(fig);
+          set3.appendChild(wrap(c, name + ' and flipped'));
         });
-        var sample = 'GATE OPENS IN 10 LAST CALL +5:30';
-        var fig = document.createElement('figure');
-        fig.className = bg;
+        var sq = document.createElement('canvas');
+        sq.width = 56 * SCALE; sq.height = 26 * SCALE;
+        var sctx = sq.getContext('2d');
+        sctx.imageSmoothingEnabled = false;
+        sctx.scale(SCALE, SCALE);
+        art.drawScaled(sctx, 'player_down', 0, 4, 18, 22, 0);
+        art.drawScaled(sctx, 'player_down', 20, 0, 14, 26, 0);
+        art.draw(sctx, 'player_down', 38, 2, 0);
+        set3.appendChild(wrap(sq, 'drawScaled 18x22, 14x26, 16x24'));
         var tc = document.createElement('canvas');
-        tc.width = (art.textWidth(sample) + 2) * SCALE; tc.height = 8 * SCALE;
+        tc.width = 116 * SCALE; tc.height = 22 * SCALE;
         var tctx = tc.getContext('2d');
         tctx.imageSmoothingEnabled = false;
         tctx.scale(SCALE, SCALE);
-        art.text(tctx, sample, 1, 1);
-        fig.appendChild(tc);
-        var cap2 = document.createElement('figcaption');
-        cap2.textContent = 'art.text, width ' + art.textWidth(sample);
-        fig.appendChild(cap2);
-        set3.appendChild(fig);
+        tctx.fillStyle = art.COLOR.U; tctx.fillRect(0, 0, 116, 22);
+        art.text(tctx, 'GATE OPENS IN 10 +5:30', 2, 2);
+        art.textTinted(tctx, '+8', 2, 10, 'yellow');
+        art.textTinted(tctx, '+2 TIP', 16, 10, 'C');
+        art.textTinted(tctx, '+1 TIP', 50, 10, 'magenta');
+        set3.appendChild(wrap(tc, 'text and textTinted, width ' + art.textWidth('GATE OPENS IN 10 +5:30')));
         root.appendChild(set3);
-
         document.getElementById('count').textContent = names.length + ' sprites, ' + total + ' frames, drawn at ' + SCALE + 'x.';
+      }
+
+      function wrap(canvas, label) {
+        var fig = document.createElement('figure');
+        fig.className = bg;
+        fig.appendChild(canvas);
+        var cap = document.createElement('figcaption');
+        cap.textContent = label;
+        fig.appendChild(cap);
+        return fig;
+      }
+
+      // A static day-1 style yard built from the contract D4 positions, with every decor item owned,
+      // so the art can be judged in place. A mock only: game.js owns the real renderer.
+      function renderYard() {
+        var cv = document.getElementById('yard');
+        var k = SCALE;
+        cv.width = 176 * k; cv.height = 192 * k;
+        var ctx = cv.getContext('2d');
+        ctx.imageSmoothingEnabled = false;
+        ctx.setTransform(k, 0, 0, k, 0, 0);
+        var G = ['FPPPFFFFFFF', 'FPPPPPPPPPF', 'FPPPPPPPPPF', 'FPPPPPPPPPF', 'FPPPPPPPPPF', 'FPPPPPPPPPF',
+                 'FHHHHPPPHHF', 'FBLLLLLLLLF', 'FBLLLLLLLLF', 'FBLLLLLLLLF', 'FBBBBBBLLLF', 'FFFFFFFFFGF'];
+        var x, y;
+        for (y = 0; y < 12; y++) {
+          for (x = 0; x < 11; x++) {
+            var t = G[y][x];
+            if (t === 'P' || ((t === 'F' || t === 'H' || t === 'B') && y < 6)) art.draw(ctx, 'paver', x * 16, y * 16, (x * 7 + y * 3) % 2);
+            else art.draw(ctx, x % 2 === 0 ? 'lawn_a' : 'lawn_b', x * 16, y * 16, (x * 5 + y * 3) % 4 === 0 ? 1 : 0);
+          }
+        }
+        var items = [];
+        function put(name, frame, dx, dy, key, layer, flip) { items.push({ n: name, f: frame, x: dx, y: dy, k: key, l: layer, flip: !!flip }); }
+        function row(r) { return r * 16 + 15; }
+        for (y = 0; y < 12; y++) {
+          for (x = 0; x < 11; x++) {
+            var c = G[y][x];
+            if (c === 'F') {
+              var corner = (x === 0 || x === 10) && (y === 0 || y === 11);
+              if (y === 0) put('fence_back', corner ? 1 : 0, x * 16, 0, row(y), 0);
+              else put(corner ? 'fence_corner' : (x === 0 || x === 10 ? 'fence_v' : 'fence_h'), 0, x * 16, y * 16 - 8, row(y), 0);
+            } else if (c === 'G') put('gate', 1, x * 16, y * 16 - 8, row(y), 0);
+            else if (c === 'H') put('hedge', x % 2, x * 16, y * 16 - 8, row(y), 0);
+            else if (c === 'B') put('bed', (x + y) % 3, x * 16, y * 16 - 4, row(y), 0);
+          }
+        }
+        [['shed', 16, 0, 1], ['sign', 68, 2, 0], ['tree', 128, 0, 2], ['woodpile', 144, 16, 1], ['tools', 16, 24, 2],
+         ['pot', 16, 48, 3], ['pot', 144, 48, 3], ['hose', 16, 80, 5], ['planter', 144, 72, 5], ['mailbox', 128, 168, 11],
+         ['picnic', 80, 136, 9], ['picnic_bench', 80, 136, 8], ['woodpile', 64, 16, 1], ['woodpile', 80, 16, 1],
+         ['planter', 16, 56, 4], ['shelf', 32, 40, 3]].forEach(function (p) { put(p[0], 0, p[1], p[2], row(p[3]), 1); });
+        [['kettle', 2, 80, 24, 2], ['kettle', 3, 112, 24, 2], ['drum', 1, 112, 48, 4], ['board', 1, 80, 64, 4], ['cooler', 2, 96, 16, 1],
+         ['counter', 1, 96, 88, 6], ['counter_ext', 0, 80, 88, 6], ['pile', 1, 64, 32, 2], ['trash', 0, 48, 64, 4]]
+          .forEach(function (p) { put(p[0], p[1], p[2], p[3], row(p[4]), 1); });
+        [['chair', 0, 112, 136, 9], ['chair', 0, 128, 136, 9], ['bed', 0, 112, 156, 10], ['bed', 1, 128, 156, 10],
+         ['birdbath', 1, 64, 136, 9], ['lights_post', 0, 64, 80, 6], ['lights_post', 0, 128, 80, 6],
+         ['picnic_bench', 0, 32, 136, 8], ['picnic', 0, 32, 136, 9]].forEach(function (p) { put(p[0], p[1], p[2], p[3], row(p[4]), 1); });
+        function person(name, frame, tx, ty, flip) {
+          put('shadow', 0, tx * 16 + 2, ty * 16 + 13, ty * 16 + 15, 3);
+          put(name, frame, tx * 16, ty * 16 - 8, ty * 16 + 15, 3, flip);
+        }
+        person('player_down', 0, 6, 3);
+        put('hand_plate_ribs', 0, 6 * 16 + 4, 3 * 16 + 4, 3 * 16 + 15, 3);
+        person('buddy_up', 0, 4, 5);
+        person('tender_side', 1, 3, 2, true);
+        person('cust0_up', 0, 7, 7);
+        person('cust1_side', 0, 8, 7);
+        person('cust2_side', 3, 9, 7);
+        person('cust3_down', 1, 9, 9);
+        [['cust3_sit', 0, 6, 8], ['cust1_sit', 2, 5, 8], ['cust0_sit', 1, 3, 8], ['cust2_sit', 0, 7, 9]].forEach(function (s) {
+          put(s[0], s[1], s[2] * 16, s[3] * 16 - 6, row(s[3]), 3);
+        });
+        put('plate_brisket', 0, 6 * 16 + 4, 8 * 16 + 17, row(9), 5);
+        put('plate_ribs', 0, 3 * 16 + 4, 8 * 16 + 17, row(9), 5);
+        put('plate_butt', 0, 7 * 16 + 4, 9 * 16 + 9, row(9), 5);
+        put('dog', 3, 64, 112, row(7), 4);
+        items.forEach(function (it, i) { it.i = i; });
+        items.sort(function (a, b) { return a.k - b.k || a.l - b.l || a.x - b.x || a.i - b.i; });
+        items.forEach(function (it) { art.draw(ctx, it.n, it.x, it.y, it.f, it.flip); });
+        // overhead, smoke and bubbles
+        art.draw(ctx, 'lights_string', 71, 80, 0);
+        art.draw(ctx, 'piece_brisket', 78, 25, 1); art.draw(ctx, 'piece_ribs', 88, 25, 2);
+        art.draw(ctx, 'piece_sausage', 110, 25, 3);
+        art.draw(ctx, 'piece_butt', 110, 44, 1); art.draw(ctx, 'piece_chicken', 120, 44, 2);
+        art.draw(ctx, 'smoke', 91, 14, 1); art.draw(ctx, 'smoke', 94, 6, 2);
+        art.draw(ctx, 'smoke_dark', 112, 14, 1); art.draw(ctx, 'smoke', 119, 36, 0);
+        art.draw(ctx, 'fire', 84, 20, 1);
+        [[98, 92, 'plate_ribs'], [108, 92, 'plate_brisket'], [108, 91, 'plate_brisket'], [118, 92, 'plate_butt'], [88, 92, 'plate_sausage']]
+          .forEach(function (p) { art.draw(ctx, p[2], p[0], p[1]); });
+        [[81, 67], [88, 67], [81, 73]].forEach(function (p) { art.draw(ctx, 'plate_chicken', p[0], p[1]); });
+        art.draw(ctx, 'bubble', 126, 92); art.draw(ctx, 'icon_ribs', 130, 94);
+        art.draw(ctx, 'bubble', 142, 92); art.draw(ctx, 'icon_brisket', 146, 94);
+        art.draw(ctx, 'bubble', 158, 92); art.draw(ctx, 'icon_sausage', 162, 94);
+        ctx.fillStyle = art.COLOR.lawnA; ctx.fillRect(127, 88, 14, 3);
+        ctx.fillStyle = art.COLOR.yellow; ctx.fillRect(143, 88, 9, 3);
+        ctx.fillStyle = art.COLOR.red; ctx.fillRect(159, 88, 4, 3);
+        art.draw(ctx, 'sweat', 156, 106, 0);
+        art.draw(ctx, 'bubble', 96, 107); art.draw(ctx, 'plate_brisket', 100, 110);
+        art.draw(ctx, 'heart', 84, 110, 0);
+        art.draw(ctx, 'zzz', 74, 66, 2);
+        art.draw(ctx, 'sparkle', 95, 88, 1); art.draw(ctx, 'sparkle', 104, 85, 0);
+        art.draw(ctx, 'coin', 89, 80, 0);
+        ctx.fillStyle = art.COLOR.outline;
+        art.textTinted(ctx, '+8', 99, 81, 'outline'); art.textTinted(ctx, '+8', 98, 80, 'yellow');
+        art.textTinted(ctx, '+2 TIP', 99, 88, 'outline'); art.textTinted(ctx, '+2 TIP', 98, 87, 'C');
+        art.text(ctx, 'YOUR PIT', 70, 5);
+        ctx.fillStyle = art.COLOR.U; ctx.fillRect(1, 1, art.textWidth('12:30') + 3, 8);
+        art.text(ctx, '12:30', 2, 2);
       }
 
       document.getElementById('bar').addEventListener('click', function (e) {
@@ -131,23 +308,25 @@
         if (b.dataset.bg) {
           bg = b.dataset.bg;
           Array.prototype.forEach.call(document.querySelectorAll('[data-bg]'), function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
-          render();
         } else if (b.dataset.scale) {
           SCALE = Number(b.dataset.scale);
           Array.prototype.forEach.call(document.querySelectorAll('[data-scale]'), function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
-          render();
         }
+        renderSheet();
+        renderYard();
       });
-      render();
+      renderSheet();
+      renderYard();
     });
   </script>
 </head>
 <body>
   <h1>Pit sim sprite sheet</h1>
-  <p>Dev only. Loads ../sprites.js and draws every sprite and frame with its name under it. <span id="count"></span></p>
+  <p>Dev only. Loads ../sprites.js and draws every sprite and frame with its name and frame meaning under it. <span id="count"></span></p>
   <div id="bar">
     <span>Background:</span>
-    <button type="button" data-bg="grass" aria-pressed="true">Grass</button>
+    <button type="button" data-bg="paver" aria-pressed="true">Paver</button>
+    <button type="button" data-bg="lawn" aria-pressed="false">Lawn</button>
     <button type="button" data-bg="dark" aria-pressed="false">Near black</button>
     <button type="button" data-bg="cream" aria-pressed="false">Cream</button>
     <span>Scale:</span>
@@ -156,6 +335,9 @@
     <button type="button" data-scale="6" aria-pressed="false">6x</button>
   </div>
   <pre id="err"></pre>
+  <div id="ok"></div>
+  <h2>Yard mock (contract D4 positions, all decor owned, static)</h2>
+  <canvas id="yard" width="528" height="576"></canvas>
   <div id="sheet"></div>
 </body>
 </html>

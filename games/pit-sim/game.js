@@ -1,53 +1,102 @@
-'use strict';
-// game.js: input, canvas rendering, DOM panels, aria-live, save hooks, pause.
-// Contract: docs/superpowers/specs/2026-10-18-pit-sim-contract.md, section 4.
-// Design:   docs/superpowers/specs/2026-10-18-pit-sim-design.md.
+// game.js: input, canvas rendering, DOM panels, aria-live, save hooks, pause, feedback, the dog.
+// Contract: docs/superpowers/specs/2026-10-18-pit-sim-contract.md, v2 delta D11 (calls only), D12, D13, D14.
+// Design:   docs/superpowers/specs/2026-10-18-pit-sim-design.md, v2 section [V2.9], [V2.12], [V2.13], [V2.16].
 //
-// Deviations (nothing added to the shared surface; PitSim.game is exactly section 4.10):
-//  1. The shared global line sits inside this file's function wrapper rather than
-//     at the top level, so three classic scripts that each declare `const PitSim`
-//     cannot collide in the page's global lexical scope.
-//  2. The fire gauge is drawn in the 4 px column just right of the cooker tile
-//     (px + 16 to px + 19), because slotPx puts the second grate piece over the
-//     tile's own right edge; drawing it inside would be covered by the piece.
-//  3. Cooking arcs are a 12 by 12 one pixel ring around each piece, filled
-//     clockwise from the top, so they stay crisp at integer scale.
-//  4. Cosmetic randomness (smoke drift, rain streaks) comes from a local
-//     mulberry32 seeded from sim.seed, not sim.rng(), so frame timing never
-//     changes the sim's own random sequence. The built in random generator is never called.
-//  5. A successful action is detected by a change in the player's hands between
-//     frames (every action in the spec's table changes the hands), which drives
-//     the bounce feedback for tap-to-walk auto actions as well as button presses.
-//  6. Round 1 review: the clipboard foot holds a How to play button (#howto-btn) that
-//     shows #howto in place of the clipboard, and #howto-body ends with a Back button
-//     (#howto-close) that is visible only then. Escape there goes back too. Both ids
-//     are new. #crowd (a p under the goal line) is new as well.
-//  7. Round 1 review: walk_past with reason 'soldout' (sim.js deviation 9) reads
-//     "Someone looked in. Nothing left to sell." The full line sentence is unchanged.
-//     tap_queued has no sentence.
-//  8. Round 1 review: every canvas tap draws a one pixel 16 by 16 ring on the tapped
-//     tile for 0.35 s (gold when the walk was taken or queued, orange when refused),
-//     which drops to its four corner pixels after 0.2 s; reduced motion keeps the ring.
-//  9. Round 1 review: the patience bar is 3 px tall and three colors (grass above
-//     C.PATIENCE_MID_FRAC, gold to C.PATIENCE_WARN_FRAC, orange under it); under warn
-//     the bubble icon blinks at 2 Hz unless reduced motion is on. The bubble sits one
-//     pixel higher (py - 14) so its tail stays clear of the bar.
-// 10. Round 1 review: a gear row whose purchase would leave less than C.GEAR_RESERVE
-//     says so in its effect line before the tap. The buy stays allowed.
-// 11. Round 1 review: on the till, Next day sits right under the Cash row and the
-//     shop note, before People and Word of mouth; New game stays last.
-// 12. Round 1 review: P resumes from the pause panel as well as pausing (the Controls
-//     card and spec 15 say so); a held P does not toggle.
+// Deviations (nothing added to the shared surface; PitSim.game is exactly D14):
+//  1. Cooking arcs are a 12 by 12 one pixel ring around each grate piece, filled clockwise
+//     from the top (v1 deviation 3, kept). Orange while cooking, green for the done window,
+//     near black when burnt.
+//  2. The fire gauge (V2.3, x = first tile px + 18, 3 px wide, sprite top + 4 to its bottom) is
+//     an outline colored track with the band color filling its full width from the bottom and a
+//     cream pixel at each edge for the 50 and 85 ticks. Since review round 2 it is drawn with its
+//     cooker in the y-sorted pass, so a player on a use tile in front of the cooker covers it.
+//  3. Cosmetic randomness comes from a local mulberry32 seeded from sim.seed (now the rule, D8).
+//  4. The v1 two pixel bounce on a change of hands is gone; the v2 squash on an accepted tap
+//     replaces it. The action button still scales down for 0.1 s on a successful press (DOM
+//     only, off under reduced motion).
+//  5. Ids #howto-btn, #howto-close and #crowd (v1 deviation 6) stay. #seats (D14) is created
+//     here inside #clip-top, right under #goal, before #crowd.
+//  6. walk_past with reason 'soldout' reads "Someone looked in. Nothing left to sell." and the
+//     till's People line adds "Looked in, sold out {n}." when that count is not zero (v1 deviation 7).
+//  7. Tap ring (v1 deviation 8): a one pixel 16 by 16 ring, yellow when walkTo took the tap,
+//     orange when refused, dropping to its four corners after 0.6 of C.FX.TAP_RING_S; reduced
+//     motion keeps the full ring. It is drawn on the tile handed to walkTo, which is the
+//     station's first tile when a station's drawn box was hit (D13).
+//  8. Patience bar (v1 deviation 9) at the V2.9 position: three colors, and under the warn
+//     fraction the order icon blinks at 2 Hz unless reduced motion is on.
+//  9. A gear or decor row whose buy would leave less than C.GEAR_RESERVE says so in its effect
+//     line before the tap (v1 deviation 10, extended to decor per V2.7).
+// 10. Till order (v1 deviation 11) and P resuming from the pause panel (v1 deviation 12) stay.
+// 11. YOUR PIT is drawn right after the sign sprite inside the y-sorted pass instead of in
+//     pass 8, so a pitmaster standing on row 1 in front of the sign covers the text rather
+//     than the text printing over the head. Position MAP.signText, art.text, cream.
+// 12. fxLog entries for the continuous emitters are one per stream, not one per sprite: a
+//     'puff' when a cooker's chimney stream starts, a 'column' when a burnt piece's smoke
+//     column starts, a 'sweat' when a waiting customer starts sweating, a 'zzz' when the
+//     buddy's zzz starts, a 'bird' per visit. Sparkles log one entry each (three per serve).
+//     This keeps the 500 entry log from filling with puffs between the entries a harness reads.
+// 13. A draw whose box crosses a canvas edge is skipped unless it is a person, shadow or hand
+//     overlay (the D15 step 33 exception); a draw wholly outside is never issued (D14). The back
+//     fence row (y = 0) draws the 16 px fence_back sprite at y = 0, so no fence piece crosses an edge.
+// 14. Transient effects (numbers, sparkles, hearts, puffs, rings, marks, sweat, zzz, bird) are
+//     cleared when the yard opens, when the next morning starts and on a new game, so the
+//     frozen evening yard does not carry into the next morning.
+// 15. "Station px, station py" in V2.9 (chimney vents) is read as the top left pixel of the
+//     station's first tile, the same origin as slotPx; "sprite top" is the station's draw y.
+// 16. index.html: the one rule is @media (max-width: 899px) { #wrap { margin: 0 -8px; width: auto; } }.
+//     width: auto is added inside it because the shell's #wrap { width: 100% } would keep the box
+//     at the column width and the negative margins would only move it 8 px left, putting the
+//     canvas off center; with width auto the stage's flex column stretches it to the column plus 16 px.
+// 17. Review round 1 (2026-10-18, now contract D12 and D14):
+//     a. Floating numbers are drawn by popText: a 1 px outline box and an umber box behind the
+//        glyphs. Cash is yellow, the counter tip white, the seat tip pink.
+//     b. The heart sits on the seat's column at (seat x, seat y - 24) and is drawn at 2x (16 by 16);
+//        the seat tip number sits left of the seat at (seat x - 30, seat y - 22).
+//     c. Unowned gear and decor footprints draw a ghost of what will stand there at GHOST_ALPHA
+//        under their dashed outline (layer 1, the footprint's sort key); captureFrame marks those
+//        records ghost: true. The dashed outline is drawn in the outline color on pavers and cream
+//        on the lawn and hedge.
+//     d. PATH_TILES, the customer route from the gate to the line, is drawn with the paver sprite.
+//        Render only: MAP.tiles and every walk rule are unchanged.
+//     e. Chimney puffs are centered on the vent (the 8 px smoke sprite is drawn at vent x - 4) and
+//        drift away from the cooler's column only, so kettle 1's stream stays off the cooler.
+// 18. Review round 2 (2026-10-18, now contract D12, D13 and D14; replaces 17a to 17c where they differ):
+//     a. D13 picks the scale in device pixels: k = floor(target * dpr) backing pixels per virtual
+//        pixel (at least 1), CSS scale k / dpr, so every game pixel is exactly k device pixels
+//        (412 px at dpr 2.625 gives k 5 and a 335 CSS px canvas). The canvas is nudged with
+//        position relative so its top left lands on a whole device pixel. 3x on desktop needs
+//        room for #status, #act and #chips too (CONTROLS_H) or it falls back to the 2x rule.
+//     b. Floating numbers are outlined text with no box: the string four times in the outline
+//        color at 1 px offsets, then in its color. The cash number sits over the served customer
+//        (the coin at the customer's px, the text after it, at py - 26; left aligned so a
+//        pitmaster on (6,5) stays clear) and the tip number at the customer's px,
+//        C.FX.TIP_GAP_PX (-11) above it; the seat tip sits over the heart at (seat x - 4,
+//        seat y - 34). Every number is clamped inside the canvas. A number whose box overlaps one
+//        that started under 0.5 s ago (within 8 px in y) starts 0.3 s later per such number,
+//        at most 3; a heart within 12 px of one that started under 0.5 s ago starts 0.3 s later.
+//     c. Ghosts of unowned gear and decor draw only in the morning and evening, at GHOST_ALPHA
+//        0.5. The dashed outlines draw in every phase.
+//     d. The unbought Flower bed draws bed frame 3 (tilled soil) on its footprint. Lawn tiles use
+//        clover frame 1 inside unowned decor footprints and where (x * 5 + y * 3) % 3 === 0.
+//        Hedge tiles alternate frames by x % 2 (frame 1 has blossoms).
+//     e. Sparkles are drawn at 2x (14 by 14, centered on the old 7 by 7 spot). Order bubbles,
+//        their icon and the walk out mark sit 2 px higher (bubble at px + 14, py - 22) and the
+//        patience bar at py - 26, so a bubble no longer touches the next customer's head.
+//     f. The dog skips a roam tile whose south neighbor is a taken seat.
+//     g. The till's bold row is "Take today" (sales and tips after wages and daily costs); the
+//        number is still till.net.
 (function () {
+'use strict';
 const PitSim = globalThis.PitSim || (globalThis.PitSim = {});
 
-const VERSION = '0.2.0';
+const VERSION = '0.3.0';
 
 const FALLBACK_COLOR = {
-  K: '#1b1714', U: '#2a2015', C: '#E6D8B8', O: '#D06129', Y: '#F3CF6D', M: '#bfb39a',
-  H: '#3a332c', I: '#33211A', S: '#444947', g: '#4a6741', G: '#5f7f4c', h: '#2f4a2d',
-  d: '#6b4a2a', b: '#8a6a3f', p: '#e8a0a0', r: '#b5583a', n: '#7a3f22', f: '#ff9a2e',
-  y: '#ffd85c', s: '#8d8a86', t: '#5a5753', w: '#a9c4d9'
+  K: '#1b1714', U: '#2a2015', C: '#E6D8B8', O: '#D06129', outline: '#3b2417', woodD: '#7a4a26', woodM: '#a8693a',
+  woodL: '#d79a5b', paver: '#e8c890', paverD: '#c9a46b', lawnA: '#6cc24a', lawnB: '#4fa83d', leafD: '#2f7a32',
+  leafL: '#a6e05a', cloth: '#5bb8f0', clothD: '#3a86c8', white: '#fbf7ef', pink: '#f27aa8', magenta: '#d94a8c',
+  yellow: '#ffd84a', skinL: '#f6c49a', skinM: '#d9935f', skinD: '#8f5634', red: '#d8402f', raw: '#f29a9a',
+  cooking: '#d0663e', done: '#8e3b1f', steelL: '#9aa4ae', steelD: '#4d5560', smokeL: '#ddd8cf', smokeD: '#6e6863'
 };
 
 const SHELL_IDS = [
@@ -70,6 +119,20 @@ const KEY_HELP = [
   ['Escape, P', 'Pause and resume.'],
   ['Tap the yard', 'Walk there. Tap a station to walk over and use it.']
 ];
+const BOARD_OFFS = [[1, 3], [8, 3], [1, 9], [8, 9]];      // board stacks, from the board's draw px
+const SPARKLE_OFFS = [[-3, -4], [6, -7], [2, 2]];          // from the served plate spot
+const BURST_OFFS = [[-3, 0], [0, -2], [3, 0]];             // from the burnt piece
+const FX_LOG_MAX = 500;
+const LAWN_FROM_ROW = 6;                                   // fence, hedge and bed tiles sit on lawn from this row down
+const OVERFLOW_OK = /^(shadow|hand_|player_|buddy_|tender_|cust[0-9]_)/;
+const GHOST_ALPHA = 0.5;                                   // unowned gear and decor, morning and evening only
+const CONTROLS_H = 24 + 48 + 52 + 8;                       // #status, #act, #chips with its margin, slack (D13 3x test)
+const CASH_ABOVE_PX = 26;                                  // the cash number sits at the served customer's py - 26
+const STAGGER_S = 0.3;                                     // a number or heart that would overlap a fresh one waits this long
+const STAGGER_WINDOW_S = 0.5;
+const STAGGER_MAX = 3;
+const PATH_TILES = new Set(['9,10', '9,9', '9,8', '9,7', '8,7', '7,7']);   // customer route, drawn as pavers
+const SMOKE_HALF_W = 4;                                    // chimney puffs are centered on the vent
 
 // Perimeter of a 12 by 12 ring, clockwise from the top center (44 pixels).
 const RING = (function () {
@@ -85,30 +148,48 @@ const RING = (function () {
 // Page state.
 const el = {};
 let sim = null;
-let C = null, MAP = null, MEATS = null, MEAT_IDS = null, CATALOG = null, STRINGS = null, art = null, COLOR = null;
-let VW = 208, VH = 240, TILE = 16;
-let off = null, octx = null, vctx = null, scale = 1, dpr = 1;
+let C = null, FX = null, MAP = null, MEATS = null, MEAT_IDS = null, CATALOG = null, STRINGS = null, art = null, COLOR = null;
+let VW = 176, VH = 192, TILE = 16;
+let off = null, octx = null, vctx = null, kpx = 1;
 let mqReduced = null, mqDesktop = null;
-let reduced = false, saveOff = false, saveOffNoted = false;
+let reduced = false, saveOff = false, saveOffNoted = false, migrated = false;
 let last = null, rafId = 0, tAnim = 0, nowMs = 0, stopped = false;
 let currentPanel = null, returnPanel = null;
 let howtoOpen = false, howtoFrom = null, howtoClose = null;
 const held = new Set();
 let crng = null; // cosmetic rng
+const SEAT_BY_ID = Object.create(null);
+let extTile = null; // the table tile that comes with the Bigger table
 
-// Effects.
-const smokes = [];
-const pops = [];
-const tapMarks = [];
-const markX = new Map();
-const cookerSmokeT = {};
-const burntSmokeT = {};
+// Effects. Every start time is on the effect clock tAnim, which stops while the game is
+// paused and while a panel is open (the frozen yard of V2.9).
+const nums = [];       // { kind, str, x, y, color, coin, at }   x, y is the text position at rest
+const sparkles = [];   // { x, y, at }
+const hearts = [];     // { x, y, at }
+const puffs = [];      // { x0, y0, vx, rise, life, at, dark, sway }
+const rings = [];      // { x, y, at, ok }
+const markX = new Map();   // customer id -> tAnim when the mark ends
+const sweatAt = new Map(); // customer id -> tAnim when the sweat started
+const puffT = {}, puffOn = {};
+const columnT = new Map(); // cooker:piece -> seconds to the next column puff
 let rainDrops = null;
-let shakeUntil = 0, bounceUntil = 0, blockedUntil = 0, lastCallUntil = 0, saveOffUntil = 0;
-let lastCarrySig = '';
+let squashAt = -1;
+let zzzSince = null, zzzAt = -1;
+let birdNext = 0, birdUntil = -1;
+let shakeUntil = 0, blockedUntil = 0, lastCallUntil = 0, saveOffUntil = 0, noticeUntil = 0;
 // Walk pasts with reason 'soldout' this day, counted from events (today.past holds both
 // reasons). Reset when the yard opens; a reload during the evening shows them as line full.
 let pastSoldOut = 0;
+const fxLog = [];
+
+// The dog: the live object of D14 holds only its six fields; the walk state lives beside it.
+const dog = { x: 4, y: 7, px: 64, py: 112, frame: 2, flip: false };
+const dogAI = { path: [], next: null, wait: 0, anim: 0 };
+
+// Draw records for captureFrame (D14).
+let capturing = false;
+let recs = [];
+const SIZE = Object.create(null);
 
 // Live region.
 const liveQueue = [];
@@ -121,7 +202,6 @@ const chipSig = {};
 const lastHud = { day: '', cash: '', rep: '' };
 let lastAct = null, lastActDis = null, lastStatus = null, lastPhase = '', lastPaused = null, lastHow = null;
 let clip = null;
-const textCache = new Map();
 
 // ---------------------------------------------------------------- helpers
 
@@ -162,10 +242,6 @@ function meatList(counts) {
   }
   return parts.join(', ');
 }
-function catalogRow(id) {
-  for (let i = 0; i < CATALOG.length; i++) if (CATALOG[i].id === id) return CATALOG[i];
-  return null;
-}
 function iconCanvas(name) {
   if (!art.has(name)) return null;
   const c = art.canvasFor(name, 0, 2);
@@ -186,7 +262,15 @@ function mulberry32(seed) {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
-function owned(entry) { return PitSim.tileOwned(entry, sim.state.gear); }
+function owned(entry) { return PitSim.tileOwned(entry, sim.state.gear, sim.state.decor); }
+function custById(id) {
+  const list = sim.state.customers;
+  for (let i = 0; i < list.length; i++) if (list[i].id === id) return list[i];
+  return null;
+}
+function byId(a, b) { return a.id - b.id; }
+function isChairSeat(seat) { return seat.decor === 'chair1' || seat.decor === 'chair2'; }
+function easeOut(t) { const u = 1 - Math.max(0, Math.min(1, t)); return 1 - u * u; }
 
 // ---------------------------------------------------------------- boot
 
@@ -215,16 +299,22 @@ function boot() {
     console.error(e);
     return;
   }
-  C = PitSim.C; MAP = PitSim.MAP; MEATS = PitSim.MEATS; MEAT_IDS = PitSim.MEAT_IDS;
+  C = PitSim.C; FX = C.FX; MAP = PitSim.MAP; MEATS = PitSim.MEATS; MEAT_IDS = PitSim.MEAT_IDS;
   CATALOG = PitSim.CATALOG; STRINGS = PitSim.STRINGS;
   COLOR = Object.assign({}, FALLBACK_COLOR, art.COLOR || {});
   TILE = MAP.TILE || 16;
   VW = MAP.W * TILE; VH = MAP.H * TILE;
+  for (let i = 0; i < MAP.seats.length; i++) SEAT_BY_ID[MAP.seats[i].id] = MAP.seats[i];
+  const table = MAP.station('table');
+  extTile = null;
+  for (let i = 0; i < table.tiles.length; i++) if (table.tiles[i].gear === 'bigtable') extTile = table.tiles[i];
 
   const saved = readSave();
   const seed = readSeed();
   sim = PitSim.createSim(saved, seed);
   crng = mulberry32((sim.seed >>> 0) ^ 0x9E3779B9);
+  birdNext = birdGap();
+  dogReset(2);
 
   setupMedia();
   buildStatic();
@@ -233,17 +323,28 @@ function boot() {
   showMorning();
   pump();
   if (saveOff) noteSaveOff();
+  if (migrated) {
+    noticeUntil = nowMs + FX.NOTICE_S * 1000;
+    announce('Your save was updated for the new yard.');
+    writeSave();
+  }
   exposeGame();
+  observe();
   rafId = requestAnimationFrame(frame);
 }
 
 function readSave() {
+  migrated = false;
   let raw = null;
   try { raw = localStorage.getItem(PitSim.SAVE_KEY); } catch (e) { saveOff = true; return null; }
   if (!raw) return null;
   let parsed = null;
   try { parsed = JSON.parse(raw); } catch (e) { return null; }
-  try { return PitSim.validateSave(parsed); } catch (e) { return null; }
+  const wasV1 = !!(parsed && typeof parsed === 'object' && !Array.isArray(parsed) && parsed.v === 1);
+  let valid = null;
+  try { valid = PitSim.validateSave(parsed); } catch (e) { valid = null; }
+  migrated = wasV1 && valid !== null;
+  return valid;
 }
 
 function readSeed() {
@@ -262,21 +363,42 @@ function exposeGame() {
     el: el,
     advance: advance,
     get reduced() { return reduced; },
-    get saveOff() { return saveOff; }
+    get saveOff() { return saveOff; },
+    dog: dog,
+    fxLog: fxLog,
+    captureFrame: captureFrame
   };
 }
 
+// Steps the sim, pumps events once, then refreshes the DOM and draws one frame (D14).
 function advance(seconds) {
   const n = Math.max(0, Math.round((Number(seconds) || 0) / C.TICK_SECONDS));
   for (let i = 0; i < n; i++) sim.tick();
   pump();
+  observe();
+  updateDom();
+  try { render(); } catch (e) { fail(e); }
+}
+
+// Renders the current state once without moving any timer and returns what it drew.
+function captureFrame() {
+  recs = [];
+  capturing = true;
+  try { render(); } finally { capturing = false; }
+  return recs;
 }
 
 function setupMedia() {
   mqReduced = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
   mqDesktop = window.matchMedia ? window.matchMedia('(min-width: 900px)') : null;
   reduced = !!(mqReduced && mqReduced.matches);
-  const onR = function () { reduced = !!(mqReduced && mqReduced.matches); if (reduced) smokes.length = 0; };
+  const onR = function () {
+    reduced = !!(mqReduced && mqReduced.matches);
+    if (reduced) {
+      puffs.length = 0; sparkles.length = 0; squashAt = -1; shakeUntil = 0; birdUntil = -1;
+      dogReset(2);
+    }
+  };
   const onD = function () { resize(); syncPanels(); };
   listenMq(mqReduced, onR);
   listenMq(mqDesktop, onD);
@@ -299,18 +421,43 @@ function setupCanvas() {
   window.addEventListener('orientationchange', resize);
 }
 
+// D13 (review round 2): the target CSS scale is 3 on desktop when the canvas and the controls
+// under it fit, 2 on phones (8 px canvas gutters), the fit width below 368 px; the backing store
+// takes floor(target * dpr) device pixels per game pixel and the CSS size follows from that, so
+// every game pixel is a whole number of device pixels.
 function resize() {
-  dpr = window.devicePixelRatio || 1;
-  const availW = Math.min(el.wrap.clientWidth || 375, 480);
-  let availH = window.innerHeight - 44 - (24 + 48 + 48) - 16;
-  if (mqDesktop && mqDesktop.matches) availH = Math.min(availH, window.innerHeight * 0.7);
-  scale = Math.max(1, Math.floor(Math.min(availW * dpr / VW, availH * dpr / VH)));
-  el.cv.width = VW * scale;
-  el.cv.height = VH * scale;
-  el.cv.style.width = (VW * scale / dpr) + 'px';
-  el.cv.style.height = (VH * scale / dpr) + 'px';
+  const vw = document.documentElement.clientWidth || window.innerWidth || 375;
+  const vh = window.innerHeight || 0;
+  const dpr = window.devicePixelRatio || 1;
+  let target;
+  if (vw >= 900 && vh - 44 - 16 - CONTROLS_H >= VH * 3) target = 3;
+  else if (vw - 16 >= VW * 2) target = 2;
+  else target = Math.max(0.25, (vw - 16) / VW);
+  kpx = Math.max(1, Math.floor(target * dpr + 1e-6));
+  const css = kpx / dpr;
+  el.cv.width = VW * kpx;
+  el.cv.height = VH * kpx;
+  el.cv.style.width = (VW * css) + 'px';
+  el.cv.style.height = (VH * css) + 'px';
+  snapCanvas(dpr);
   vctx.imageSmoothingEnabled = false;
   octx.imageSmoothingEnabled = false;
+  if (sim) { try { render(); } catch (e) { fail(e); } }
+}
+
+// Nudge the canvas so its top left corner lands on a whole device pixel.
+function snapCanvas(dpr) {
+  const st = el.cv.style;
+  st.position = 'relative';
+  st.left = '0px';
+  st.top = '0px';
+  const r = el.cv.getBoundingClientRect();
+  const fix = function (v) {
+    const d = Math.round((Math.round(v * dpr) / dpr - v) * 10000) / 10000;
+    return Math.abs(d) < 0.0001 ? 0 : d;
+  };
+  st.left = fix(r.left) + 'px';
+  st.top = fix(r.top) + 'px';
 }
 
 // ---------------------------------------------------------------- frame loop
@@ -331,8 +478,10 @@ function frame(now) {
   }
   sim.step(dt);
   pump();
+  observe();
   s = sim.state;
-  if (!s.paused) {
+  const frozen = s.paused || currentPanel !== null || s.phase !== 'service';
+  if (!frozen) {
     tAnim += dt;
     updateFx(dt);
   }
@@ -366,6 +515,8 @@ function onEvent(ev) {
     case 'yard_open':
       announce('Yard open. Gate opens in ' + C.GATE_OPENS + ' seconds.');
       pastSoldOut = 0;
+      clearFx();
+      dogReset(3);
       closePanel();
       break;
     case 'gate_soon': announce('Gate opens in 10.'); break;
@@ -374,19 +525,22 @@ function onEvent(ev) {
     case 'piece_done': announce(L + ' is done on ' + K + '.'); break;
     case 'piece_burnt':
       announce(L + ' burnt on ' + K + '.');
-      if (!reduced) shakeUntil = nowMs + 120;
+      if (!reduced) {
+        shakeUntil = nowMs + FX.SHAKE_MS;
+        burntBurst(ev.cooker);
+      }
       break;
-    case 'served':
-      announce(ev.tip > 0
-        ? 'Served ' + L + ', ' + ev.price + ' plus ' + ev.tip + ' tip.'
-        : 'Served ' + L + ', ' + ev.price + ', no tip.');
-      pops.push({ x: Number(ev.x) || 0, y: Number(ev.y) || 0, price: ev.price, tip: ev.tip, age: 0 });
-      if (pops.length > 12) pops.shift();
-      break;
-    case 'walk_out':
+    case 'served': onServed(ev, L); break;
+    case 'seat_taken': break;
+    case 'to_go': announce('No free seat. They took it to go.'); break;
+    case 'seat_done': onSeatDone(ev); break;
+    case 'walk_out': {
       announce('A customer walked out.');
-      markX.set(ev.id, tAnim + 0.6);
+      markX.set(ev.id, tAnim + FX.WALKOUT_MARK_S);
+      const c = custById(ev.id);
+      if (c) log('mark', Math.round(c.px) + 18, Math.round(c.py) - 20);
       break;
+    }
     case 'walk_past':
       if (ev.reason === 'soldout') pastSoldOut += 1;
       announce(ev.reason === 'soldout' ? 'Someone looked in. Nothing left to sell.' : 'Someone walked past. The line is full.');
@@ -425,6 +579,80 @@ function onEvent(ev) {
     case 'blocked': blockedUntil = nowMs + 1500; break;
     default: break;
   }
+}
+
+function onServed(ev, L) {
+  announce(ev.tip > 0
+    ? 'Served ' + L + ', ' + ev.price + ' plus ' + ev.tip + ' tip.'
+    : 'Served ' + L + ', ' + ev.price + ', no tip.');
+  const x = Math.round(Number(ev.x) || 0), y = Math.round(Number(ev.y) || 0);
+  // Over the served customer (round 2), falling back to the plate spot.
+  const cu = custById(ev.id);
+  const cashStr = '+' + ev.price;
+  let nx = x, ny = y - 6;
+  if (cu) {
+    nx = Math.round(cu.px) + 9;     // the coin on the customer's left edge, the text after it
+    ny = Math.round(cu.py) - CASH_ABOVE_PX;
+  }
+  addNum('cash', cashStr, numX(nx, cashStr, true), Math.max(1, ny), 'yellow', true);
+  if (ev.tip > 0) {
+    const tipStr = '+' + ev.tip + ' TIP';
+    const tx = cu ? Math.round(cu.px) : nx;
+    addNum('tip', tipStr, numX(tx, tipStr, false), Math.max(1, ny + FX.TIP_GAP_PX), 'white', false);
+  }
+  if (!reduced) {
+    for (let i = 0; i < SPARKLE_OFFS.length; i++) {
+      const sx = x + SPARKLE_OFFS[i][0], sy = y + SPARKLE_OFFS[i][1];
+      sparkles.push({ x: sx, y: sy, at: tAnim + i * FX.SPARKLE_STAGGER_S });
+      log('sparkle', sx, sy);
+    }
+    if (sparkles.length > 24) sparkles.splice(0, sparkles.length - 24);
+    const c = custById(ev.id);
+    if (c) log('hop', Math.round(c.px), Math.round(c.py) - 10);
+  }
+}
+
+function onSeatDone(ev) {
+  if (ev.atClose) return;
+  announce('A seated customer tipped ' + ev.bonus + ' more.');
+  const x = Math.round(Number(ev.x) || 0), y = Math.round(Number(ev.y) || 0);
+  let k = 0;
+  for (let i = 0; i < hearts.length; i++) {
+    const h = hearts[i];
+    if (tAnim - h.at < STAGGER_WINDOW_S && Math.abs(h.x - x) <= 12 && Math.abs(h.y - (y - 24)) <= 8) k++;
+  }
+  hearts.push({ x: x, y: y - 24, at: tAnim + Math.min(STAGGER_MAX, k) * STAGGER_S });
+  if (hearts.length > 8) hearts.shift();
+  log('heart', x, y - 24);
+  const str = '+' + ev.bonus + ' TIP';
+  addNum('seatTip', str, numX(x - 4, str, false), Math.max(1, y - 34), 'pink', false);
+}
+
+// Clamp a number's text x so the text (and its coin) stays inside the canvas with its outline.
+function numX(x, str, coin) {
+  const w = art.textWidth(str);
+  return Math.max(coin ? 10 : 1, Math.min(VW - w - 1, x));
+}
+
+// Numbers that would overlap one still fresh start STAGGER_S later per such number (round 2).
+function addNum(kind, str, x, y, color, coin) {
+  const x0 = coin ? x - 9 : x, x1 = x + art.textWidth(str);
+  let k = 0;
+  for (let i = 0; i < nums.length; i++) {
+    const n = nums[i];
+    if (tAnim - n.at >= STAGGER_WINDOW_S || Math.abs(n.y - y) >= 8) continue;
+    const n0 = n.coin ? n.x - 9 : n.x, n1 = n.x + art.textWidth(n.str);
+    if (n0 < x1 && x0 < n1) k++;
+  }
+  nums.push({ kind: kind, str: str, x: x, y: y, color: color, coin: coin, at: tAnim + Math.min(STAGGER_MAX, k) * STAGGER_S });
+  if (nums.length > 16) nums.shift();
+  log(kind, x, y);
+}
+
+function log(kind, x, y) {
+  const s = sim.state;
+  fxLog.push({ kind: kind, x: Math.round(x), y: Math.round(y), day: s.day, at: s.clock });
+  if (fxLog.length > FX_LOG_MAX) fxLog.splice(0, fxLog.length - FX_LOG_MAX);
 }
 
 function announce(msg) {
@@ -553,11 +781,13 @@ function togglePause() {
     sim.setPaused(true);
     openPanel('pause');
   }
+  updateDom();
 }
 
 function resumeFromPause() {
   if (sim.state.paused) sim.setPaused(false);
   closePanel();
+  updateDom();
 }
 
 function openConfirm(from) {
@@ -572,13 +802,12 @@ function confirmNo() {
 }
 function confirmYes() {
   held.clear();
-  smokes.length = 0;
-  pops.length = 0;
-  markX.clear();
-  rainDrops = null;
+  clearFx();
+  fxLog.length = 0;
   returnPanel = null;
   sim.reset();
   sim.setPaused(false);
+  dogReset(2);
   pump();
   showMorning();
   pump();
@@ -643,11 +872,15 @@ function rebuildClipboardKeepFocus() {
   if (f && typeof f.focus === 'function') f.focus();
 }
 
+function seatsLine() {
+  return 'Seats ' + sim.seatCount() + '. Charm ' + sim.charm() + '. Each seated customer tips ' + sim.seatBonus() + ' more.';
+}
+
 function buildClipboard() {
   const s = sim.state;
   el['clipboard-h'].textContent = 'Morning';
   clear(el['clip-top']); clear(el.shop); clear(el.hire); clear(el['clip-foot']);
-  clip = { rows: [], headText: null, cart: null, open: null, why: null };
+  clip = { rows: [], headText: null, seats: null, cart: null, open: null, why: null };
 
   // Header lines.
   clip.headText = document.createTextNode(headLine(s));
@@ -678,6 +911,8 @@ function buildClipboard() {
     const g = sim.goal();
     el['clip-top'].appendChild(mk('p', { id: 'goal', text: g ? 'Next goal: ' + g.label + ', ' + g.price + '.' : '' }));
   }
+  clip.seats = mk('p', { id: 'seats', text: seatsLine() });
+  el['clip-top'].appendChild(clip.seats);
   if (typeof sim.expectedCrowd === 'function') {
     el['clip-top'].appendChild(mk('p', { id: 'crowd', text: 'Expect about ' + sim.expectedCrowd() + ' people today. One plate each.' }));
   }
@@ -695,8 +930,11 @@ function buildClipboard() {
   el.shop.appendChild(h3('Charcoal'));
   for (let i = 0; i < CATALOG.length; i++) if (CATALOG[i].kind === 'fuel') el.shop.appendChild(cartRow(CATALOG[i]));
   el.shop.appendChild(h3('Gear'));
-  for (let i = 0; i < CATALOG.length; i++) if (CATALOG[i].kind === 'gear') el.shop.appendChild(gearRow(CATALOG[i]));
+  for (let i = 0; i < CATALOG.length; i++) if (CATALOG[i].kind === 'gear') el.shop.appendChild(ownRow(CATALOG[i]));
   for (let i = 0; i < CATALOG.length; i++) if (CATALOG[i].kind === 'goal') el.shop.appendChild(goalRow(CATALOG[i]));
+  el.shop.appendChild(h3('Decor'));
+  el.shop.appendChild(mk('p', { cls: 'muted', text: 'Charm adds to the tip each seated customer leaves, up to 3 more, and lets word of mouth climb a little faster.' }));
+  for (let i = 0; i < CATALOG.length; i++) if (CATALOG[i].kind === 'decor') el.shop.appendChild(ownRow(CATALOG[i]));
 
   // Hires.
   el.hire.appendChild(h3('Hires'));
@@ -728,6 +966,8 @@ function refreshClipboard() {
   if (!clip) return;
   const s = sim.state;
   clip.headText.nodeValue = headLine(s);
+  const seats = seatsLine();
+  if (clip.seats.textContent !== seats) clip.seats.textContent = seats;
   for (let i = 0; i < clip.rows.length; i++) clip.rows[i]();
   const total = sim.cartTotal();
   clip.cart.textContent = 'Total ' + total + '. Cash after ' + (s.cash - total) + '.';
@@ -742,9 +982,11 @@ function nameCell(item, withIcon) {
 }
 
 function lockedBy(item, s) {
-  if (!item.needs) return false;
-  if (item.needs.gear) return s.gear[item.needs.gear] !== true;
-  if (item.needs.day) return s.day < item.needs.day;
+  const n = item.needs;
+  if (!n) return false;
+  if (n.gear) return s.gear[n.gear] !== true;
+  if (n.decor) return s.decor[n.decor] !== true;
+  if (n.day) return s.day < n.day;
   return false;
 }
 
@@ -774,7 +1016,9 @@ function cartRow(item) {
   return row;
 }
 
-function gearRow(item) {
+// A gear or decor row: bought at once, one of each, Owned once bought.
+function ownRow(item) {
+  const isDecor = item.kind === 'decor';
   const price = mk('span', { cls: 'price' });
   const name = nameCell(item, false);
   const eff = name.querySelector('.effect');
@@ -782,7 +1026,7 @@ function gearRow(item) {
   let ctl = null, ctlOwned = null;
   clip.rows.push(function () {
     const s = sim.state;
-    const isOwned = s.gear[item.id] === true;
+    const isOwned = (isDecor ? s.decor : s.gear)[item.id] === true;
     const locked = lockedBy(item, s);
     const canPay = s.cash - sim.cartTotal() >= item.price;
     const after = s.cash - sim.cartTotal() - item.price;
@@ -882,8 +1126,10 @@ function buildTill() {
   const spoiled = meatList(t.spoiled) || 'nothing';
   const grate = meatList(t.grateLeft) || 'nothing';
   const soldOut = Math.max(0, Math.min(t.past, pastSoldOut));
+  const seated = t.seated | 0;
   body.appendChild(tillRow('Served', plural(t.served, 'plate', 'plates'), plus(t.revenue)));
   body.appendChild(tillRow('Tips', '', plus(t.tips)));
+  body.appendChild(tillRow('Seat tips', seated + ' sat down', plus(t.seatTips | 0)));
   body.appendChild(tillRow('Food cost (what you cooked)', '', minus(t.foodCost)));
   body.appendChild(tillRow('Charcoal used', plural(t.bags, 'bag', 'bags'), minus(t.bags * C.CHARCOAL_PRICE)));
   body.appendChild(tillRow('Wages', wages, minus(t.wages)));
@@ -892,22 +1138,26 @@ function buildTill() {
   body.appendChild(tillRow('Thrown out', plural(t.wastePlates, 'plate', 'plates') + ', ' + t.wasteBurnt + ' burnt', minus(t.wasteCost)));
   body.appendChild(tillRow('Left on the grate', grate, minus(t.grateCost)));
   body.appendChild(tillRow('Burnt today', plural(t.burnt || 0, 'piece', 'pieces') + ', costed in the two rows above', ''));
-  body.appendChild(tillRow('Net', '', signed(t.net), 'net'));
+  body.appendChild(tillRow('Take today', 'sales and tips after wages and daily costs', signed(t.net), 'net'));
   body.appendChild(tillRow('Cash', '', String(t.cashAfter)));
   body.appendChild(mk('p', { cls: 'muted', text: 'Food, charcoal and spoilage were paid at the shop. They are listed so you can see where the money went.' }));
   body.appendChild(btn('next', 'Next day', 'primary', onNextDay));
   body.appendChild(h3('People'));
   body.appendChild(mk('p', {
-    text: 'Came to the gate ' + t.customers + '. Served ' + t.served + '. Walked out ' + t.walkouts +
+    text: 'Came to the gate ' + t.customers + '. Served ' + t.served + '. Sat down ' + seated +
+      '. Took it to go ' + (t.togo | 0) + '. Walked out ' + t.walkouts +
       '. Walked past (line full) ' + (t.past - soldOut) + '.' + (soldOut > 0 ? ' Looked in, sold out ' + soldOut + '.' : '') +
       ' Left at close ' + t.close + '.'
   }));
   body.appendChild(h3('Word of mouth'));
   body.appendChild(mk('p', { text: 'Word of mouth ' + t.repStart + ' to ' + t.repEnd }));
-  const capped = t.repCapped ? ', capped at ' + signed(C.REP_DAY_MAX) + ' / ' + C.REP_DAY_MIN + ' for the day' : '';
+  const happy = t.happy | 0, togoQuick = t.togoQuick | 0, ok = t.ok | 0, walkouts = t.walkouts | 0;
+  const capped = t.repCapped ? ', capped at ' + signed(t.repMax) + ' / ' + C.REP_DAY_MIN + ' for the day' : '';
   body.appendChild(mk('p', {
-    text: '+' + (t.happy * C.REP_QUICK) + ' from ' + plural(t.happy, 'quick serve', 'quick serves') + ', +' + (t.ok * C.REP_OK) + ' from ' +
-      plural(t.ok, 'serve', 'serves') + ', -' + (t.walkouts * Math.abs(C.REP_WALKOUT)) + ' from ' + plural(t.walkouts, 'walk-out', 'walk-outs') + capped
+    text: '+' + (happy * C.REP_QUICK) + ' from ' + plural(happy, 'quick serve', 'quick serves') + ' at a seat, +' +
+      (togoQuick * C.REP_TOGO_QUICK) + ' from ' + plural(togoQuick, 'quick serve', 'quick serves') + ' to go, +' +
+      (ok * C.REP_OK) + ' from ' + plural(ok, 'other serve', 'other serves') + ', -' +
+      (walkouts * Math.abs(C.REP_WALKOUT)) + ' from ' + plural(walkouts, 'walk-out', 'walk-outs') + capped
   }));
   body.appendChild(btn('till-new', 'New game', 'alt', function () { openConfirm('till'); }));
 }
@@ -915,6 +1165,8 @@ function buildTill() {
 function onNextDay() {
   if (sim.state.phase !== 'evening') return;
   sim.continueFromTill();
+  clearFx();
+  dogReset(2);
   pump();
   showMorning();
   pump();
@@ -946,23 +1198,28 @@ function buildBroke() {
   body.appendChild(mk('p', { text: 'Sell gear back at half price, or start over.' }));
   body.appendChild(mk('p', { cls: 'muted', text: 'Cash ' + s.cash + '.' }));
   let any = false;
-  for (let i = 0; i < CATALOG.length; i++) {
-    const item = CATALOG[i];
-    if (item.kind !== 'gear' || s.gear[item.id] !== true) continue;
-    any = true;
-    const price = Math.floor(item.price * C.SELL_BACK);
-    body.appendChild(mk('div', { cls: 'row' }, [
-      mk('span', { cls: 'name', text: item.label }),
-      btn('sell-' + item.id, 'Sell for ' + price, 'alt', (function (id) {
-        return function () {
-          sim.sell(id);
-          pump();
-          buildBroke();
-          const k = document.getElementById('broke-keep');
-          if (k) k.focus(); else el['broke-h'].focus();
-        };
-      })(item.id))
-    ]));
+  const kinds = ['gear', 'decor'];
+  for (let k = 0; k < kinds.length; k++) {
+    const kind = kinds[k];
+    const ownedSet = kind === 'gear' ? s.gear : s.decor;
+    for (let i = 0; i < CATALOG.length; i++) {
+      const item = CATALOG[i];
+      if (item.kind !== kind || ownedSet[item.id] !== true) continue;
+      any = true;
+      const price = Math.floor(item.price * C.SELL_BACK);
+      body.appendChild(mk('div', { cls: 'row' }, [
+        mk('span', { cls: 'name', text: item.label }),
+        btn('sell-' + item.id, 'Sell for ' + price, 'alt', (function (id) {
+          return function () {
+            sim.sell(id);
+            pump();
+            buildBroke();
+            const kp = document.getElementById('broke-keep');
+            if (kp) kp.focus(); else el['broke-h'].focus();
+          };
+        })(item.id))
+      ]));
+    }
   }
   if (!any) body.appendChild(mk('p', { cls: 'muted', text: 'Nothing left to sell.' }));
   if (!s.broke || !brokeTest(s)) {
@@ -987,6 +1244,42 @@ function setupInput() {
   document.addEventListener('visibilitychange', onVisibility);
 }
 
+// The drawn boxes of a station: its sprite, plus the counter extension when owned (D13).
+function stationRects(st) {
+  const sz = size(st.sprite);
+  const out = [{ x: st.draw.x, y: st.draw.y, w: sz[0], h: sz[1] }];
+  if (st.type === 'table' && extTile && owned(extTile)) out.push(extRect());
+  return out;
+}
+function extRect() {
+  const sz = size('counter_ext');
+  return { x: extTile.x * TILE, y: (extTile.y + 1) * TILE - sz[1], w: sz[0], h: sz[1] };
+}
+
+// Active stations in y-sort draw order (key, draw x, list order); stations share one layer.
+function stationsInDrawOrder() {
+  const list = [];
+  for (let i = 0; i < MAP.stations.length; i++) {
+    const st = MAP.stations[i];
+    if (!owned(st)) continue;
+    list.push({ st: st, k: st.sortRow * TILE + 15, x: st.draw.x, o: i });
+  }
+  list.sort(function (a, b) { return (a.k - b.k) || (a.x - b.x) || (a.o - b.o); });
+  return list;
+}
+
+function stationAt(vx, vy) {
+  const list = stationsInDrawOrder();
+  for (let i = list.length - 1; i >= 0; i--) {
+    const rects = stationRects(list[i].st);
+    for (let j = 0; j < rects.length; j++) {
+      const r = rects[j];
+      if (vx >= r.x && vx < r.x + r.w && vy >= r.y && vy < r.y + r.h) return list[i].st;
+    }
+  }
+  return null;
+}
+
 function onPointer(e) {
   if (e.button !== undefined && e.button !== 0) return;
   if (currentPanel) return;
@@ -994,13 +1287,23 @@ function onPointer(e) {
   if (s.paused || s.phase !== 'service') return;
   const r = el.cv.getBoundingClientRect();
   if (!(r.width > 0 && r.height > 0)) return;
-  const tx = Math.floor((e.clientX - r.left) / r.width * MAP.W);
-  const ty = Math.floor((e.clientY - r.top) / r.height * MAP.H);
-  const ok = sim.walkTo(tx, ty);
+  const vx = (e.clientX - r.left) / r.width * VW;
+  const vy = (e.clientY - r.top) / r.height * VH;
+  const hit = stationAt(vx, vy);
+  let tx, ty;
+  if (hit) { tx = hit.tiles[0].x; ty = hit.tiles[0].y; }
+  else { tx = Math.floor(vx / TILE); ty = Math.floor(vy / TILE); }
+  const ok = sim.walkTo(tx, ty) === true;
   pump();
   if (tx >= 0 && tx < MAP.W && ty >= 0 && ty < MAP.H) {
-    tapMarks.push({ x: tx * TILE, y: ty * TILE, at: tAnim, until: tAnim + 0.35, ok: ok === true });
-    if (tapMarks.length > 6) tapMarks.shift();
+    rings.push({ x: tx * TILE, y: ty * TILE, at: tAnim, ok: ok });
+    if (rings.length > 6) rings.shift();
+    log('ring', tx * TILE, ty * TILE);
+  }
+  if (ok && !reduced) {
+    squashAt = tAnim;
+    const p = sim.state.player;
+    log('squash', Math.round(p.px) - 1, Math.round(p.py) + TILE - 22);
   }
 }
 
@@ -1013,7 +1316,6 @@ function onAct() {
 
 function feedback() {
   if (reduced) return;
-  bounceUntil = tAnim + 0.15;
   el.act.style.transform = 'scale(0.96)';
   setTimeout(function () { el.act.style.transform = ''; }, 100);
 }
@@ -1087,6 +1389,7 @@ function onVisibility() {
     if (s.phase === 'service' && !s.paused && !currentPanel) {
       sim.setPaused(true);
       openPanel('pause');
+      updateDom();
     }
   } else {
     last = null;
@@ -1095,74 +1398,170 @@ function onVisibility() {
 
 // ---------------------------------------------------------------- effects
 
+function clearFx() {
+  nums.length = 0; sparkles.length = 0; hearts.length = 0; puffs.length = 0; rings.length = 0;
+  markX.clear(); sweatAt.clear(); columnT.clear();
+  for (const k in puffT) delete puffT[k];
+  for (const k in puffOn) delete puffOn[k];
+  rainDrops = null;
+  squashAt = -1;
+  zzzSince = null; zzzAt = -1;
+  birdUntil = -1; birdNext = tAnim + birdGap();
+  shakeUntil = 0;
+}
+
+function birdGap() { return FX.BIRD_GAP_MIN + (FX.BIRD_GAP_MAX - FX.BIRD_GAP_MIN) * crng(); }
+
+function piecePos(st, p) {
+  const o = st.slotPx && st.slotPx[p.slot] ? st.slotPx[p.slot] : { x: 3, y: 3 };
+  return { x: st.tiles[0].x * TILE + o.x, y: st.tiles[0].y * TILE + o.y };
+}
+
+function burntBurst(cooker) {
+  const st = MAP.station(cooker);
+  const ck = sim.state.stations[cooker];
+  if (!st || !ck) return;
+  let best = null;
+  for (let i = 0; i < ck.pieces.length; i++) {
+    const p = ck.pieces[i];
+    if (p.state !== 'burnt') continue;
+    if (best === null || (p.burntAt || 0) >= (best.burntAt || 0)) best = p;
+  }
+  if (!best) return;
+  const pos = piecePos(st, best);
+  for (let i = 0; i < BURST_OFFS.length; i++) {
+    spawnPuff(pos.x + BURST_OFFS[i][0], pos.y + BURST_OFFS[i][1], 0, FX.BURNT_RISE_PX_S, FX.BURNT_BURST_S, true, false);
+  }
+  log('burnt', pos.x + BURST_OFFS[0][0], pos.y + BURST_OFFS[0][1]);
+}
+
+// A chimney stream drifts away from the cooler's column so the smoke never sits over it.
+function puffDrift(st) {
+  const r = crng();
+  const cooler = MAP.station('cooler');
+  const away = cooler ? Math.sign(st.tiles[0].x - cooler.tiles[0].x) : 0;
+  return away === 0 ? r * 2 - 1 : away * r;
+}
+
+function spawnPuff(x, y, vx, rise, life, dark, sway) {
+  if (puffs.length >= 60) puffs.shift();
+  puffs.push({ x0: x, y0: y, vx: vx, rise: rise, life: life, at: tAnim, dark: dark, sway: sway });
+}
+
+// Watches the sim for the cues that have no event: the buddy's zzz, sweat drops, and the dog
+// going home at the panels. Starts no timer and moves nothing on the effect clock.
+function observe() {
+  const s = sim.state;
+  const service = s.phase === 'service';
+  if (!service || reduced) {
+    const h = MAP.dogHome;
+    if (dog.x !== h.x || dog.y !== h.y || dog.px !== h.x * TILE || dog.py !== h.y * TILE || dog.frame !== 2 || dogAI.next) dogReset(2);
+  }
+  const b = s.buddy;
+  if (service && b && b.task === 'idle') {
+    if (zzzSince === null) zzzSince = s.clock;
+    if (s.clock - zzzSince >= C.ZZZ_AFTER) {
+      if (zzzAt < 0) {
+        zzzAt = tAnim;
+        log('zzz', Math.round(b.px) + 10, Math.round(b.py) - 14);
+      }
+    } else {
+      zzzAt = -1;
+    }
+  } else {
+    zzzSince = null; zzzAt = -1;
+  }
+  if (service || sweatAt.size) {
+    const seen = new Set();
+    for (let i = 0; i < s.customers.length; i++) {
+      const c = s.customers[i];
+      if (!sweating(c)) continue;
+      seen.add(c.id);
+      if (!sweatAt.has(c.id)) {
+        sweatAt.set(c.id, tAnim);
+        log('sweat', Math.round(c.px) + 12, Math.round(c.py) - 6);
+      }
+    }
+    sweatAt.forEach(function (t, id) { if (!seen.has(id)) sweatAt.delete(id); });
+  }
+}
+
+function sweating(c) {
+  return c.mode === 'waiting' && c.patienceMax > 0 && c.patience <= c.patienceMax * C.SWEAT_FRAC;
+}
+
 function updateFx(dt) {
   const s = sim.state;
-  const inService = s.phase === 'service';
 
-  // Action feedback from the hands changing.
-  const c = s.player ? s.player.carrying : null;
-  const sig = s.phase + '|' + (c ? c.kind + ':' + (c.meat || '') + ':' + (c.times ? c.times.length : '') : 'none');
-  if (sig !== lastCarrySig) {
-    if (lastCarrySig.indexOf('service|') === 0 && inService && !reduced) bounceUntil = tAnim + 0.15;
-    lastCarrySig = sig;
-  }
-
-  // Smoke.
-  if (!reduced && inService) {
-    const stations = MAP.stations;
-    for (let i = 0; i < stations.length; i++) {
-      const st = stations[i];
-      if (st.type !== 'cooker' || !owned(st)) continue;
+  // Chimney puffs on lit cookers and the smoke column over burnt pieces.
+  if (!reduced) {
+    const live = new Set();
+    for (let i = 0; i < MAP.stations.length; i++) {
+      const st = MAP.stations[i];
+      if (st.type !== 'cooker') continue;
       const ck = s.stations[st.id];
-      if (!ck) continue;
-      const px = st.tiles[0].x * TILE, py = st.tiles[0].y * TILE;
+      if (!ck || !owned(st)) { puffOn[st.id] = false; continue; }
+      const tx = st.tiles[0].x * TILE, ty = st.tiles[0].y * TILE;
       const band = PitSim.fireBand(ck.fire);
-      if (band === 'good' || band === 'hot') {
-        cookerSmokeT[st.id] = (cookerSmokeT[st.id] || 0) - dt;
-        if (cookerSmokeT[st.id] <= 0) {
-          cookerSmokeT[st.id] = band === 'hot' ? 0.3 : 0.45;
-          spawnSmoke(px + 4 + Math.floor(crng() * 5) - 2, py - 6);
+      if (band === 'out') {
+        puffOn[st.id] = false;
+        puffT[st.id] = 0;
+      } else {
+        const every = band === 'low' ? FX.PUFF_EVERY_LOW : band === 'good' ? FX.PUFF_EVERY_GOOD : FX.PUFF_EVERY_HOT;
+        puffT[st.id] = (puffT[st.id] || 0) - dt;
+        if (puffT[st.id] <= 0) {
+          puffT[st.id] = every;
+          const vent = st.sprite === 'drum' ? { x: tx + 7, y: ty - 4 } : { x: tx + 11, y: ty - 10 };
+          const life = FX.PUFF_LIFE_MIN + (FX.PUFF_LIFE_MAX - FX.PUFF_LIFE_MIN) * crng();
+          spawnPuff(vent.x - SMOKE_HALF_W, vent.y, puffDrift(st) * FX.PUFF_DRIFT_PX_S, FX.PUFF_RISE_PX_S, life, false, false);
+          if (!puffOn[st.id]) { puffOn[st.id] = true; log('puff', vent.x, vent.y); }
         }
       }
       for (let j = 0; j < ck.pieces.length; j++) {
         const p = ck.pieces[j];
         if (p.state !== 'burnt') continue;
         const key = st.id + ':' + p.id;
-        burntSmokeT[key] = (burntSmokeT[key] || 0) - dt;
-        if (burntSmokeT[key] <= 0) {
-          burntSmokeT[key] = 0.5;
-          const o = st.slotPx && st.slotPx[p.slot] ? st.slotPx[p.slot] : { x: 0, y: 0 };
-          spawnSmoke(px + o.x + 1, py + o.y - 3);
+        live.add(key);
+        const pos = piecePos(st, p);
+        let left = columnT.get(key);
+        if (left === undefined) { left = 0; log('column', pos.x + 1, pos.y - 3); }
+        left -= dt;
+        if (left <= 0) {
+          left = FX.BURNT_COLUMN_EVERY;
+          spawnPuff(pos.x + 1, pos.y - 3, 0, FX.BURNT_COLUMN_RISE_PX_S, FX.BURNT_COLUMN_LIFE, true, true);
         }
+        columnT.set(key, left);
       }
     }
-  }
-  for (let i = smokes.length - 1; i >= 0; i--) {
-    const sm = smokes[i];
-    sm.age += dt;
-    sm.y -= 8 * dt;
-    sm.x += sm.drift * dt;
-    if (sm.age >= sm.life) smokes.splice(i, 1);
+    columnT.forEach(function (v, k) { if (!live.has(k)) columnT.delete(k); });
   }
 
-  // Coin pops.
-  for (let i = pops.length - 1; i >= 0; i--) {
-    pops[i].age += dt;
-    if (pops[i].age >= (reduced ? 0.6 : 0.8)) pops.splice(i, 1);
+  // Expire.
+  for (let i = puffs.length - 1; i >= 0; i--) if (tAnim - puffs[i].at >= puffs[i].life) puffs.splice(i, 1);
+  for (let i = nums.length - 1; i >= 0; i--) if (tAnim - nums[i].at >= FX.NUMBER_S) nums.splice(i, 1);
+  for (let i = sparkles.length - 1; i >= 0; i--) if (tAnim - sparkles[i].at >= FX.SPARKLE_S) sparkles.splice(i, 1);
+  for (let i = hearts.length - 1; i >= 0; i--) if (tAnim - hearts[i].at >= FX.HEART_S) hearts.splice(i, 1);
+  for (let i = rings.length - 1; i >= 0; i--) if (tAnim - rings[i].at >= FX.TAP_RING_S) rings.splice(i, 1);
+  if (markX.size) markX.forEach(function (until, id) { if (until <= tAnim) markX.delete(id); });
+  if (squashAt >= 0 && tAnim - squashAt >= FX.SQUASH_S) squashAt = -1;
+
+  // The bird at the bath.
+  if (s.decor && s.decor.birdbath === true && !reduced) {
+    if (birdUntil >= 0 && tAnim >= birdUntil) { birdUntil = -1; birdNext = tAnim + birdGap(); }
+    if (birdUntil < 0 && tAnim >= birdNext) {
+      birdUntil = tAnim + FX.BIRD_SHOW_S;
+      const bath = decorDraw('birdbath', 'birdbath');
+      if (bath) log('bird', bath.x, bath.y);
+    }
+  } else {
+    birdUntil = -1;
   }
 
-  // Walk out marks.
-  if (markX.size) {
-    markX.forEach(function (until, id) { if (until <= tAnim) markX.delete(id); });
-  }
-
-  // Tap marks.
-  for (let i = tapMarks.length - 1; i >= 0; i--) {
-    if (tapMarks[i].until <= tAnim) tapMarks.splice(i, 1);
-  }
+  // The dog.
+  if (!reduced) updateDog(dt);
 
   // Rain.
-  if (inService && s.rain && !reduced) {
+  if (s.rain && !reduced) {
     if (!rainDrops) {
       rainDrops = [];
       for (let i = 0; i < 40; i++) rainDrops.push({ x: Math.floor(crng() * VW), y: crng() * VH, v: 70 + crng() * 40 });
@@ -1175,72 +1574,273 @@ function updateFx(dt) {
   }
 }
 
-function spawnSmoke(x, y) {
-  if (smokes.length >= 40) smokes.shift();
-  smokes.push({ x: x, y: y, age: 0, life: 1.1 + crng() * 0.3, drift: (crng() - 0.5) * 6 });
+function decorDraw(spotId, sprite) {
+  for (let i = 0; i < MAP.decor.length; i++) {
+    const spot = MAP.decor[i];
+    if (spot.id !== spotId) continue;
+    for (let j = 0; j < spot.draws.length; j++) if (spot.draws[j].sprite === sprite) return spot.draws[j];
+  }
+  return null;
 }
 
-// ---------------------------------------------------------------- render
+// ---------------------------------------------------------------- the dog
 
-function tinted(str, color) {
-  const key = color + '|' + str;
-  let c = textCache.get(key);
-  if (c) return c;
-  const w = Math.max(1, art.textWidth(str));
-  c = document.createElement('canvas');
-  c.width = w; c.height = 6;
-  const x = c.getContext('2d');
-  art.text(x, str, 0, 0);
-  x.globalCompositeOperation = 'source-in';
-  x.fillStyle = color;
-  x.fillRect(0, 0, w, 6);
-  if (textCache.size > 240) textCache.clear();
-  textCache.set(key, c);
-  return c;
+function dogReset(frame) {
+  const h = MAP.dogHome;
+  dog.x = h.x; dog.y = h.y; dog.px = h.x * TILE; dog.py = h.y * TILE;
+  dog.frame = frame; dog.flip = false;
+  dogAI.path = []; dogAI.next = null; dogAI.anim = 0;
+  dogAI.wait = FX.DOG_WAIT_MIN + FX.DOG_WAIT_SPREAD * crng();
 }
 
-function drawText(ctx, str, x, y, color) {
-  ctx.drawImage(tinted(str, COLOR.K), x + 1, y + 1);
-  ctx.drawImage(tinted(str, color), x, y);
+function dogOpen(x, y) {
+  return x >= 0 && y >= 0 && x < MAP.W && y < MAP.H && y <= MAP.H - 2 && sim.custWalkable(x, y, -1, -1) === true;
 }
 
-// Canvas text on a near black box so it reads over the fence (round 2 finding).
-function drawBoxedText(ctx, str, x, y, color) {
-  ctx.fillStyle = COLOR.K;
-  ctx.fillRect(x - 1, y - 1, art.textWidth(str) + 3, 8);
-  drawText(ctx, str, x, y, color);
+// 4 direction BFS, neighbors up, down, left, right; returns the tiles after the start, or null.
+function dogPath(sx, sy, gx, gy) {
+  if (!dogOpen(gx, gy)) return null;
+  const W = MAP.W, n = W * MAP.H;
+  const prev = new Int16Array(n).fill(-1);
+  const start = sy * W + sx, goal = gy * W + gx;
+  prev[start] = start;
+  const q = [start];
+  const NB = [[0, -1], [0, 1], [-1, 0], [1, 0]];
+  for (let qi = 0; qi < q.length; qi++) {
+    const cur = q[qi];
+    if (cur === goal) break;
+    const cx = cur % W, cy = (cur - cx) / W;
+    for (let d = 0; d < 4; d++) {
+      const nx = cx + NB[d][0], ny = cy + NB[d][1];
+      if (nx < 0 || ny < 0 || nx >= W || ny >= MAP.H) continue;
+      const ni = ny * W + nx;
+      if (prev[ni] !== -1 || !dogOpen(nx, ny)) continue;
+      prev[ni] = cur;
+      q.push(ni);
+    }
+  }
+  if (prev[goal] === -1) return null;
+  const path = [];
+  for (let c = goal; c !== start; c = prev[c]) path.push({ x: c % W, y: Math.floor(c / W) });
+  path.reverse();
+  return path;
 }
 
-function drawRing(ctx, x, y, frac, color) {
+function dogFaceNext() {
+  const nx = dogAI.next;
+  if (nx.x < dog.x) dog.flip = false;
+  else if (nx.x > dog.x) dog.flip = true;
+}
+
+function dogArrive() {
+  const h = MAP.dogHome;
+  dog.frame = (dog.x === h.x && dog.y === h.y) ? 3 : 2;
+  dogAI.wait = FX.DOG_WAIT_MIN + FX.DOG_WAIT_SPREAD * crng();
+  dogAI.anim = 0;
+}
+
+function dogPick() {
+  const cands = [];
+  for (let i = 0; i < MAP.dogRoam.length; i++) {
+    const t = MAP.dogRoam[i];
+    if ((t.x !== dog.x || t.y !== dog.y) && !seatTakenBelow(t.x, t.y)) cands.push(t);
+  }
+  const goal = cands.length ? cands[Math.min(cands.length - 1, Math.floor(crng() * cands.length))] : null;
+  const path = goal ? dogPath(dog.x, dog.y, goal.x, goal.y) : null;
+  if (!path || !path.length) { dogAI.wait = FX.DOG_WAIT_MIN + FX.DOG_WAIT_SPREAD * crng(); return; }
+  dogAI.path = path;
+  dogAI.next = dogAI.path.shift();
+  dogAI.anim = 0;
+  dogFaceNext();
+}
+
+// True when the tile south of (x, y) is a seat someone has taken (round 2): the dog does not
+// stand behind a seated customer's head.
+function seatTakenBelow(x, y) {
+  const seats = sim.state.seats || {};
+  for (let i = 0; i < MAP.seats.length; i++) {
+    const st = MAP.seats[i];
+    if (st.x === x && st.y === y + 1 && seats[st.id] !== null && seats[st.id] !== undefined) return true;
+  }
+  return false;
+}
+
+function updateDog(dt) {
+  if (sim.state.phase !== 'service') return;
+  if (!dogAI.next) {
+    dogAI.wait -= dt;
+    if (dogAI.wait <= 0) dogPick();
+    if (!dogAI.next) return;
+  }
+  dogAI.anim += dt;
+  let budget = FX.DOG_TILES_PER_S * TILE * dt;
+  while (dogAI.next && budget > 0) {
+    const tx = dogAI.next.x * TILE, ty = dogAI.next.y * TILE;
+    const dx = tx - dog.px, dy = ty - dog.py;
+    const dist = Math.abs(dx) + Math.abs(dy);
+    if (dist <= budget) {
+      budget -= dist;
+      dog.px = tx; dog.py = ty; dog.x = dogAI.next.x; dog.y = dogAI.next.y;
+      dogAI.next = dogAI.path.length ? dogAI.path.shift() : null;
+      if (dogAI.next) dogFaceNext();
+      else { dogArrive(); return; }
+    } else {
+      if (dx !== 0) dog.px += Math.sign(dx) * Math.min(Math.abs(dx), budget);
+      else dog.py += Math.sign(dy) * Math.min(Math.abs(dy), budget);
+      budget = 0;
+    }
+  }
+  if (dogAI.next) dog.frame = Math.floor(dogAI.anim * 6) % 2;
+}
+
+// ---------------------------------------------------------------- drawing primitives
+
+function size(name) {
+  let s = SIZE[name];
+  if (!s) {
+    const sp = art.SPRITES ? art.SPRITES[name] : null;
+    s = SIZE[name] = sp ? [sp.w, sp.h, Math.max(1, art.frames(name))] : [16, 16, Math.max(1, art.frames(name))];
+  }
+  return s;
+}
+
+// Wholly outside: never drawn. Crossing an edge: drawn only for the D15 step 33 exceptions.
+function inView(name, x, y, w, h) {
+  if (x >= VW || y >= VH || x + w <= 0 || y + h <= 0) return false;
+  if (x >= 0 && y >= 0 && x + w <= VW && y + h <= VH) return true;
+  return OVERFLOW_OK.test(name);
+}
+
+function normFrame(frame, n) {
+  const f = Math.trunc(Number(frame) || 0);
+  return ((f % n) + n) % n;
+}
+
+function D(name, x, y, frame, flip) {
+  const sz = size(name);
+  if (!inView(name, x, y, sz[0], sz[1])) return;
+  const f = normFrame(frame, sz[2]);
+  art.draw(octx, name, x, y, f, flip === true);
+  if (capturing) recs.push({ name: name, frame: f, x: x, y: y, w: sz[0], h: sz[1] });
+}
+
+function DS(name, x, y, w, h, frame, flip) {
+  if (!inView(name, x, y, w, h)) return;
+  const f = normFrame(frame, size(name)[2]);
+  art.drawScaled(octx, name, x, y, w, h, f, flip === true);
+  if (capturing) recs.push({ name: name, frame: f, x: x, y: y, w: w, h: h });
+}
+
+function glyphFrame(ch) {
+  const c = ch.charCodeAt(0);
+  if (c >= 48 && c <= 57) return c - 48;
+  if (c >= 65 && c <= 90) return 10 + (c - 65);
+  if (ch === '+') return 36;
+  if (ch === ':') return 37;
+  return -1;
+}
+
+// Canvas text: cream through art.text, any other color through art.textTinted.
+function T(str, x, y, colorKey) {
+  if (!colorKey || colorKey === 'C') art.text(octx, str, x, y);
+  else art.textTinted(octx, str, x, y, colorKey);
+  if (!capturing) return;
+  const fs = size('font');
+  const s = String(str).toUpperCase();
+  let cx = x;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (ch === ' ') { cx += fs[0] + 1; continue; }
+    const g = glyphFrame(ch);
+    if (g < 0) continue;
+    recs.push({ name: 'font', frame: g, x: cx, y: y, w: fs[0], h: fs[1] });
+    cx += fs[0] + 1;
+  }
+}
+
+// Floating number: the string in the outline color at four 1 px offsets, then in its color on
+// top (round 2; no box). Only the colored pass is recorded by captureFrame.
+function popText(str, x, y, colorKey) {
+  art.textTinted(octx, str, x - 1, y, 'outline');
+  art.textTinted(octx, str, x + 1, y, 'outline');
+  art.textTinted(octx, str, x, y - 1, 'outline');
+  art.textTinted(octx, str, x, y + 1, 'outline');
+  T(str, x, y, colorKey);
+}
+
+// Canvas text in an umber box: the box 1 px up and left of the text, width + 3 by 8.
+function boxText(str, x, y, colorKey) {
+  octx.fillStyle = COLOR.U;
+  octx.fillRect(x - 1, y - 1, art.textWidth(str) + 3, 8);
+  T(str, x + 1, y + 1, 'K');
+  T(str, x, y, colorKey);
+}
+
+// Dashed footprint outline: 1 px, 2 on and 2 off, clockwise from the top left pixel. Outline
+// colored on pavers (cream would vanish on the paver tan), cream on the lawn and hedge.
+function dashedBox(x, y, w, h) {
+  octx.fillStyle = paverAt(Math.floor(x / TILE), Math.floor(y / TILE)) ? COLOR.outline : COLOR.C;
+  let i = 0;
+  for (let xx = x; xx < x + w; xx++, i++) if ((i & 3) < 2) octx.fillRect(xx, y, 1, 1);
+  for (let yy = y + 1; yy < y + h; yy++, i++) if ((i & 3) < 2) octx.fillRect(x + w - 1, yy, 1, 1);
+  for (let xx = x + w - 2; xx >= x; xx--, i++) if ((i & 3) < 2) octx.fillRect(xx, y + h - 1, 1, 1);
+  for (let yy = y + h - 2; yy > y; yy--, i++) if ((i & 3) < 2) octx.fillRect(x, yy, 1, 1);
+  if (capturing) recs.push({ name: '#outline', frame: 0, x: x, y: y, w: w, h: h });
+}
+
+function drawRing(x, y, frac, color) {
   const n = Math.max(0, Math.min(RING.length, Math.round(frac * RING.length)));
   if (n === 0) return;
-  ctx.fillStyle = color;
-  for (let i = 0; i < n; i++) ctx.fillRect(x + RING[i][0], y + RING[i][1], 1, 1);
+  octx.fillStyle = color;
+  for (let i = 0; i < n; i++) octx.fillRect(x + RING[i][0], y + RING[i][1], 1, 1);
 }
 
-function bandColor(band) {
-  if (band === 'hot') return COLOR.f;
-  if (band === 'good') return COLOR.G;
-  if (band === 'low') return COLOR.r;
-  return COLOR.M;
+// ---------------------------------------------------------------- render: ground
+
+function lawnTile(x, y, clover) {
+  const alt = (clover && clover.has(x + ',' + y)) || (x * 5 + y * 3) % 3 === 0;
+  D(MAP.stripe(x) === 'a' ? 'lawn_a' : 'lawn_b', x * TILE, y * TILE, alt ? 1 : 0);
+}
+function paverTile(x, y) {
+  D('paver', x * TILE, y * TILE, (x * 7 + y * 3) % 2);
 }
 
-function drawGauge(ctx, px, py, h, fire) {
-  const gx = px + TILE;
-  ctx.fillStyle = COLOR.K;
-  ctx.fillRect(gx, py, 4, h);
-  const inner = h - 2;
-  const f = Math.max(0, Math.min(1, fire / C.FIRE_MAX));
-  const fh = Math.round(f * inner);
-  if (fh > 0) {
-    ctx.fillStyle = bandColor(PitSim.fireBand(fire));
-    ctx.fillRect(gx + 1, py + 1 + (inner - fh), 2, fh);
+// Paver drawn on this tile: PAVER ground, or a lawn tile on the customer route.
+function paverAt(x, y) {
+  return MAP.at(x, y) === MAP.T.PAVER || PATH_TILES.has(x + ',' + y);
+}
+
+function drawGround(s) {
+  const T_ = MAP.T;
+  const clover = new Set();      // unowned decor footprints take the clover frame (round 2)
+  for (let i = 0; i < MAP.decor.length; i++) {
+    const spot = MAP.decor[i];
+    if (s.decor[spot.id] === true) continue;
+    for (let j = 0; j < spot.tiles.length; j++) clover.add(spot.tiles[j].x + ',' + spot.tiles[j].y);
   }
-  ctx.fillStyle = COLOR.C;
-  const t1 = py + 1 + inner - Math.round(C.FIRE_GOOD / C.FIRE_MAX * inner);
-  const t2 = py + 1 + inner - Math.round(C.FIRE_HOT / C.FIRE_MAX * inner);
-  ctx.fillRect(gx, t1, 1, 1); ctx.fillRect(gx + 3, t1, 1, 1);
-  ctx.fillRect(gx, t2, 1, 1); ctx.fillRect(gx + 3, t2, 1, 1);
+  for (let y = 0; y < MAP.H; y++) {
+    for (let x = 0; x < MAP.W; x++) {
+      const t = MAP.at(x, y);
+      if (t === T_.PAVER || PATH_TILES.has(x + ',' + y)) paverTile(x, y);
+      else if (t === T_.LAWN || t === T_.GATE) lawnTile(x, y, clover);
+      else if (y >= LAWN_FROM_ROW) lawnTile(x, y, clover);
+      else paverTile(x, y);
+    }
+  }
+}
+
+// ---------------------------------------------------------------- render: the y-sorted pass
+
+function fenceName(x, y) {
+  const edgeX = x === 0 || x === MAP.W - 1, edgeY = y === 0 || y === MAP.H - 1;
+  if (edgeX && edgeY) return 'fence_corner';
+  if (edgeY) return 'fence_h';
+  return 'fence_v';
+}
+
+function gateOpen(s) {
+  if (s.phase !== 'service') return false;
+  return (s.clock >= C.GATE_OPENS && s.clock < C.LAST_CALL) || s.customers.length > 0;
 }
 
 function pieceFrame(p) {
@@ -1250,103 +1850,104 @@ function pieceFrame(p) {
   return p.prog < cook / 2 ? 0 : 1;
 }
 
-function drawCooker(ctx, st, s) {
-  const ck = s.stations[st.id];
-  const px = st.tiles[0].x * TILE, py = st.tiles[0].y * TILE;
-  const fire = ck ? ck.fire : 0;
-  const band = PitSim.fireBand(fire);
-  const name = st.id === 'drum' ? 'drum' : 'kettle';
-  art.draw(ctx, name, px, py, BAND_FRAME[band] || 0);
-  const h = st.tiles.length * TILE;
-  if (ck) {
-    for (let i = 0; i < ck.pieces.length; i++) {
-      const p = ck.pieces[i];
-      const o = st.slotPx && st.slotPx[p.slot] ? st.slotPx[p.slot] : { x: 3, y: 3 };
-      const sx = px + o.x, sy = py + o.y;
-      art.draw(ctx, 'piece_' + p.meat, sx, sy, pieceFrame(p));
-      const m = MEATS[p.meat];
-      if (m) {
-        if (p.state === 'cooking') drawRing(ctx, sx - 1, sy - 1, Math.min(1, p.prog / m.cook), COLOR.O);
-        else if (p.state === 'done') drawRing(ctx, sx - 1, sy - 1, Math.max(0, 1 - (p.prog - m.cook) / m.window), COLOR.G);
-        else drawRing(ctx, sx - 1, sy - 1, 1, COLOR.K);
-      }
-    }
-  }
-  drawGauge(ctx, px, py, h, fire);
-}
-
-function drawStack(ctx, meat, count, x, y, max) {
+function drawStack(meat, count, x, y, max) {
   const n = Math.min(count, max);
   const name = 'plate_' + meat;
-  for (let k = 0; k < n; k++) art.draw(ctx, name, x, y - k);
+  for (let k = 0; k < n; k++) D(name, x, y - k);
 }
 
-function drawStations(ctx, s) {
-  const stations = MAP.stations.slice().sort(function (a, b) {
-    return (a.tiles[0].y - b.tiles[0].y) || (a.tiles[0].x - b.tiles[0].x);
-  });
-  const reach = sim.reach();
-  for (let i = 0; i < stations.length; i++) {
-    const st = stations[i];
-    if (!owned(st)) continue;
-    const px = st.tiles[0].x * TILE, py = st.tiles[0].y * TILE;
-    if (st.type === 'table') {
-      const tiles = st.tiles;
-      let minX = Infinity, maxX = -Infinity;
-      for (let j = 0; j < tiles.length; j++) {
-        if (!owned(tiles[j])) continue;
-        if (tiles[j].x < minX) minX = tiles[j].x;
-        if (tiles[j].x > maxX) maxX = tiles[j].x;
-      }
-      const spots = s.stations.table ? s.stations.table.spots : [];
-      for (let j = 0; j < tiles.length; j++) {
-        const t = tiles[j];
-        if (!owned(t)) continue;
-        const tx = t.x * TILE, ty = t.y * TILE;
-        if (t.x === minX) art.draw(ctx, 'table_end', tx, ty, 0, false);
-        else if (t.x === maxX) art.draw(ctx, 'table_end', tx, ty, 0, true);
-        else art.draw(ctx, 'table_mid', tx, ty);
-        const stack = j < spots.length ? spots[j] : null;
-        if (stack && stack.times && stack.times.length) drawStack(ctx, stack.meat, stack.times.length, tx + 4, ty + 3, C.TABLE_STACK);
-      }
-    } else if (st.type === 'board') {
-      const b = s.stations.board;
-      art.draw(ctx, 'board', px, py, b && b.slicing ? 1 : 0);
-      if (b && b.stacks) {
-        const offs = [[1, 3], [8, 3], [1, 9], [8, 9]];
-        for (let j = 0; j < b.stacks.length && j < offs.length; j++) {
-          const stack = b.stacks[j];
-          if (stack && stack.times && stack.times.length) drawStack(ctx, stack.meat, stack.times.length, px + offs[j][0], py + offs[j][1], C.BOARD_STACK);
+function drawStation(st, s) {
+  const tx = st.tiles[0].x * TILE, ty = st.tiles[0].y * TILE;
+  if (st.type === 'cooker') {
+    const ck = s.stations[st.id];
+    const band = PitSim.fireBand(ck ? ck.fire : 0);
+    D(st.sprite, st.draw.x, st.draw.y, BAND_FRAME[band] || 0);
+    if (!ck) return;
+    drawGauge(st, ck);
+    for (let i = 0; i < ck.pieces.length; i++) {
+      const p = ck.pieces[i];
+      const pos = piecePos(st, p);
+      D('piece_' + p.meat, pos.x, pos.y, pieceFrame(p));
+      const m = MEATS[p.meat];
+      if (!m) continue;
+      if (p.state === 'cooking') drawRing(pos.x - 1, pos.y - 1, Math.min(1, p.prog / m.cook), COLOR.O);
+      else if (p.state === 'done') drawRing(pos.x - 1, pos.y - 1, Math.max(0, 1 - (p.prog - m.cook) / m.window), COLOR.lawnA);
+      else drawRing(pos.x - 1, pos.y - 1, 1, COLOR.K);
+    }
+  } else if (st.type === 'board') {
+    const b = s.stations.board;
+    D('board', st.draw.x, st.draw.y, b && b.slicing ? 1 : 0);
+    if (b && b.stacks) {
+      for (let j = 0; j < b.stacks.length && j < BOARD_OFFS.length; j++) {
+        const stack = b.stacks[j];
+        if (stack && stack.times && stack.times.length) {
+          drawStack(stack.meat, stack.times.length, st.draw.x + BOARD_OFFS[j][0], st.draw.y + BOARD_OFFS[j][1], C.BOARD_STACK);
         }
       }
-    } else if (st.type === 'cooler') {
-      art.draw(ctx, 'cooler', px, py, s.gear.cooler ? (reach === 'cooler' ? 2 : 1) : 0);
-    } else if (st.type === 'cooker') {
-      drawCooker(ctx, st, s);
-    } else if (st.type === 'pile') {
-      const n = s.charcoal | 0;
-      art.draw(ctx, 'pile', px, py, n > 6 ? 0 : n >= 3 ? 1 : n >= 1 ? 2 : 3);
-    } else if (st.type === 'trash') {
-      art.draw(ctx, 'trash', px, py);
     }
+  } else if (st.type === 'cooler') {
+    D('cooler', st.draw.x, st.draw.y, s.gear.cooler ? (sim.reach() === 'cooler' ? 2 : 1) : 0);
+  } else if (st.type === 'table') {
+    const big = !!(extTile && owned(extTile));
+    if (big) { const r = extRect(); D('counter_ext', r.x, r.y); }
+    D('counter', st.draw.x, st.draw.y, big ? 1 : 0);
+    const spots = s.stations.table ? s.stations.table.spots : [];
+    const px = st.spotPx || [];
+    for (let i = 0; i < spots.length && i < px.length; i++) {
+      const stack = spots[i];
+      if (!stack || !stack.times || !stack.times.length || !owned(px[i])) continue;
+      drawStack(stack.meat, stack.times.length, px[i].x, px[i].y, C.TABLE_STACK);
+    }
+  } else if (st.type === 'pile') {
+    const n = s.charcoal | 0;
+    D('pile', st.draw.x, st.draw.y, n > 6 ? 0 : n >= 3 ? 1 : n >= 1 ? 2 : 3);
+  } else if (st.type === 'trash') {
+    D('trash', st.draw.x, st.draw.y);
+  } else {
+    D(st.sprite, tx, ty);
   }
 }
 
-function bodyFor(kind, m, s) {
-  const wf = m.walking ? 1 + (Math.floor((m.anim || 0) * 8) % 2) : 0;
-  if (kind === 'cust') {
-    const n = 'cust' + (m.body | 0);
-    if (m.face === 'up') return [n + '_up', Math.floor((m.anim || 0) * 8) % 2, false];
-    if (m.face === 'left' || m.face === 'right') return [n + '_side', Math.floor((m.anim || 0) * 8) % 2, m.face === 'right'];
-    return [n + '_down', m.walking ? wf : (m.mood === 'unhappy' ? 3 : 0), false];
+// 4 connected runs of footprint tiles, one box each, top left first.
+function runsOf(tiles) {
+  const left = tiles.map(function (t) { return { x: t.x, y: t.y }; });
+  const runs = [];
+  while (left.length) {
+    const comp = [left.shift()];
+    for (let i = 0; i < comp.length; i++) {
+      for (let j = left.length - 1; j >= 0; j--) {
+        if (Math.abs(comp[i].x - left[j].x) + Math.abs(comp[i].y - left[j].y) === 1) comp.push(left.splice(j, 1)[0]);
+      }
+    }
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (let i = 0; i < comp.length; i++) {
+      x0 = Math.min(x0, comp[i].x); y0 = Math.min(y0, comp[i].y);
+      x1 = Math.max(x1, comp[i].x); y1 = Math.max(y1, comp[i].y);
+    }
+    runs.push({ tx: x0, ty: y0, x: x0 * TILE, y: y0 * TILE, w: (x1 - x0 + 1) * TILE, h: (y1 - y0 + 1) * TILE, row: y1 });
   }
+  runs.sort(function (a, b) { return (a.ty - b.ty) || (a.tx - b.tx); });
+  return runs;
+}
+
+function staffBody(kind, m, s) {
+  const wf = m.walking ? 1 + (Math.floor((m.anim || 0) * 8) % 2) : 0;
   if (kind === 'player' && s.player.busy) return ['player_slice', Math.floor((s.player.busy.t || 0) * 6) % 2, false];
   if (m.face === 'up') return [kind + '_up', wf, false];
   if (m.face === 'left' || m.face === 'right') return [kind + '_side', wf, m.face === 'right'];
   return [kind + '_down', wf, false];
 }
 
-function handFor(kind, m, s) {
+function custBody(c) {
+  const n = 'cust' + (((c.body | 0) % 4 + 4) % 4);
+  const wf = 1 + (Math.floor((c.anim || 0) * 8) % 2);
+  const unhappy = c.mood === 'unhappy';
+  if (c.face === 'up') return [n + '_up', c.walking ? wf : 0, false];
+  if (c.face === 'left' || c.face === 'right') return [n + '_side', c.walking ? wf : (unhappy ? 3 : 0), c.face === 'right'];
+  return [n + '_down', c.walking ? (unhappy ? wf + 2 : wf) : 0, false];
+}
+
+function staffHand(kind, m, s) {
   const c = m.carrying;
   if (!c) return (kind === 'player' && s.gear.tray && !s.player.busy) ? 'hand_tray' : null;
   if (c.kind === 'charcoal') return 'hand_charcoal';
@@ -1357,221 +1958,455 @@ function handFor(kind, m, s) {
   return null;
 }
 
-function drawPeople(ctx, s) {
-  const people = [];
-  for (let i = 0; i < s.customers.length; i++) people.push({ kind: 'cust', m: s.customers[i] });
-  if (s.player) people.push({ kind: 'player', m: s.player });
-  if (s.buddy) people.push({ kind: 'buddy', m: s.buddy });
-  if (s.tender) people.push({ kind: 'tender', m: s.tender });
-  people.sort(function (a, b) { return a.m.py - b.m.py; });
-  for (let i = 0; i < people.length; i++) {
-    const p = people[i], m = p.m;
-    const bx = Math.round(m.px), by = Math.round(m.py);
-    let py = by;
-    if (!reduced) {
-      if (p.kind === 'cust' && m.hop > 0) py -= 2;
-      if (p.kind === 'player' && bounceUntil > tAnim) py -= 2;
-      if (p.kind !== 'cust' && !m.walking && !(p.kind === 'player' && s.player.busy) && Math.floor(tAnim * 2) % 2 === 1) py -= 1;
+function custHand(c) {
+  if (c.mode === 'toSeat') return 'hand_plate_' + c.want;
+  if (c.mode === 'leaving' && c.reason === 'togo') return 'hand_togo';
+  return null;
+}
+
+function hopOffset(c) { return (c.hop > 0 && !reduced) ? -2 : 0; }
+
+function drawMover(kind, m, s) {
+  const bx = Math.round(m.px), by = Math.round(m.py);
+  const isCust = kind === 'cust';
+  const yo = isCust ? hopOffset(m) : 0;
+  const body = isCust ? custBody(m) : staffBody(kind, m, s);
+  const hand = isCust ? custHand(m) : staffHand(kind, m, s);
+  const bh = size(body[0])[1];
+  const feet = by + TILE;
+  D('shadow', bx + 2, by + 13);
+  if (hand && m.face === 'up') D(hand, bx + 4, by - 1 + yo);
+  const sq = (kind === 'player' && squashAt >= 0 && !reduced) ? tAnim - squashAt : -1;
+  if (sq >= 0 && sq < FX.SQUASH_S) {
+    if (sq < FX.SQUASH_S / 2) DS(body[0], bx - 1, feet - 22, 18, 22, body[1], body[2]);
+    else DS(body[0], bx + 1, feet - 26, 14, 26, body[1], body[2]);
+  } else {
+    D(body[0], bx, feet - bh + yo, body[1], body[2]);
+  }
+  if (hand && m.face !== 'up') D(hand, bx + 4, by + 4 + yo);
+}
+
+function drawSeated(c, seat) {
+  const sx = seat.x * TILE, sy = seat.y * TILE;
+  const f = c.eat > 0 ? (reduced ? 0 : Math.floor(tAnim / FX.EAT_FRAME_S) % 2) : 2;
+  D('cust' + (((c.body | 0) % 4 + 4) % 4) + '_sit', sx, sy - 6, f);
+}
+
+function seatOf(c) { return c.seat ? SEAT_BY_ID[c.seat] || null : null; }
+
+// A see-through preview of an unowned piece; its capture record carries ghost: true.
+function ghost(name, x, y, frame) {
+  const n = recs.length;
+  octx.globalAlpha = GHOST_ALPHA;
+  D(name, x, y, frame);
+  octx.globalAlpha = 1;
+  if (capturing) for (let i = n; i < recs.length; i++) recs[i].ghost = true;
+}
+
+function drawSorted(s) {
+  const items = [];
+  let order = 0;
+  function push(k, layer, dx, fn) { items.push({ k: k, l: layer, x: dx, o: order++, f: fn }); }
+  const T_ = MAP.T;
+  const open = gateOpen(s);
+
+  // Fence, gate, hedge and bed tiles, row major (layer 0).
+  for (let y = 0; y < MAP.H; y++) {
+    for (let x = 0; x < MAP.W; x++) {
+      const t = MAP.at(x, y);
+      const px = x * TILE, key = y * TILE + 15;
+      if (t === T_.FENCE && y === 0) {
+        const corner = x === 0 || x === MAP.W - 1;
+        push(key, 0, px, function () { D('fence_back', px, 0, corner ? 1 : 0); });
+      } else if (t === T_.FENCE) {
+        const name = fenceName(x, y);
+        push(key, 0, px, function () { D(name, px, (y + 1) * TILE - size(name)[1]); });
+      } else if (t === T_.GATE) {
+        push(key, 0, px, function () { D('gate', px, (y + 1) * TILE - size('gate')[1], open ? 1 : 0); });
+      } else if (t === T_.HEDGE) {
+        push(key, 0, px, function () { D('hedge', px, (y + 1) * TILE - size('hedge')[1], x % 2); });
+      } else if (t === T_.BED) {
+        push(key, 0, px, function () { D('bed', px, (y + 1) * TILE - size('bed')[1], (x + y) % 3); });
+      }
     }
-    art.draw(ctx, 'shadow', bx + 2, by + 13);
-    const hand = handFor(p.kind, m, s);
-    if (hand && m.face === 'up') art.draw(ctx, hand, bx + 4, py + 1);
-    const b = bodyFor(p.kind, m, s);
-    art.draw(ctx, b[0], bx, py, b[1], b[2]);
-    if (hand && m.face !== 'up') art.draw(ctx, hand, bx + 4, py + 8);
+  }
+
+  // Fixed props (layer 1).
+  for (let i = 0; i < MAP.props.length; i++) {
+    const p = MAP.props[i];
+    push(p.sortRow * TILE + 15, 1, p.draw.x, function () {
+      D(p.sprite, p.draw.x, p.draw.y, p.frame);
+      if (p.id === 'sign' && MAP.signText) T('YOUR PIT', MAP.signText.x, MAP.signText.y);
+    });
+  }
+
+  // Active stations with their extras (layer 1).
+  for (let i = 0; i < MAP.stations.length; i++) {
+    const st = MAP.stations[i];
+    if (!owned(st)) continue;
+    push(st.sortRow * TILE + 15, 1, st.draw.x, function () { drawStation(st, s); });
+  }
+
+  // Owned decor, not the overhead draws (layer 1).
+  const birdOn = birdUntil >= 0 && birdUntil > tAnim && !reduced;
+  for (let i = 0; i < MAP.decor.length; i++) {
+    const spot = MAP.decor[i];
+    if (s.decor[spot.id] !== true) {
+      // The unbought Flower bed shows its box of tilled soil (bed frame 3, round 2).
+      if (spot.id === 'flowers') {
+        for (let j = 0; j < spot.draws.length; j++) {
+          const d = spot.draws[j];
+          if (d.sprite === 'bed') push(d.sortRow * TILE + 15, 1, d.x, function () { D('bed', d.x, d.y, 3); });
+        }
+      }
+      continue;
+    }
+    for (let j = 0; j < spot.draws.length; j++) {
+      const d = spot.draws[j];
+      if (d.overhead) continue;
+      const frame = (spot.id === 'birdbath' && d.sprite === 'birdbath' && birdOn) ? 1 : d.frame;
+      push(d.sortRow * TILE + 15, 1, d.x, function () { D(d.sprite, d.x, d.y, frame); });
+    }
+  }
+
+  // Ghosts of unowned gear and decor (layer 1, the footprint's sort key), under their outlines.
+  // Morning and evening only (round 2): during service the yard shows what is really there.
+  if (s.phase !== 'service') {
+    for (let i = 0; i < MAP.stations.length; i++) {
+      const st = MAP.stations[i];
+      if (!owned(st)) {
+        push(st.sortRow * TILE + 15, 1, st.draw.x, function () { ghost(st.sprite, st.draw.x, st.draw.y, 0); });
+      } else if (st.type === 'table' && extTile && !owned(extTile)) {
+        const r = extRect();
+        push(st.sortRow * TILE + 15, 1, r.x, function () { ghost('counter_ext', r.x, r.y, 0); });
+      }
+    }
+    for (let i = 0; i < MAP.decor.length; i++) {
+      const spot = MAP.decor[i];
+      if (s.decor[spot.id] === true) continue;
+      for (let j = 0; j < spot.draws.length; j++) {
+        const d = spot.draws[j];
+        if (d.overhead) continue;
+        push(d.sortRow * TILE + 15, 1, d.x, function () { ghost(d.sprite, d.x, d.y, d.frame); });
+      }
+    }
+  }
+
+  // Dashed outlines of unowned footprints: stations, then decor (layer 2).
+  for (let i = 0; i < MAP.stations.length; i++) {
+    const st = MAP.stations[i];
+    const stOwned = owned(st);
+    const tiles = [];
+    for (let j = 0; j < st.tiles.length; j++) if (!stOwned || !owned(st.tiles[j])) tiles.push(st.tiles[j]);
+    if (!tiles.length) continue;
+    const runs = runsOf(tiles);
+    for (let j = 0; j < runs.length; j++) {
+      const r = runs[j];
+      push(r.row * TILE + 15, 2, r.x, function () { dashedBox(r.x, r.y, r.w, r.h); });
+    }
+  }
+  for (let i = 0; i < MAP.decor.length; i++) {
+    const spot = MAP.decor[i];
+    if (s.decor[spot.id] === true) continue;
+    const runs = runsOf(spot.tiles);
+    for (let j = 0; j < runs.length; j++) {
+      const r = runs[j];
+      push(r.row * TILE + 15, 2, r.x, function () { dashedBox(r.x, r.y, r.w, r.h); });
+    }
+  }
+
+  // People (layer 3): the player, the buddy, the tender, then customers by id.
+  const staff = [['player', s.player], ['buddy', s.buddy], ['tender', s.tender]];
+  for (let i = 0; i < staff.length; i++) {
+    const kind = staff[i][0], m = staff[i][1];
+    if (!m) continue;
+    push(Math.round(m.py) + 15, 3, Math.round(m.px), function () { drawMover(kind, m, s); });
+  }
+  const custs = s.customers.slice().sort(byId);
+  for (let i = 0; i < custs.length; i++) {
+    const c = custs[i];
+    const seat = c.mode === 'eating' ? seatOf(c) : null;
+    if (seat) push(seat.y * TILE + 15, 3, seat.x * TILE, function () { drawSeated(c, seat); });
+    else push(Math.round(c.py) + 15, 3, Math.round(c.px), function () { drawMover('cust', c, s); });
+  }
+
+  // Eaters' plates (layer 5), by customer id.
+  for (let i = 0; i < custs.length; i++) {
+    const c = custs[i];
+    if (c.mode !== 'eating') continue;
+    const seat = seatOf(c);
+    if (!seat) continue;
+    const sx = seat.x * TILE, sy = seat.y * TILE;
+    const chair = isChairSeat(seat);
+    const px = sx + 4, py = chair ? sy + 9 : sy + 17;
+    const key = chair ? seat.y * TILE + 15 : (seat.y + 1) * TILE + 15;
+    push(key, 5, px, function () { D('plate_' + c.want, px, py); });
+  }
+
+  // The dog (layer 4).
+  const dx = Math.round(dog.px), dy = Math.round(dog.py);
+  push(dy + 15, 4, dx, function () { D('dog', dx, dy, dog.frame, dog.flip); });
+
+  items.sort(function (a, b) { return (a.k - b.k) || (a.l - b.l) || (a.x - b.x) || (a.o - b.o); });
+  for (let i = 0; i < items.length; i++) items[i].f();
+  return custs;
+}
+
+// ---------------------------------------------------------------- render: the passes after the sort
+
+function drawOverhead(s) {
+  if (s.decor.lights === true && MAP.overhead && MAP.overhead.lights) {
+    D('lights_string', MAP.overhead.lights.x, MAP.overhead.lights.y, reduced ? 0 : Math.floor(tAnim / FX.TWINKLE_S) % 2);
+  }
+  if (s.gear.canopy === true && MAP.overhead && MAP.overhead.canopy) {
+    D('canopy', MAP.overhead.canopy.x, MAP.overhead.canopy.y);
   }
 }
 
-function drawBubbles(ctx, s) {
-  for (let i = 0; i < s.customers.length; i++) {
-    const c = s.customers[i];
-    const inLine = c.mode === 'arriving' || c.mode === 'waiting';
-    const mark = markX.get(c.id);
-    const showMark = mark !== undefined && mark > tAnim;
-    if (!inLine && !showMark) continue;
-    const px = Math.round(c.px);
-    let py = Math.round(c.py);
-    if (!reduced && c.hop > 0) py -= 2;
-    const frac = c.patienceMax > 0 ? Math.max(0, Math.min(1, c.patience / c.patienceMax)) : 1;
-    const warn = inLine && frac <= C.PATIENCE_WARN_FRAC;
-    const blink = warn && !reduced && Math.floor(tAnim * 4) % 2 === 1;
-    art.draw(ctx, 'bubble', px, py - 14);
-    if (!blink) art.draw(ctx, showMark ? 'mark_x' : 'icon_' + c.want, px + 4, py - 12);
-    if (inLine) {
-      const mid = typeof C.PATIENCE_MID_FRAC === 'number' ? C.PATIENCE_MID_FRAC : 0.5;
-      ctx.fillStyle = COLOR.K;
-      ctx.fillRect(px + 1, py - 2, 14, 3);
-      ctx.fillStyle = warn ? COLOR.O : (frac <= mid ? COLOR.Y : COLOR.G);
-      const w = Math.max(frac > 0 ? 1 : 0, Math.round(14 * frac));
-      if (w > 0) ctx.fillRect(px + 1, py - 2, w, 3);
-    }
+function drawSmokeAndFire(s) {
+  for (let i = 0; i < puffs.length; i++) {
+    const p = puffs[i];
+    const age = tAnim - p.at;
+    if (age < 0 || age >= p.life) continue;
+    let x = p.x0 + p.vx * age;
+    if (p.sway) x += Math.sin(age * 2 * Math.PI / p.life) * FX.BURNT_COLUMN_SWAY_PX;
+    const y = p.y0 - p.rise * age;
+    D(p.dark ? 'smoke_dark' : 'smoke', Math.round(x), Math.round(y), Math.min(2, Math.floor(3 * age / p.life)));
   }
-}
-
-// One pixel ring on the tapped tile, then its four corners. Reduced motion keeps the ring.
-function drawTapMarks(ctx) {
-  for (let i = 0; i < tapMarks.length; i++) {
-    const m = tapMarks[i];
-    const x = m.x, y = m.y;
-    ctx.fillStyle = m.ok ? COLOR.Y : COLOR.O;
-    if (reduced || tAnim - m.at < 0.2) {
-      ctx.fillRect(x, y, 16, 1);
-      ctx.fillRect(x, y + 15, 16, 1);
-      ctx.fillRect(x, y, 1, 16);
-      ctx.fillRect(x + 15, y, 1, 16);
-    } else {
-      ctx.fillRect(x, y, 1, 1);
-      ctx.fillRect(x + 15, y, 1, 1);
-      ctx.fillRect(x, y + 15, 1, 1);
-      ctx.fillRect(x + 15, y + 15, 1, 1);
-    }
-  }
-}
-
-function drawFxLayer(ctx, s) {
-  // Fire on good or hot cookers, smoke puffs.
-  const stations = MAP.stations;
-  for (let i = 0; i < stations.length; i++) {
-    const st = stations[i];
+  for (let i = 0; i < MAP.stations.length; i++) {
+    const st = MAP.stations[i];
     if (st.type !== 'cooker' || !owned(st)) continue;
     const ck = s.stations[st.id];
     if (!ck) continue;
     const band = PitSim.fireBand(ck.fire);
     if (band === 'good' || band === 'hot') {
-      art.draw(ctx, 'fire', st.tiles[0].x * TILE + 4, st.tiles[0].y * TILE - 4, reduced ? 0 : Math.floor(tAnim * 6) % 3);
-    }
-  }
-  if (!reduced) {
-    for (let i = 0; i < smokes.length; i++) {
-      const sm = smokes[i];
-      art.draw(ctx, 'smoke', Math.round(sm.x), Math.round(sm.y), Math.min(2, Math.floor(sm.age / 0.4)));
+      D('fire', st.draw.x + 4, st.draw.y - 4, reduced ? 0 : Math.floor(tAnim * FX.FIRE_FPS) % 3);
     }
   }
 }
 
-function drawPops(ctx, s) {
+function bandColor(band) {
+  if (band === 'hot') return COLOR.O;
+  if (band === 'good') return COLOR.lawnA;
+  if (band === 'low') return COLOR.woodL;
+  return COLOR.smokeD;
+}
+
+function drawGauge(st, ck) {
+  const gx = st.tiles[0].x * TILE + 18;
+  const top = st.draw.y + 4, bottom = st.draw.y + size(st.sprite)[1];
+  const h = bottom - top;
+  if (h < 4) return;
+  octx.fillStyle = COLOR.outline;
+  octx.fillRect(gx, top, 3, h);
+  const inner = h - 2;
+  const f = Math.max(0, Math.min(1, ck.fire / C.FIRE_MAX));
+  const fh = Math.round(f * inner);
+  if (fh > 0) {
+    octx.fillStyle = bandColor(PitSim.fireBand(ck.fire));
+    octx.fillRect(gx, top + 1 + (inner - fh), 3, fh);
+  }
+  octx.fillStyle = COLOR.C;
+  const t1 = top + 1 + inner - Math.round(C.FIRE_GOOD / C.FIRE_MAX * inner);
+  const t2 = top + 1 + inner - Math.round(C.FIRE_HOT / C.FIRE_MAX * inner);
+  octx.fillRect(gx, t1, 1, 1); octx.fillRect(gx + 2, t1, 1, 1);
+  octx.fillRect(gx, t2, 1, 1); octx.fillRect(gx + 2, t2, 1, 1);
+}
+
+function drawCues(s, custs) {
+  // Bubbles: order icon or walk out mark, then food bubbles.
+  for (let i = 0; i < custs.length; i++) {
+    const c = custs[i];
+    const inLine = c.mode === 'arriving' || c.mode === 'waiting';
+    const until = markX.get(c.id);
+    const showMark = until !== undefined && until > tAnim;
+    const px = Math.round(c.px), py = Math.round(c.py) + hopOffset(c);
+    if (inLine || showMark) {
+      D('bubble', px + 14, py - 22);
+      if (showMark) {
+        D('mark_x', px + 18, py - 20);
+      } else {
+        const frac = c.patienceMax > 0 ? Math.max(0, Math.min(1, c.patience / c.patienceMax)) : 1;
+        const blink = frac <= C.PATIENCE_WARN_FRAC && !reduced && Math.floor(tAnim * 4) % 2 === 1;
+        if (!blink) D('icon_' + c.want, px + 18, py - 20);
+      }
+    } else if (c.mode === 'eating' && c.eat > 0) {
+      const seat = seatOf(c);
+      const sx = seat ? seat.x * TILE : px, sy = seat ? seat.y * TILE : Math.round(c.py);
+      D('bubble', sx, sy - 21);
+      D('plate_' + c.want, sx + 4, sy - 18);
+    }
+  }
+  // Patience bars.
+  const mid = typeof C.PATIENCE_MID_FRAC === 'number' ? C.PATIENCE_MID_FRAC : 0.5;
+  for (let i = 0; i < custs.length; i++) {
+    const c = custs[i];
+    if (c.mode !== 'arriving' && c.mode !== 'waiting') continue;
+    const px = Math.round(c.px), py = Math.round(c.py) + hopOffset(c);
+    const frac = c.patienceMax > 0 ? Math.max(0, Math.min(1, c.patience / c.patienceMax)) : 1;
+    const bx = px + 15, by = py - 26;
+    if (bx >= VW || by < 0) continue;
+    octx.fillStyle = COLOR.K;
+    octx.fillRect(bx, by, 14, 3);
+    octx.fillStyle = frac <= C.PATIENCE_WARN_FRAC ? COLOR.red : (frac <= mid ? COLOR.yellow : COLOR.lawnA);
+    const w = Math.max(frac > 0 ? 1 : 0, Math.round(14 * frac));
+    if (w > 0) octx.fillRect(bx, by, w, 3);
+  }
+  // Sweat drops. (Fire gauges draw with their cooker in the y-sorted pass, round 2.)
+  for (let i = 0; i < custs.length; i++) {
+    const c = custs[i];
+    if (!sweating(c)) continue;
+    const px = Math.round(c.px) + 12, py = Math.round(c.py) - 6 + hopOffset(c);
+    if (reduced) { D('sweat', px, py, 0); continue; }
+    const t0 = sweatAt.has(c.id) ? sweatAt.get(c.id) : tAnim;
+    const t = Math.max(0, tAnim - t0) % FX.SWEAT_EVERY;
+    if (t < FX.SWEAT_SLIDE_S) D('sweat', px, py + Math.round(FX.SWEAT_SLIDE_PX * t / FX.SWEAT_SLIDE_S), 0);
+    else if (t < FX.SWEAT_SLIDE_S + FX.SWEAT_SPLASH_S) D('sweat', px, py + FX.SWEAT_SLIDE_PX, 1);
+  }
+  // zzz over an idle buddy.
+  const b = s.buddy;
+  if (b && zzzAt >= 0) {
+    const zx = Math.round(b.px) + 10, zy = Math.round(b.py) - 14;
+    if (reduced) {
+      D('zzz', zx, zy, 2);
+    } else {
+      const cycle = FX.ZZZ_FRAME_S * 3;
+      const t = Math.max(0, tAnim - zzzAt);
+      D('zzz', zx, zy - Math.round(FX.ZZZ_DRIFT_PX * (t % cycle) / cycle), Math.floor(t / FX.ZZZ_FRAME_S) % 3);
+    }
+  }
+  // Hearts.
+  for (let i = 0; i < hearts.length; i++) {
+    const h = hearts[i];
+    const age = tAnim - h.at;
+    if (age < 0 || age >= FX.HEART_S) continue;
+    if (reduced) { DS('heart', h.x, h.y, 16, 16, 0); continue; }
+    const rise = Math.round(FX.HEART_RISE_PX * easeOut(age / FX.HEART_S));
+    const fadeFrom = FX.HEART_S - FX.HEART_FADE_S;
+    octx.globalAlpha = age > fadeFrom ? Math.max(0, (FX.HEART_S - age) / FX.HEART_FADE_S) : 1;
+    DS('heart', h.x, h.y - rise, 16, 16, age < FX.HEART_FRAME_S ? 0 : 1);
+    octx.globalAlpha = 1;
+  }
+}
+
+function numAlpha(age) {
+  if (age < FX.NUMBER_FADE_AT) return 1;
+  return Math.max(0, 1 - (age - FX.NUMBER_FADE_AT) / (FX.NUMBER_S - FX.NUMBER_FADE_AT));
+}
+function numRise(age) {
+  return reduced ? 0 : Math.round(FX.NUMBER_RISE_PX * easeOut(age / FX.NUMBER_S));
+}
+
+function drawTop(s) {
+  // Slice bar over the board.
   const b = s.stations.board;
   if (b && b.slicing && b.slicing.total > 0) {
-    const t = MAP.station('board').tiles[0];
-    const bx = t.x * TILE, by = t.y * TILE;
-    ctx.fillStyle = COLOR.K;
-    ctx.fillRect(bx, by - 5, 16, 3);
-    ctx.fillStyle = COLOR.C;
+    const st = MAP.station('board');
+    const bx = st.draw.x, by = st.draw.y;
+    octx.fillStyle = COLOR.K;
+    octx.fillRect(bx, by - 5, 16, 3);
+    octx.fillStyle = COLOR.C;
     const w = Math.round(14 * Math.max(0, Math.min(1, b.slicing.t / b.slicing.total)));
-    if (w > 0) ctx.fillRect(bx + 1, by - 4, w, 1);
+    if (w > 0) octx.fillRect(bx + 1, by - 4, w, 1);
   }
-  for (let i = 0; i < pops.length; i++) {
-    const p = pops[i];
-    const rise = reduced ? 0 : Math.round(p.age * 14);
-    const x = p.x, y = p.y - 6 - rise;
-    art.draw(ctx, 'coin', x, y, Math.floor(tAnim * 8) % 2);
-    drawText(ctx, '+' + p.price, x + 9, y, COLOR.O);
-    if (p.tip > 0) drawText(ctx, '+' + p.tip, x + 9, y + 7, COLOR.Y);
+  // Floating numbers, then their coins.
+  for (let i = 0; i < nums.length; i++) {
+    const n = nums[i];
+    const age = tAnim - n.at;
+    if (age < 0 || age >= FX.NUMBER_S) continue;
+    octx.globalAlpha = numAlpha(age);
+    popText(n.str, n.x, n.y - numRise(age), n.color);
+    octx.globalAlpha = 1;
+  }
+  for (let i = 0; i < nums.length; i++) {
+    const n = nums[i];
+    if (!n.coin) continue;
+    const age = tAnim - n.at;
+    if (age < 0 || age >= FX.NUMBER_S) continue;
+    octx.globalAlpha = numAlpha(age);
+    D('coin', n.x - 9, n.y - numRise(age), reduced ? 0 : Math.floor(tAnim * 8) % 2);
+    octx.globalAlpha = 1;
+  }
+  // Sparkles.
+  for (let i = 0; i < sparkles.length; i++) {
+    const sp = sparkles[i];
+    const age = tAnim - sp.at;
+    if (age < 0 || age >= FX.SPARKLE_S) continue;
+    DS('sparkle', sp.x - 3, sp.y - 3, 14, 14, Math.min(2, Math.floor(age / FX.SPARKLE_FRAME_S)));
+  }
+  // Tap rings: the full ring, then its four corners. Reduced motion keeps the ring.
+  if (s.phase === 'service') {
+    for (let i = 0; i < rings.length; i++) {
+      const m = rings[i];
+      const age = tAnim - m.at;
+      if (age < 0 || age >= FX.TAP_RING_S) continue;
+      octx.fillStyle = m.ok ? COLOR.yellow : COLOR.O;
+      if (reduced || age < FX.TAP_RING_S * 0.6) {
+        octx.fillRect(m.x, m.y, 16, 1);
+        octx.fillRect(m.x, m.y + 15, 16, 1);
+        octx.fillRect(m.x, m.y, 1, 16);
+        octx.fillRect(m.x + 15, m.y, 1, 16);
+      } else {
+        octx.fillRect(m.x, m.y, 1, 1);
+        octx.fillRect(m.x + 15, m.y, 1, 1);
+        octx.fillRect(m.x, m.y + 15, 1, 1);
+        octx.fillRect(m.x + 15, m.y + 15, 1, 1);
+      }
+    }
   }
 }
 
-function drawRain(ctx) {
-  ctx.fillStyle = 'rgba(90, 87, 83, 0.55)';
-  ctx.fillRect(0, 0, VW, 10);
-  ctx.fillStyle = 'rgba(169, 196, 217, 0.10)';
-  ctx.fillRect(0, 0, VW, VH);
+function drawRain() {
+  octx.fillStyle = 'rgba(110, 104, 99, 0.55)';
+  octx.fillRect(0, 0, VW, 10);
+  octx.fillStyle = 'rgba(91, 184, 240, 0.10)';
+  octx.fillRect(0, 0, VW, VH);
   if (reduced || !rainDrops) return;
-  ctx.fillStyle = COLOR.w;
-  for (let i = 0; i < rainDrops.length; i++) ctx.fillRect(rainDrops[i].x, Math.floor(rainDrops[i].y), 1, 3);
+  octx.fillStyle = COLOR.smokeL;
+  for (let i = 0; i < rainDrops.length; i++) {
+    const y = Math.floor(rainDrops[i].y);
+    if (y < 0 || y > VH - 3) continue;
+    octx.fillRect(rainDrops[i].x, y, 1, 3);
+  }
 }
 
 function render() {
   const s = sim.state;
-  const ctx = octx;
-  const T = MAP.T;
   const inService = s.phase === 'service';
-  const gateOpen = inService && s.clock >= C.GATE_OPENS && s.clock < C.LAST_CALL;
+  octx.globalAlpha = 1;
+  octx.fillStyle = COLOR.K;
+  octx.fillRect(0, 0, VW, VH);
 
-  ctx.fillStyle = COLOR.K;
-  ctx.fillRect(0, 0, VW, VH);
+  drawGround(s);                      // 1. ground
+  const custs = drawSorted(s);        // 2. the y-sorted pass
+  drawOverhead(s);                    // 3. string lights, canopy
+  drawSmokeAndFire(s);                // 4. smoke, puffs, flames
+  drawCues(s, custs);                 // 5. bubbles, bars, sweat, zzz, hearts
+  drawTop(s);                         // 6. slice bar, numbers, coins, sparkles, tap rings
+  if (inService && s.rain) drawRain(); // 7. rain
 
-  // 1. Ground.
-  for (let y = 0; y < MAP.H; y++) {
-    for (let x = 0; x < MAP.W; x++) {
-      const t = MAP.at(x, y);
-      const px = x * TILE, py = y * TILE;
-      if (t === T.FENCE) {
-        const edgeRow = y === 0 || y === MAP.H - 1;
-        const edgeCol = x === 0 || x === MAP.W - 1;
-        art.draw(ctx, edgeRow && !edgeCol ? 'fence_h' : 'fence_v', px, py);
-      } else if (t === T.GATE) {
-        art.draw(ctx, 'path', px, py);
-        art.draw(ctx, 'gate', px, py, gateOpen ? 1 : 0);
-      } else if (t === T.PATH) {
-        art.draw(ctx, 'path', px, py);
-      } else if (t === T.HEDGE) {
-        art.draw(ctx, 'hedge', px, py);
-      } else {
-        art.draw(ctx, 'grass', px, py, (x + y) % 2 === 0 ? 0 : 1);
-      }
-    }
-  }
-
-  // 2. Canopy canvas and back poles.
-  if (s.gear.canopy) art.draw(ctx, 'canopy', 64, 74);
-
-  // 3. Dashed outlines on inactive station tiles.
-  for (let i = 0; i < MAP.stations.length; i++) {
-    const st = MAP.stations[i];
-    const stOwned = owned(st);
-    for (let j = 0; j < st.tiles.length; j++) {
-      const t = st.tiles[j];
-      if (stOwned && owned(t)) continue;
-      const frame = st.id === 'drum' ? (j === 0 ? 1 : 2) : 0;
-      art.draw(ctx, 'outline', t.x * TILE, t.y * TILE, frame);
-    }
-  }
-
-  // 4. Stations.
-  drawStations(ctx, s);
-
-  // 5. People.
-  drawPeople(ctx, s);
-
-  // 6. Canopy front poles.
-  if (s.gear.canopy) {
-    art.draw(ctx, 'canopy_pole', 65, 98);
-    art.draw(ctx, 'canopy_pole', 139, 98);
-  }
-
-  // 7. Smoke and fire.
-  drawFxLayer(ctx, s);
-
-  // 8. Bubbles and patience bars.
-  drawBubbles(ctx, s);
-
-  // 9. Slice bar and coin pops, then tap marks.
-  drawPops(ctx, s);
-  if (inService) drawTapMarks(ctx);
-
-  // 10. Rain.
-  if (inService && s.rain) drawRain(ctx);
-
-  // 11. Canvas text.
+  // 8. Canvas text in umber boxes.
   if (inService) {
     const rem = Math.max(0, Math.ceil(C.DAY_SECONDS - s.clock));
-    drawBoxedText(ctx, String(rem), 2, 2, COLOR.C);
-    if (s.clock < C.GATE_OPENS) drawBoxedText(ctx, 'GATE OPENS IN ' + Math.ceil(C.GATE_OPENS - s.clock), 2, 9, COLOR.Y);
-    else if (lastCallUntil > nowMs) drawBoxedText(ctx, 'LAST CALL', 2, 9, COLOR.Y);
+    boxText(String(rem), 2, 2, null);
+    if (s.clock < C.GATE_OPENS) boxText('GATE OPENS IN ' + Math.ceil(C.GATE_OPENS - s.clock), 2, 183, 'yellow');
+    else if (lastCallUntil > nowMs) boxText('LAST CALL', 2, 183, 'yellow');
   }
 
-  // 12. Blit with shake.
+  // 9. Blit at the D13 scale, with the burnt shake.
+  vctx.imageSmoothingEnabled = false;
   vctx.fillStyle = COLOR.K;
   vctx.fillRect(0, 0, el.cv.width, el.cv.height);
   let ox = 0;
-  if (!reduced && shakeUntil > nowMs) ox = (Math.floor(nowMs / 16) % 2 === 0 ? 1 : -1) * scale;
-  vctx.drawImage(off, 0, 0, VW, VH, ox, 0, VW * scale, VH * scale);
+  if (!reduced && shakeUntil > nowMs) ox = (Math.floor(nowMs / 16) % 2 === 0 ? 1 : -1) * kpx;
+  vctx.drawImage(off, 0, 0, VW, VH, ox, 0, VW * kpx, VH * kpx);
 }
 
 // ---------------------------------------------------------------- DOM per frame
 
 function statusText(s) {
   if (saveOffUntil > nowMs) return 'Saving is off in this browser.';
+  if (noticeUntil > nowMs) return 'Your save was updated for the new yard.';
   if (blockedUntil > nowMs) return STRINGS.cantGetThere;
   if (s.phase === 'service' && s.clock < C.GATE_OPENS) return STRINGS.gateOpensIn + Math.ceil(C.GATE_OPENS - s.clock);
   if (lastCallUntil > nowMs) return STRINGS.lastCall;

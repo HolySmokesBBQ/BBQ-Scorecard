@@ -1,23 +1,45 @@
 #!/usr/bin/env node
 // games/pit-sim/dev/smoke.mjs
-// Headless smoke test for the pit sim backyard prototype. Never shipped, never linked.
+// Headless smoke test for the pit sim backyard prototype, v2 (dense yard, seating, feedback).
+// Never shipped, never linked.
 //
-// Run from the repo root:  node games/pit-sim/dev/smoke.mjs [--out <dir>] [--desktop] [--seed <n>]
+// Run from the repo root:
+//   node games/pit-sim/dev/smoke.mjs [--out <dir>] [--desktop] [--seed <n>] [--dir <folder>]
 //
-// What it does, in order:
-//   1. Node checks with no browser: node --check on the three scripts, sim.js loaded under vm,
-//      the shared surface and validateSave spot checks from the contract (section 5.1, items 1 to 3).
+// What it does, in order (contract D15, the 36 step list, plus one step listed under Deviations):
+//   1. Node checks with no browser: files present, node --check on the three scripts, sim.js loaded
+//      under vm with the v2 surface and counts, validateSave rejects, clamps and migrates v1 to v2,
+//      and a customer BFS on sim.custWalkable reaches every owned seat for all 64 decor sets.
 //   2. Launches Chrome headless with a fresh profile, connects over CDP with the global WebSocket,
 //      collects every console message, exception, log entry and network request, emulates a phone
-//      (375 by 812, dpr 2, mobile, touch) unless --desktop is passed, opens index.html?seed=<n>.
-//   3. Plays one full day through the contract's DOM ids and window.PitSim.game.sim, asserting
-//      each step of the harness list, measuring the boredom metric (seconds of service with
-//      nothing cooking, no customer present and fire above the low threshold) and taps per plate.
-//   4. Writes <out>/report.json and three screenshots (clipboard, mid service, till), prints one
-//      summary line, exits 1 on any failed step, and always kills Chrome and removes the profile.
+//      (375 by 812, dpr 2, mobile, touch) unless --desktop is passed (1024 by 820, dpr 1), and opens
+//      index.html?seed=<n>.
+//   3. Checks the sprite list and palette, the integer canvas scale on phone and desktop, then plays
+//      day 1 through the DOM ids and PitSim.game.sim: a served customer sits, eats and fires a heart.
+//      Reloads into seeded saves for the decor purchase and the v1 migration, checks pause, that no
+//      draw record leaves the canvas, that the dog never stands on a station use tile, layout and
+//      keyboard at 375 by 740, and reduced motion.
+//   4. Writes <out>/report.json and five screenshots (clipboard, mid-service, seated, decor, till),
+//      prints one summary line, exits 1 on any failed step, and always kills Chrome and removes the
+//      profile.
+//
+// Every DOM read comes right after PitSim.game.advance (contract D14), which updates the DOM and
+// draws one frame, never after a guessed frame delay.
 //
 // Every selector, sim field path, tile, key and number the script depends on lives in the
 // constants block below, so a contract change is one edit here.
+//
+// Deviations from contract D15:
+//   1. Step 12 checks the integer scale in both modes in one run: it checks the run's own mode,
+//      switches the emulation to the other mode (phone 375 by 812 dpr 2, desktop 1024 by 820 dpr 1),
+//      checks again, then restores the run's mode.
+//   2. One step added after step 33, "dog never on a station use tile": 60 s of service sampled
+//      tick by tick through advance; PitSim.game.dog never stands on (or centers over) any use tile
+//      of any station, owned or not. The dog is timed in real seconds (V2.9), so if it never moves
+//      under advance the step also polls it in real time for up to 15 s and notes that.
+//   3. Step 34 checks the 44 px buttons before the reload (service) and again after it (morning).
+//   4. Seeded saves (steps 30, 31) are written with Page.addScriptToEvaluateOnNewDocument before the
+//      reload and the script is removed after, so the page cannot overwrite them on unload.
 
 import fs from 'node:fs';
 import os from 'node:os';
@@ -47,23 +69,88 @@ const EXPECTED_REQUEST_FILES = ['index.html', 'sprites.js', 'sim.js', 'game.js']
 const DEFAULT_SEED = 1;
 const SAVE_KEY = 'hs.pitsim.save';
 const GLOBAL_NAME = 'PitSim';
+const GAME_VERSION = '0.3.0';
 const SIM_SURFACE = ['C', 'MEATS', 'MEAT_IDS', 'MAP', 'CATALOG', 'STRINGS', 'createSim', 'validateSave', 'fireBand', 'fireMult', 'tileOwned', 'SAVE_KEY'];
-const SURFACE_COUNTS = { tiles: 195, stations: 8, catalog: 15 };
+const SURFACE_COUNTS = { tiles: 132, stations: 8, seats: 6, decor: 6, props: 19, catalog: 21 };
+const MAP_SIZE = { w: 11, h: 12 };
+const TILE_PX = 16;
+const VIRTUAL = { w: MAP_SIZE.w * TILE_PX, h: MAP_SIZE.h * TILE_PX };   // 176 by 192
+const CSS_SCALE = { phone: 2, desktop: 3 };                              // contract D13
+// Review round 2, contract D13: sizes where the old rule left the device scale fractional.
+// controls: the action button and the meat chips must end inside the viewport.
+const DEVICE_SIZES = [
+  { width: 412, height: 915, deviceScaleFactor: 2.625, mobile: true },
+  { width: 360, height: 800, deviceScaleFactor: 3, mobile: true },
+  { width: 393, height: 873, deviceScaleFactor: 2.75, mobile: true },
+  { width: 1366, height: 657, deviceScaleFactor: 1, mobile: false, controls: true },
+  { width: 1280, height: 720, deviceScaleFactor: 1.5, mobile: false, controls: true }
+];
 
-// DOM ids (contract 4.4). Functions build the per item ids.
+// Contract D2 and D3.
+const C_EXPECT = { WALK_TILES_PER_S: 6, SAVE_VERSION: 2, PATIENCE_MID_FRAC: 0.5, GEAR_RESERVE: 30, QUEUE_SPOTS: 3, QUEUE_SPOTS_BIG: 5, TABLE_SPOTS: 3, TABLE_SPOTS_BIG: 5 };
+const C_NEW_KEYS = ['EAT_MIN', 'EAT_MAX', 'HEART_SECONDS', 'SEAT_BONUS_BASE', 'SEAT_BONUS_MAX', 'CHARM_STEP', 'CHARM_MAX', 'REP_TOGO_QUICK', 'SWEAT_FRAC', 'ZZZ_AFTER', 'FX', 'PATIENCE_MID_FRAC', 'GEAR_RESERVE'];
+const FX_KEYS = ['NUMBER_S', 'NUMBER_RISE_PX', 'NUMBER_FADE_AT', 'TIP_GAP_PX', 'SPARKLE_S', 'SPARKLE_FRAME_S', 'SPARKLE_STAGGER_S',
+  'HEART_S', 'HEART_FRAME_S', 'HEART_RISE_PX', 'HEART_FADE_S', 'EAT_FRAME_S', 'PUFF_EVERY_LOW', 'PUFF_EVERY_GOOD', 'PUFF_EVERY_HOT',
+  'PUFF_LIFE_MIN', 'PUFF_LIFE_MAX', 'PUFF_RISE_PX_S', 'PUFF_DRIFT_PX_S', 'BURNT_BURST_S', 'BURNT_RISE_PX_S', 'SHAKE_MS',
+  'BURNT_COLUMN_EVERY', 'BURNT_COLUMN_LIFE', 'BURNT_COLUMN_RISE_PX_S', 'BURNT_COLUMN_SWAY_PX', 'SWEAT_EVERY', 'SWEAT_SLIDE_S',
+  'SWEAT_SLIDE_PX', 'SWEAT_SPLASH_S', 'ZZZ_FRAME_S', 'ZZZ_DRIFT_PX', 'SQUASH_S', 'WALKOUT_MARK_S', 'TAP_RING_S', 'FIRE_FPS',
+  'TWINKLE_S', 'BIRD_SHOW_S', 'BIRD_GAP_MIN', 'BIRD_GAP_MAX', 'DOG_TILES_PER_S', 'DOG_WAIT_MIN', 'DOG_WAIT_SPREAD', 'NOTICE_S'];
+const MEAT_COOK = { sausage: 14, chicken: 22 };
+const MEAT_IDS = ['sausage', 'chicken', 'ribs', 'butt', 'brisket'];
+const GEAR_IDS = ['kettle2', 'cooler', 'bigtable', 'tray', 'canopy', 'drum'];
+const DECOR_IDS = ['chair1', 'chair2', 'flowers', 'birdbath', 'lights', 'picnic2'];
+const SEAT_IDS = ['pt1b', 'pt1a', 'chair1', 'chair2', 'pt2b', 'pt2a'];
+const DOG_HOME = { x: 4, y: 7, px: 64, py: 112, frame: 2 };
+
+// Contract D11, copied verbatim.
+const REQUIRED_SPRITES = [   // [name, w, h, frames]
+  ['player_down', 16, 24, 3], ['player_up', 16, 24, 3], ['player_side', 16, 24, 3], ['player_slice', 16, 24, 2],
+  ['buddy_down', 16, 24, 3], ['buddy_up', 16, 24, 3], ['buddy_side', 16, 24, 3], ['tender_down', 16, 24, 3],
+  ['tender_up', 16, 24, 3], ['tender_side', 16, 24, 3], ['cust0_down', 16, 24, 5], ['cust0_up', 16, 24, 3],
+  ['cust0_side', 16, 24, 4], ['cust0_sit', 16, 24, 3], ['cust1_down', 16, 24, 5], ['cust1_up', 16, 24, 3],
+  ['cust1_side', 16, 24, 4], ['cust1_sit', 16, 24, 3], ['cust2_down', 16, 24, 5], ['cust2_up', 16, 24, 3],
+  ['cust2_side', 16, 24, 4], ['cust2_sit', 16, 24, 3], ['cust3_down', 16, 24, 5], ['cust3_up', 16, 24, 3],
+  ['cust3_side', 16, 24, 4], ['cust3_sit', 16, 24, 3], ['shadow', 12, 4, 1], ['dog', 16, 16, 4],
+  ['hand_charcoal', 8, 8, 1], ['hand_raw_sausage', 8, 8, 1], ['hand_raw_chicken', 8, 8, 1], ['hand_raw_ribs', 8, 8, 1],
+  ['hand_raw_butt', 8, 8, 1], ['hand_raw_brisket', 8, 8, 1], ['hand_cooked_sausage', 8, 8, 1], ['hand_cooked_chicken', 8, 8, 1],
+  ['hand_cooked_ribs', 8, 8, 1], ['hand_cooked_butt', 8, 8, 1], ['hand_cooked_brisket', 8, 8, 1], ['hand_burnt', 8, 8, 1],
+  ['hand_plate_sausage', 8, 8, 1], ['hand_plate_chicken', 8, 8, 1], ['hand_plate_ribs', 8, 8, 1], ['hand_plate_butt', 8, 8, 1],
+  ['hand_plate_brisket', 8, 8, 1], ['hand_tray_sausage', 8, 8, 1], ['hand_tray_chicken', 8, 8, 1], ['hand_tray_ribs', 8, 8, 1],
+  ['hand_tray_butt', 8, 8, 1], ['hand_tray_brisket', 8, 8, 1], ['hand_tray', 8, 8, 1], ['hand_togo', 8, 8, 1],
+  ['icon_sausage', 8, 8, 1], ['icon_chicken', 8, 8, 1], ['icon_ribs', 8, 8, 1], ['icon_butt', 8, 8, 1],
+  ['icon_brisket', 8, 8, 1], ['plate_sausage', 8, 6, 1], ['plate_chicken', 8, 6, 1], ['plate_ribs', 8, 6, 1],
+  ['plate_butt', 8, 6, 1], ['plate_brisket', 8, 6, 1], ['piece_sausage', 10, 10, 4], ['piece_chicken', 10, 10, 4],
+  ['piece_ribs', 10, 10, 4], ['piece_butt', 10, 10, 4], ['piece_brisket', 10, 10, 4], ['mark_x', 8, 8, 1],
+  ['kettle', 16, 24, 4], ['drum', 16, 32, 4], ['cooler', 16, 16, 3], ['board', 16, 16, 2],
+  ['counter', 32, 24, 2], ['counter_ext', 16, 24, 1], ['pile', 16, 16, 4], ['trash', 16, 16, 1],
+  ['paver', 16, 16, 2], ['lawn_a', 16, 16, 2], ['lawn_b', 16, 16, 2], ['fence_h', 16, 24, 1],
+  ['fence_v', 16, 24, 1], ['fence_corner', 16, 24, 1], ['fence_back', 16, 16, 2], ['gate', 16, 24, 2], ['hedge', 16, 24, 2],
+  ['bed', 16, 20, 4], ['shed', 48, 32, 1], ['sign', 44, 12, 1], ['tree', 32, 48, 1],
+  ['woodpile', 16, 16, 1], ['hose', 16, 16, 1], ['tools', 16, 24, 1], ['pot', 16, 16, 1],
+  ['planter', 16, 24, 1], ['shelf', 16, 24, 1], ['mailbox', 16, 24, 1], ['picnic', 32, 24, 1], ['picnic_bench', 32, 8, 1],
+  ['chair', 16, 24, 1], ['lights_post', 16, 32, 1], ['lights_string', 66, 10, 2], ['birdbath', 16, 24, 2],
+  ['canopy', 40, 32, 1], ['bubble', 16, 12, 1], ['heart', 8, 8, 2], ['sparkle', 7, 7, 3],
+  ['smoke', 8, 8, 3], ['smoke_dark', 8, 8, 3], ['fire', 8, 8, 3], ['coin', 8, 8, 2],
+  ['sweat', 4, 6, 2], ['zzz', 8, 8, 3], ['font', 4, 6, 38]
+];
+const SPRITE_COUNT = 113;
+const PALETTE_LEN = 32;
+const COLOR_KEYS = 'K U C O outline woodD woodM woodL paver paverD lawnA lawnB leafD leafL cloth clothD white pink magenta yellow skinL skinM skinD red raw cooking done steelL steelD smokeL smokeD'.split(' ');
+
+// DOM ids (contract 4.4 and D14). Functions build the per item ids.
 const ID = {
-  root: 'root', cv: 'cv', act: 'act', status: 'status', live: 'live',
+  root: 'root', cv: 'cv', act: 'act', status: 'status', live: 'live', chips: 'chips',
   clipboard: 'clipboard', open: 'open', openWhy: 'open-why', cart: 'cart', clipNew: 'clip-new',
-  till: 'till', tillH: 'till-h', next: 'next',
+  seats: 'seats',
+  till: 'till', tillH: 'till-h', tillBody: 'till-body', next: 'next',
   pause: 'pause', resume: 'resume', howto: 'howto', newgame: 'newgame', broke: 'broke',
   hireBuddy: 'hire-buddy',
   qty: (id) => 'qty-' + id,
   inc: (id) => 'inc-' + id,
   dec: (id) => 'dec-' + id,
   chip: (id) => 'chip-' + id,
-  // The contract has no dedicated how to button; the Controls panel (#howto) shows with #pause.
-  // If game.js adds a button under one of these ids the harness clicks it; otherwise it verifies
-  // #howto through the pause panel.
+  buy: (id) => 'buy-' + id,
+  // Game deviation 6 adds #howto-btn; the other names are fallbacks if a later build renames it.
   howtoButtons: ['howto-btn', 'help', 'how-to', 'btn-howto', 'controls']
 };
 const PHASE = { morning: 'morning', service: 'service', evening: 'evening' };
@@ -71,11 +158,14 @@ const TEXT = {
   needCharcoal: 'Buy at least one bag of charcoal.',
   gateOpensIn: 'Gate opens in',
   walk: 'Walk',
+  notice: 'Your save was updated for the new yard.',
+  seatTipsRow: 'Seat tips',
   tillHeading: (day) => 'Day ' + day + ' till',
-  cartLine: (total, after) => 'Total ' + total + '. Cash after ' + after + '.'
+  cartLine: (total, after) => 'Total ' + total + '. Cash after ' + after + '.',
+  seats: (n, charm, bonus) => 'Seats ' + n + '. Charm ' + charm + '. Each seated customer tips ' + bonus + ' more.'
 };
 
-// Sim field paths (contract 2.5.1), written as JS expressions over S() which returns sim.state.
+// Sim field paths (contract 2.5.1 and D6), written as JS expressions over S() which returns sim.state.
 const F = {
   phase: 'S().phase', day: 'S().day', cash: 'S().cash', rep: 'S().rep', paused: 'S().paused', clock: 'S().clock',
   carrying: 'S().player.carrying', busy: 'S().player.busy', walking: 'S().player.walking',
@@ -87,52 +177,111 @@ const F = {
   boardStacks: 'S().stations.board.stacks',
   tableSpots: 'S().stations.table.spots',
   customers: 'S().customers',
+  seats: 'S().seats',
+  decor: 'S().decor',
   today: 'S().today',
   till: 'S().till',
-  stock: (m) => 'S().stock.' + m,
+  stock: 'S().stock',
   charcoal: 'S().charcoal',
-  gear: 'S().gear'
+  gear: 'S().gear',
+  hires: 'S().hires'
 };
 const COOKERS = ['kettle1', 'kettle2', 'drum'];
 const PIECE_STATE = { cooking: 'cooking', done: 'done', burnt: 'burnt' };
 const CARRY_KIND = { charcoal: 'charcoal', raw: 'raw', cooked: 'cooked', burnt: 'burnt', plates: 'plates' };
 const CUSTOMER_PRESENT_MODES = ['arriving', 'waiting'];
+const MODE = { eating: 'eating', toSeat: 'toSeat', leaving: 'leaving' };
+const REASON = { seated: 'seated' };
 const EVENT = {
   yardOpen: 'yard_open', gateOpen: 'gate_open', pieceDone: 'piece_done', sliceDone: 'slice_done',
-  setDown: 'set_down', served: 'served', walkOut: 'walk_out', dayOver: 'day_over', saveWanted: 'save_wanted'
+  setDown: 'set_down', served: 'served', walkOut: 'walk_out', dayOver: 'day_over', saveWanted: 'save_wanted',
+  seatTaken: 'seat_taken', toGo: 'to_go', seatDone: 'seat_done', purchase: 'purchase', customerArrived: 'customer_arrived'
 };
-const C_NAMES = { gateOpens: 'GATE_OPENS', daySeconds: 'DAY_SECONDS', fireLight: 'FIRE_LIGHT', fireGood: 'FIRE_GOOD', fireLowWarn: 'FIRE_LOW_WARN', tick: 'TICK_SECONDS', repQuick: 'REP_QUICK', repOk: 'REP_OK', startCash: 'START_CASH' };
+const FX_KIND = { cash: 'cash', seatTip: 'seatTip', heart: 'heart', ring: 'ring', squash: 'squash' };
+const OUTLINE = '#outline';
+const C_NAMES = {
+  gateOpens: 'GATE_OPENS', daySeconds: 'DAY_SECONDS', fireLight: 'FIRE_LIGHT', fireGood: 'FIRE_GOOD', fireLowWarn: 'FIRE_LOW_WARN',
+  tick: 'TICK_SECONDS', repQuick: 'REP_QUICK', repOk: 'REP_OK', repTogoQuick: 'REP_TOGO_QUICK', repDayMin: 'REP_DAY_MIN',
+  startCash: 'START_CASH', startRep: 'START_REP', dailyCosts: 'DAILY_COSTS', eatMax: 'EAT_MAX', heartSeconds: 'HEART_SECONDS'
+};
 const SIM_METHODS = { walkTo: 'walkTo', interact: 'interact', drainEvents: 'drainEvents', serialize: 'serialize' };
-const GAME_FIELDS = { version: 'version', advance: 'advance', reduced: 'reduced', sim: 'sim' };
+const GAME_FIELDS = { version: 'version', advance: 'advance', reduced: 'reduced', sim: 'sim', dog: 'dog', fxLog: 'fxLog', captureFrame: 'captureFrame' };
 const ART_FIELDS = { built: 'built' };
 
-// Tiles the player walks to (contract 2.3.2 footprints; tapping a station tile walks to its use tile).
+// Tiles the player taps (contract D15; tapping a station walks to its use tile).
 const TILE = {
-  pile: { x: 8, y: 13 },
-  kettle1: { x: 8, y: 9 },
-  cooler: { x: 3, y: 11 },
-  board: { x: 4, y: 9 },
+  pile: { x: 4, y: 2 },
+  kettle1: { x: 5, y: 2 },
+  cooler: { x: 6, y: 1 },
+  board: { x: 5, y: 4 },
   table: { x: 6, y: 6 }
 };
-const MAP_SIZE = { w: 13, h: 15 };
+const SPAWN = { x: 6, y: 3 };
+const ARROW_LEFT_X = 5;
 
-// The shopping list for day 1 and day 2. Two sausage units give four plates, so later customers
-// walk out and the walk out step has something to assert.
+// What the morning yard must draw (step 13), the first seat (step 23) and the chair (step 30).
+const MORNING_DRAWS = [
+  { name: 'picnic', x: 80, y: 136 },
+  { name: 'picnic_bench', x: 80, y: 136 },
+  { name: 'dog', x: DOG_HOME.px, y: DOG_HOME.py, frame: DOG_HOME.frame }
+];
+// Unowned gear and decor also draw a see-through ghost (records marked ghost: true).
+const MORNING_GHOSTS = [
+  { name: 'kettle', x: 112, y: 24 },
+  { name: 'chair', x: 112, y: 136 }
+];
+const MORNING_OUTLINES = [
+  { what: 'kettle2', x: 112, y: 32, w: 16, h: 16 },
+  { what: 'chair1', x: 112, y: 144, w: 16, h: 16 }
+];
+const CASH_ABOVE = 26;   // review round 2: the cash number sits over the served customer, at py - 26
+const FIRST_SEAT = { id: 'pt1b', x: 6, y: 8, px: 96, py: 128, bonus: 1, heart: { x: 96, y: 104 } };
+const DECOR_BUY = { id: 'chair1', draw: { name: 'chair', x: 112, y: 136 }, outlineGone: { x: 112, y: 144 }, seatsAfter: [3, 3, 1] };
+const DECOR_SAVE = { day: 2, cash: 200 };
+
+// Step 33: records that may extend past a canvas edge (people at the gate or the spawn only;
+// the back fence row is drawn inside the canvas).
+const EDGE_OK = {
+  bottom: /^(player_|buddy_|tender_|cust\d_|shadow$|hand_)/
+};
+
+// Section 2.8 v1 sample and section 5.1 item 3 dirty sample.
+const SAVE_V1_SAMPLE = {
+  v: 1, day: 5, cash: 187, rep: 80,
+  stock: { sausage: 0, chicken: 2, ribs: 0, butt: 1, brisket: 0 },
+  charcoal: 3,
+  gear: { kettle2: true, cooler: false, bigtable: false, tray: false, canopy: false, drum: false },
+  hires: { buddy: false, tender: false },
+  stats: { days: 4, served: 45, walkouts: 1, past: 3, burnt: 0 },
+  drivewayShown: false
+};
+const SAVE_DIRTY = { v: 1, day: 'abc', cash: -50, rep: 400, stock: { sausage: 200, bogus: 1 }, gear: { drum: true, kettle2: false }, hires: { tender: true }, extra: 1 };
+const INVALID_SAVES = [null, 'x', [], {}, undefined, 42, { v: 3 }, { v: 0 }];
+
+// The shopping list for day 1 and later days. Two sausage units give four plates, so later
+// customers walk out and the walk out step has something to assert.
 const BUY_DAY1 = { charcoal: 4, meat: 'sausage', units: 2 };
-const BUY_DAY2 = { charcoal: 1, meat: 'sausage', units: 1 };
+const BUY_LATER = { charcoal: 1, meat: 'sausage', units: 1 };
 const MEAT = 'sausage';
 const PLATE_CYCLES_MAX = 2;      // pieces to pull, slice and carry during the day
 
 const KEYS = {
   escape: { key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 },
-  p: { key: 'p', code: 'KeyP', windowsVirtualKeyCode: 80 }
+  p: { key: 'p', code: 'KeyP', windowsVirtualKeyCode: 80 },
+  left: { key: 'ArrowLeft', code: 'ArrowLeft', windowsVirtualKeyCode: 37 }
 };
 const PHONE = { width: 375, height: 812, deviceScaleFactor: 2, mobile: true };
 const DESKTOP = { width: 1024, height: 820, deviceScaleFactor: 1, mobile: false };
-const TIMEOUT_MS = { launch: 20000, load: 20000, cdp: 90000 };
+const LAYOUT_VIEW = { width: 375, height: 740, deviceScaleFactor: 2, mobile: true };
+const MIN_CONTROL_PX = 44;
+const TIMEOUT_MS = { launch: 20000, load: 20000, cdp: 90000, resize: 400 };
 // Simulated seconds the harness will advance while waiting for a condition.
-const WAIT_S = { walk: 10, settle: 0.15, fire: 45, cook: 70, slice: 15, serve: 75, serveRetry: 25, day: 170, afterOpen: 0.2 };
-const SCREENSHOTS = { clipboard: 'clipboard.png', midService: 'mid-service.png', till: 'till.png' };
+const WAIT_S = {
+  walk: 10, settle: 0.15, fire: 45, cook: 70, slice: 15, serve: 75, serveRetry: 25, day: 170, afterOpen: 0.2,
+  toEating: 15, eatSlack: 3, toLeaving: 3, service: 45, dogSample: 60, arrow: 0.5
+};
+const DOG_REALTIME_MS = 15000;
+const SCREENSHOTS = { clipboard: 'clipboard.png', midService: 'mid-service.png', seated: 'seated.png', decor: 'decor.png', till: 'till.png' };
 
 // ---------------------------------------------------------------------------------------------
 // Arguments and report
@@ -147,6 +296,7 @@ const DESKTOP_MODE = argv.includes('--desktop');
 const SEED = Number.parseInt(argValue('--seed', String(DEFAULT_SEED)), 10) || DEFAULT_SEED;
 const OUT_DIR = path.resolve(argValue('--out', path.join(os.tmpdir(), 'pit-sim-smoke')));
 fs.mkdirSync(OUT_DIR, { recursive: true });
+const RUN_METRICS = DESKTOP_MODE ? DESKTOP : PHONE;
 
 const report = {
   startedAt: new Date().toISOString(),
@@ -166,9 +316,9 @@ let failed = 0;
 let fatal = false;
 
 function record(name, ok, note) {
-  report.steps.push({ name, ok, note: note || '' });
+  report.steps.push({ n: report.steps.length + 1, name, ok, note: note || '' });
   if (!ok) failed += 1;
-  console.log((ok ? 'ok   ' : 'FAIL ') + name + (note ? '  (' + note + ')' : ''));
+  console.log((ok ? 'ok   ' : 'FAIL ') + String(report.steps.length).padStart(2) + ' ' + name + (note ? '  (' + note + ')' : ''));
 }
 function assert(cond, msg) {
   if (!cond) throw new Error(msg);
@@ -186,9 +336,29 @@ async function step(name, fn, opts = {}) {
 function describe(v) {
   try { return JSON.stringify(v); } catch (_e) { return String(v); }
 }
+function sameJSON(a, b) { return describe(a) === describe(b); }
+
+// A complete v2 save with defaults, for the Node BFS step and the seeded decor save.
+function saveV2(over = {}, startRep = 20) {
+  const s = {
+    v: 2, day: 1, cash: 80, rep: startRep,
+    stock: Object.fromEntries(MEAT_IDS.map((m) => [m, 0])),
+    charcoal: 0,
+    gear: Object.fromEntries(GEAR_IDS.map((g) => [g, false])),
+    decor: Object.fromEntries(DECOR_IDS.map((d) => [d, false])),
+    hires: { buddy: false, tender: false },
+    stats: { days: 0, served: 0, walkouts: 0, past: 0, burnt: 0, seated: 0 },
+    drivewayShown: false
+  };
+  for (const [k, v] of Object.entries(over)) {
+    if (v && typeof v === 'object' && !Array.isArray(v) && s[k] && typeof s[k] === 'object') Object.assign(s[k], v);
+    else s[k] = v;
+  }
+  return s;
+}
 
 // ---------------------------------------------------------------------------------------------
-// 1. Node checks (no browser)
+// 1. Node checks (no browser): steps 1 to 7
 // ---------------------------------------------------------------------------------------------
 
 async function nodeChecks() {
@@ -213,21 +383,39 @@ async function nodeChecks() {
     const missing = SIM_SURFACE.filter((n) => !(n in P));
     assert(missing.length === 0, 'missing ' + missing.join(', '));
     assert(P.SAVE_KEY === SAVE_KEY, 'SAVE_KEY is ' + describe(P.SAVE_KEY));
-    assert(P.MAP.tiles.length === SURFACE_COUNTS.tiles, 'MAP.tiles.length ' + P.MAP.tiles.length);
-    assert(P.MAP.stations.length === SURFACE_COUNTS.stations, 'MAP.stations.length ' + P.MAP.stations.length);
+    const M = P.MAP;
+    assert(M.W === MAP_SIZE.w && M.H === MAP_SIZE.h, 'MAP.W, MAP.H are ' + M.W + ', ' + M.H);
+    assert(M.tiles.length === SURFACE_COUNTS.tiles, 'MAP.tiles.length ' + M.tiles.length);
+    assert(M.stations.length === SURFACE_COUNTS.stations, 'MAP.stations.length ' + M.stations.length);
+    assert(Array.isArray(M.seats) && M.seats.length === SURFACE_COUNTS.seats, 'MAP.seats.length ' + (M.seats && M.seats.length));
+    assert(Array.isArray(M.decor) && M.decor.length === SURFACE_COUNTS.decor, 'MAP.decor.length ' + (M.decor && M.decor.length));
+    assert(Array.isArray(M.props) && M.props.length === SURFACE_COUNTS.props, 'MAP.props.length ' + (M.props && M.props.length));
     assert(P.CATALOG.length === SURFACE_COUNTS.catalog, 'CATALOG.length ' + P.CATALOG.length);
-    return SIM_SURFACE.length + ' names';
+    assert(sameJSON(M.seats.map((s) => s.id), SEAT_IDS), 'seat order ' + describe(M.seats.map((s) => s.id)));
+    assert(sameJSON(M.decor.map((d) => d.id), DECOR_IDS), 'decor order ' + describe(M.decor.map((d) => d.id)));
+    for (const [k, v] of Object.entries(C_EXPECT)) assert(P.C[k] === v, 'C.' + k + ' is ' + describe(P.C[k]) + ', wanted ' + v);
+    const missingC = C_NEW_KEYS.filter((k) => !(k in P.C));
+    assert(missingC.length === 0, 'C missing ' + missingC.join(', '));
+    assert(P.C.FX && Object.isFrozen(P.C.FX), 'C.FX is not a frozen object');
+    const missingFx = FX_KEYS.filter((k) => typeof P.C.FX[k] !== 'number');
+    assert(missingFx.length === 0, 'C.FX missing ' + missingFx.join(', '));
+    for (const [m, s] of Object.entries(MEAT_COOK)) assert(P.MEATS[m].cook === s, 'MEATS.' + m + '.cook is ' + P.MEATS[m].cook);
+    assert(M.dogHome && M.dogHome.x === DOG_HOME.x && M.dogHome.y === DOG_HOME.y, 'MAP.dogHome is ' + describe(M.dogHome));
+    return SIM_SURFACE.length + ' names, ' + C_NEW_KEYS.length + ' new C keys, ' + FX_KEYS.length + ' FX keys';
   });
 
-  await step('validateSave rejects and clamps as the contract says', () => {
+  await step('validateSave rejects, clamps and migrates', () => {
     const P = globalThis[GLOBAL_NAME];
     assert(P && typeof P.validateSave === 'function', 'validateSave missing');
-    for (const bad of [null, 'x', [], {}, { v: 2 }, undefined, 42]) {
-      assert(P.validateSave(bad) === null, 'expected null for ' + describe(bad));
+    for (const bad of INVALID_SAVES) {
+      let r;
+      try { r = P.validateSave(bad); } catch (e) { throw new Error('threw on ' + describe(bad) + ': ' + e.message); }
+      assert(r === null, 'expected null for ' + describe(bad) + ', got ' + describe(r));
     }
-    const dirty = { v: 1, day: 'abc', cash: -50, rep: 400, stock: { sausage: 200, bogus: 1 }, gear: { drum: true, kettle2: false }, hires: { tender: true }, extra: 1 };
-    const v = P.validateSave(dirty);
-    assert(v && v.day === 1, 'day ' + describe(v && v.day));
+    const allFalse = (o) => o && DECOR_IDS.every((d) => o[d] === false) && Object.keys(o).length === DECOR_IDS.length;
+    const v = P.validateSave(JSON.parse(JSON.stringify(SAVE_DIRTY)));
+    assert(v && v.v === 2, 'dirty v1 sample returned v ' + describe(v && v.v));
+    assert(v.day === 1, 'day ' + describe(v.day));
     assert(v.cash === 0, 'cash ' + v.cash);
     assert(v.rep === 100, 'rep ' + v.rep);
     assert(v.stock.sausage === 99, 'stock.sausage ' + v.stock.sausage);
@@ -235,8 +423,75 @@ async function nodeChecks() {
     assert(v.gear.drum === false, 'gear.drum not forced false');
     assert(v.hires.tender === false, 'hires.tender not forced false');
     assert(!('extra' in v), 'extra kept');
-    const cyclic = { v: 1 }; cyclic.self = cyclic;
-    assert(P.validateSave(cyclic) !== undefined, 'cyclic threw');
+    assert(allFalse(v.decor), 'dirty sample decor ' + describe(v.decor));
+    assert(v.stats && v.stats.seated === 0, 'dirty sample stats.seated ' + describe(v.stats && v.stats.seated));
+    const s = P.validateSave(JSON.parse(JSON.stringify(SAVE_V1_SAMPLE)));
+    assert(s && s.v === 2, 'v1 sample returned v ' + describe(s && s.v));
+    for (const k of ['day', 'cash', 'rep', 'stock', 'charcoal', 'gear', 'hires', 'drivewayShown']) {
+      assert(sameJSON(s[k], SAVE_V1_SAMPLE[k]), 'v1 sample ' + k + ' is ' + describe(s[k]) + ', wanted ' + describe(SAVE_V1_SAMPLE[k]));
+    }
+    for (const [k, n] of Object.entries(SAVE_V1_SAMPLE.stats)) assert(s.stats[k] === n, 'v1 sample stats.' + k + ' is ' + s.stats[k]);
+    assert(s.stats.seated === 0, 'v1 sample stats.seated ' + s.stats.seated);
+    assert(allFalse(s.decor), 'v1 sample decor ' + describe(s.decor));
+    const d = P.validateSave({ v: 2, decor: { chair2: true, bogus: true } });
+    assert(d && d.v === 2, 'v2 decor sample returned ' + describe(d));
+    assert(d.decor.chair2 === false, 'decor.chair2 not forced false without chair1');
+    assert(!('bogus' in d.decor), 'decor.bogus kept');
+    const cyclic = { v: 1 }; cyclic.self = cyclic; cyclic.decor = cyclic;
+    let threw = null;
+    try { P.validateSave(cyclic); } catch (e) { threw = e; }
+    assert(!threw, 'cyclic threw: ' + (threw && threw.message));
+    return INVALID_SAVES.length + ' rejected, v1 to v2 migrated, chair2 forced, cyclic safe';
+  });
+
+  await step('seat reachability', () => {
+    const P = globalThis[GLOBAL_NAME];
+    const M = P.MAP;
+    const startRep = P.C.START_REP;
+    const bfs = (sim, from, goal) => {
+      const key = (x, y) => x + ',' + y;
+      const seen = new Set([key(from.x, from.y)]);
+      const q = [from];
+      const dirs = [[0, -1], [0, 1], [-1, 0], [1, 0]];   // up, down, left, right
+      while (q.length) {
+        const c = q.shift();
+        if (c.x === goal.x && c.y === goal.y) return true;
+        for (const [dx, dy] of dirs) {
+          const nx = c.x + dx, ny = c.y + dy;
+          if (nx < 0 || nx >= M.W || ny < 0 || ny > M.H) continue;   // row H is the off canvas spawn row
+          const k = key(nx, ny);
+          if (seen.has(k)) continue;
+          if (!sim.custWalkable(nx, ny, goal.x, goal.y)) continue;
+          seen.add(k);
+          q.push({ x: nx, y: ny });
+        }
+      }
+      return false;
+    };
+    let checks = 0;
+    const fails = [];
+    for (let mask = 0; mask < 64; mask++) {
+      for (const big of [false, true]) {
+        const decor = Object.fromEntries(DECOR_IDS.map((id, i) => [id, (mask & (1 << i)) !== 0]));
+        const saved = P.validateSave(saveV2({ day: 3, decor, gear: { bigtable: big } }, startRep));
+        assert(saved, 'validateSave refused the mask ' + mask + ' save');
+        const sim = P.createSim(saved, 1);
+        assert(typeof sim.custWalkable === 'function', 'sim.custWalkable missing');
+        const st = sim.state;
+        const queue = M.queue.filter((qs) => P.tileOwned(qs, st.gear, st.decor));
+        const seats = M.seats.filter((s) => P.tileOwned(s, st.gear, st.decor));
+        for (const seat of seats) {
+          for (const qs of queue) {
+            checks += 1;
+            if (!bfs(sim, qs, seat)) fails.push('mask ' + mask + (big ? ' big' : '') + ': queue (' + qs.x + ',' + qs.y + ') to ' + seat.id);
+          }
+          checks += 1;
+          if (!bfs(sim, seat, M.custSpawn)) fails.push('mask ' + mask + (big ? ' big' : '') + ': ' + seat.id + ' to spawn');
+        }
+      }
+    }
+    assert(fails.length === 0, fails.length + ' unreachable, first ' + fails.slice(0, 3).join('; '));
+    return checks + ' routes over 128 yards';
   });
 }
 
@@ -274,7 +529,7 @@ class CDP {
         else p.resolve(m.result);
       } else if (m.method) {
         const hs = this.handlers.get(m.method);
-        if (hs) for (const h of hs) h(m.params);
+        if (hs) for (const h of hs.slice()) h(m.params);
       }
     });
   }
@@ -293,10 +548,15 @@ class CDP {
     if (!this.handlers.has(method)) this.handlers.set(method, []);
     this.handlers.get(method).push(fn);
   }
+  off(method, fn) {
+    const hs = this.handlers.get(method);
+    if (hs) { const i = hs.indexOf(fn); if (i >= 0) hs.splice(i, 1); }
+  }
   once(method, timeoutMs = TIMEOUT_MS.load) {
     return new Promise((resolve, reject) => {
-      const t = setTimeout(() => reject(new Error('timeout waiting for ' + method)), timeoutMs);
-      this.on(method, function handler(p) { clearTimeout(t); resolve(p); });
+      const handler = (p) => { clearTimeout(t); this.off(method, handler); resolve(p); };
+      const t = setTimeout(() => { this.off(method, handler); reject(new Error('timeout waiting for ' + method)); }, timeoutMs);
+      this.on(method, handler);
     });
   }
 }
@@ -322,6 +582,11 @@ async function removeProfile() {
 process.on('exit', killChrome);
 process.on('SIGINT', () => { killChrome(); process.exit(130); });
 process.on('SIGTERM', () => { killChrome(); process.exit(143); });
+
+async function emulate(metrics, touch) {
+  await cdp.send('Emulation.setDeviceMetricsOverride', { width: metrics.width, height: metrics.height, deviceScaleFactor: metrics.deviceScaleFactor, mobile: metrics.mobile });
+  await cdp.send('Emulation.setTouchEmulationEnabled', { enabled: touch === undefined ? metrics.mobile : touch, maxTouchPoints: 5 });
+}
 
 async function launch() {
   const port = await freePort();
@@ -374,9 +639,7 @@ async function launch() {
   await cdp.send('Page.enable');
   await cdp.send('Log.enable');
   await cdp.send('Network.enable');
-  const metrics = DESKTOP_MODE ? DESKTOP : PHONE;
-  await cdp.send('Emulation.setDeviceMetricsOverride', { width: metrics.width, height: metrics.height, deviceScaleFactor: metrics.deviceScaleFactor, mobile: metrics.mobile });
-  await cdp.send('Emulation.setTouchEmulationEnabled', { enabled: !DESKTOP_MODE, maxTouchPoints: 5 });
+  await emulate(RUN_METRICS);
   return port;
 }
 
@@ -395,6 +658,7 @@ const PRELUDE = `
   const sim = g && g.${GAME_FIELDS.sim};
   const S = () => sim.state;
   const C = globalThis.${GLOBAL_NAME}.C;
+  const MAP = globalThis.${GLOBAL_NAME}.MAP;
   const $ = (id) => document.getElementById(id);
   const txt = (id) => { const e = $(id); if (!e) throw new Error('#' + id + ' missing'); return (e.textContent || '').trim(); };
   const vis = (id) => { const e = $(id); return !!e && !e.hidden && !e.closest('[hidden]') && e.getClientRects().length > 0; };
@@ -420,6 +684,10 @@ async function run(body) {
 const click = (id) => ev('click(' + JSON.stringify(id) + ')');
 const text = (id) => ev('txt(' + JSON.stringify(id) + ')');
 const visible = (id) => ev('vis(' + JSON.stringify(id) + ')');
+// advance(s) steps the sim, pumps events, refreshes the DOM and draws one frame (D14).
+const advance = (s) => ev('(g.' + GAME_FIELDS.advance + '(' + s + '), true)');
+const captureFrame = () => ev('g.' + GAME_FIELDS.captureFrame + '()');
+const fxLog = () => ev('JSON.parse(JSON.stringify(g.' + GAME_FIELDS.fxLog + '))');
 
 // The probe wraps sim.drainEvents so the harness sees every event game.js pumps, and samples the
 // clock between advances for the boredom metric. Reinstalled after a reload; totals are carried.
@@ -462,28 +730,39 @@ const PROBE = `
 `;
 const installProbe = () => run(PROBE);
 
-// Advance the sim until pred (a JS expression over S(), C, sim) holds, at most maxSec simulated seconds.
+// Advance the sim until pred (a JS expression over S(), C, MAP, g, sim) holds, at most maxSec simulated seconds.
 async function until(pred, maxSec) {
   return run('return globalThis.__smoke.until(() => (' + pred + '), ' + maxSec + ');');
 }
 async function eventsOfType(type) {
   return run('return globalThis.__smoke.events.filter((e) => e.type === ' + JSON.stringify(type) + ');');
 }
+async function eventCount() {
+  return run('return globalThis.__smoke.events.length;');
+}
+async function eventsSince(n, type) {
+  return run('return globalThis.__smoke.events.slice(' + n + ').filter((e) => e.type === ' + JSON.stringify(type) + ');');
+}
 async function probeMetrics() {
   return run('const P = globalThis.__smoke; return { bored: P.bored, boredPrep: P.boredPrep, service: P.service, events: P.events.length };');
 }
 
 let taps = 0;        // canvas taps, action button clicks and walkTo fallbacks during service
-let tapNotes = [];
+const tapNotes = [];
 
-async function canvasTap(tx, ty) {
+async function canvasPoint(tx, ty) {
   const r = await ev('(() => { const b = $(' + JSON.stringify(ID.cv) + ').getBoundingClientRect(); return { l: b.left, t: b.top, w: b.width, h: b.height }; })()');
-  const x = r.l + (tx + 0.5) * r.w / MAP_SIZE.w;
-  const y = r.t + (ty + 0.5) * r.h / MAP_SIZE.h;
+  return { x: r.l + (tx + 0.5) * r.w / MAP_SIZE.w, y: r.t + (ty + 0.5) * r.h / MAP_SIZE.h };
+}
+async function mouseTap(x, y) {
+  await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y });
+  await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', clickCount: 1 });
+  await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', clickCount: 1 });
+}
+async function canvasTap(tx, ty) {
+  const { x, y } = await canvasPoint(tx, ty);
   if (DESKTOP_MODE) {
-    await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y });
-    await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', clickCount: 1 });
-    await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', clickCount: 1 });
+    await mouseTap(x, y);
   } else {
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y, radiusX: 4, radiusY: 4, force: 1 }] });
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
@@ -524,6 +803,7 @@ const hasKind = (kind) => F.carrying + ' !== null && ' + F.carrying + '.kind ===
 const anyPiece = (state) => F.pieces('kettle1') + '.some((p) => p.state === ' + JSON.stringify(state) + ')';
 const boardHasPlates = F.boardStacks + '.some((st) => st.times.length > 0)';
 const tableHas = (meat) => F.tableSpots + '.some((sp) => sp && sp.meat === ' + JSON.stringify(meat) + ' && sp.times.length > 0)';
+const inService = F.phase + ' === ' + JSON.stringify(PHASE.service);
 
 async function feedFireIfLow() {
   const low = await ev(F.fire('kettle1') + ' < C.' + C_NAMES.fireGood + ' && ' + F.carrying + ' === null && ' + F.charcoal + ' > 0');
@@ -538,10 +818,10 @@ async function waitForDone() {
   const deadline = WAIT_S.cook;
   let spent = 0;
   for (let i = 0; i < 8 && spent < deadline; i++) {
-    const r = await until(anyPiece(PIECE_STATE.done) + ' || ' + F.fire('kettle1') + ' < C.' + C_NAMES.fireGood + ' || ' + F.phase + ' !== ' + JSON.stringify(PHASE.service), deadline - spent);
+    const r = await until(anyPiece(PIECE_STATE.done) + ' || ' + F.fire('kettle1') + ' < C.' + C_NAMES.fireGood + ' || !(' + inService + ')', deadline - spent);
     spent += r.t;
     if (await ev(anyPiece(PIECE_STATE.done))) return true;
-    if (await ev(F.phase + ' !== ' + JSON.stringify(PHASE.service))) return false;
+    if (!(await ev(inService))) return false;
     await feedFireIfLow();
   }
   return ev(anyPiece(PIECE_STATE.done));
@@ -557,6 +837,17 @@ async function screenshot(name) {
   report.screenshots.push(file);
   return file;
 }
+// On the phone the morning clipboard covers the canvas: hide the panels for the one shot.
+const PANELS_ID = 'panels';
+async function screenshotYard(name) {
+  if (DESKTOP_MODE) return screenshot(name);
+  await ev('(document.getElementById(' + JSON.stringify(PANELS_ID) + ').style.visibility = "hidden", true)');
+  try {
+    return await screenshot(name);
+  } finally {
+    await ev('(document.getElementById(' + JSON.stringify(PANELS_ID) + ').style.visibility = "", true)');
+  }
+}
 async function waitForGame() {
   const deadline = Date.now() + TIMEOUT_MS.load;
   while (Date.now() < deadline) {
@@ -566,9 +857,36 @@ async function waitForGame() {
   }
   return false;
 }
+// Reload the page. With a save object, it is written to SAVE_KEY by a script that runs before any
+// page script on the new document, then that script is removed.
+async function reload(saveObj) {
+  let scriptId = null;
+  if (saveObj !== undefined) {
+    const src = 'try { localStorage.setItem(' + JSON.stringify(SAVE_KEY) + ', ' + JSON.stringify(JSON.stringify(saveObj)) + '); } catch (e) {}';
+    const r = await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: src });
+    scriptId = r.identifier;
+  }
+  try {
+    const loaded = cdp.once('Page.loadEventFired');
+    await cdp.send('Page.reload', { ignoreCache: true });
+    await loaded;
+  } finally {
+    if (scriptId) await cdp.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: scriptId }).catch(() => {});
+  }
+  assert(await waitForGame(), GLOBAL_NAME + '.game did not come back after reload');
+  await sleep(250);
+  await installProbe();
+  await advance(0);
+}
 async function shop(list) {
   for (let i = 0; i < list.charcoal; i++) await click(ID.inc('charcoal'));
   for (let i = 0; i < list.units; i++) await click(ID.inc(list.meat));
+}
+async function openYard(list) {
+  await shop(list);
+  await click(ID.open);
+  await until('false', WAIT_S.afterOpen);
+  assert(await ev(inService), 'the yard did not open; phase ' + (await ev(F.phase)));
 }
 // Day 1 opens with a prefilled cart (sim.js deviation 12). Click every line down to zero through
 // the DOM so the buy steps below start from the contract's empty cart.
@@ -581,14 +899,31 @@ async function emptyCart() {
   }
   return clicks;
 }
+// Canvas rect and backing store, after the emulation settles.
+async function canvasScale() {
+  return ev('(() => { const c = $(' + JSON.stringify(ID.cv) + '); const b = c.getBoundingClientRect(); return { w: b.width, h: b.height, left: b.left, top: b.top, bw: c.width, bh: c.height, dpr: window.devicePixelRatio || 1, vw: document.documentElement.clientWidth, vh: window.innerHeight }; })()');
+}
+function checkScale(r, css, label) {
+  const k = Math.max(1, Math.round(css * r.dpr));
+  assert(r.w === VIRTUAL.w * css && r.h === VIRTUAL.h * css, label + ': #cv rect ' + r.w + ' by ' + r.h + ', wanted ' + (VIRTUAL.w * css) + ' by ' + (VIRTUAL.h * css) + ' (viewport ' + r.vw + ' by ' + r.vh + ')');
+  assert(r.bw === VIRTUAL.w * k && r.bh === VIRTUAL.h * k, label + ': backing store ' + r.bw + ' by ' + r.bh + ', wanted k ' + k);
+  assert(Number.isInteger(r.w / VIRTUAL.w), label + ': ' + r.w + ' / ' + VIRTUAL.w + ' is not an integer');
+  return label + ' ' + r.w + 'x' + r.h + ' k ' + k;
+}
+// Ghost records (unowned previews) never count as the real draw.
+const hasRecord = (frame, want) => frame.some((d) => !d.ghost && d.name === want.name && d.x === want.x && d.y === want.y && (want.frame === undefined || d.frame === want.frame));
+const hasGhost = (frame, want) => frame.some((d) => d.ghost === true && d.name === want.name && d.x === want.x && d.y === want.y);
+const outlineAt = (frame, o) => frame.find((d) => d.name === OUTLINE && d.x === o.x && d.y === o.y && (o.w === undefined || (d.w === o.w && d.h === o.h)));
+// Every visible button in the document, smaller than the minimum.
+const SMALL_BUTTONS = '[...document.querySelectorAll("button")].filter((b) => !b.hidden && !b.closest("[hidden]") && b.getClientRects().length > 0).map((b) => { const r = b.getBoundingClientRect(); return { id: b.id || b.textContent.trim().slice(0, 20), w: Math.round(r.width), h: Math.round(r.height) }; }).filter((r) => r.w < ' + MIN_CONTROL_PX + ' || r.h < ' + MIN_CONTROL_PX + ')';
 
 // ---------------------------------------------------------------------------------------------
-// 3. The day
+// 3. The browser run: steps 9 onward
 // ---------------------------------------------------------------------------------------------
 
 async function browserChecks() {
   const url = pathToFileURL(FILES.index).href + '?seed=' + SEED;
-  const errorsAtLoad = { total: 0 };
+  const captures = {};
 
   await step('page loaded with zero errors', async () => {
     const loaded = cdp.once('Page.loadEventFired');
@@ -597,14 +932,16 @@ async function browserChecks() {
     assert(await waitForGame(), GLOBAL_NAME + '.game did not appear within ' + TIMEOUT_MS.load + ' ms');
     await sleep(250);
     const e = errorCount();
-    Object.assign(errorsAtLoad, e);
     assert(e.total === 0, describe(e) + ' first: ' + describe(report.console.find((c) => c.type === 'error') || report.exceptions[0] || report.logEntries.find((l) => l.level === 'error')));
     const art = await ev(GLOBAL_NAME + '.art && ' + GLOBAL_NAME + '.art.' + ART_FIELDS.built + ' === true');
     assert(art, 'art.built is not true');
-    const ver = await ev('typeof g.' + GAME_FIELDS.version);
-    assert(ver === 'string', 'game.version is ' + ver);
+    const ver = await ev('g.' + GAME_FIELDS.version);
+    assert(ver === GAME_VERSION, 'game.version is ' + describe(ver) + ', wanted ' + GAME_VERSION);
+    const hooks = await ev('({ dog: !!g.' + GAME_FIELDS.dog + ', fxLog: Array.isArray(g.' + GAME_FIELDS.fxLog + '), captureFrame: typeof g.' + GAME_FIELDS.captureFrame + ' === "function", advance: typeof g.' + GAME_FIELDS.advance + ' === "function" })');
+    assert(hooks.dog && hooks.fxLog && hooks.captureFrame && hooks.advance, 'PitSim.game hooks ' + describe(hooks));
     await installProbe();
-    return 'version ' + (await ev('g.' + GAME_FIELDS.version));
+    await advance(0);
+    return 'version ' + ver;
   }, { fatal: true });
 
   await step('only the four file:// requests', () => {
@@ -613,13 +950,90 @@ async function browserChecks() {
     return report.requests.length + ' requests';
   });
 
+  await step('sprite list and palette', async () => {
+    const r = await run('const A = globalThis.' + GLOBAL_NAME + '.art; const list = ' + describe(REQUIRED_SPRITES) + ';'
+      + ' const bad = []; for (const [n, w, h, f] of list) {'
+      + '   if (!A.has(n)) { bad.push(n + " missing"); continue; }'
+      + '   if (A.frames(n) !== f) bad.push(n + " frames " + A.frames(n));'
+      + '   const s = A.SPRITES[n]; if (!s || s.w !== w || s.h !== h) bad.push(n + " size " + (s && s.w) + "x" + (s && s.h));'
+      + ' }'
+      + ' return { bad, count: Object.keys(A.SPRITES).length, pal: A.PALETTE.length, pal0: A.PALETTE[0], colorKeys: Object.keys(A.COLOR) };');
+    assert(r.bad.length === 0, r.bad.length + ' sprite problems, first ' + r.bad.slice(0, 4).join('; '));
+    assert(r.count === SPRITE_COUNT, 'SPRITES has ' + r.count + ' names, wanted ' + SPRITE_COUNT);
+    assert(r.pal === PALETTE_LEN && r.pal0 === '', 'PALETTE length ' + r.pal + ', [0] ' + describe(r.pal0));
+    const missing = COLOR_KEYS.filter((k) => !r.colorKeys.includes(k));
+    const extra = r.colorKeys.filter((k) => !COLOR_KEYS.includes(k));
+    assert(missing.length === 0 && extra.length === 0, 'COLOR missing ' + missing.join(' ') + ', extra ' + extra.join(' '));
+    return REQUIRED_SPRITES.length + ' sprites, ' + r.pal + ' colors, ' + COLOR_KEYS.length + ' keys';
+  });
+
+  await step('canvas scale is an integer', async () => {
+    const own = DESKTOP_MODE ? 'desktop' : 'phone';
+    const other = DESKTOP_MODE ? 'phone' : 'desktop';
+    const notes = [];
+    await advance(0);
+    notes.push(checkScale(await canvasScale(), CSS_SCALE[own], own));
+    try {
+      await emulate(DESKTOP_MODE ? PHONE : DESKTOP);
+      await sleep(TIMEOUT_MS.resize);
+      await advance(0);
+      notes.push(checkScale(await canvasScale(), CSS_SCALE[other], other));
+    } finally {
+      await emulate(RUN_METRICS);
+      await sleep(TIMEOUT_MS.resize);
+      await advance(0);
+    }
+    const back = await canvasScale();
+    assert(back.w === VIRTUAL.w * CSS_SCALE[own], 'after restoring ' + own + ' the canvas is ' + back.w + ' wide');
+    return notes.join('; ');
+  });
+
+  await step('canvas is device pixel exact on Android and laptop sizes', async () => {
+    const notes = [];
+    try {
+      for (const m of DEVICE_SIZES) {
+        const label = m.width + 'x' + m.height + '@' + m.deviceScaleFactor;
+        await emulate(m);
+        await sleep(TIMEOUT_MS.resize);
+        await advance(0);
+        const r = await canvasScale();
+        const k = r.bw / VIRTUAL.w;
+        assert(Number.isInteger(k) && k >= 1, label + ': backing store ' + r.bw + ' is not a whole multiple of ' + VIRTUAL.w);
+        assert(r.bh === VIRTUAL.h * k, label + ': backing store ' + r.bw + ' by ' + r.bh + ' is not k ' + k + ' on both axes');
+        assert(Math.abs(r.w * r.dpr - r.bw) < 0.1 && Math.abs(r.h * r.dpr - r.bh) < 0.1,
+          label + ': rect ' + r.w + ' by ' + r.h + ' at dpr ' + r.dpr + ' is ' + (r.w * r.dpr) + ' device px, backing store ' + r.bw);
+        const fx = Math.abs(r.left * r.dpr - Math.round(r.left * r.dpr)), fy = Math.abs(r.top * r.dpr - Math.round(r.top * r.dpr));
+        assert(fx < 0.05 && fy < 0.05, label + ': canvas top left (' + r.left + ', ' + r.top + ') is not on a whole device pixel');
+        const lay = await ev('({ sw: document.documentElement.scrollWidth, iw: window.innerWidth, chips: $(' + JSON.stringify(ID.chips) + ').getBoundingClientRect().bottom })');
+        assert(lay.sw <= lay.iw, label + ': scrollWidth ' + lay.sw + ' over innerWidth ' + lay.iw);
+        if (m.controls) assert(lay.chips <= m.height, label + ': the meat chips end at ' + lay.chips + ', below the ' + m.height + ' px viewport');
+        notes.push(label + ' k ' + k + ', ' + (Math.round(r.w * 100) / 100) + ' css px');
+      }
+    } finally {
+      await emulate(RUN_METRICS);
+      await sleep(TIMEOUT_MS.resize);
+      await advance(0);
+    }
+    const back = await canvasScale();
+    assert(back.w === VIRTUAL.w * CSS_SCALE[DESKTOP_MODE ? 'desktop' : 'phone'], 'after restoring the run size the canvas is ' + back.w + ' wide');
+    return notes.join('; ');
+  });
+
   await step('clipboard: morning, day 1, start cash', async () => {
+    await advance(0);
     const s = await ev('({ phase: ' + F.phase + ', day: ' + F.day + ', cash: ' + F.cash + ', start: C.' + C_NAMES.startCash + ' })');
     assert(s.phase === PHASE.morning, 'phase ' + s.phase);
     assert(s.day === 1, 'day ' + s.day);
     assert(s.cash === s.start, 'cash ' + s.cash);
     assert(await visible(ID.clipboard), '#clipboard hidden');
+    const seats = await text(ID.seats);
+    assert(seats === TEXT.seats(2, 0, 1), '#seats is ' + describe(seats));
     await screenshot(SCREENSHOTS.clipboard);
+    const frame = await captureFrame();
+    captures.morning = frame;
+    for (const want of MORNING_DRAWS) assert(hasRecord(frame, want), 'captureFrame has no ' + describe(want) + '; dog records ' + describe(frame.filter((d) => d.name === 'dog')));
+    for (const o of MORNING_OUTLINES) assert(outlineAt(frame, o), 'no ' + OUTLINE + ' for ' + o.what + ' at ' + describe(o) + '; outlines ' + describe(frame.filter((d) => d.name === OUTLINE).slice(0, 12)));
+    for (const g of MORNING_GHOSTS) assert(hasGhost(frame, g), 'captureFrame has no ghost ' + describe(g) + '; ghosts ' + describe(frame.filter((d) => d.ghost).slice(0, 12)));
     const prefilled = await ev('JSON.parse(JSON.stringify(S().cart))');
     const prefillTotal = await ev('sim.cartTotal()');
     if (prefillTotal > 0) {
@@ -628,19 +1042,21 @@ async function browserChecks() {
       assert(openBox.top >= 0 && openBox.bottom <= openBox.h, '#open is not inside the viewport before scrolling: ' + describe(openBox));
     }
     const emptied = await emptyCart();
+    await advance(0);
     assert(await ev('$(' + JSON.stringify(ID.open) + ').disabled === true'), '#open should be disabled with an empty cart');
     const why = await text(ID.openWhy);
     assert(why === TEXT.needCharcoal, '#open-why is ' + describe(why));
-    return prefillTotal > 0 ? 'prefilled ' + describe(prefilled) + ' (total ' + prefillTotal + '), emptied in ' + emptied + ' clicks' : 'cart started empty';
+    return frame.length + ' draw records; ' + (prefillTotal > 0 ? 'prefilled ' + describe(prefilled) + ' (total ' + prefillTotal + '), emptied in ' + emptied + ' clicks' : 'cart started empty');
   }, { fatal: true });
 
   await step('how to', async () => {
     const found = await ev('(' + describe(ID.howtoButtons) + ').find((id) => $(id) && !$(id).hidden) || null');
-    if (!found) return 'no how to button in the contract; #howto is checked with the pause panel';
+    if (!found) return 'no how to button; #howto is checked with the pause panel';
     await click(found);
+    await advance(0);
     assert(await visible(ID.howto), '#howto not visible after clicking #' + found);
     await keyPress(KEYS.escape);
-    await sleep(50);
+    await advance(0);
     assert(await visible(ID.clipboard), '#clipboard did not come back after Escape on #howto');
     return 'clicked #' + found + ', Escape returned to the clipboard';
   });
@@ -649,6 +1065,7 @@ async function browserChecks() {
   await step('bought', async () => {
     const prices = await ev('({ charcoal: ' + GLOBAL_NAME + '.CATALOG.find((r) => r.id === "charcoal").price, meat: ' + GLOBAL_NAME + '.CATALOG.find((r) => r.id === ' + JSON.stringify(BUY_DAY1.meat) + ').price, cash: ' + F.cash + ' })');
     await shop(BUY_DAY1);
+    await advance(0);
     cartTotal = BUY_DAY1.charcoal * prices.charcoal + BUY_DAY1.units * prices.meat;
     const qty = await text(ID.qty('charcoal'));
     assert(qty === String(BUY_DAY1.charcoal), '#qty-charcoal is ' + describe(qty));
@@ -659,15 +1076,14 @@ async function browserChecks() {
     return cart;
   }, { fatal: true });
 
-  let cashAtOpen = 0;
   await step('gate open', async () => {
     const before = await ev(F.cash);
     await click(ID.open);
     await until('false', WAIT_S.afterOpen);
+    await advance(0);
     const s = await ev('({ phase: ' + F.phase + ', cash: ' + F.cash + ' })');
     assert(s.phase === PHASE.service, 'phase ' + s.phase);
     assert(s.cash === before - cartTotal, 'cash ' + s.cash + ', wanted ' + (before - cartTotal));
-    cashAtOpen = s.cash;
     assert(!(await visible(ID.clipboard)), '#clipboard still visible');
     const status = await text(ID.status);
     assert(status.startsWith(TEXT.gateOpensIn), '#status is ' + describe(status));
@@ -693,7 +1109,7 @@ async function browserChecks() {
     const b = await goto('kettle1', F.pieces('kettle1') + '.length >= 1');
     assert(b.ok, 'kettle 1 has no piece');
     // Second unit on the other grate slot, when stock allows.
-    if (await ev(F.stock(MEAT) + ' > 0')) {
+    if (await ev(F.stock + '.' + MEAT + ' > 0')) {
       const c = await goto('cooler', hasKind(CARRY_KIND.raw));
       if (c.ok) await goto('kettle1', F.pieces('kettle1') + '.length >= 2');
     }
@@ -739,24 +1155,66 @@ async function browserChecks() {
       await goto('table', F.carrying + ' === null');
     }
     const cashBefore = await ev(F.cash);
-    let r = await until(F.today + '.served >= 1 || ' + F.phase + ' !== ' + JSON.stringify(PHASE.service), WAIT_S.serve);
+    let r = await until(F.today + '.served >= 1 || !(' + inService + ')', WAIT_S.serve);
     if (!(await ev(F.today + '.served >= 1'))) {
       // Serving may need the player at the table; try once more from there.
       await goto('table', 'true');
-      r = await until(F.today + '.served >= 1 || ' + F.phase + ' !== ' + JSON.stringify(PHASE.service), WAIT_S.serveRetry);
+      r = await until(F.today + '.served >= 1 || !(' + inService + ')', WAIT_S.serveRetry);
     }
+    await advance(0);
     const served = await eventsOfType(EVENT.served);
     const cash = await ev(F.cash);
     assert(served.length >= 1, 'no ' + EVENT.served + ' event after ' + r.t + 's; customers ' + describe(await ev(F.customers + '.map((c) => c.want + ":" + c.mode)')));
     assert(cash > cashBefore, 'cash ' + cash + ' not above ' + cashBefore);
+    const e = served[0];
+    const spots = await ev('MAP.station("table").spotPx');
+    assert(Array.isArray(spots) && spots.some((sp) => sp.x === e.x && sp.y === e.y), 'served at (' + e.x + ',' + e.y + ') is not a spotPx ' + describe(spots));
+    const fx = await fxLog();
+    const queue = await ev('MAP.queue.map((q) => ({ x: q.x, y: q.y }))');
+    const overQueue = (f) => queue.some((q) => f.y === q.y * TILE_PX - CASH_ABOVE && f.x >= q.x * TILE_PX - 9 && f.x <= q.x * TILE_PX + 16);
+    const cashFx = fx.find((f) => f.kind === FX_KIND.cash && overQueue(f));
+    assert(cashFx, 'fxLog has no ' + FX_KIND.cash + ' over a queue spot (py - ' + CASH_ABOVE + '); cash entries ' + describe(fx.filter((f) => f.kind === FX_KIND.cash)));
+    captures.midService = await captureFrame();
     await screenshot(SCREENSHOTS.midService);
-    return 'cash ' + cashBefore + ' to ' + cash + ', tip ' + served[0].tip;
+    return 'cash ' + cashBefore + ' to ' + cash + ', tip ' + e.tip + ', plate spot (' + e.x + ',' + e.y + ')';
   }, { fatal: true });
+
+  await step('a served customer sits and a heart fires', async () => {
+    const first = (await eventsOfType(EVENT.served))[0];
+    assert(first, 'no served event to follow');
+    const cid = first.id;
+    const taken = (await eventsOfType(EVENT.seatTaken)).find((e) => e.id === cid);
+    const togo = (await eventsOfType(EVENT.toGo)).find((e) => e.id === cid);
+    assert(taken, 'no ' + EVENT.seatTaken + ' for customer ' + cid + (togo ? '; got ' + EVENT.toGo : ''));
+    assert(taken.seat === FIRST_SEAT.id, EVENT.seatTaken + ' seat ' + describe(taken.seat) + ', wanted ' + FIRST_SEAT.id);
+    const cust = (expr) => F.customers + '.some((c) => c.id === ' + cid + ' && ' + expr + ')';
+    const eat = await until(cust('c.mode === ' + JSON.stringify(MODE.eating) + ' && c.x === ' + FIRST_SEAT.x + ' && c.y === ' + FIRST_SEAT.y), WAIT_S.toEating);
+    assert(eat.ok, 'customer ' + cid + ' not eating on (' + FIRST_SEAT.x + ',' + FIRST_SEAT.y + ') within ' + WAIT_S.toEating + 's; ' + describe(await ev(F.customers + '.filter((c) => c.id === ' + cid + ').map((c) => ({ mode: c.mode, x: c.x, y: c.y, seat: c.seat }))')));
+    await advance(0);
+    await screenshot(SCREENSHOTS.seated);
+    const maxEat = (await ev('C.' + C_NAMES.eatMax)) + WAIT_S.eatSlack;
+    const doneExpr = 'globalThis.__smoke.events.some((e) => e.type === ' + JSON.stringify(EVENT.seatDone) + ' && e.id === ' + cid + ')';
+    const d = await until(doneExpr, maxEat);
+    assert(d.ok, 'no ' + EVENT.seatDone + ' within ' + maxEat + 's of sitting');
+    await advance(0);
+    const sd = (await eventsOfType(EVENT.seatDone)).find((e) => e.id === cid);
+    assert(sd.bonus === FIRST_SEAT.bonus, 'bonus ' + sd.bonus);
+    assert(sd.atClose === false, 'atClose ' + sd.atClose);
+    assert(sd.x === FIRST_SEAT.px && sd.y === FIRST_SEAT.py, 'seat_done at (' + sd.x + ',' + sd.y + ')');
+    assert(sd.seat === FIRST_SEAT.id, 'seat_done seat ' + describe(sd.seat));
+    const fx = await fxLog();
+    const heart = fx.find((f) => f.kind === FX_KIND.heart && f.x === FIRST_SEAT.heart.x && f.y === FIRST_SEAT.heart.y);
+    assert(heart, 'fxLog has no heart at (' + FIRST_SEAT.heart.x + ',' + FIRST_SEAT.heart.y + '); hearts ' + describe(fx.filter((f) => f.kind === FX_KIND.heart)));
+    assert(fx.some((f) => f.kind === FX_KIND.seatTip), 'fxLog has no ' + FX_KIND.seatTip);
+    const lv = await until(cust('c.mode === ' + JSON.stringify(MODE.leaving) + ' && c.reason === ' + JSON.stringify(REASON.seated)) + ' && ' + F.seats + '.' + FIRST_SEAT.id + ' === null', WAIT_S.toLeaving);
+    assert(lv.ok, 'customer ' + cid + ' not leaving seated with the seat freed within ' + WAIT_S.toLeaving + 's; seats ' + describe(await ev(F.seats)));
+    return 'customer ' + cid + ' sat ' + eat.t + 's after the serve, ate ' + d.t + 's, left ' + lv.t + 's later';
+  });
 
   await step('rest of the day cooked and carried', async () => {
     let cycles = 0;
     for (let i = 0; i < PLATE_CYCLES_MAX + 2; i++) {
-      if (await ev(F.phase + ' !== ' + JSON.stringify(PHASE.service))) break;
+      if (!(await ev(inService))) break;
       const hasDone = await ev(anyPiece(PIECE_STATE.done));
       const hasCooking = await ev(anyPiece(PIECE_STATE.cooking));
       if (hasDone && (await ev(F.carrying + ' === null'))) {
@@ -780,63 +1238,73 @@ async function browserChecks() {
   await step('day over', async () => {
     const r = await until(F.phase + ' === ' + JSON.stringify(PHASE.evening), WAIT_S.day);
     assert(r.ok, 'phase still ' + (await ev(F.phase)) + ' after ' + r.t + 's');
+    await advance(0);
     const over = await eventsOfType(EVENT.dayOver);
     assert(over.length === 1, EVENT.dayOver + ' events: ' + over.length);
     assert(await ev(F.till + ' !== null'), 'till is null');
+    const seats = await ev(F.seats);
+    assert(seats && SEAT_IDS.every((id) => seats[id] === null), 'state.seats after the till ' + describe(seats));
+    const sitting = await ev(F.customers + '.filter((c) => c.mode === ' + JSON.stringify(MODE.toSeat) + ' || c.mode === ' + JSON.stringify(MODE.eating) + ').length');
+    assert(sitting === 0, sitting + ' customer(s) still in toSeat or eating');
     return 'day ' + (await ev(F.day));
   }, { fatal: true });
 
   await step('a walk-out with rep down, or the day sold out early', async () => {
     const t = await ev(F.till);
+    const k = await ev('({ q: C.' + C_NAMES.repQuick + ', o: C.' + C_NAMES.repOk + ', tq: C.' + C_NAMES.repTogoQuick + ', min: C.' + C_NAMES.repDayMin + ', ds: C.' + C_NAMES.daySeconds + ' })');
     const outs = await eventsOfType(EVENT.walkOut);
-    const positive = t.happy * (await ev('C.' + C_NAMES.repQuick)) + t.ok * (await ev('C.' + C_NAMES.repOk));
+    const positive = t.happy * k.q + (t.togoQuick | 0) * k.tq + t.ok * k.o;
+    const clamped = Math.min(Math.max(positive, k.min), t.repMax);
     if (outs.length === 0) {
       // Sold out ends the day (sim.js deviation 8): nothing left anywhere, so nobody could walk out.
       const over = (await eventsOfType(EVENT.dayOver))[0];
-      const daySeconds = await ev('C.' + C_NAMES.daySeconds);
-      const stockLeft = await ev('Object.values(' + F.stock('').slice(0, -1) + ').reduce((a, b) => a + b, 0)');
-      assert(over && over.at < daySeconds, 'no walk-out and the day ran the full ' + daySeconds + 's; till customers ' + t.customers + ', served ' + t.served + ', past ' + t.past + ', close ' + t.close);
+      const stockLeft = await ev('Object.values(' + F.stock + ').reduce((a, b) => a + b, 0)');
+      assert(over && over.at < k.ds, 'no walk-out and the day ran the full ' + k.ds + 's; till customers ' + t.customers + ', served ' + t.served + ', past ' + t.past + ', close ' + t.close);
       assert(t.walkouts === 0, 'till.walkouts is ' + t.walkouts + ' with no walk_out event');
       assert(stockLeft === 0, 'stock left ' + stockLeft + ' after an early day end');
-      assert(t.repDelta === positive, 'repDelta ' + t.repDelta + ' differs from the serve credit ' + positive + ' with no walk-out');
+      assert(t.repDelta === clamped, 'repDelta ' + t.repDelta + ' differs from the serve credit ' + positive + ' (clamped ' + clamped + ') with no walk-out');
       return 'sold out at ' + over.at + 's, ' + t.served + ' served, repDelta ' + t.repDelta;
     }
     assert(t.walkouts >= 1, 'till.walkouts is ' + t.walkouts);
-    assert(t.repDelta < positive, 'repDelta ' + t.repDelta + ' is not below the serve credit ' + positive);
-    return outs.length + ' walk-out(s), repDelta ' + t.repDelta + ' (serve credit ' + positive + ')';
+    assert(t.repDelta < clamped, 'repDelta ' + t.repDelta + ' is not below the serve credit ' + positive + ' (clamped ' + clamped + ')');
+    return outs.length + ' walk-out(s), repDelta ' + t.repDelta + ' (serve credit ' + positive + ', happy ' + t.happy + ', togoQuick ' + t.togoQuick + ', ok ' + t.ok + ')';
   });
 
   await step('till shown', async () => {
+    await advance(0);
     assert(await visible(ID.till), '#till hidden');
     const h = await text(ID.tillH);
     assert(h === TEXT.tillHeading(1), '#till-h is ' + describe(h));
-    await screenshot(SCREENSHOTS.till);
+    const body = await text(ID.tillBody);
+    assert(body.includes(TEXT.seatTipsRow), '#till-body has no ' + describe(TEXT.seatTipsRow) + ' row');
     const t = await ev(F.till);
-    return 'served ' + t.served + ', revenue ' + t.revenue + ', tips ' + t.tips + ', net ' + t.net + ', cash ' + t.cashAfter;
+    const daily = await ev('C.' + C_NAMES.dailyCosts);
+    const want = t.revenue + t.tips + t.seatTips - t.wages - daily;
+    assert(t.net === want, 'till.net ' + t.net + ', wanted ' + want);
+    await screenshot(SCREENSHOTS.till);
+    return 'served ' + t.served + ', seated ' + t.seated + ', revenue ' + t.revenue + ', tips ' + t.tips + ', seat tips ' + t.seatTips + ', net ' + t.net + ', cash ' + t.cashAfter;
   });
 
   let savedCash = null;
   await step('save key present and valid', async () => {
-    const r = await run('const raw = localStorage.getItem(' + JSON.stringify(SAVE_KEY) + '); let parsed = null; try { parsed = JSON.parse(raw); } catch (e) { return { raw, error: String(e) }; } return { raw: !!raw, v: ' + GLOBAL_NAME + '.validateSave(parsed), cash: ' + F.cash + ', day: ' + F.day + ' };');
+    const r = await run('const raw = localStorage.getItem(' + JSON.stringify(SAVE_KEY) + '); let parsed = null; try { parsed = JSON.parse(raw); } catch (e) { return { raw, error: String(e) }; } return { raw: !!raw, parsed, v: ' + GLOBAL_NAME + '.validateSave(parsed), cash: ' + F.cash + ', day: ' + F.day + ' };');
     assert(r.raw, SAVE_KEY + ' missing');
     assert(!r.error, 'save is not JSON: ' + r.error);
     assert(r.v, 'validateSave returned null');
     assert(r.v.day === 2 && r.day === 2, 'save day ' + r.v.day + ', state day ' + r.day);
     assert(r.v.cash === r.cash, 'save cash ' + r.v.cash + ', state cash ' + r.cash);
+    assert(r.parsed.v === 2, 'raw save v is ' + describe(r.parsed.v));
+    assert(r.parsed.decor && typeof r.parsed.decor === 'object', 'raw save has no decor');
+    assert(r.parsed.stats && r.parsed.stats.seated >= 1, 'raw save stats.seated is ' + describe(r.parsed.stats && r.parsed.stats.seated));
     savedCash = r.cash;
-    return 'day ' + r.v.day + ', cash ' + r.v.cash;
+    return 'day ' + r.v.day + ', cash ' + r.v.cash + ', seated ' + r.parsed.stats.seated;
   });
 
   const before = await probeMetrics().catch(() => ({ bored: 0, boredPrep: 0, service: 0, events: 0 }));
   const eventsDay1 = await run('return globalThis.__smoke.events;').catch(() => []);
 
   await step('reload persists', async () => {
-    const loaded = cdp.once('Page.loadEventFired');
-    await cdp.send('Page.reload', { ignoreCache: true });
-    await loaded;
-    assert(await waitForGame(), GLOBAL_NAME + '.game did not come back after reload');
-    await sleep(250);
-    await installProbe();
+    await reload();
     const s = await ev('({ phase: ' + F.phase + ', day: ' + F.day + ', cash: ' + F.cash + ' })');
     assert(s.phase === PHASE.morning, 'phase ' + s.phase);
     assert(s.day === 2, 'day ' + s.day);
@@ -846,44 +1314,208 @@ async function browserChecks() {
     return 'day 2, cash ' + s.cash;
   }, { fatal: true });
 
+  await step('decor purchase shows the sprite', async () => {
+    const startRep = await ev('C.' + C_NAMES.startRep);
+    await reload(saveV2({ day: DECOR_SAVE.day, cash: DECOR_SAVE.cash }, startRep));
+    const s = await ev('({ phase: ' + F.phase + ', day: ' + F.day + ', cash: ' + F.cash + ' })');
+    assert(s.phase === PHASE.morning && s.day === DECOR_SAVE.day && s.cash === DECOR_SAVE.cash, 'seeded save loaded as ' + describe(s));
+    const n0 = await eventCount();
+    await click(ID.buy(DECOR_BUY.id));
+    await advance(0);
+    const bought = (await eventsSince(n0, EVENT.purchase)).filter((e) => e.kind === 'decor');
+    assert(bought.length === 1 && bought[0].id === DECOR_BUY.id, 'decor purchase events ' + describe(bought));
+    assert(await ev(F.decor + '.' + DECOR_BUY.id + ' === true'), 'state.decor.' + DECOR_BUY.id + ' is not true');
+    const seats = await text(ID.seats);
+    const want = TEXT.seats(...DECOR_BUY.seatsAfter);
+    assert(seats === want, '#seats is ' + describe(seats) + ', wanted ' + describe(want));
+    await advance(0);
+    const frame = await captureFrame();
+    assert(hasRecord(frame, DECOR_BUY.draw), 'captureFrame has no ' + describe(DECOR_BUY.draw));
+    assert(!outlineAt(frame, DECOR_BUY.outlineGone), 'the ' + OUTLINE + ' at ' + describe(DECOR_BUY.outlineGone) + ' is still drawn');
+    const stored = await run('try { return ' + GLOBAL_NAME + '.validateSave(JSON.parse(localStorage.getItem(' + JSON.stringify(SAVE_KEY) + '))); } catch (e) { return { error: String(e) }; }');
+    assert(stored && stored.decor && stored.decor[DECOR_BUY.id] === true, 'stored save decor ' + describe(stored && (stored.decor || stored.error)));
+    await screenshotYard(SCREENSHOTS.decor);
+    return seats + ' cash ' + (await ev(F.cash));
+  });
+
+  await step('v1 save migrates', async () => {
+    await reload(SAVE_V1_SAMPLE);
+    await advance(0);
+    const s = await ev('({ phase: ' + F.phase + ', day: ' + F.day + ', cash: ' + F.cash + ', rep: ' + F.rep + ', stock: ' + F.stock + ', charcoal: ' + F.charcoal + ', gear: ' + F.gear + ', hires: ' + F.hires + ', decor: ' + F.decor + ' })');
+    assert(s.phase === PHASE.morning, 'phase ' + s.phase);
+    for (const k of ['day', 'cash', 'rep', 'stock', 'charcoal', 'gear', 'hires']) {
+      assert(sameJSON(s[k], SAVE_V1_SAMPLE[k]), k + ' is ' + describe(s[k]) + ', wanted ' + describe(SAVE_V1_SAMPLE[k]));
+    }
+    assert(s.decor && DECOR_IDS.every((d) => s.decor[d] === false), 'decor ' + describe(s.decor));
+    const status = await text(ID.status);
+    assert(status === TEXT.notice, '#status is ' + describe(status) + ', wanted ' + describe(TEXT.notice));
+    const raw = await run('try { return JSON.parse(localStorage.getItem(' + JSON.stringify(SAVE_KEY) + ')); } catch (e) { return null; }');
+    assert(raw && raw.v === 2, 'stored save v is ' + describe(raw && raw.v));
+    return 'day ' + s.day + ', cash ' + s.cash + ', rep ' + s.rep + ', stored v ' + raw.v;
+  });
+
   await step('pause and resume', async () => {
-    await shop(BUY_DAY2);
-    await click(ID.open);
-    await until('false', WAIT_S.afterOpen);
-    assert((await ev(F.phase)) === PHASE.service, 'day 2 did not open');
+    await openYard(BUY_LATER);
     await keyPress(KEYS.escape);
-    await sleep(100);
+    await advance(0);
     assert(await visible(ID.pause), '#pause not visible after Escape');
     assert(await ev(F.paused + ' === true'), 'state.paused is not true');
     assert(await ev('$(' + JSON.stringify(ID.root) + ').dataset.paused === "1"'), '#root data-paused is not 1');
     const howto = await visible(ID.howto);
     await keyPress(KEYS.escape);
-    await sleep(100);
+    await advance(0);
     assert(!(await visible(ID.pause)), '#pause still visible after the second Escape');
     assert(await ev(F.paused + ' === false'), 'state.paused still true');
     await keyPress(KEYS.p);
-    await sleep(100);
+    await advance(0);
     assert(await visible(ID.pause), '#pause not visible after P');
     assert(await ev(F.paused + ' === true'), 'state.paused is not true after P');
     await keyPress(KEYS.p);
-    await sleep(100);
+    await advance(0);
     assert(!(await visible(ID.pause)), '#pause still visible after the second P');
     assert(await ev(F.paused + ' === false'), 'state.paused still true after the second P');
     return (howto ? 'Controls panel shown with pause' : 'resumed (#howto was not visible with #pause)') + '; P pauses and resumes';
   });
 
+  await step('no sprite drawn outside the canvas', async () => {
+    if (await ev(F.paused)) await keyPress(KEYS.escape);
+    await until('false', WAIT_S.service);
+    captures.service = await captureFrame();
+    const bad = [];
+    let total = 0;
+    for (const [label, frame] of Object.entries(captures)) {
+      if (!Array.isArray(frame)) continue;
+      for (const d of frame) {
+        total += 1;
+        const hits = d.x < VIRTUAL.w && d.x + d.w > 0 && d.y < VIRTUAL.h && d.y + d.h > 0;
+        const inside = d.x >= 0 && d.y >= 0 && d.x + d.w <= VIRTUAL.w && d.y + d.h <= VIRTUAL.h;
+        if (!hits) { bad.push(label + ': ' + describe(d) + ' misses the canvas'); continue; }
+        if (inside) continue;
+        const sides = d.x >= 0 && d.x + d.w <= VIRTUAL.w;
+        const bottom = EDGE_OK.bottom.test(d.name) && sides && d.y >= 0 && d.y + d.h > VIRTUAL.h;
+        if (!bottom) bad.push(label + ': ' + describe(d));
+      }
+    }
+    assert(bad.length === 0, bad.length + ' record(s) past the edge, first ' + bad.slice(0, 4).join('; '));
+    return total + ' records over ' + Object.keys(captures).join(', ');
+  });
+
+  await step('dog never on a station use tile', async () => {
+    const r = await run(`
+      const use = new Set();
+      for (const st of MAP.stations) for (const u of st.use) use.add(u.x + ',' + u.y);
+      const dt = C.${C_NAMES.tick};
+      const seen = new Set();
+      const bad = [];
+      let t = 0, moves = 0, lastPx = null, samples = 0;
+      const check = () => {
+        const d = g.${GAME_FIELDS.dog};
+        const cx = Math.floor((d.px + 8) / 16), cy = Math.floor((d.py + 8) / 16);
+        samples += 1;
+        seen.add(d.x + ',' + d.y);
+        if (use.has(d.x + ',' + d.y)) bad.push({ t, x: d.x, y: d.y });
+        else if (use.has(cx + ',' + cy)) bad.push({ t, cx, cy });
+        if (lastPx !== null && (lastPx.x !== d.px || lastPx.y !== d.py)) moves += 1;
+        lastPx = { x: d.px, y: d.py };
+      };
+      check();
+      while (t < ${WAIT_S.dogSample} && S().phase === '${PHASE.service}' && bad.length < 5) {
+        g.${GAME_FIELDS.advance}(dt);
+        t += dt;
+        globalThis.__smoke.sample();
+        check();
+      }
+      return { bad, moves, samples, tiles: [...seen], t: Math.round(t * 100) / 100, useTiles: use.size, reduced: !!g.${GAME_FIELDS.reduced} };
+    `);
+    assert(r.bad.length === 0, 'dog on a use tile: ' + describe(r.bad.slice(0, 3)));
+    let note = r.samples + ' samples over ' + r.t + 's, ' + r.moves + ' moves, tiles ' + r.tiles.join(' ');
+    if (r.moves === 0 && !r.reduced) {
+      // The dog runs on real seconds (V2.9); poll it while the page runs on its own.
+      const deadline = Date.now() + DOG_REALTIME_MS;
+      const use = await ev('[...new Set(MAP.stations.flatMap((st) => st.use.map((u) => u.x + "," + u.y)))]');
+      const seen = new Set();
+      let last = null, rtMoves = 0;
+      while (Date.now() < deadline && (await ev(inService))) {
+        const d = await ev('({ x: g.' + GAME_FIELDS.dog + '.x, y: g.' + GAME_FIELDS.dog + '.y, px: g.' + GAME_FIELDS.dog + '.px, py: g.' + GAME_FIELDS.dog + '.py })');
+        assert(!use.includes(d.x + ',' + d.y), 'dog on use tile (' + d.x + ',' + d.y + ') in real time');
+        seen.add(d.x + ',' + d.y);
+        if (last && (last.px !== d.px || last.py !== d.py)) rtMoves += 1;
+        last = d;
+        await sleep(100);
+      }
+      note += '; did not move under advance, real time poll saw ' + rtMoves + ' moves over ' + [...seen].join(' ');
+    }
+    return note;
+  });
+
+  await step('layout and keyboard at 375 by 740', async () => {
+    const notes = [];
+    try {
+      await emulate(LAYOUT_VIEW);
+      await sleep(TIMEOUT_MS.resize);
+      await advance(0);
+      const lay = await ev('({ sw: document.documentElement.scrollWidth, iw: window.innerWidth })');
+      assert(lay.sw <= lay.iw, 'scrollWidth ' + lay.sw + ' over innerWidth ' + lay.iw);
+      const small = await ev(SMALL_BUTTONS);
+      assert(small.length === 0, 'buttons under ' + MIN_CONTROL_PX + ' px in service: ' + describe(small.slice(0, 5)));
+      const sc = await canvasScale();
+      assert(sc.w === VIRTUAL.w * CSS_SCALE.phone && sc.h === VIRTUAL.h * CSS_SCALE.phone, '#cv ' + sc.w + ' by ' + sc.h);
+      notes.push('service ok, #cv ' + sc.w + 'x' + sc.h);
+      await reload();
+      const lay2 = await ev('({ sw: document.documentElement.scrollWidth, iw: window.innerWidth })');
+      assert(lay2.sw <= lay2.iw, 'morning scrollWidth ' + lay2.sw + ' over innerWidth ' + lay2.iw);
+      const small2 = await ev(SMALL_BUTTONS);
+      assert(small2.length === 0, 'buttons under ' + MIN_CONTROL_PX + ' px on the clipboard: ' + describe(small2.slice(0, 5)));
+      await openYard(BUY_LATER);
+      await advance(0);
+      const p = await ev('({ x: ' + F.playerX + ', y: ' + F.playerY + ' })');
+      assert(p.x === SPAWN.x && p.y === SPAWN.y, 'player at (' + p.x + ',' + p.y + '), wanted the spawn (' + SPAWN.x + ',' + SPAWN.y + ')');
+      await keyPress(KEYS.left);
+      await advance(WAIT_S.arrow);
+      const x = await ev(F.playerX);
+      assert(x === ARROW_LEFT_X, 'after ArrowLeft player.x is ' + x);
+      notes.push('ArrowLeft to x ' + x);
+    } finally {
+      await emulate(RUN_METRICS);
+      await sleep(TIMEOUT_MS.resize);
+    }
+    return notes.join('; ');
+  });
+
+  await step('reduced motion', async () => {
+    await cdp.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
+    await reload();
+    assert(await ev('g.' + GAME_FIELDS.reduced + ' === true'), 'game.reduced is not true');
+    const frame = await captureFrame();
+    const dogWant = { name: 'dog', x: DOG_HOME.px, y: DOG_HOME.py, frame: DOG_HOME.frame };
+    assert(hasRecord(frame, dogWant), 'no ' + describe(dogWant) + '; dog records ' + describe(frame.filter((d) => d.name === 'dog')));
+    if (await ev(F.phase + ' === ' + JSON.stringify(PHASE.morning))) await openYard(BUY_LATER);
+    await advance(0);
+    const n0 = (await fxLog()).length;
+    const pt = await canvasPoint(TILE.pile.x, TILE.pile.y);
+    await mouseTap(pt.x, pt.y);
+    await advance(await ev('C.' + C_NAMES.tick));
+    const walking = await ev(F.walking + ' || ' + F.nextTile + ' !== null || ' + F.pathLen + ' > 0');
+    assert(walking, 'the walk did not start after a mouse tap on the pile; player ' + describe(await ev('({ x: ' + F.playerX + ', y: ' + F.playerY + ' })')));
+    const fx = (await fxLog()).slice(n0);
+    assert(fx.some((f) => f.kind === FX_KIND.ring), 'no ' + FX_KIND.ring + ' in fxLog after the tap; got ' + describe(fx.map((f) => f.kind)));
+    assert(!fx.some((f) => f.kind === FX_KIND.squash), 'a ' + FX_KIND.squash + ' was logged under reduced motion');
+    return 'reduced, dog home in frame ' + DOG_HOME.frame + ', ring without squash';
+  });
+
   await step('zero console errors across the run', () => {
     const e = errorCount();
-    assert(e.total === 0, describe(e));
+    assert(e.total === 0, describe(e) + ' first: ' + describe(report.console.find((c) => c.type === 'error') || report.exceptions[0] || report.logEntries.find((l) => l.level === 'error')));
     return 'console ' + report.console.length + ' messages';
   });
 
-  // Metrics
-  const after = await probeMetrics().catch(() => ({ bored: 0, boredPrep: 0, service: 0, events: 0 }));
+  // Metrics, day 1 only.
   const served = eventsDay1.filter((e) => e.type === EVENT.served).length;
-  const daySecondsOfService = before.service;   // day 1 only; day 2 is a short pause check
+  const daySecondsOfService = before.service;
   report.metrics = {
     platesServed: served,
+    seated: eventsDay1.filter((e) => e.type === EVENT.seatDone).length,
+    toGo: eventsDay1.filter((e) => e.type === EVENT.toGo).length,
     taps,
     tapsPerPlate: served ? Math.round((taps / served) * 100) / 100 : null,
     tapFallbacks: tapNotes,
@@ -892,9 +1524,9 @@ async function browserChecks() {
     serviceSeconds: Math.round(daySecondsOfService * 100) / 100,
     boredomFraction: daySecondsOfService ? Math.round((before.bored / daySecondsOfService) * 1000) / 1000 : null,
     day1Events: eventsDay1.length,
-    day2Events: after.events,
     walkOuts: eventsDay1.filter((e) => e.type === EVENT.walkOut).length,
-    customersArrived: eventsDay1.filter((e) => e.type === 'customer_arrived').length,
+    customersArrived: eventsDay1.filter((e) => e.type === EVENT.customerArrived).length,
+    drawRecords: Object.fromEntries(Object.entries(captures).map(([k, v]) => [k, Array.isArray(v) ? v.length : 0])),
     errors: errorCount()
   };
   report.events = eventsDay1;
@@ -910,13 +1542,13 @@ async function main() {
     try {
       await step('Chrome launched and CDP connected', async () => {
         const port = await launch();
-        return 'port ' + port + ', ' + report.mode;
+        return 'port ' + port + ', ' + report.mode + ' ' + RUN_METRICS.width + 'x' + RUN_METRICS.height + ' dpr ' + RUN_METRICS.deviceScaleFactor;
       }, { fatal: true });
       if (!fatal) await browserChecks();
     } catch (e) {
       record('browser run', false, (e && e.stack) || String(e));
     } finally {
-      try { if (cdp) await cdp.send('Browser.close').catch(() => {}); } catch (_e) { /* ignore */ }
+      try { if (cdp) await Promise.race([cdp.send('Browser.close').catch(() => {}), sleep(2000)]); } catch (_e) { /* ignore */ }
       try { if (cdp && cdp.ws) cdp.ws.close(); } catch (_e) { /* ignore */ }
       killChrome();
       await removeProfile();
@@ -928,7 +1560,7 @@ async function main() {
   const parts = [
     'smoke: ' + ok + '/' + total + ' steps ok',
     m.boredomSeconds !== undefined ? 'boredom ' + m.boredomSeconds + 's of ' + m.serviceSeconds + 's service' + (m.boredomFraction !== null && m.boredomFraction !== undefined ? ' (' + Math.round(m.boredomFraction * 100) + '%)' : '') : null,
-    m.tapsPerPlate !== undefined && m.tapsPerPlate !== null ? m.tapsPerPlate + ' taps/plate (' + m.taps + ' taps, ' + m.platesServed + ' plates)' : null,
+    m.tapsPerPlate !== undefined && m.tapsPerPlate !== null ? m.tapsPerPlate + ' taps/plate (' + m.taps + ' taps, ' + m.platesServed + ' plates, ' + m.seated + ' seated)' : null,
     (m.errors ? m.errors.total : errorCount().total) + ' errors',
     'report ' + path.join(OUT_DIR, 'report.json')
   ].filter(Boolean);

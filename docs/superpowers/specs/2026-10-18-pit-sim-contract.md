@@ -1,16 +1,613 @@
 # Pit sim, backyard rung: module contract
 
-**Date:** 2026-10-18
-**Design spec:** `docs/superpowers/specs/2026-10-18-pit-sim-design.md` (the rules). This document is the interface between three files written at the same time by three builders who do not talk. Where this document and the design spec disagree on a name or a signature, this document wins; where they disagree on a rule of play, the design spec wins and the builder notes it under Deviations in their own file header.
-**Files:** `games/pit-sim/index.html` (written with this contract, shared shell), `games/pit-sim/sprites.js` (builder A), `games/pit-sim/sim.js` (builder B), `games/pit-sim/game.js` (builder C), `games/pit-sim/dev/smoke.mjs` (harness, never shipped), optionally `games/pit-sim/dev/sheet.html` (sprite sheet viewer, never shipped).
+**Date:** 2026-10-18. v1 contract written in the morning; v2 interface delta (the section right below) rewritten the same evening for four parallel builders. Read the delta first.
+**Design spec:** `docs/superpowers/specs/2026-10-18-pit-sim-design.md` (the rules). Its top section "v2 (2026-10-18): dense yard, seating, feedback" is cited here as [V2.n]; older sections are cited as [spec n]. Where this document and the design spec disagree on a name or a signature, this document wins; where they disagree on a rule of play, the design spec wins and the builder notes it under Deviations in their own file header.
+**Files:** `games/pit-sim/index.html` (shared shell), `games/pit-sim/sprites.js`, `games/pit-sim/sim.js`, `games/pit-sim/game.js`, `games/pit-sim/dev/smoke.mjs` (harness, never shipped), `games/pit-sim/dev/sheet.html` (sprite sheet viewer, never shipped), optionally `games/pit-sim/dev/econ.mjs` (economy rerun, never shipped).
 **Load order:** `sprites.js`, `sim.js`, `game.js`, each with `defer`, in that order, from `index.html`. Deferred scripts run in document order after parsing, so `game.js` may assume both other modules are present on `window.PitSim` when it runs.
 **Law:** implement every name below with the exact signature and semantics. Add nothing to the shared surface without listing it under a `// Deviations` comment at the top of your file. Never read another module's internals (anything not named here). Never edit a file you do not own.
 
-Every rule of play (numbers, step order, order rule, pull order, strings) lives in the design spec and is not repeated here unless the interface needs it. Section references in brackets, for example [spec 5.2], point there.
+Every rule of play (numbers, step order, order rule, pull order, strings) lives in the design spec and is not repeated here unless the interface needs it.
+
+---
+
+## Who owns what (v2)
+
+Four builders work at the same time and do not talk. Each owns only the files in their row.
+
+| Builder | Owns (may edit) | Writes against | Must not touch |
+|---|---|---|---|
+| **Art** | `sprites.js`, `dev/sheet.html` | D11 (palette, legend, the 113 sprites, `drawScaled`, `textTinted`), [V2.10], [V2.11] | everything else |
+| **Sim** | `sim.js`, optionally `dev/econ.mjs` | D2 to D10, [V2.2] to [V2.7], [V2.14], [V2.15], [V2.17], [V2.19] | everything else |
+| **Game** | `game.js`, and in `index.html` exactly one CSS rule, `@media (max-width: 899px) { #wrap { margin: 0 -8px; width: auto; } }` (`width: auto` added at integration, see the integration record) | D11 (calls only), D12 to D14, [V2.9], [V2.12], [V2.13], [V2.16] | everything else, and every other line of `index.html` |
+| **Harness** | `dev/smoke.mjs` | D15, every public name in this document | everything else |
+| Overseer | the three spec docs | | the four builders' files |
+
+Nobody else edits `index.html`. The harness reads only public names (the `PitSim.*` surface, `sim.state`, DOM ids and the `PitSim.game` hooks of D14). Every builder runs `node --check` on each script they edited and scans each edited file for U+2014 and U+2013.
+
+---
+
+## v2 interface delta (2026-10-18)
+
+**Rules:** [V2.1] to [V2.19]. This delta is law for the v2 builders exactly as the rest of this contract was for v1. Where this delta and a section below disagree, this delta wins. Sections it replaces are marked superseded below; sections it does not mention stand, read with v2 coordinates and sizes.
+
+### D0. Names kept from the design spec
+
+The v2 brief that started this round used working names for some members. The design spec had already fixed names for the same things and uses them throughout, so this contract keeps the spec's names and adds no aliases. A builder who sees a brief name implements the contract name in the right column.
+
+| Brief name | Contract name | Note |
+|---|---|---|
+| `MAP.w`, `MAP.h` | `MAP.W` (11), `MAP.H` (12) | v1 spelling kept |
+| `MAP.layers` | none | no layer grid; fixed props are `MAP.props`, decor is `MAP.decor`, seats are `MAP.seats` |
+| station types `'seat'`, `'decor'`, `'prop'` | `kind: 'seat'` on `MAP.seats` entries, `kind: 'decor'` on `MAP.decor`, `kind: 'prop'` on `MAP.props` | `MAP.stations` keeps the eight v1 stations and v1 types; seats, decor and props are never stations (no reach, no tap target) |
+| `C.WALK` 6 | `C.WALK_TILES_PER_S: 6` | |
+| `C.SEAT_TIP_BASE` | `C.SEAT_BONUS_BASE: 1` | |
+| `C.CHARM_CAP` | `C.CHARM_MAX: 30` | |
+| `customer.mode 'togo'` | `mode: 'leaving'` with `reason: 'togo'` | a to go customer is a leaver; `game.js` draws `hand_togo` when `reason === 'togo'` |
+| `state.charm` | `sim.charm()` | computed, never stored, never saved |
+| `state.dog` | `PitSim.game.dog` (D14) | the dog is cosmetic and lives in `game.js`; the sim has no dog |
+| event `seated` | `seat_taken` | |
+| event `ate` | `seat_done` | |
+| event `togo` | `to_go` | |
+| event `heart` | none: `seat_done` with `atClose: false` is the heart trigger | `game.js` starts the heart and logs it in `PitSim.game.fxLog` (D14) |
+| event `decor_bought` | `purchase` with `kind: 'decor'` | |
+| event `dog_moved` | none | |
+| `PitSim.migrateSave(v1)` | none: `validateSave` accepts `v: 1` and returns `v: 2` (D9) | |
+
+### D1. Load order and the shared global
+
+Unchanged load order (`sprites.js`, `sim.js`, `game.js`, all `defer`). Each script body sits inside one function expression, `(function () { ... })();`, and the first statement inside it (after `'use strict';` where the file puts it) is `const PitSim = globalThis.PitSim || (globalThis.PitSim = {});` (section 1 as corrected). In the browser `globalThis` is `window`, so this is `window.PitSim`; the line says `globalThis` because `sim.js` also runs in Node. Top level attachments are unchanged: `sprites.js` attaches `art`; `sim.js` attaches `C`, `MEATS`, `MEAT_IDS`, `MAP`, `CATALOG`, `STRINGS`, `createSim`, `validateSave`, `fireBand`, `fireMult`, `tileOwned`, `SAVE_KEY`; `game.js` attaches `game`. Nothing new at the top level.
+
+### D2. `PitSim.C`
+
+Changed values: `WALK_TILES_PER_S: 6` (4.8 px a tick; `game.js` draws `Math.round(px)`), `SAVE_VERSION: 2`. New keys, all read by name, never hard coded:
+
+```js
+// seating and charm [V2.5], [V2.6]
+EAT_MIN: 8, EAT_MAX: 12,            // seconds a seated customer eats: EAT_MIN + (EAT_MAX - EAT_MIN) * rng()
+HEART_SECONDS: 0.6,                 // sim: seated pause after the bonus is paid, before standing up
+SEAT_BONUS_BASE: 1, SEAT_BONUS_MAX: 3,
+CHARM_STEP: 10, CHARM_MAX: 30,      // seatBonus = min(MAX, BASE + floor(charm / STEP)); repMax = REP_DAY_MAX + floor(charm / STEP)
+REP_TOGO_QUICK: 1,                  // word of mouth for a quick serve taken to go
+// cues the sim does not act on but game.js reads [V2.9]
+SWEAT_FRAC: 0.25,                   // sweat drop at or under this fraction of patience, mode 'waiting' only
+ZZZ_AFTER: 3,                       // sim clock seconds the buddy spends in task 'idle' before zzz
+FX: Object.freeze({ /* cosmetic timings, below */ })
+```
+
+`C.FX` is a frozen object owned by `sim.js` and read only by `game.js`. Every duration is in real seconds unless the key says px or ms; values are [V2.9]'s:
+
+```js
+FX: Object.freeze({
+  NUMBER_S: 1.4, NUMBER_RISE_PX: 14, NUMBER_FADE_AT: 1.0, TIP_GAP_PX: -11,    // cash, tip and seat tip numbers (round 1; round 2: the tip stacks above the cash)
+  SPARKLE_S: 0.45, SPARKLE_FRAME_S: 0.15, SPARKLE_STAGGER_S: 0.05,
+  HEART_S: 1.4, HEART_FRAME_S: 0.4, HEART_RISE_PX: 12, HEART_FADE_S: 0.3,     // review round 1
+  EAT_FRAME_S: 0.35,                                                      // cust{n}_sit frames 0 and 1
+  PUFF_EVERY_LOW: 0.9, PUFF_EVERY_GOOD: 0.45, PUFF_EVERY_HOT: 0.3,
+  PUFF_LIFE_MIN: 1.1, PUFF_LIFE_MAX: 1.4, PUFF_RISE_PX_S: 8, PUFF_DRIFT_PX_S: 3,
+  BURNT_BURST_S: 0.5, BURNT_RISE_PX_S: 12, SHAKE_MS: 120,
+  BURNT_COLUMN_EVERY: 0.35, BURNT_COLUMN_LIFE: 1.2, BURNT_COLUMN_RISE_PX_S: 10, BURNT_COLUMN_SWAY_PX: 2,
+  SWEAT_EVERY: 1.2, SWEAT_SLIDE_S: 0.6, SWEAT_SLIDE_PX: 3, SWEAT_SPLASH_S: 0.15,
+  ZZZ_FRAME_S: 0.5, ZZZ_DRIFT_PX: 4,
+  SQUASH_S: 0.12,                                                         // 18x22 for the first half, 14x26 for the second, then 16x24
+  WALKOUT_MARK_S: 0.6, TAP_RING_S: 0.35, FIRE_FPS: 6, TWINKLE_S: 0.5,
+  BIRD_SHOW_S: 2, BIRD_GAP_MIN: 8, BIRD_GAP_MAX: 14,
+  DOG_TILES_PER_S: 2, DOG_WAIT_MIN: 2, DOG_WAIT_SPREAD: 3,
+  NOTICE_S: 4                                                             // Your save was updated for the new yard.
+})
+```
+
+Every other key keeps its v1 value, including `PATIENCE_MID_FRAC: 0.5` and `GEAR_RESERVE: 30` (sim deviation 14, now contract), `QUEUE_SPOTS: 3`, `QUEUE_SPOTS_BIG: 5`, `TABLE_SPOTS: 3`, `TABLE_SPOTS_BIG: 5`. `MEATS.sausage.cook` is 14 and `MEATS.chicken.cook` is 22 ([V2.19] item 1; the shipped 10 and 16 were an unlisted deviation and are reverted).
+
+### D3. Types
+
+- `DecorId` is one of `'chair1' | 'chair2' | 'flowers' | 'birdbath' | 'lights' | 'picnic2'`, always in that order.
+- `SeatId` is one of `'pt1b' | 'pt1a' | 'chair1' | 'chair2' | 'pt2b' | 'pt2a'`, always in that order (`MAP.SEAT_ORDER`).
+- Tile coordinates: x 0 to 10, y 0 to 11. Customers may also stand on (9,12), the spawn below the gate, off canvas. Pixel coordinates are in the 176 by 192 virtual canvas; a tile's top left pixel is `(x * 16, y * 16)`.
+- `Dir` unchanged; up is toward y = 0 (the shed), down toward y = 11 (the gate fence). Section 0's ranges (13 by 15, gate at the top) are v1.
+
+### D4. `PitSim.MAP` (replaces section 2.3)
+
+```js
+PitSim.MAP = Object.freeze({
+  W: 11, H: 12, TILE: 16,
+  T: Object.freeze({ PAVER: 0, FENCE: 1, GATE: 2, LAWN: 3, HEDGE: 4, BED: 5 }),
+  tiles: number[],               // length 132, row major, ground only, the grid below
+  at(x, y): int,                 // tiles[y * 11 + x], or T.FENCE outside the map
+  stripe(x): 'a' | 'b',          // 'a' when x is even (lawn_a), 'b' when odd (lawn_b)
+  stations: Station[],           // the eight v1 ids, v1 order, v1 types, v2 data from [V2.3]
+  station(id): Station,
+  props: Prop[],                 // 19 entries, table below (four added in review round 1, three in round 2)
+  decor: DecorSpot[],            // 6 entries, DecorId order
+  seats: Seat[],                 // 6 entries, SeatId order
+  SEAT_ORDER: ['pt1b', 'pt1a', 'chair1', 'chair2', 'pt2b', 'pt2a'],
+  spawn:      { x: 6, y: 3, face: 'up' },
+  gate:       { x: 9, y: 11 },
+  custSpawn:  { x: 9, y: 12 },
+  passStop:   { x: 9, y: 10 },
+  queue: [ { x: 7, y: 7, face: 'up',   gear: null }, { x: 8, y: 7, face: 'left', gear: null },
+           { x: 9, y: 7, face: 'left', gear: null }, { x: 9, y: 8, face: 'up',   gear: 'bigtable' },
+           { x: 9, y: 9, face: 'up',   gear: 'bigtable' } ],
+  buddyIdle:  { x: 4, y: 5, face: 'up' },
+  tenderIdle: { x: 3, y: 2, face: 'right' },
+  dogHome:    { x: 4, y: 7 },
+  dogRoam:    [ {x:2,y:7}, {x:3,y:7}, {x:4,y:7}, {x:5,y:7}, {x:6,y:7}, {x:7,y:8}, {x:8,y:8} ],   // round 2: (4,8) holds pot3
+  overhead:   { lights: { x: 71, y: 80 }, canopy: { x: 76, y: 106 } },
+  signText:   { x: 70, y: 5 }
+});
+```
+
+`dogHome` is (4,7), not (4,8) as the first draft of this delta said ([V2.2.3] governs). `MAP.canopy` (the v1 tile rectangle) is gone; the Canopy gear draws at `overhead.canopy`. The ground grid, row by row (`P` paver, `F` fence, `G` gate, `L` lawn, `H` hedge, `B` bed), from [V2.2]:
+
+```
+      x: 0 1 2 3 4 5 6 7 8 9 10
+y0       F P P P F F F F F F F     (1..3, 0) are PAVER under the shed prop, which blocks them
+y1       F P P P P P P P P P F
+y2       F P P P P P P P P P F
+y3       F P P P P P P P P P F
+y4       F P P P P P P P P P F
+y5       F P P P P P P P P P F
+y6       F H H H H P P P H H F     (4,6) (8,6) HEDGE under the light post footprints; (5,6) (6,6) (7,6) PAVER under the counter
+y7       F B L L L L L L L L F
+y8       F B L L L L L L L L F
+y9       F B L L L L L L L L F
+y10      F B B B B B B L L L F     (7,10) (8,10) LAWN under the decor flower bed footprint
+y11      F F F F F F F F F G F     (8,11) FENCE with the mailbox prop drawn over it
+```
+
+```ts
+Station = {                                   // v1 fields kept: id, type, label, spoken, gear, tiles, use, slots, decay
+  id: StationId, type: 'cooker' | 'board' | 'cooler' | 'table' | 'pile' | 'trash',
+  label: string, spoken: string, gear: GearId | null,
+  tiles: { x, y, gear?: GearId }[],
+  use:   { x, y, face: Dir, gear?: GearId }[],
+  slots?: int, decay?: float,
+  sprite: 'kettle' | 'drum' | 'board' | 'cooler' | 'counter' | 'pile' | 'trash',
+  draw: { x, y },                             // top left px of the sprite
+  sortRow: int,                               // the station's bottom tile row, for the y-sort (D12)
+  slotPx?: { x, y }[],                        // cookers: offsets from the top left px of the first tile
+  spotPx?: { x, y, gear?: GearId }[]          // table only: absolute px of the bottom plate of each spot
+};
+Prop      = { kind: 'prop', id: string, sprite: string, frame: int, tile: { x, y }, draw: { x, y },
+              blocks: { x, y }[], sortRow: int };
+DecorSpot = { kind: 'decor', id: DecorId, tiles: { x, y }[], blocks: { x, y }[], seats: SeatId[],
+              draws: { sprite: string, frame: int, x: int, y: int, sortRow: int, overhead?: true }[] };
+Seat      = { kind: 'seat', id: SeatId, x: int, y: int, face: 'down', decor: DecorId | null };
+```
+
+Stations, in `MAP.stations` order ([V2.3]; labels, spoken names, slots and decay as section 2.3.2):
+
+| id | tiles | use (x, y, face) | sprite | draw | sortRow | extra |
+|---|---|---|---|---|---|---|
+| `kettle1` | (5,2) | (6,2,left) (5,3,up) | kettle | (80,24) | 2 | slotPx (0,-7) (6,-7) (round 2) |
+| `kettle2` | (7,2) | (6,2,right) (8,2,left) (7,1,down) | kettle | (112,24) | 2 | gear kettle2; slotPx as kettle1 |
+| `drum` | (7,3) (7,4) | (6,3,right) (6,4,right) (8,3,left) (8,4,left) (7,5,up) | drum | (112,48) | 4 | gear drum; slotPx (-2,-4) (8,-4) (-2,7) (8,7) |
+| `board` | (5,4) | (6,4,left) (5,3,down) (5,5,up) (4,4,right) | board | (80,64) | 4 | stacks at (1,3) (8,3) (1,9) (8,9) from (80,64) |
+| `cooler` | (6,1) | (6,2,up) (7,1,left) | cooler | (96,16) | 1 | |
+| `table` | (6,6) (7,6) (5,6 gear bigtable) | (6,5,down) (7,5,down) (5,5,down gear bigtable) | counter | (96,88) | 6 | spotPx (98,92) (108,92) (118,92) (88,92 bigtable) (80,92 bigtable); `counter_ext` at (80,88) while owned, and `counter` frame 1 then |
+| `pile` | (4,2) | (4,3,up) | pile | (64,32) | 2 | |
+| `trash` | (3,4) | (4,4,left) (3,3,down) (3,5,up) (2,4,right) | trash | (48,64) | 4 | |
+
+`table.spots[i]` is drawn at `spotPx[i]`, and the `served` event's `x, y` are that `spotPx`. The table's `tiles` order is index 0 (6,6), 1 (7,6), 2 (5,6).
+
+Props, in this order ([V2.2.2]):
+
+| id | sprite | frame | tile | draw | blocks | sortRow |
+|---|---|---|---|---|---|---|
+| `shed` | shed | 0 | (1,1) | (16,0) | (1,0) (2,0) (3,0) (1,1) (2,1) (3,1) | 1 |
+| `sign` | sign | 0 | (4,0) | (68,2) | none | 0 |
+| `tree` | tree | 0 | (9,2) | (128,0) | (9,2) | 2 |
+| `woodpile` | woodpile | 0 | (9,1) | (144,16) | (9,1) | 1 |
+| `tools` | tools | 0 | (1,2) | (16,24) | (1,2) | 2 |
+| `pot1` | pot | 0 | (1,3) | (16,48) | (1,3) | 3 |
+| `pot2` | pot | 0 | (9,3) | (144,48) | (9,3) | 3 |
+| `hose` | hose | 0 | (1,5) | (16,80) | (1,5) | 5 |
+| `planter` | planter | 0 | (9,5) | (144,72) | (9,5) | 5 |
+| `mailbox` | mailbox | 0 | (8,11) | (128,168) | none (fence tile) | 11 |
+| `picnic1` | picnic | 0 | (5,9) | (80,136) | (5,9) (6,9) | 9 |
+| `bench1` | picnic_bench | 0 | (5,8) | (80,136) | none | 8 |
+| `woodpile2` | woodpile | 0 | (4,1) | (64,16) | (4,1) | 1 |
+| `woodpile3` | woodpile | 0 | (5,1) | (80,16) | (5,1) | 1 |
+| `planter2` | planter | 0 | (1,4) | (16,56) | (1,4) | 4 |
+| `shelf` | shelf | 0 | (2,3) | (32,40) | (2,3) | 3 |
+| `pot3` | pot | 0 | (4,8) | (64,128) | (4,8) | 8 |
+| `pot4` | pot | 0 | (2,2) | (32,32) | (2,2) | 2 |
+| `woodpile4` | woodpile | 0 | (9,4) | (144,64) | (9,4) | 4 |
+
+Decor spots, in `DecorId` order ([V2.7]):
+
+| id | tiles | blocks | seats | draws (sprite, frame, x, y, sortRow) |
+|---|---|---|---|---|
+| `chair1` | (7,9) | none (its tile is the seat) | chair1 | chair 0 112 136 9 |
+| `chair2` | (8,9) | none | chair2 | chair 0 128 136 9 |
+| `flowers` | (7,10) (8,10) | (7,10) (8,10) | | bed 0 112 156 10; bed 1 128 156 10 |
+| `birdbath` | (4,9) | (4,9) | | birdbath 0 64 136 9 (`game.js` swaps in frame 1 for the bird) |
+| `lights` | (4,6) (8,6) | none (the hedge blocks) | | lights_post 0 64 80 6; lights_post 0 128 80 6; lights_string 0 71 80 6 overhead |
+| `picnic2` | (2,9) (3,9) | (2,9) (3,9) | pt2b, pt2a | picnic_bench 0 32 136 8; picnic 0 32 136 9 |
+
+Seats, in `SeatId` order ([V2.2.4]), every face `'down'`: `pt1b` (6,8) decor null; `pt1a` (5,8) null; `chair1` (7,9) `'chair1'`; `chair2` (8,9) `'chair2'`; `pt2b` (3,8) `'picnic2'`; `pt2a` (2,8) `'picnic2'`.
+
+`PitSim.tileOwned(entry, gear, decor)` (extends v1): `(!entry.gear || gear[entry.gear] === true) && (!entry.decor || (decor !== undefined && decor[entry.decor] === true))`. Pure; works on stations, footprint tiles, use tiles, queue entries and seats. A `DecorSpot` is owned when `decor[spot.id] === true` (callers test that directly). The v1 two argument call still works for every entry without a `decor` field.
+
+Walkability is [V2.2.1]. `sim.walkable(x, y)` keeps its meaning (the player rule: ground `PAVER`, no prop block, no active station tile). New: `sim.custWalkable(x, y, gx, gy)`, the customer rule with BFS goal `(gx, gy)`; the dog calls it with `(-1, -1)` and adds `y <= 10`. BFS everywhere is 4 directional, neighbor order up, down, left, right.
+
+### D5. `PitSim.CATALOG`
+
+Rows in display order: the five meats, `charcoal`, the six gear rows, the six decor rows in `DecorId` order, `buddy`, `tender`, `driveway`. Length 21. `kind` gains `'decor'`; `needs` gains `{ decor: DecorId }`. Decor rows:
+
+```ts
+CatalogRow (decor) = CatalogRow & { kind: 'decor', seats: int, charm: int, needs: null | { decor: DecorId } }
+```
+
+| id | label | price | seats | charm | effect | needs | needsText | sets |
+|---|---|---|---|---|---|---|---|---|
+| chair1 | Lawn chair | 25 | 1 | 3 | One more seat by the line. Charm 3. | null | | decor.chair1, seat chair1 |
+| chair2 | Second lawn chair | 25 | 1 | 3 | One more seat by the line. Charm 3. | { decor: 'chair1' } | Needs the first lawn chair. | decor.chair2, seat chair2 |
+| flowers | Flower bed | 30 | 0 | 4 | Flowers along the fence by the gate. Charm 4. | null | | decor.flowers |
+| birdbath | Bird bath | 40 | 0 | 4 | Birds stop by between the tables. Charm 4. | null | | decor.birdbath |
+| lights | String lights | 60 | 0 | 10 | Lights strung over the serving table. Charm 10. | null | | decor.lights |
+| picnic2 | Second picnic table | 80 | 2 | 6 | Two more seats on the lawn. Charm 6. | null | | decor.picnic2, seats pt2b and pt2a |
+
+The chicken row's effect line is `Chicken thighs: 2 plates, 22 seconds on good fire, sells for 8.` ([V2.19] item 1). `STRINGS.decorLabel` is added: `{ chair1: 'Lawn chair', chair2: 'Second lawn chair', flowers: 'Flower bed', birdbath: 'Bird bath', lights: 'String lights', picnic2: 'Second picnic table' }`. The goal order is unchanged; decor is never a goal.
+
+### D6. State additions (section 2.5.1)
+
+```ts
+state.decor: { [d in DecorId]: boolean };          // owned flags, saved
+state.seats: { [s in SeatId]: null | int };        // customer id holding the seat (reserved or sitting); all null at openGate and after the till
+state.stats: v1 stats & { seated: int };
+Today: v1 Today & { seated: int, togo: int, togoQuick: int, seatTips: int };
+Till:  v1 Till & { repMax: int };                  // the clamp's upper bound used that day
+Till.net = revenue + tips + seatTips - wages - DAILY_COSTS;
+Customer: v1 Customer with
+  body: 0 | 1 | 2 | 3,                             // arrivals % 4
+  mode: 'arriving' | 'waiting' | 'toSeat' | 'eating' | 'leaving' | 'passing',
+  reason: null | 'seated' | 'togo' | 'walkout' | 'past' | 'close',   // v1 'served' becomes 'seated' or 'togo'
+  seat: SeatId | null,                             // set at serve time when a seat was found; kept until removal
+  eat: float,                                      // seconds left eating; 0 outside 'eating'
+  eatMax: float,                                   // 0 until a seat is found
+  bonusPaid: boolean;
+```
+
+`queueIndex` is `-1` in modes `toSeat`, `eating`, `leaving` and `passing`. While `mode === 'eating'` and `eat === 0` the customer is in the `HEART_SECONDS` pause, counted down in `pause`. Patience and `wait` advance only in `waiting`. `player.queued` (sim deviation 11) and `sim.expectedCrowd()` (sim deviation 13) stay. Buddy and tender objects keep their v1 shape; their v2 routes are [V2.4]. Charm is not state (`sim.charm()`); the dog is not state (`PitSim.game.dog`).
+
+What `game.js` draws from a customer, by mode: `arriving` and `waiting`, walk or stand frames with the order bubble and patience bar ([V2.9]); `toSeat`, with `hand_plate_{want}`; `eating`, `cust{body}_sit` at (seat px, seat py - 6) with the food bubble while `eat > 0` and frame 2 while `eat === 0`, plus `plate_{want}` per [V2.2.4]; `leaving`, with `hand_togo` when `reason === 'togo'` and the unhappy frames when `reason === 'walkout'`; `passing`, plain.
+
+### D7. Methods (section 2.6)
+
+Changed:
+- `buy(id, qty)`: decor ids behave like gear (immediate; refuses with `Owned`, the prerequisite's `needsText`, or `Not enough cash` when `cash - cartTotal() < price`), set `decor[id] = true`, emit `purchase { id, label, price, kind: 'decor' }` then `save_wanted { reason: 'decor' }`, `message = 'Bought ' + label + '.'`. Gear purchases now carry `kind: 'gear'`.
+- `sell(id)`: accepts `DecorId`. Selling `chair1` also sells `chair2` if owned: `sell chair1` first, then `sell chair2`, message `Sold Lawn chair for 12 and Second lawn chair for 12`. Price `floor(price * SELL_BACK)`. The Broke card is morning only, so no seat is in use.
+- `walkTo`, `move`, `walkable`: unchanged semantics on the v2 grid.
+
+New, own properties of the sim object, fresh results each call:
+
+| Method | Returns | Semantics |
+|---|---|---|
+| `charm()` | `int` | `min(C.CHARM_MAX, sum of CATALOG charm over owned decor)` |
+| `seatBonus()` | `int` | `min(C.SEAT_BONUS_MAX, C.SEAT_BONUS_BASE + floor(charm() / C.CHARM_STEP))` |
+| `seatCount()` | `int` | owned seats: 2 plus the `seats` of owned decor rows |
+| `repMax()` | `int` | `C.REP_DAY_MAX + floor(charm() / C.CHARM_STEP)` |
+| `custWalkable(x, y, gx, gy)` | `boolean` | the customer rule of [V2.2.1] with goal `(gx, gy)` |
+
+### D8. Rules the interface depends on (section 2.7 additions)
+
+- RNG order per spawn unchanged (jitter, patience, branch, weight). One extra draw, `eatMax`, happens at serve time only when a seat is found. No other new draws. Cosmetic randomness in `game.js` never calls `sim.rng()` (game deviation 4 is now the rule; the `rng()` row of section 2.6 no longer invites cosmetic use).
+- Serve [V2.5 steps 3 to 7]: `served` is emitted first, then `seat_taken` or `to_go`. Seat pick: the first id in `SEAT_ORDER` that is owned, has `state.seats[id] === null`, and is reachable by customer BFS from the customer's tile. Rep counters: seated and quick to `happy`; to go and quick to `togoQuick`; the rest to `ok`. Day rep: `happy * REP_QUICK + togoQuick * REP_TOGO_QUICK + ok * REP_OK + walkouts * REP_WALKOUT + close * CLOSE_PENALTY`, clamped to `[REP_DAY_MIN, repMax()]`; `till.repCapped` compares against that clamp.
+- Seat done [V2.5 step 5]: when `eat` reaches 0, `cash += bonus`, `today.seatTips += bonus`, `today.seated += 1`, `stats.seated += 1`, `bonusPaid = true`, emit `seat_done`; after `HEART_SECONDS` the seat is freed, mode `leaving`, reason `seated`, mood happy, BFS to `custSpawn` with no turn pause.
+- Step order [spec 5.10]: stage 2 (NPCs) moves customers in `toSeat` and skips the pause and movement of `eating` ones (still counting `hop`); stage 5 (customers), after the serve checks, runs the `eat` countdown, `seat_done`, the heart pause and standing up. A seat freed in stage 5 is free for a serve on the next tick.
+- Facing on routes [V2.5 step 11]: a new BFS route faces its first step; leaving the line holds `LEAVE_TURN_SECONDS` facing that step; arrival at a queue spot faces that spot's `face`, at a seat `'down'`; the walk past pauses facing up.
+- Day end [V2.5 step 9]: `dayShouldEnd` adds "no customer in `toSeat` or `eating`" to the after last call and sold out branches; once sold out at or after `GATE_OPENS` the sim runs `closeOutLine()` and sets `spawnAt = Infinity` on each such tick. The hard end at `DAY_SECONDS` closes out the line, then pays every unpaid seat bonus with `atClose: true`, then runs the till. `state.seats` is all `null` after the till.
+
+### D9. Save and `validateSave` (replaces the format in section 2.8)
+
+`SAVE_KEY` unchanged (`'hs.pitsim.save'`), `C.SAVE_VERSION` 2. The v2 shape is exactly [V2.14]: the v1 keys plus `decor` (six booleans in `DecorId` order) and `stats.seated`, with `v: 2`. There is no `migrateSave`; `validateSave(obj)` is extended:
+
+- `obj.v === 2`: every v1 field rule, plus `decor.*` `=== true` per `DecorId`, unknown keys dropped, `decor.chair2` forced false when `decor.chair1` is false, `stats.seated` integer clamped 0 to `MAX_STAT`, default 0.
+- `obj.v === 1`: the v1 field rules, then returned as `v: 2` with `decor` all false and `stats.seated` 0, every v1 value kept.
+- Anything else (not a plain object, `v` missing, `v: 3`, a string, an array): `null`. Never throws, including on cyclic objects.
+
+`serialize()` always writes `v: 2`; service state, `state.seats` and charm are never saved. `game.js` reads `parsed.v === 1` before validating, shows Your save was updated for the new yard. on the status line for `C.FX.NOTICE_S` and once in the live region, then writes the save once so a reload does not show the notice again.
+
+### D10. Events (replaces the table in section 2.9)
+
+`drainEvents()` returns `Event[]`; every event is `{ type, ...payload }` with exactly these types and fields. Sentences are `game.js`'s (section 4.7 plus [V2.15]); `L = MEATS[meat].label`, `K = STRINGS.cooker[cooker]`.
+
+| type | payload | when | sentence (`#live`) | status |
+|---|---|---|---|---|
+| `yard_open` | | `openGate` succeeded | Yard open. Gate opens in 30 seconds. | unchanged |
+| `gate_soon` | | clock crossed `GATE_OPENS - 10` | Gate opens in 10. | unchanged |
+| `gate_open` | | clock crossed `GATE_OPENS` | Gate open. | unchanged |
+| `customer_arrived` | `id, meat` | a customer spawned who will join the line | New customer wants {L}. | unchanged |
+| `walk_past` | `id, reason: 'full' \| 'soldout'` | a customer spawned into a full line, or with nothing to sell (sim deviation 9) | Someone walked past. The line is full. / Someone looked in. Nothing left to sell. | unchanged |
+| `piece_done` | `cooker, meat` | a piece entered `done` | {L} is done on {K}. | unchanged |
+| `piece_burnt` | `cooker, meat` | a piece entered `burnt` | {L} burnt on {K}. | unchanged |
+| `served` | `id, meat, price, tip, quick, x, y` | a customer was served; `x, y` is the `spotPx` the plate came from | Served {L}, {price} plus {tip} tip. / Served {L}, {price}, no tip. | unchanged |
+| `seat_taken` | `id, seat` | right after `served`, a seat was reserved | none | **new** |
+| `to_go` | `id` | right after `served`, no free seat | No free seat. They took it to go. | **new** |
+| `seat_done` | `id, seat, bonus, x, y, atClose` | the seat tip was paid; `x, y` is the seat tile's top left px; `atClose` true when the hard end paid it | A seated customer tipped {bonus} more. (none when `atClose`) | **new** |
+| `walk_out` | `id` | patience reached 0 | A customer walked out. | unchanged |
+| `left_at_close` | `id` | still in line at close or sold out | none | unchanged |
+| `fire_low` | `cooker` | fire crossed below `FIRE_LOW_WARN` | Fire low on {K}. | unchanged |
+| `fire_out` | `cooker` | fire reached 0 | Fire out on {K}. | unchanged |
+| `last_call` | | clock crossed `LAST_CALL` | Last call. No more customers today. | unchanged |
+| `day_over` | | the till is built | Day over. Opening the till. | unchanged |
+| `slice_done` | `meat, plates` | a slice finished | none | unchanged |
+| `set_down` | `meat, n` | plates went on the counter | none | unchanged |
+| `trash` | `meat, kind` | something went in the trash | none | unchanged |
+| `tap_queued` | | `walkTo` during a slice (sim deviation 11) | none | unchanged |
+| `purchase` | `id, label, price, kind: 'gear' \| 'decor'` | gear or decor bought | Bought {label}. | `kind` **new** |
+| `hire` | `id, label, hired` | hire toggled | Hired {label}. / Let {label} go. | unchanged |
+| `sell` | `id, label, price` | Broke card sale, gear or decor | Sold {label} for {price}. | covers decor |
+| `save_wanted` | `reason: 'till' \| 'gear' \| 'decor' \| 'hire' \| 'open' \| 'sell'` | `game.js` writes `serialize()` | none | `'decor'` **new** |
+| `save_clear` | | `game.js` removes `SAVE_KEY` | none | unchanged |
+| `blocked` | | `walkTo` could not reach the tile | none (status line) | unchanged |
+| `rain` | `raining` | morning weather roll from `RAIN_FROM_DAY` | none | unchanged |
+| `coming_next` | | first Coming next card | You can afford the driveway pop-up. It is the next rung and is not built yet. | unchanged |
+| `broke` | | a morning opened on the Broke card | Broke. Sell gear or start over. | unchanged |
+
+No `heart`, `decor_bought`, `dog_moved` or `seated` event exists (D0). `game.js`'s own notice, Your save was updated for the new yard., is not a sim event.
+
+### D11. `PitSim.art` (replaces sections 3.2 and 3.4; amends 3.1 and 3.5)
+
+**Surface.** Section 3.1 stands with these changes: `PALETTE` has 32 entries; `COLOR` has the v2 keys; `SPRITES` holds exactly the list below; two functions are added:
+
+```ts
+drawScaled(ctx, name: string, x: int, y: int, w: int, h: int, frame = 0, flip = false): void   // one frame stretched into a w by h box, smoothing off (the squash and stretch only)
+textTinted(ctx, str: string, x: int, y: int, colorKey: string): void                         // like text, with the cream glyph pixels drawn in COLOR[colorKey] (floating numbers)
+```
+
+`draw(ctx, name, x, y, frame = 0, flip = false)` still takes the sprite's top left pixel, whatever its size; `flip` mirrors inside the sprite's own `w`. `text` and `textWidth` are unchanged (glyph count times 5 minus 1); `text` maps a digit to frame `d`, a letter to `10 + (code - 65)` after `toUpperCase()`, `+` to 36, `:` to 37, a space to a 4 px gap, and skips anything else. `build()` still validates every grid and throws `Error('sprite <name> frame <i> row <j>: <reason>')`.
+
+**PALETTE v2**, in index order ([V2.10]):
+
+```js
+PALETTE: ['', '#1b1714', '#2a2015', '#E6D8B8', '#D06129', '#3b2417', '#7a4a26', '#a8693a', '#d79a5b',
+          '#e8c890', '#c9a46b', '#6cc24a', '#4fa83d', '#2f7a32', '#a6e05a', '#5bb8f0', '#3a86c8',
+          '#fbf7ef', '#f27aa8', '#d94a8c', '#ffd84a', '#f6c49a', '#d9935f', '#8f5634', '#d8402f',
+          '#f29a9a', '#d0663e', '#8e3b1f', '#9aa4ae', '#4d5560', '#ddd8cf', '#6e6863']
+```
+
+**Legend.** One character per pixel; the character is the index written in base 32 with digits `0123456789abcdefghijklmnopqrstuv`: `0` is index 0 (transparent), `9` is 9, `a` is 10, `v` is 31. Grids use only these 32 characters, lowercase; `build()` rejects anything else, `w` to `z` and uppercase included. 32 colors fit, so no second scheme is in use. If a later round ever needs more than 32, the legend extends with `w x y z` for 32 to 35, and past 36 with uppercase `A` to `Z` for 36 to 61 (case sensitive); that is decided now and is not active in v2.
+
+| char | key | hex | char | key | hex | char | key | hex | char | key | hex |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| `0` | | transparent | `8` | `woodL` | #d79a5b | `g` | `clothD` | #3a86c8 | `o` | `red` | #d8402f |
+| `1` | `K` | #1b1714 | `9` | `paver` | #e8c890 | `h` | `white` | #fbf7ef | `p` | `raw` | #f29a9a |
+| `2` | `U` | #2a2015 | `a` | `paverD` | #c9a46b | `i` | `pink` | #f27aa8 | `q` | `cooking` | #d0663e |
+| `3` | `C` | #E6D8B8 | `b` | `lawnA` | #6cc24a | `j` | `magenta` | #d94a8c | `r` | `done` | #8e3b1f |
+| `4` | `O` | #D06129 | `c` | `lawnB` | #4fa83d | `k` | `yellow` | #ffd84a | `s` | `steelL` | #9aa4ae |
+| `5` | `outline` | #3b2417 | `d` | `leafD` | #2f7a32 | `l` | `skinL` | #f6c49a | `t` | `steelD` | #4d5560 |
+| `6` | `woodD` | #7a4a26 | `e` | `leafL` | #a6e05a | `m` | `skinM` | #d9935f | `u` | `smokeL` | #ddd8cf |
+| `7` | `woodM` | #a8693a | `f` | `cloth` | #5bb8f0 | `n` | `skinD` | #8f5634 | `v` | `smokeD` | #6e6863 |
+
+`COLOR` maps exactly these 31 keys to those hex strings: `K U C O outline woodD woodM woodL paver paverD lawnA lawnB leafD leafL cloth clothD white pink magenta yellow skinL skinM skinD red raw cooking done steelL steelD smokeL smokeD`. The v1 keys (`Y M H I S g G h d b p r n f y s t w`) are gone; `game.js` uses the v2 keys only. Roles per color, hair, shirt, gauge and patience bar colors are [V2.10]. The DOM keeps the site palette in `index.html`.
+
+**Anchor rule.** A sprite of `w` by `h` anchored at tile `(ax, ay)`, its bottom left tile, is drawn with its top left at `x = ax * 16 + dx`, `y = (ay + 1) * 16 - h + dy`, with `dx = dy = 0` unless a D4 table gives the draw position (those positions already include any shift, for example the tree's canopy overhanging one tile left: anchor (9,2), draw (128,0)). People (16x24) are drawn at `(Math.round(px), Math.round(py) - 8)`, feet on the bottom row of their tile. Ground tiles (16x16) sit on their own tile. Fence, gate and hedge pieces are 16x24 anchored on their tile, except the back fence row (y = 0), which draws the 16x16 `fence_back` at y = 0 (frame 1 at the corners), so no fence piece crosses the canvas edge (review round 1).
+
+**REQUIRED SPRITES v2.** Exactly these 113 names, sizes and frame counts (268 frames; review round 1 added `fence_back` and `shelf`; review round 2 added `hedge` frame 1 and `bed` frame 3), nothing added, nothing missing. The harness copies this literal verbatim; the art builder may paste it into `dev/sheet.html`. Frame meanings are the "shows" column of [V2.11] and are fixed so `game.js` can index them blind; side sprites face left and are flipped for right.
+
+```js
+const REQUIRED_SPRITES = [   // [name, w, h, frames]
+  ['player_down', 16, 24, 3], ['player_up', 16, 24, 3], ['player_side', 16, 24, 3], ['player_slice', 16, 24, 2],
+  ['buddy_down', 16, 24, 3], ['buddy_up', 16, 24, 3], ['buddy_side', 16, 24, 3], ['tender_down', 16, 24, 3],
+  ['tender_up', 16, 24, 3], ['tender_side', 16, 24, 3], ['cust0_down', 16, 24, 5], ['cust0_up', 16, 24, 3],
+  ['cust0_side', 16, 24, 4], ['cust0_sit', 16, 24, 3], ['cust1_down', 16, 24, 5], ['cust1_up', 16, 24, 3],
+  ['cust1_side', 16, 24, 4], ['cust1_sit', 16, 24, 3], ['cust2_down', 16, 24, 5], ['cust2_up', 16, 24, 3],
+  ['cust2_side', 16, 24, 4], ['cust2_sit', 16, 24, 3], ['cust3_down', 16, 24, 5], ['cust3_up', 16, 24, 3],
+  ['cust3_side', 16, 24, 4], ['cust3_sit', 16, 24, 3], ['shadow', 12, 4, 1], ['dog', 16, 16, 4],
+  ['hand_charcoal', 8, 8, 1], ['hand_raw_sausage', 8, 8, 1], ['hand_raw_chicken', 8, 8, 1], ['hand_raw_ribs', 8, 8, 1],
+  ['hand_raw_butt', 8, 8, 1], ['hand_raw_brisket', 8, 8, 1], ['hand_cooked_sausage', 8, 8, 1], ['hand_cooked_chicken', 8, 8, 1],
+  ['hand_cooked_ribs', 8, 8, 1], ['hand_cooked_butt', 8, 8, 1], ['hand_cooked_brisket', 8, 8, 1], ['hand_burnt', 8, 8, 1],
+  ['hand_plate_sausage', 8, 8, 1], ['hand_plate_chicken', 8, 8, 1], ['hand_plate_ribs', 8, 8, 1], ['hand_plate_butt', 8, 8, 1],
+  ['hand_plate_brisket', 8, 8, 1], ['hand_tray_sausage', 8, 8, 1], ['hand_tray_chicken', 8, 8, 1], ['hand_tray_ribs', 8, 8, 1],
+  ['hand_tray_butt', 8, 8, 1], ['hand_tray_brisket', 8, 8, 1], ['hand_tray', 8, 8, 1], ['hand_togo', 8, 8, 1],
+  ['icon_sausage', 8, 8, 1], ['icon_chicken', 8, 8, 1], ['icon_ribs', 8, 8, 1], ['icon_butt', 8, 8, 1],
+  ['icon_brisket', 8, 8, 1], ['plate_sausage', 8, 6, 1], ['plate_chicken', 8, 6, 1], ['plate_ribs', 8, 6, 1],
+  ['plate_butt', 8, 6, 1], ['plate_brisket', 8, 6, 1], ['piece_sausage', 10, 10, 4], ['piece_chicken', 10, 10, 4],
+  ['piece_ribs', 10, 10, 4], ['piece_butt', 10, 10, 4], ['piece_brisket', 10, 10, 4], ['mark_x', 8, 8, 1],
+  ['kettle', 16, 24, 4], ['drum', 16, 32, 4], ['cooler', 16, 16, 3], ['board', 16, 16, 2],
+  ['counter', 32, 24, 2], ['counter_ext', 16, 24, 1], ['pile', 16, 16, 4], ['trash', 16, 16, 1],
+  ['paver', 16, 16, 2], ['lawn_a', 16, 16, 2], ['lawn_b', 16, 16, 2], ['fence_h', 16, 24, 1],
+  ['fence_v', 16, 24, 1], ['fence_corner', 16, 24, 1], ['fence_back', 16, 16, 2], ['gate', 16, 24, 2], ['hedge', 16, 24, 2],
+  ['bed', 16, 20, 4], ['shed', 48, 32, 1], ['sign', 44, 12, 1], ['tree', 32, 48, 1],
+  ['woodpile', 16, 16, 1], ['hose', 16, 16, 1], ['tools', 16, 24, 1], ['pot', 16, 16, 1],
+  ['planter', 16, 24, 1], ['shelf', 16, 24, 1], ['mailbox', 16, 24, 1], ['picnic', 32, 24, 1], ['picnic_bench', 32, 8, 1],
+  ['chair', 16, 24, 1], ['lights_post', 16, 32, 1], ['lights_string', 66, 10, 2], ['birdbath', 16, 24, 2],
+  ['canopy', 40, 32, 1], ['bubble', 16, 12, 1], ['heart', 8, 8, 2], ['sparkle', 7, 7, 3],
+  ['smoke', 8, 8, 3], ['smoke_dark', 8, 8, 3], ['fire', 8, 8, 3], ['coin', 8, 8, 2],
+  ['sweat', 4, 6, 2], ['zzz', 8, 8, 3], ['font', 4, 6, 38]
+];
+```
+
+Frame indexes `game.js` relies on: people `_down`, `_up`, `_side` frame 0 stand, 1 and 2 walk; `cust{n}_down` 3 and 4 unhappy walk; `cust{n}_side` 3 stand unhappy; `cust{n}_sit` 0 eat a, 1 eat b, 2 content; `dog` 0 and 1 walk, 2 sit, 3 nap; `piece_*` 0 raw, 1 cooking, 2 done, 3 burnt; `kettle` and `drum` by `fireBand`: out 0, low 1, good 2, hot 3; `cooler` 0 crate (since round 2 painted as a small red cooler), 1 shut, 2 open; `board` 0 empty, 1 slicing; `counter` 0 both caps, 1 right cap only; `pile` 0 full (over 6), 1 half (3 to 6), 2 low (1 to 2), 3 bare; `gate` 0 shut, 1 open; `fence_back` 0 rail, 1 corner; `bed` 0 pink, 1 yellow, 2 mixed, 3 tilled soil (round 2); `hedge` 0 plain, 1 blossoms (round 2); `paver` and `lawn_*` 0 plain, 1 alternate; `birdbath` 0 empty, 1 bird; `lights_string` 0 and 1 twinkle; `heart` 0 big, 1 small; `sparkle` 0 small, 1 large, 2 fading; `smoke`, `smoke_dark` 0 small, 1 medium, 2 large; `coin` 0 face, 1 edge; `sweat` 0 drop, 1 splash; `zzz` 0 z, 1 zz, 2 zzz. The v1 sprites `outline`, `grass`, `path`, `table_mid`, `table_end` and `canopy_pole` are retired. Procedural, drawn by `game.js` with `COLOR`: dashed outlines (the boxes of [V2.11]; outline color on pavers, cream on lawn and hedge), the patience bar, fire gauges, cooking arcs, the slice bar, the tap ring, rain, canvas text boxes.
+
+### D12. Render order and the y-sort (replaces section 4.3)
+
+Into the 176 by 192 offscreen canvas, each frame ([V2.12]):
+
+1. Ground: `PAVER` draws `paver` frame `(x * 7 + y * 3) % 2`, and so do the customer route tiles (9,10) (9,9) (9,8) (9,7) (8,7) (7,7) (review round 1, render only: `MAP.tiles` keeps them `LAWN`); `LAWN` and `GATE` draw `lawn_a` or `lawn_b` by `MAP.stripe(x)`, frame 1 inside an unowned decor footprint and where `(x * 5 + y * 3) % 3 === 0` (round 2); fence, hedge and bed tiles get a lawn tile under them on rows 6 to 11 and a paver above row 6.
+2. The y-sorted pass: fence, gate, hedge and bed tiles (hedge frame `x % 2`, round 2); props; active stations with their extras (the fire gauge (round 2), grate pieces, cooking arcs, the counter extension, plate stacks, the slicing piece); owned decor draws not marked `overhead`, and `bed` frame 3 at each `bed` draw of the unowned `flowers` spot (round 2); in the morning and evening only (round 2), ghosts of unowned gear (kettle 2, the drum, the counter extension) and of unowned decor draws not marked `overhead`, at alpha 0.5; dashed outlines of unowned footprints, in every phase; people (shadow, behind hand, body, front hand); eaters' plates; the dog.
+3. Overhead: `lights_string` at `overhead.lights` when `decor.lights`; `canopy` at `overhead.canopy` when `gear.canopy`.
+4. Smoke, chimney puffs, dark puffs, fire flames.
+5. Bubbles (order icon, `mark_x`, food bubble; the order bubble at (px + 14, py - 22), its icon at (px + 18, py - 20), round 2), patience bars (at (px + 15, py - 26)), sweat, zzz, hearts. Fire gauges moved to pass 2 in round 2.
+6. The slice bar, floating numbers (outlined text, no box, round 2), coins, sparkles (2x, 14 by 14, round 2), tap rings.
+7. Rain.
+8. Canvas text in umber boxes: the clock at (2,2); GATE OPENS IN {n} and LAST CALL at (2,183); YOUR PIT on the sign at `MAP.signText`.
+9. Blit to `#cv` at the D13 scale, with the burnt shake.
+
+**Sort key** (pass 2): the bottom pixel row of the anchor tile, `sortRow * 16 + 15`; for anyone moving, `Math.round(py) + 15`; a seated customer uses the seat tile's row; a dashed outline uses its run's bottom row; an eater's plate uses the table row `(seat y + 1) * 16 + 15` at a picnic seat and `seat y * 16 + 15` on a lawn chair. Lower keys draw first. **Ties:** (1) key; (2) layer: fence, gate, hedge and beds 0, stations, props, decor and ghosts 1 (a ghost uses its footprint's sort row), outlines 2, people 3, the dog 4, eaters' plates 5; (3) draw x (the top left x the sprite or box is drawn at); (4) list order: ground pieces row major, `MAP.props`, `MAP.stations`, decor in `DecorId` order (within one item its `draws` order), outlines (stations then decor, runs top left first), player, buddy, tender, customers by id, plates by customer id, the dog. The visual checks of [V2.12] are the acceptance for this rule.
+
+### D13. Scaling and taps (replaces sections 4.2 and the tap mapping of 4.5)
+
+```
+vw   = document.documentElement.clientWidth
+vh   = window.innerHeight
+dpr  = window.devicePixelRatio || 1
+CONTROLS_H = 24 + 48 + 52 + 8                                        // #status, #act, #chips, slack (round 2)
+if (vw >= 900 && vh - 44 - 16 - CONTROLS_H >= 576)  target = 3       // desktop: 528 by 576 CSS px at dpr 1
+else if (vw - 16 >= 352)                            target = 2       // phone: 352 by 384 CSS px at dpr 2
+else                                                target = (vw - 16) / 176
+k = Math.max(1, Math.floor(target * dpr))                            // device pixels per virtual pixel (round 2)
+css = k / dpr
+cv.width = 176 * k;  cv.height = 192 * k
+cv.style.width = (176 * css) + 'px';  cv.style.height = (192 * css) + 'px'
+#cv: position relative, left and top nudged so its top left lands on a whole device pixel
+```
+
+Review round 2 replaced `k = round(css * dpr)` with the device pixel rule above: every virtual pixel is now exactly `k` device pixels at any DPR (412 at 2.625 gives k 5 and a 335 CSS px canvas). At 375 by 812 dpr 2 and 1024 by 820 dpr 1 the sizes are unchanged.
+
+Recomputed on `resize` and `orientationchange`; smoothing off on both contexts after every resize; `#cv` keeps `image-rendering: pixelated`. The `index.html` rule `@media (max-width: 899px) { #wrap { margin: 0 -8px; width: auto; } }` lets the canvas reach 8 px from each edge (the Game builder adds it, nothing else in the shell changes). `width: auto` was added by the Game builder and kept at integration: the shell's `#wrap { width: 100% }` otherwise holds the box at the column width, so the negative margins only shift it 8 px left and the canvas sits off center. The scale is an integer (2 or 3 CSS px per virtual px) at every viewport 368 CSS px wide or more; only narrower screens take the fit path.
+
+Taps: `vx = (clientX - rect.left) / rect.width * 176`, `vy = (clientY - rect.top) / rect.height * 192`. First the drawn rects of active stations are hit tested in reverse draw order (the table's rect is the `counter` rect (96,88,32,24) plus the `counter_ext` rect (80,88,16,24) when owned); a hit calls `sim.walkTo` with that station's first tile. Otherwise `sim.walkTo(floor(vx / 16), floor(vy / 16))`. People, props, seats and decor never take a tap.
+
+### D14. `game.js` (amends sections 4.1 and 4.4 to 4.10)
+
+- **Clipboard:** a `Decor` heading and block in `#shop` after Gear, the muted note of [V2.16], one row per decor id with a `buy-{decorId}` control (a `Buy` button, or a span `Owned` with the same id), the reserve warning of game deviation 10 applied to decor rows, and a `p#seats` in `#clip-top` right under `#goal` reading `Seats {seatCount()}. Charm {charm()}. Each seated customer tips {seatBonus()} more.`
+- **Till:** a `Seat tips` row right after `Tips` (`{seated} sat down`, `+{seatTips}`); the People and Word of mouth lines of [V2.16]; the capped note uses `till.repMax`; net as D6, on a bold row labeled `Take today` with the detail `sales and tips after wages and daily costs` (round 2; it was `Net`).
+- **Broke card:** owned decor listed after gear with `sell-{decorId}` buttons, `Sell for {n}`.
+- **Status line precedence:** Saving is off in this browser. > Your save was updated for the new yard. (`C.FX.NOTICE_S`, once) > Can't get there > Gate opens in {n} > Last call > `sim.holding()`.
+- **aria-live:** the D10 sentences, same queue rules (one a second, identical within 5 s dropped).
+- **Feedback and the dog:** [V2.9] exactly, timings from `C.FX`, randomness from `game.js`'s own mulberry32 seeded from `sim.seed`. Frozen yard during panels and pause.
+- **Reduced motion** (replaces 4.8): numbers appear and fade in place; no sparkles, squash, chimney puffs, burnt burst or column, shake, twinkle, bird, hop or dog walking (the dog sits at `dogHome` in frame 2); the sweat drop and zzz show still; fire shows frame 0; walking frames, cooking arcs, bars and gauges still animate.
+
+`PitSim.game` v2 (replaces 4.10; every v1 member kept):
+
+```ts
+PitSim.game = {
+  version: '0.3.0',
+  sim: Sim, el: { [id: string]: HTMLElement }, reduced: boolean, saveOff: boolean,
+  advance(seconds: float): void,     // steps the sim in TICK_SECONDS ticks, pumps events once, then updates the DOM and renders one frame,
+                                     // so a harness read right after it sees fresh #status, #act, panels and draw records
+  dog: { x: int, y: int, px: float, py: float, frame: int, flip: boolean },   // live object, read only outside game.js
+  fxLog: FxEntry[],                  // append only, newest last, the oldest dropped past 500 entries; emptied by sim reset
+  captureFrame(): DrawRecord[]       // renders the current state once, synchronously, without advancing any timer, and returns what it drew
+};
+FxEntry    = { kind: 'cash' | 'tip' | 'seatTip' | 'sparkle' | 'heart' | 'puff' | 'burnt' | 'column' | 'sweat' | 'zzz'
+                     | 'squash' | 'hop' | 'mark' | 'ring' | 'bird',
+               x: int, y: int,       // top left virtual px where the effect is first drawn; for cash, tip and seatTip numbers the text position
+               day: int, at: float };// state.day and state.clock when it started
+DrawRecord = { name: string, frame: int, x: int, y: int, w: int, h: int, ghost?: true };   // virtual px, in draw order; ghost marks an unowned preview (review round 1)
+```
+
+An effect that reduced motion turns off is neither started nor logged. `captureFrame()` records every `art.draw` and `art.drawScaled` call (with the drawn `w, h`), one `font` record per glyph of `art.text` and `art.textTinted`, and one `'#outline'` record per dashed box; procedural bars, gauges, arcs, rings and rain are not recorded. `game.js` never issues a draw whose rect lies wholly outside 0 to 176 by 0 to 192, so every record intersects the canvas.
+
+### D15. Harness v2: `games/pit-sim/dev/smoke.mjs` (amends section 5)
+
+Run `node games/pit-sim/dev/smoke.mjs [--out <dir>] [--desktop] [--seed <n>] [--dir <folder>]` from the repo root; exit 0 when every step is ok, 1 otherwise; one `ok` or `FAIL` line per step; `<out>/report.json` plus screenshots `clipboard.png`, `mid-service.png`, `seated.png`, `decor.png`, `till.png`. Phone mode emulates 375 by 812 at dpr 2 (mobile, touch); `--desktop` emulates 1024 by 820 at dpr 1. Constants change to the v2 names: `SURFACE_COUNTS = { tiles: 132, stations: 8, seats: 6, decor: 6, props: 19, catalog: 21 }` (props 16 since review round 1, 19 since round 2); tiles to tap `pile (4,2)`, `kettle1 (5,2)`, `cooler (6,1)`, `board (5,4)`, `table (6,6)`; `MAP_SIZE = { w: 11, h: 12 }`; `REQUIRED_SPRITES` is the D11 literal. DOM reads come right after `PitSim.game.advance` (D14), never on a guessed frame delay. The v1 run of 2026-10-18 failed at `gate open` because `#status` was read before the page painted; `advance` updating the DOM removes that race.
+
+The 27 v1 steps, kept in order and moved to v2 tiles and names, with the new steps inserted (marked **new**):
+
+| # | step | asserts |
+|---|---|---|
+| 1 | files present | index, sprites, sim, game (fatal) |
+| 2 | node --check sprites.js | exit 0 |
+| 3 | node --check sim.js | exit 0 |
+| 4 | node --check game.js | exit 0 |
+| 5 | sim.js loads headless with the full surface | the 12 names; `SURFACE_COUNTS`; `C.WALK_TILES_PER_S === 6`, `C.SAVE_VERSION === 2`, every D2 key present including `C.FX`; `MEATS.sausage.cook === 14`, `MEATS.chicken.cook === 22`; `MAP.dogHome` is (4,7) |
+| 6 | validateSave rejects, clamps and migrates | v1 null list minus `{ v: 2 }` (now valid), plus `{ v: 3 }` and `{ v: 0 }` give `null`; the v1 dirty sample of section 5.1 item 3 returns `v: 2` with the same clamps, `decor` all false and `stats.seated === 0`; the section 2.8 v1 sample returns its values unchanged under `v: 2`; `{ v: 2, decor: { chair2: true, bogus: true } }` gives `chair2 false`, no `bogus`; cyclic input does not throw |
+| 7 | **new** seat reachability | for all 64 decor sets, each with and without `gear.bigtable`, a BFS on `sim.custWalkable` reaches every owned seat from every active `MAP.queue` spot and reaches `MAP.custSpawn` from every owned seat ([V2.18]) |
+| 8 | Chrome launched and CDP connected | port read, phone or desktop emulation set (fatal) |
+| 9 | page loaded with zero errors | zero console errors and exceptions; `art.built`; `game.version === '0.3.0'` (fatal) |
+| 10 | only the four file:// requests | `index.html`, `sprites.js`, `sim.js`, `game.js` |
+| 11 | **new** sprite list and palette | every `REQUIRED_SPRITES` row passes `art.has(name)` and `art.frames(name) === frames`, `SPRITES[name].w` and `.h` match, `Object.keys(SPRITES).length === 113`; `PALETTE.length === 32`, `PALETTE[0] === ''`; `COLOR` has the 31 D11 keys |
+| 12 | **new** canvas scale is an integer | phone: `#cv` rect 352 by 384, `cv.width === 176 * k` and `cv.height === 192 * k` with `k === Math.round(2 * devicePixelRatio)`; desktop: rect 528 by 576, `k === Math.round(3 * devicePixelRatio)`; `rect.width / 176` is an integer in both |
+| 13 | clipboard: morning, day 1, start cash | phase, day 1, cash 80, prefill emptied, `#open-why` text; **added:** `#seats` text `Seats 2. Charm 0. Each seated customer tips 1 more.`; `captureFrame()` holds `picnic` at (80,136), `bench1`'s `picnic_bench` at (80,136), `'#outline'` boxes for kettle2 (112,32,16,16) and chair1 (112,144,16,16), ghost records (`ghost: true`) of `kettle` at (112,24) and `chair` at (112,136), and `dog` at (64,112) frame 2 |
+| 14 | how to | as v1 |
+| 15 | bought | as v1 |
+| 16 | gate open | phase service, cash, clipboard hidden, `#status` starts with `Gate opens in`, `#act` `Walk`, one `yard_open` |
+| 17 | fire raised | tap the pile (4,2) then kettle 1 (5,2); fire at least `FIRE_LIGHT` |
+| 18 | meat on | cooler (6,1), kettle 1 |
+| 19 | piece done | as v1 |
+| 20 | sliced | board (5,4) |
+| 21 | carried | as v1 |
+| 22 | served with cash up and a served event | table (6,6); `served` with `x, y` equal to a `spotPx`; **added:** `fxLog` gains a `cash` entry over a `MAP.queue` spot, at y = spot py - 26 with x from spot px - 9 to spot px + 16 (round 2: the cash number sits over the served customer) |
+| 23 | **new** a served customer sits and a heart fires | after the first `served`: a `seat_taken` with `seat === 'pt1b'` (all seats free on day 1); within 15 s that customer is in mode `eating` on (6,8); then `seat_done` with `bonus === 1`, `atClose === false`, `x === 96`, `y === 128`; `fxLog` gains a `heart` at (96,104) and a `seatTip`; within 3 s more the customer is `leaving` with `reason === 'seated'` and `state.seats.pt1b === null`; screenshot `seated.png` while eating |
+| 24 | rest of the day cooked and carried | as v1 |
+| 25 | day over | as v1; **added:** every `state.seats` value is `null`; no customer in `toSeat` or `eating` |
+| 26 | a walk-out with rep down, or the day sold out early | the serve credit is `happy * REP_QUICK + togoQuick * REP_TOGO_QUICK + ok * REP_OK` |
+| 27 | till shown | `#till-h` `Day 1 till`; **added:** a `Seat tips` row; `till.net === revenue + tips + seatTips - wages - DAILY_COSTS` |
+| 28 | save key present and valid | as v1; **added:** raw JSON has `v === 2`, `decor`, `stats.seated >= 1` |
+| 29 | reload persists | as v1 |
+| 30 | **new** decor purchase shows the sprite | write a v2 save (`day 2`, `cash 200`, the rest default) to `SAVE_KEY`, reload; click `buy-chair1`; one `purchase` with `kind === 'decor'`; `state.decor.chair1`; `#seats` text `Seats 3. Charm 3. Each seated customer tips 1 more.`; `advance(0)`; `captureFrame()` holds a non ghost `chair` at (112,136) and no `'#outline'` at (112,144); the stored save validates with `decor.chair1 === true`; screenshot `decor.png` (in phone mode with `#panels` hidden for the shot, since the clipboard covers the canvas) |
+| 31 | **new** v1 save migrates | write the section 2.8 v1 sample, reload; morning of day 5, cash 187, rep 80, stock, charcoal, gear and hires as written, `decor` all false; `#status` reads `Your save was updated for the new yard.`; the stored save now has `v === 2` |
+| 32 | pause and resume | as v1 (Escape and P, `#root` `data-paused`) |
+| 33 | **new** no sprite drawn outside the canvas | resume, `advance(45)` so customers walk in through the gate; then `captureFrame()` here and at the morning (step 13) and mid service (step 22) captures: every record intersects 0 to 176 by 0 to 192; a record may extend past an edge only if it is a person, `shadow` or `hand_*` record whose bottom passes 192 (a customer at the gate or the spawn); since review round 1 no fence piece is exempt |
+| 34 | **new** layout and keyboard at 375 by 740 | `scrollWidth <= innerWidth`; every visible `button` at least 44 by 44; `#cv` 352 by 384; reload at that size, buy a bag and a unit, open the yard; the player is at `MAP.spawn` (6,3); ArrowLeft then `advance(0.5)` gives `player.x === 5` |
+| 35 | **new** reduced motion | `prefers-reduced-motion: reduce`, reload with the seed: `game.reduced === true`; `captureFrame()` shows `dog` at (64,112) frame 2; open the yard and send a mouse tap (`Input.dispatchMouseEvent`) at the canvas point of the pile tile (4,2); the walk starts and `fxLog` gains a `ring` and no `squash` |
+| 36 | zero console errors across the run | as v1 |
+
+Step 36 closes Chrome and removes the profile in a `finally`, as v1. Steps 1, 8, 9, 13, 15 to 22, 25 and 29 stay fatal as in v1. `dev/econ.mjs`, if the Sim builder writes it, is not a harness step ([V2.18]).
+
+### D16. Decisions made in this delta
+
+1. The spec's names win over the brief's working names (D0); no aliases, so nobody implements two spellings.
+2. Seats, decor and props are typed by a `kind` field in their own arrays; `MAP.stations` stays the eight v1 stations.
+3. Cosmetic timings live in `C.FX` (owned by `sim.js`, read by `game.js`) so `game.js` hard codes no timing, which section 2.1 already required.
+4. No `migrateSave`: one validator, two accepted versions, always returns v2.
+5. `PitSim.game` gains three read only hooks (`dog`, `fxLog`, `captureFrame`) and `advance` refreshes the DOM and draws one frame, so the harness asserts on what the page drew rather than on screenshots.
+6. The legend stays one character per pixel, base 32, `0` to `v`; the extension past 36 colors would be uppercase, decided now, unused.
+7. `dogHome` is (4,7), following [V2.2.3]; the first draft of this delta had (4,8).
+8. The Game builder owns the one `index.html` CSS rule; nobody else touches the shell.
+
+### Integration record (2026-10-18, evening)
+
+The four v2 builds were integrated against this delta the same evening. Result: `node games/pit-sim/dev/smoke.mjs` passes 37 of 37 steps in phone mode and in `--desktop` mode with zero console errors, exceptions or log errors and only the four file:// requests. A seam diff (sprites.js and sim.js loaded in Node with a canvas stub, game.js scanned) found every name in place: the 13 top level names and nothing extra; the 14 `art` members; the 111 sprites, 263 frames, 32 palette entries and 31 `COLOR` keys; the 30 D10 event types, each emitted by `sim.js` and none outside the table, with a `game.js` case for every event that has a sentence; every `C`, `C.FX`, `MAP`, `STRINGS` and sim member `game.js` reads.
+
+Amended at integration (the tables above already carry these):
+
+1. D4: (5,1) is no longer a use tile of `kettle1` or `cooler`. It is in a closed pocket with (4,1), boxed in by the shed (3,1), the pile (4,2), kettle 1 (5,2), the cooler (6,1) and the back fence, so no BFS could reach it. Play is unchanged. `sim.js` records it as sim deviation 21; [V2.3] and the [V2.12] visual check (now kettle 2 over a player on (7,1)) are amended to match.
+2. D13 and the ownership table: the `index.html` rule is `@media (max-width: 899px) { #wrap { margin: 0 -8px; width: auto; } }`. Without `width: auto` the shell's `#wrap { width: 100% }` keeps the box at the column width and the canvas sits 8 px left of center (3.5 px gutter on one side, 19.5 px on the other). With it the canvas is centered with 11.5 px each side at 375 px.
+3. D15: the harness runs 37 steps, not 36. It adds "dog never on a station use tile" after step 33, checks the integer scale in both modes inside step 12, checks the 44 px minimum twice in step 34, and in step 26 compares `repDelta` against the serve credit clamped to `[REP_DAY_MIN, till.repMax]` (the clamp is the rule, so the raw credit was the wrong comparison).
+4. Builder deviations kept as written in each file header: Art (mirrored frames and one tinted font strip per `COLOR` key pre-rendered in `build()`; `textTinted` throws on an unknown color key; `drawScaled` draws nothing under 1 px and restores smoothing; slashed zero); Sim 16 to 21; Game (YOUR PIT drawn in the y-sorted pass right after the sign; `fxLog` logs continuous emitters once per stream; draws that cross an edge are skipped except the D15 step 33 exceptions; transient effects cleared at `yard_open`, the next morning and a new game; chimney vents read from the first tile's top left; the v1 change-of-hands bounce replaced by the squash).
+
+Checked by eye at integration (phone and desktop screenshots from the harness, plus a full yard with every gear, decor and hire at rep 100, a full line of five, a rain day, the Broke card with decor sell buttons, the Coming next card, a 320 px and a 414 px phone, and real time touch play): the y-sort reads right (counter over the player's shins, sitters chest up over the picnic table, the bottom fence over feet at the gate, the tree over row 1), every sprite sits on its footprint, and there is no horizontal scroll at 320, 375 or 414 px.
+
+Known issues left open, all cosmetic, for the Overseer (none is a contract violation):
+
+1. The buddy's idle tile (4,5) is directly behind the left light post footprint (4,6). With String lights owned, the post draws down the middle of the buddy (the y-sort is right; it reads as a lamp wearing his cap). Fixing it means moving the post or the idle tile, which changes [V2.2] and the [V2.4] route table.
+2. Seats pt1a and pt1b are 16 px apart and a `+N TIP` seat tip number is 29 px wide, so two seated customers finishing within 0.9 s print over each other. Cash numbers from back to back serves on neighboring plate spots (10 px apart) overlap the same way.
+3. The cream `+N TIP` tip number lands on the counter's white top edge and, with String lights owned, on the light string, where mostly its brown shadow reads ([V2.9] fixes the color as cream).
+4. The canopy's striped top (y 106 to 118) shares its band with the pt1a and pt1b food bubbles, hearts and seat tip numbers, so during service it is mostly covered.
+5. The woodpile (9,1) is almost entirely under the tree canopy.
+6. The economy reruns (`dev/econ.mjs` and the Sim builder's bot) cook only sausage and chicken; second kettle on day 3 or 4 and the drum on day 13 to 15 for seeds 1 to 8 describe that bot, not a player who buys ribs, butt and brisket.
+
+### Review round 1 (2026-10-18, night)
+
+Applied from the first visual review; the tables above already carry these. No economy number changed.
+
+1. D4: four props, `woodpile2` (4,1), `woodpile3` (5,1), `planter2` (1,4) and `shelf` (2,3), appended to `MAP.props` (16 entries). They close the unreachable pocket of integration item 1 and fill two dead cook area pavers. A BFS from the spawn with no gear or decor and with everything owned still reaches every owned station use tile, `buddyIdle` and `tenderIdle`. Sim deviation 22.
+2. D2: `C.FX` `NUMBER_S` 1.4, `NUMBER_FADE_AT` 1.0, `NUMBER_RISE_PX` 14, `TIP_GAP_PX` 11, `HEART_S` 1.4, `HEART_RISE_PX` 12.
+3. D11: `fence_back` (16x16, 2 frames) and `shelf` (16x24, 1 frame); 113 names, 266 frames. The drum is painted red, the empty board shows a cleaver, the nap frame of the dog is redrawn. Sizes and frame meanings of existing names are unchanged.
+4. D12 and D14: back fence row inside the canvas; ghosts of unowned gear and decor under the outlines, recorded with `ghost: true`; outlines in the outline color on pavers; the customer route drawn with pavers; floating numbers in pills (cash yellow, tip white, seat tip pink at (seat x - 30, seat y - 22)); the heart at 2x at (seat x, seat y - 24); chimney puffs centered on the vent and drifting away from the cooler. Game deviation 17.
+5. D15: `SURFACE_COUNTS.props` 16, the sprite list and count, step 13 ghosts, step 23 heart (96,104), step 30 ghost aware and the phone `decor.png` with the panels hidden, step 33 without the fence exception.
+
+Known issue 3 above (the cream tip number) is fixed by item 4.
+
+### Review round 2 (2026-10-18, night)
+
+Applied from the second visual review; the tables above already carry these. No economy number changed.
+
+1. D13: the scale is picked in device pixels, `k = max(1, floor(target * dpr))`, CSS scale `k / dpr`, and `#cv` is nudged (position relative) onto a whole device pixel, so no DPR resamples the canvas. Desktop 3x also needs room for `#status`, `#act` and `#chips` (`CONTROLS_H` 132 px) or falls back to the 2x rule. Game deviation 18a.
+2. D4: three props appended to `MAP.props` (19 entries): `pot3` (4,8) in the lawn nook between the picnic tables, `pot4` (2,2) under the shed window, `woodpile4` (9,4) by the right fence. None is a seat, footprint, queue, spawn, idle or use tile; with every decor set, with and without the bigger table, every seat still reaches every queue spot and the customer spawn. (4,8) leaves `dogRoam`. Kettle `slotPx` is (0,-7) (6,-7), inside the kettle. Sim deviation 23.
+3. D2: `C.FX.TIP_GAP_PX` is -11, so the tip number stacks above the cash number.
+4. D11: `hedge` gains frame 1 (blossoms) and `bed` frame 3 (tilled soil, nothing planted); `cooler` frame 0 is repainted as a small red cooler with a white lid and band. 113 names, 268 frames.
+5. D12 and D14: ghosts in the morning and evening only, alpha 0.5; outlines in every phase; the unbought flower bed draws `bed` frame 3; lawn clover inside unowned decor footprints and on `(x * 5 + y * 3) % 3 === 0`; hedge frame `x % 2`; fire gauges drawn with their cooker in the y-sorted pass; floating numbers as outlined text with no box, the cash number over the served customer (coin at px, text at px + 9, py - 26), the tip at the customer's px 11 px above it, the seat tip over the heart at (seat x - 4, seat y - 34), all clamped inside the canvas; a number whose box overlaps one that started under 0.5 s ago (within 8 px in y) starts 0.3 s later per such number (at most 3), and so does a heart within 12 px of a fresh one; sparkles at 2x; order bubble, icon and walk out mark 2 px higher, patience bar at py - 26; the dog skips a roam tile whose south neighbor is a taken seat; the till's bold row reads `Take today`. Game deviation 18.
+6. D15: 38 steps. A new step 13, "canvas is device pixel exact on Android and laptop sizes", emulates 412 by 915 at 2.625, 360 by 800 at 3, 393 by 873 at 2.75, 1366 by 657 at 1 and 1280 by 720 at 1.5 and asserts a backing store that is a whole multiple of 176 by 192, a rect times dpr equal to it, the top left on a whole device pixel, no horizontal scroll, and on the two laptop sizes the meat chips inside the viewport. `SURFACE_COUNTS.props` 19, the D11 literal, step 22's cash position (item 5). Every later step number moves up by one.
+
+Not applied in round 2, with the reason:
+
+- The charcoal pile leg (table to pile 4 tiles): the pile must stay adjacent to kettle 1 ([V2.2]), and every tile next to the pile that could be a use tile is either the tender's idle tile (3,2), a woodpile in the closed pocket (4,1) or a station; (4,3) is 4 tiles from the counter use tile (6,5) by Manhattan distance, so no pile use tile can be within 3 without moving kettle 1.
+- The woodpiles at (5,1) and (9,1): (8,1) is the only route to the use tile (7,1) once kettle 2 is owned and sits under the tree canopy too; (3,2) is the tender's idle tile. A visible woodpile was added at (9,4) instead (item 2).
+- The buddy idle tile behind the left light post (integration known issue 1): the only free paver with no tall sprite south of it, (2,5), is two tiles farther from the board, which adds about a second to every buddy run, a nerf to a paid hire for a cosmetic issue. Left for the Overseer.
+- The canopy over row 7 heads (integration known issue 4): y 98 still covers 4 px of those heads and moves the cloth onto the front of the counter; x 68 puts the pole through the pt1a seated customer; drawing the cloth and the pole in different passes needs a clipped draw that `PitSim.art` does not have.
+- Order bubbles moved above the head or flipped left: either puts the (7,7) bubble over the counter's plate spots or stacks the (8,7) bubble on the (7,7) bubble. The bubbles were raised 2 px instead (item 5).
+- The optional 2x cash number: it needs a scratch canvas drawn outside `art.text`, so `captureFrame` would lose its font records.
 
 ---
 
 ## 0. Conventions used in this document
+
+> **v2:** tile ranges, canvas size and the meaning of up are D3. The rest stands.
 
 - Types are written TypeScript style for reading only; the code is plain ES2020, strict mode, no build step.
 - `int` means a JavaScript number that is always an integer. `float` means any finite number. `clock` means a float in simulated seconds since the yard opened that day (0 at Open the yard).
@@ -28,7 +625,7 @@ Every rule of play (numbers, step order, order rule, pull order, strings) lives 
 
 ## 1. The shared global
 
-Every script begins, after `'use strict';`, with this line and nothing else that touches the global:
+Every script is an IIFE: it wraps its whole body in one function expression, `(function () { ... })();`, and the first statement inside the wrapper is this line (after `'use strict';` where the file puts it there), which in the browser is `PitSim = window.PitSim || (window.PitSim = {})` written with `globalThis` so that `sim.js` also runs in Node; nothing else touches the global, and no script declares anything at the top level. (Corrected 2026-10-18: the first version of this sentence said the line sat at the top level. Three classic scripts that each declare a top level `const PitSim` share one global lexical scope and the second one throws a redeclaration SyntaxError, so all three builders used the wrapper; the wrapper is now the rule, not a deviation.)
 
 ```js
 const PitSim = globalThis.PitSim || (globalThis.PitSim = {});
@@ -51,6 +648,8 @@ A module that finds its own names already present (a double load) overwrites the
 ## 2. `sim.js` surface
 
 ### 2.1 `PitSim.C`: constants
+
+> **Amended by the v2 delta, D2:** `WALK_TILES_PER_S` 6, `SAVE_VERSION` 2, the seating, charm and cue keys, `C.FX`, and `PATIENCE_MID_FRAC` and `GEAR_RESERVE` now in the contract.
 
 A frozen plain object. Every value from [spec 19], named as below. `game.js` reads timing and layout values from here (for example the gate countdown) and never hard codes them. `sim.js` reads nothing else for these values.
 
@@ -95,6 +694,8 @@ Fire bands, from these: out is `fire < COLD_UNDER`, low is `COLD_UNDER <= fire <
 
 ### 2.2 `PitSim.MEATS` and `PitSim.MEAT_IDS`
 
+> **v2:** unchanged; the shipped sausage 10 and chicken 16 cook times revert to the 14 and 22 below (D2, [V2.19] item 1).
+
 ```js
 PitSim.MEAT_IDS = Object.freeze(['sausage', 'chicken', 'ribs', 'butt', 'brisket']);
 
@@ -110,6 +711,8 @@ PitSim.MEATS = Object.freeze({
 `plateLabel` is used only in the aria-label of a plate [spec 18]. `key` is the keyboard digit that selects the chip.
 
 ### 2.3 `PitSim.MAP`
+
+> **Superseded by the v2 delta, D4.** Kept for history.
 
 ```js
 PitSim.MAP = Object.freeze({
@@ -183,6 +786,8 @@ The buddy and the tender walk the same grid under the same rule, with BFS from t
 
 ### 2.4 `PitSim.CATALOG`
 
+> **Amended by the v2 delta, D5:** six decor rows after the gear rows, length 21, `kind` `'decor'`, `needs` `{ decor }`.
+
 An array of shop rows in display order. Shape:
 
 ```ts
@@ -231,6 +836,8 @@ const sim = PitSim.createSim(saved /* validated save object or null */, seed /* 
 - A sim created from a save or from null always starts in phase `'morning'` with the clipboard data ready (rain rolled, Broke test run, cart empty, `selected` set). The morning roll consumes rng.
 
 #### 2.5.1 `sim.state`
+
+> **Amended by the v2 delta, D6:** `decor`, `seats`, `stats.seated`, the Today and Till additions, and the v2 Customer (`body` 0 to 3, modes `toSeat` and `eating`, reasons `seated` and `togo`, `seat`, `eat`, `eatMax`, `bonusPaid`). Mover `px, py` stay the top left of the 16 by 16 tile; people draw 8 px higher (D11).
 
 A plain mutable object. `game.js` reads it every frame for rendering and never writes to it. Every field:
 
@@ -362,9 +969,13 @@ Till = Today & {
 
 #### 2.5.2 Timekeeping
 
+> **Amended by the v2 delta, D8:** the early end also waits for no customer in `toSeat` or `eating`; sold out ends the day early; the hard end pays unpaid seat bonuses first.
+
 `state.clock` advances only in `step()` while `phase === 'service'` and `paused === false`. Prep is `clock < C.GATE_OPENS`; the gate is open from `GATE_OPENS` to `LAST_CALL`; the day ends when `clock >= C.DAY_SECONDS`, or when `clock >= C.LAST_CALL` and no customer remains in the yard in mode `arriving` or `waiting` [spec 3]. Day end runs the till (section 2.7.5) and sets `phase = 'evening'`.
 
 #### 2.5.3 Fixed step
+
+> **v2:** at `WALK_TILES_PER_S` 6 a step is 4.8 px a tick; `game.js` draws `Math.round(px)`.
 
 `sim.step(dt)` clamps `dt` to `C.MAX_FRAME_DT`, adds it to an internal accumulator, and runs `sim.tick()` once per whole `C.TICK_SECONDS` in the accumulator. `sim.tick()` advances the world by exactly one `TICK_SECONDS` in the six stage order of [spec 5.10]. `step` returns nothing. Movement is advanced per tick (at 5 tiles per second that is 4 virtual pixels per tick); `game.js` draws `px, py` as they are, with no interpolation of its own.
 
@@ -384,6 +995,8 @@ The station in reach is the active station whose footprint contains the tile dir
 
 #### 2.5.6 NPC routes
 
+> **Superseded for customers by the v2 delta, D4 and D8, and [V2.5]:** every customer walk is a BFS over the customer grid. The buddy and tender paragraphs stand with the v2 idle tiles.
+
 Customers walk at `C.NPC_TILES_PER_S` along fixed routes, no BFS, no collision:
 
 - Arriving: from `MAP.custSpawn` straight down column 6 to `(6, 5)`, then along row 5 to the reserved spot's x. `queueIndex` is the spot reserved at spawn; `wait` starts the first time the customer reaches their reserved spot, and a spot passed through on the way does not count.
@@ -394,6 +1007,8 @@ Customers walk at `C.NPC_TILES_PER_S` along fixed routes, no BFS, no collision:
 The buddy loops idle at `MAP.buddyIdle` facing left, BFS to `(6, 7)` facing up, back [spec 5.8]. The tender idles at `MAP.tenderIdle` facing right, grabs from the pile (adjacent, no walk), BFS to the nearest active use tile of the cooker needing fire, adds, returns [spec 5.9]. Their pixel positions follow the same `Mover` fields as the player.
 
 ### 2.6 Sim methods
+
+> **Amended by the v2 delta, D7:** `buy` and `sell` take decor ids; new `charm`, `seatBonus`, `seatCount`, `repMax`, `custWalkable`. The `rng()` row no longer invites cosmetic use (D8).
 
 All methods are plain functions on the `sim` object (not prototype methods; `const { walkTo } = sim` must work). Results are fresh objects each call.
 
@@ -450,13 +1065,19 @@ Plate counts in hand: 1, or 2 of the same meat with `gear.tray`. Board pickup ta
 
 #### 2.7.4 Customers
 
+> **Amended by the v2 delta, D8:** one extra draw, `eatMax`, at serve time when a seat is found; seat pick, to go and the rep counters per D8.
+
 Spawn, order, patience, tip, rep: [spec 6]. The order roll, patience roll, body variant and jitter all draw from `sim.rng()` in this order per spawn: interval jitter, patience, order branch, order weight. Walk past is decided at spawn against `queueSpots = gear.bigtable ? QUEUE_SPOTS_BIG : QUEUE_SPOTS` minus customers with `queueIndex >= 0`.
 
 #### 2.7.5 Day end
 
+> **Amended by the v2 delta, D8:** seat bonuses paid with `atClose: true` after the close out and before the till; rep clamp upper bound `repMax()`; `state.seats` cleared.
+
 In this order, once, when the end condition of section 2.5.2 holds: close out customers still in line (`reason: 'close'`, `today.close`), compute `grateLeft` and `grateCost` from pieces still on cookers (unit cost each, burnt pieces included here and not in waste), compute waste from board and table plates (`unit / plates` per plate, rounded to the nearest integer per plate, summed) plus burnt pieces already trashed during the day (unit cost each; `wasteBurnt` counts those), compute wages from `buddy`/`tender` presence, apply rep with the clamp, then cash: `cash = max(C.CASH_FLOOR, cash - wages - C.DAILY_COSTS)` (revenue and tips were added at each serve). Then spoilage: without `gear.cooler`, every raw unit is lost at unit cost into `spoilCost` and `spoiled`, stock zeroed; with the cooler, stock carries. Then `day += 1`, `stats.days += 1`, `yesterday = { served, walkouts, past }`, `till` is built from `today`, `phase = 'evening'`, emit `day_over` and `save_wanted { reason: 'till' }`. Pieces on the grate are not trashed events; they are simply gone when the next day opens.
 
 ### 2.8 Save format and `PitSim.validateSave(obj)`
+
+> **Superseded for the format by the v2 delta, D9.** The field rules below still apply to every v1 key.
 
 The save is the v1 object of [spec 12], exactly these keys and no others:
 
@@ -475,6 +1096,8 @@ The save is the v1 object of [spec 12], exactly these keys and no others:
 `sim.serialize()` returns the same shape from `state`. During service the fields reflect the current morning's committed values plus whatever has changed (cash from sales, stock drawn down); `game.js` never saves during service, so this is only informational.
 
 ### 2.9 Events
+
+> **Superseded by the v2 delta, D10**, which carries every v1 type plus the new and changed ones. Kept for history.
 
 `drainEvents()` returns `Event[]`. Every event is `{ type, ...payload }` with exactly these types and payload fields. `game.js` maps them to aria-live sentences in section 4.7.
 
@@ -511,6 +1134,8 @@ Events are emitted inside the method or tick that caused them; `drainEvents()` a
 
 ### 2.10 `PitSim.STRINGS`
 
+> **Amended by the v2 delta, D5:** `decorLabel` is added. Nothing else changes.
+
 A frozen object holding the strings the sim produces that `game.js` also needs to display without a sim call, so both files spell them the same way. Only these keys:
 
 ```js
@@ -533,6 +1158,8 @@ Every other string a player reads is owned by `game.js` and written in section 4
 ## 3. `sprites.js` surface
 
 ### 3.1 `PitSim.art`
+
+> **Amended by the v2 delta, D11:** 32 palette entries, the v2 `COLOR` keys, the 111 sprites, `drawScaled` and `textTinted`.
 
 ```ts
 PitSim.art = {
@@ -558,6 +1185,8 @@ PitSim.art = {
 Nothing in `sprites.js` touches the DOM except `document.createElement('canvas')` inside `build()` and `canvasFor()`. It uses no timers and no `Math.random`.
 
 ### 3.2 Palette and index characters
+
+> **Superseded by the v2 delta, D11, and [V2.10].** Kept for history.
 
 `PALETTE` and the character that names each index in a grid string. The first nine colors are the site's canon tones [spec 14.1].
 
@@ -591,6 +1220,8 @@ Nothing in `sprites.js` touches the DOM except `document.createElement('canvas')
 
 ### 3.3 Grid format
 
+> **v2:** the legend is base 32, `0` to `v` (D11); sprites may be wider and taller than 16.
+
 `SPRITES[name] = { w, h, frames }` where `frames` is an array and each frame is an array of `h` strings of length `w`. Example of a 4 by 3, two frame sprite:
 
 ```js
@@ -601,6 +1232,8 @@ coin: { w: 4, h: 3, frames: [
 ```
 
 ### 3.4 Required sprite list
+
+> **Superseded by the v2 delta, D11, and [V2.11].** Kept for history.
 
 The art builder implements exactly these names, sizes and frame counts: nothing added, nothing missing. The harness checks every name with `has()` and every frame count with `frames()`. Frame semantics are fixed so `game.js` can index them blind.
 
@@ -688,6 +1321,8 @@ Procedural elements drawn by `game.js` with `COLOR`, not sprites: patience bar (
 
 ### 3.5 Anchors the renderer relies on
 
+> **Superseded by [V2.1], [V2.3] and [V2.11]:** people are 16x24 drawn at (px, py - 8); slot, spot and stack anchors are in [V2.3].
+
 - Every 16 by 16 person sprite stands on its bottom row; feet at `py + 15`.
 - Station sprites fill their tile; the drum fills two tiles tall.
 - Plate stacks on the table draw at `(tile px + 4, tile py + 3)`, each further plate 1 px higher, up to 6. On the board, stacks draw at `(px + 1, py + 3)`, `(px + 8, py + 3)`, `(px + 1, py + 9)`, `(px + 8, py + 9)` for stack index 0 to 3, each up to 8 plates.
@@ -698,6 +1333,8 @@ Procedural elements drawn by `game.js` with `COLOR`, not sprites: patience bar (
 ## 4. `game.js` responsibilities
 
 ### 4.1 Boot
+
+> **Amended by the v2 delta, D9 and D14:** step 2 also notes `parsed.v === 1` for the update notice; `PitSim.game` gains `dog`, `fxLog` and `captureFrame`.
 
 `game.js` runs on `DOMContentLoaded` (it is deferred, so it may also run at once when `document.readyState !== 'loading'`). In order:
 
@@ -710,6 +1347,8 @@ Procedural elements drawn by `game.js` with `COLOR`, not sprites: patience bar (
 Frame loop: `dt = Math.min(PitSim.C.MAX_FRAME_DT, (now - last) / 1000)`; `sim.step(dt)`; pump events (`drainEvents` to aria-live, saves, panels, pops); render; schedule the next frame. On `visibilitychange` to hidden during service: `sim.setPaused(true)` and open the pause panel; the clock is reset on the next visible frame so no big `dt` arrives.
 
 ### 4.2 Canvas
+
+> **Superseded by the v2 delta, D13, and [V2.13].** Kept for history.
 
 An offscreen `HTMLCanvasElement` of 208 by 240 (`MAP.W * 16`, `MAP.H * 16`) is drawn every frame at 1x and blitted to `#cv`. Scale, recomputed on `resize` and `orientationchange`:
 
@@ -725,6 +1364,8 @@ cv.style.width = (208 * scale / dpr) + 'px'; cv.style.height = (240 * scale / dp
 `imageSmoothingEnabled = false` on both contexts, set again after any resize (resizing a canvas resets its context state).
 
 ### 4.3 Render order
+
+> **Superseded by the v2 delta, D12, and [V2.12].** Kept for history.
 
 Each frame, into the offscreen context, in this order:
 
@@ -744,6 +1385,8 @@ Each frame, into the offscreen context, in this order:
 Then one `drawImage` of the offscreen canvas onto `#cv` at the integer scale.
 
 ### 4.4 DOM: ids and ownership
+
+> **Amended by the v2 delta, D14:** new `#seats` in `#clip-top`, a Decor block with `buy-{decorId}` in `#shop`, `sell-{decorId}` on the Broke card, a Seat tips row on the till. Game deviation 6 ids (`#howto-btn`, `#howto-close`, `#crowd`) stay.
 
 The shell (`index.html`, section 6) carries every container below as an empty element. `game.js` fills them with `createElement` and `textContent`; it never uses `innerHTML`. Ids are the contract between the shell, `game.js` and the harness.
 
@@ -814,6 +1457,8 @@ Panels open by removing `hidden` from the section and from `#panels`, moving foc
 
 ### 4.5 Input
 
+> **Amended by the v2 delta, D13:** the tap mapping uses 176 by 192 virtual px with station rect hit tests first; the `13` and `15` below are v1.
+
 - Pointer: `pointerdown` on `#cv` (and `touchstart` with `preventDefault` to stop double tap zoom) maps client coordinates to the tile: `tx = floor((clientX - rect.left) / rect.width * 13)`, `ty = floor((clientY - rect.top) / rect.height * 15)`, then `sim.walkTo(tx, ty)`. Ignored while a panel is open.
 - `#act` click: `sim.interact()`.
 - Chips click: `sim.selectMeat(id)`.
@@ -822,9 +1467,13 @@ Panels open by removing `hidden` from the section and from `#panels`, moving foc
 
 ### 4.6 Status line
 
+> **Superseded by the v2 delta, D14** for the precedence (the save notice sits second).
+
 `#status` shows one message by the precedence of [spec 14.3]: `Saving is off in this browser.` (4 s at load, once) > `Can't get there` (1.5 s after `blocked`) > `Gate opens in {n}` (prep, `n = ceil(GATE_OPENS - clock)`) > `Last call` (3 s after `last_call`) > `sim.holding()`.
 
 ### 4.7 Events to aria-live and saves
+
+> **Amended by the v2 delta, D10:** the to go and seat tip sentences, and the sold out walk past sentence of game deviation 7.
 
 `#live` receives messages through a queue: one message per second at most, identical messages within 5 s dropped [spec 16]. The mapping, with meat label `L = MEATS[meat].label` and cooker name `K = STRINGS.cooker[cooker]`:
 
@@ -856,6 +1505,8 @@ Save failure sentence: `Saving is off in this browser.` is also queued to `#live
 
 ### 4.8 Reduced motion
 
+> **Superseded by the v2 delta, D14.**
+
 `matchMedia('(prefers-reduced-motion: reduce)')`, read at boot and on change. When it matches: no smoke sprites, no shake, coin pops hold still for 600 ms, no served hop (`hop` is ignored), rain is a flat band with no streaks, `fire` shows frame 0, no idle bobbing. Walking frames, cooking arcs, patience bars and gauges still animate [spec 17]. Panels never animate in either mode.
 
 ### 4.9 Strings owned by `game.js`
@@ -863,6 +1514,8 @@ Save failure sentence: `Saving is off in this browser.` is also queued to `#live
 Every string from [spec 18] that is not in `PitSim.STRINGS` or produced by a sim method, spelled exactly as the spec writes it: the header words, the status line forms, the clipboard lines, the shop section headings (`Meat`, `Charcoal`, `Gear`, `Hires`), `Daily costs: ice and trash bags, 10.`, `Game numbers. Not real prices and not a cooking guide.`, the till lines of [spec 9] including `Food, charcoal and spoilage were paid at the shop. They are listed so you can see where the money went.`, the pause, confirm, Broke and Coming next texts of [spec 11 and 12], and the Controls list. Star string: `'★'.repeat(round(rep / 20)) + '☆'.repeat(5 - round(rep / 20))`.
 
 ### 4.10 `PitSim.game`
+
+> **Superseded by the v2 delta, D14:** version `'0.3.0'`, `advance` refreshes the DOM and draws, new `dog`, `fxLog`, `captureFrame`.
 
 ```ts
 PitSim.game = {
@@ -878,6 +1531,8 @@ PitSim.game = {
 ---
 
 ## 5. Harness: `games/pit-sim/dev/smoke.mjs`
+
+> **Amended by the v2 delta, D15:** the v2 step list (36 steps: the 27 v1 steps plus 9 new) replaces the lists below, which describe the v1 contract and not the shipped v1 harness.
 
 Run with `node games/pit-sim/dev/smoke.mjs` from the repo root. Exit code 0 on success, 1 on any failed assertion, with one line per step (`ok` or `FAIL` plus the step name). It is never served or linked.
 
@@ -914,6 +1569,8 @@ Steps, each asserted:
 
 ## 6. `index.html`
 
+> **Amended by the v2 delta, D13:** the Game builder adds `@media (max-width: 899px) { #wrap { margin: 0 -8px; width: auto; } }` and nothing else.
+
 Written with this contract at `games/pit-sim/index.html`. It is the shell every builder targets and nobody edits. Contents, in order: `<!doctype html>`, `html lang="en"`, head with `charset`, `viewport width=device-width, initial-scale=1`, `title` `Your Pit`, `description` meta, `color-scheme dark`, `theme-color #1b1714`, one inline `<style>`, three `<script defer>` tags for `./sprites.js`, `./sim.js`, `./game.js`; body with the skeleton of section 4.4, static text only in `#title` and `#foot`, the `noscript` line `This game runs in your browser and needs JavaScript turned on.`, the visually hidden `#live`. Zero inline script, zero inline handlers, no external resource, no dash characters.
 
 The inline style defines: a reset (`box-sizing: border-box`, zero margins), the palette as custom properties on `:root` (`--k`, `--u`, `--c`, `--o`, `--y`, `--m`, `--h`, `--i`), body cream on near black in `ui-monospace, Menlo, Consolas, monospace`, the single column layout with 16 px gutters and the 44 px header, `#wrap` as a centered near black letterbox, `#status` at 24 px, `#act` 48 px tall full width orange with near black text, `#chips` as five equal buttons at least 44 px tall, panel sections as umber boxes with hairline borders over an 85 percent near black scrim, the two column layout at 900 px and up with a 320 px right column holding `#panels` inline, `button` defaults (44 px minimum, orange primary, umber secondary via `.alt`), focus ring 2 px gold with a 2 px offset, `.sr` visually hidden, `[hidden] { display: none !important }`, `.muted`, `.row`, `.card`, `.dl` classes `game.js` may use, and a `@media (prefers-reduced-motion: reduce)` block that disables transitions (there are none anyway).
@@ -923,6 +1580,8 @@ Class names `game.js` may rely on: `.primary`, `.alt`, `.muted`, `.row` (a shop 
 ---
 
 ## 7. Decisions made where the spec was silent
+
+> **v2:** items 6 (fixed routes), 9 (unhappy face frame 3 now covers `_down` frames 3 and 4 and `_side` frame 3), 11 (font unchanged) and 12 (the canopy is one 40 by 32 umbrella sprite) are read with D8 and D11; D16 lists the v2 decisions.
 
 Listed so nobody re-decides them:
 
