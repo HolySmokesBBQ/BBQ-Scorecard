@@ -296,7 +296,7 @@
 //        glyphs. Cash is yellow, the counter tip white, the seat tip pink.
 //     b. The heart sits on the seat's column at (seat x, seat y - 24) and is drawn at 2x (16 by 16);
 //        the seat tip number sits left of the seat at (seat x - 30, seat y - 22).
-//     c. Unowned gear and decor footprints draw a ghost of what will stand there at GHOST_ALPHA
+//     c. (v3.6) Unowned gear and decor spots show a "+" mark on the ground; no ghosts
 //        under their dashed outline (layer 1, the footprint's sort key); captureFrame marks those
 //        records ghost: true. The dashed outline is drawn in the outline color on pavers and cream
 //        on the lawn and hedge.
@@ -318,7 +318,7 @@
 //        seat y - 34). Every number is clamped inside the canvas. A number whose box overlaps one
 //        that started under 0.5 s ago (within 8 px in y) starts 0.3 s later per such number,
 //        at most 3; a heart within 12 px of one that started under 0.5 s ago starts 0.3 s later.
-//     c. Ghosts of unowned gear and decor draw only in the morning and evening, at GHOST_ALPHA
+//     c. (v3.6) The "+" marks show in prep and in service
 //        0.5. The dashed outlines draw in every phase.
 //     d. The unbought Flower bed draws bed frame 3 (tilled soil) on its footprint. Lawn tiles use
 //        clover frame 1 inside unowned decor footprints and where (x * 5 + y * 3) % 3 === 0.
@@ -441,7 +441,6 @@ const BURST_OFFS = [[-3, 0], [0, -2], [3, 0]];             // from the burnt pie
 const FX_LOG_MAX = 500;
 const LAWN_FROM_ROW = 6;                                   // fence, hedge and bed tiles sit on lawn from this row down
 const OVERFLOW_OK = /^(shadow|hand_|player_|buddy_|tender_|prep_|cust[0-9]_)/;
-const GHOST_ALPHA = 0.5;                                   // unowned gear and decor, morning and evening only
 const CONTROLS_H = 24 + 48 + 52 + 8;                       // #status, #act, #chips with its margin, slack (D13 3x test)
 const CASH_ABOVE_PX = 26;                                  // the cash number sits at the served customer's py - 26
 const STAGGER_S = 0.3;                                     // a number or heart that would overlap a fresh one waits this long
@@ -454,15 +453,6 @@ const BANNER_TEXT_W = 164;                                 // widest line, art.t
 const BANNER_MAX_LINES = 2;
 
 // Perimeter of a 12 by 12 ring, clockwise from the top center (44 pixels).
-const RING = (function () {
-  const n = 12, pts = [];
-  for (let x = 6; x < n; x++) pts.push([x, 0]);
-  for (let y = 1; y < n; y++) pts.push([n - 1, y]);
-  for (let x = n - 2; x >= 0; x--) pts.push([x, n - 1]);
-  for (let y = n - 2; y >= 1; y--) pts.push([0, y]);
-  for (let x = 0; x < 6; x++) pts.push([x, 0]);
-  return pts;
-})();
 
 // Page state.
 const el = {};
@@ -1044,7 +1034,7 @@ function cookerWarns(ck) {
   return false;
 }
 // Left of the chimney vent (round 1), so the dark warning puffs rise clear of the bubble.
-function warnBubblePos(st) { return { x: st.draw.x - 2, y: st.draw.y - 11 }; }
+function warnBubblePos(st) { const d = drawOf(st); return { x: d.x - 2, y: d.y - 11 }; }
 
 // tut-pulse on the DOM target, and on #act when the target station is in reach and usable ([T 2.6]).
 function syncPulse(verb) {
@@ -1165,43 +1155,20 @@ function readSeed() {
 
 function exposeGame() {
   PitSim.game = {
-    // v3.4: the client x, y of tile (tx, ty)'s centre on the yard canvas, for the harness taps.
-    tileToClient: function (tx, ty) {
-      // v3.5: the projected tile centre; on a station tile whose centre another sprite covers,
-      // the nearest point of the station's own sprite that a tap there would hit.
-      const r = el.cv.getBoundingClientRect();
-      let ux = isoX(tx * TILE + 8, ty * TILE + 8), uy = isoY(tx * TILE + 8, ty * TILE + 8);
-      const st = MAP.stations.find(function (q) { return owned(q) && q.tiles.some(function (t) { return t.x === tx && t.y === ty && owned(t); }); });
-      if (st && hitAt(ux, uy).st !== st) {
-        let best = null, bd = Infinity;
-        const rs = stationRects(st);
-        for (let i = 0; i < rs.length; i++) {
-          for (let yy = rs[i].y + 0.5; yy < rs[i].y + rs[i].h; yy += 1) {
-            for (let xx = rs[i].x + 0.5; xx < rs[i].x + rs[i].w; xx += 1) {
-              const d = (xx - ux) * (xx - ux) + (yy - uy) * (yy - uy);
-              if (d < bd && hitAt(xx, yy).st === st) { bd = d; best = [xx, yy]; }
-            }
-          }
-        }
-        if (best) { ux = best[0]; uy = best[1]; }
-      } else if (!st && tx >= 0 && tx < MAP.W && ty >= 0 && ty < MAP.H && sim.walkable(tx, ty)) {
-        // A walkable tile whose centre a padded object box takes: the nearest point of the tile's
-        // diamond that a tap there walks to this tile.
-        const want = function (h) { return h.tile && h.tile.x === tx && h.tile.y === ty; };
-        if (!want(hitAt(ux, uy))) {
-          let best = null, bd = Infinity;
-          for (let yy = -3.5; yy <= 3.5; yy += 1) {
-            for (let xx = -7.5; xx <= 7.5; xx += 1) {
-              if (Math.abs(xx) / 8 + Math.abs(yy) / 4 >= 0.9) continue;
-              const d = xx * xx + yy * yy;
-              if (d < bd && want(hitAt(ux + xx, uy + yy))) { bd = d; best = [ux + xx, uy + yy]; }
-            }
-          }
-          if (best) { ux = best[0]; uy = best[1]; }
-        }
-      }
-      return { x: r.left + ux / SW * r.width, y: r.top + uy / SH * r.height };
+    // v3.6: the client x, y a tap on tile (tx, ty) acts on, after panning it into view (spec F).
+    tileToClient: tileToClient,
+    camera: {
+      // z and cssPerRp: CSS px per rp; device: device px per rp.
+    get: function () { const o = camOrigin(); return { mode: cam.mode, x0: o[0], y0: o[1], vw: cam.vw, vh: cam.vh, z: cssPerRp(), cssPerRp: cssPerRp(), device: cam.z, follow: cam.follow, home: homeBox() }; },
+      set: function (mode) { camSet(mode); try { render(); } catch (e) { fail(e); } return cam.mode; },
+      centerOn: function (tx, ty, instant) { const c = tileRp(tx, ty); cam.ease = null; camCenter(c[0], c[1]); },
+      reveal: function (tx, ty) { camReveal(tx, ty); },
+      pan: function (dx, dy) { camPan(dx, dy); },
+      home: function () { camHome(); },
+      follow: function (on) { cam.follow = on !== false; }
     },
+    get previewLook() { return previewLook; },
+    tileRp: tileRp,
     version: VERSION,
     sim: sim,
     el: el,
@@ -1279,49 +1246,7 @@ function listenMq(mq, fn) {
 
 // ---------------------------------------------------------------- canvas
 
-function setupCanvas() {
-  off = document.createElement('canvas');
-  off.width = GEO.W; off.height = GEO.H;
-  octx = off.getContext('2d');
-  octx.setTransform(RS, 0, 0, RS, 0, 0);
-  vctx = el.cv.getContext('2d');
-  resize();
-  window.addEventListener('resize', resize);
-  window.addEventListener('orientationchange', resize);
-}
 
-// D13 (review round 2): the target CSS scale is 3 on desktop when the canvas and the controls
-// under it fit, 2 on phones (8 px canvas gutters), the fit width below 368 px; the backing store
-// takes floor(target * dpr) device pixels per game pixel and the CSS size follows from that, so
-// every game pixel is a whole number of device pixels.
-function resize() {
-  const vw = document.documentElement.clientWidth || window.innerWidth || 375;
-  const vh = window.innerHeight || 0;
-  const dpr = window.devicePixelRatio || 1;
-  // v3.5: integer k device px per render px on the 352 by 288 iso yard, 4 CSS px gutters.
-  const RW = GEO.W, RH = GEO.H;
-  let target;
-  // Phones fit the width. Laptops take the largest scale that fits the stage column (the page is
-  // up to DESK_MAX_W wide, less its padding and the 320 px side column) and the height left over
-  // by the header and the controls under the yard.
-  target = Math.max(0.25, (vw - 8) / RW);
-  if (vw >= 900) {
-    const colW = Math.min(vw, DESK_MAX_W) - 32 - 320 - 24;
-    target = Math.max(0.25, Math.min(colW / RW, (vh - 44 - 16 - CONTROLS_H) / RH));
-  }
-  kpx = Math.max(1, Math.floor(target * dpr + 1e-6));
-  const css = kpx / dpr;
-  el.cv.width = RW * kpx;
-  el.cv.height = RH * kpx;
-  el.cv.style.width = (RW * css) + 'px';
-  el.cv.style.height = (RH * css) + 'px';
-  snapCanvas(dpr);
-  vctx.imageSmoothingEnabled = false;
-  octx.imageSmoothingEnabled = false;
-  if (sim) { try { render(); } catch (e) { fail(e); } }
-  if (currentPanel === 'creator') { drawCrSign(); drawCreatorScene(); }
-  if (currentPanel === 'week') fitWeek();
-}
 
 // Nudge the canvas so its top left corner lands on a whole device pixel.
 function snapCanvas(dpr) {
@@ -1357,6 +1282,7 @@ function frame(now) {
   sim.step(dt);
   pump();
   observe();
+  camFollow(dt);
   s = sim.state;
   const frozen = s.paused || currentPanel !== null || s.phase !== 'service';
   if (!frozen) {
@@ -1397,6 +1323,7 @@ function onEvent(ev) {
   switch (ev.type) {
     case 'yard_open': {
       const s = sim.state;
+      camHome();
       const kind = ev.kind || todayKind(s);
       const secs = Math.max(0, Math.ceil(tGate(s) - s.clock));
       if (kind === 'booking' && s.today && s.today.booking) {
@@ -2236,7 +2163,7 @@ function ownRow(item) {
   const price = mk('span', { cls: 'price' });
   const name = nameCell(item, false);
   const eff = name.querySelector('.effect');
-  const row = mk('div', { cls: 'row' }, [name, price]);
+  const row = mk('div', { cls: 'row', attrs: { 'data-item': item.id } }, [name, price]);
   let ctl = null, ctlOwned = null;
   rowSink.push(function () {
     const s = sim.state;
@@ -3966,7 +3893,7 @@ function onNextDay() {
 function openSheet(kind, openerId, from) {
   sheetKind = kind;
   sheetOpener = openerId || null;
-  sheetFrom = from === 'hiring' ? 'hiring' : 'week';
+  sheetFrom = from === 'hiring' || from === 'yard' ? from : 'week';
   sheetMsg = '';
   shopOther = false;
   crewMsg = '';
@@ -3980,7 +3907,10 @@ function closeSheet() {
   const opener = sheetOpener;
   const from = sheetFrom;
   dropSheet();
-  if (from === 'hiring' && loopOf(sim.state) === 'hiring') {
+  if (from === 'yard') {
+    resumeFromPause();
+    return;
+  } else if (from === 'hiring' && loopOf(sim.state) === 'hiring') {
     openHiring(false);
   } else {
     openWeek();
@@ -5103,7 +5033,10 @@ function refreshCreatorRows() {
       if (!out) continue;
       const word = lookLabel(key, v).toUpperCase();
       clear(out);
-      uiPut(out, word, 2, UI.gold, null, word);
+      const room = out.clientWidth > 0 ? out.clientWidth - 8 : 120;
+      const fit = fitSign(word, room, [2], UI.gold, null);
+      if (fit) { out.appendChild(fit); out.appendChild(mk('span', { cls: 'sr', text: word })); }
+      else uiPut(out, word, 2, UI.gold, null, word);
       const pips = mk('span', { cls: 'pips', attrs: { 'aria-hidden': 'true' } });
       for (let k = 0; k < n; k++) pips.appendChild(mk('span', { cls: 'pp' + (k === v ? ' on' : '') }));
       out.appendChild(pips);
@@ -5128,79 +5061,15 @@ function drawCrSign() {
   const room = Math.max(120, ((sign.parentNode && sign.parentNode.clientWidth) || 330) - 56);
   // R-14: the sticky phone preview keeps the sign at 2x so the scene stays the larger part.
   const big = (document.documentElement.clientWidth || 375) >= 900;
-  const c = fitSign(name, room, big ? [3, 2] : [2], '#fff0c8', { bold: true, shadow: '#120c08' });
+  const c = fitSign(name, room, big ? [3, 2] : [2], UI.signText, { bold: true, shadow: UI.woodX });
   if (c) {
     sign.appendChild(c);
     sign.appendChild(mk('span', { cls: 'sr', text: name }));
   } else {
-    uiPut(sign, name.toUpperCase(), 3, '#fff0c8', { shadow: '#120c08' }, name);
+    uiPut(sign, name.toUpperCase(), 3, UI.signText, { bold: true, shadow: UI.woodX }, name);
   }
 }
 
-// The backyard patch with the draft look (deviation 38), at an integer device pixel scale. Q-6: on a
-// phone (the sticky preview) the patch is cropped to the panel's width at 4x (3x under 700 px of
-// screen height) and 44 px tall, the pitmaster near the middle and the kettle at his right; the
-// desktop column keeps the 64 by 56 patch at up to 5x.
-function drawCreatorScene() {
-  const cv = document.getElementById('cr-scene');
-  if (!cv) return;
-  const pvw = document.getElementById('cr-preview');
-  const vw = document.documentElement.clientWidth || 375;
-  const phone = vw < 900;
-  // The preview's content width (its sticky phone padding is 12 a side), less the scene's frame.
-  const avail = (pvw && pvw.clientWidth ? pvw.clientWidth : 300) - (phone ? 24 : 0) - 8;
-  const css = phone ? ((window.innerHeight || 812) >= 700 ? 4 : 3) : Math.max(1, Math.min(5, Math.floor(avail / CR_SCENE_W)));
-  const W = phone ? Math.max(48, Math.min(128, Math.floor(avail / css))) : CR_SCENE_W;
-  const H = phone ? 44 : CR_SCENE_H;
-  const dy = phone ? -10 : 0;                                 // the crop starts 10 px down the patch
-  const px0 = phone ? Math.round(W * 0.42) - 8 : 8;           // the pitmaster's left
-  const kx = phone ? Math.min(W - 12, px0 + 30) : 40;         // the kettle's left
-  // v3.4: the preview is art3 at 2 render px per sim px, through the bridge (v2 art if art3 lacks one).
-  if (!crOff) crOff = document.createElement('canvas');
-  if (crOff.width !== W * RS || crOff.height !== H * RS) { crOff.width = W * RS; crOff.height = H * RS; }
-  const g = crOff.getContext('2d');
-  g.setTransform(RS, 0, 0, RS, 0, 0);
-  g.imageSmoothingEnabled = false;
-  g.globalAlpha = 1;
-  g.fillStyle = COLOR.K;
-  g.fillRect(0, 0, W, H);
-  const draw = function (name, x, y, f) {
-    if (!art.has(name)) return;
-    const ff = Math.max(0, Math.min(art.frames(name) - 1, f | 0)), sz = size(name);
-    if (B3 && B3.draw(g, name, x, y, sz[0], sz[1], ff, false)) return;
-    art.draw(g, name, x, y, ff, false);
-  };
-  for (let x = 0; x < Math.ceil(W / TILE); x++) {
-    draw('fence_back', x * TILE, dy, 0);
-    draw('lawn_a', x * TILE, TILE + dy, (x * 5 + 3) % 3 === 0 ? 1 : 0);
-    draw('paver', x * TILE, 2 * TILE + dy, (x * 7 + 6) % 2);
-    draw('paver', x * TILE, 3 * TILE + dy, (x * 7 + 9) % 2);
-  }
-  // P-15: the pitmaster and the kettle with three puffs over its vent.
-  draw('kettle', kx, 28 + dy, 2);
-  const ph = reduced ? 0.15 : (crAnim % 1.2) / 1.2;
-  for (let k = 0; k < 3; k++) {
-    const age = (k + ph) / 3;
-    draw('smoke', kx + 7 + Math.round(age * 4), Math.round(20 - age * 18) + dy, Math.min(2, Math.floor(age * 3)));
-  }
-  draw('shadow', px0 + 2, 49 + dy, 0);
-  draw('player_down', px0, 28 + dy, 0);
-  const d = dpr();
-  const k = Math.max(1, Math.floor(css * d / RS + 1e-6));
-  const RWc = W * RS, RHc = H * RS;
-  if (cv.width !== RWc * k || cv.height !== RHc * k) { cv.width = RWc * k; cv.height = RHc * k; }
-  cv.style.width = (RWc * k / d) + 'px';
-  cv.style.height = (RHc * k / d) + 'px';
-  const vg = cv.getContext('2d');
-  vg.imageSmoothingEnabled = false;
-  vg.drawImage(crOff, 0, 0, RWc, RHc, 0, 0, RWc * k, RHc * k);
-  // R-14 and Q-6: focused rows scroll clear of the sticky preview and the sticky Fire it up.
-  const foot = document.getElementById('cr-foot');
-  if (el.creator) {
-    el.creator.style.scrollPaddingTop = phone && pvw ? (pvw.offsetHeight + 8) + 'px' : '';
-    el.creator.style.scrollPaddingBottom = phone && foot ? (foot.offsetHeight + 8) + 'px' : '';
-  }
-}
 
 function onCreatorGo() {
   const n = document.getElementById('cr-name'), p = document.getElementById('cr-pit');
@@ -5295,7 +5164,10 @@ function buildSeasonEnd() {
 // ---------------------------------------------------------------- input
 
 function setupInput() {
-  el.cv.addEventListener('pointerdown', onPointer);
+  el.cv.addEventListener('pointerdown', onPtrDown);
+  el.cv.addEventListener('pointermove', onPtrMove);
+  el.cv.addEventListener('pointerup', onPtrUp);
+  el.cv.addEventListener('pointercancel', onPtrUp);
   el.cv.addEventListener('touchstart', function (e) { e.preventDefault(); }, { passive: false });
   el.act.addEventListener('click', onAct);
   document.addEventListener('keydown', onKeyDown);
@@ -5304,189 +5176,74 @@ function setupInput() {
   document.addEventListener('visibilitychange', onVisibility);
 }
 
-// The drawn boxes of a station in sim px: its sprite, plus the counter extension when owned (D13).
-// With the art3 look the sprite's box is the art3 sprite's, clipped to the sim yard.
-function stationRectsSim(st) {
-  const sz = size(st.sprite);
-  let r0 = { x: st.draw.x, y: st.draw.y, w: sz[0], h: sz[1] };
-  const b3 = B3 && B3.bounds ? B3.bounds(st.sprite, st.draw.x, st.draw.y, sz[0], sz[1], 0) : null;
-  if (b3) {
-    const x0 = Math.max(0, b3.x), y0 = Math.max(0, b3.y);
-    const x1 = Math.min(VW, b3.x + b3.w), y1 = Math.min(VH, b3.y + b3.h);
-    if (x1 > x0 && y1 > y0) r0 = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
-  }
-  const out = [r0];
-  if (st.type === 'table' && extTile && owned(extTile)) out.push(extRect());
-  return out;
-}
-// v3.5: the same boxes on screen (canvas units), unclipped, moved onto the station's tiles.
-function stationRects(st) {
-  const sz = size(st.sprite), sh = stationShift(st);
-  const b3 = B3 && B3.bounds ? B3.bounds(st.sprite, st.draw.x, st.draw.y, sz[0], sz[1], 0) : null;
-  const r0 = b3 || { x: st.draw.x, y: st.draw.y, w: sz[0], h: sz[1] };
-  const out = [{ x: r0.x + sh.dx, y: r0.y + sh.dy, w: r0.w, h: r0.h }];
-  if (st.type === 'table' && extTile && owned(extTile)) { const e = extRect(); out.push({ x: e.x + sh.dx, y: e.y + sh.dy, w: e.w, h: e.h }); }
-  return out;
-}
-// The on screen box of a prop or decor sprite drawn at (x, y) with shift sh.
-function spriteRect(name, x, y, sh) {
-  const sz = size(name);
-  const b3 = B3 && B3.bounds ? B3.bounds(name, x, y, sz[0], sz[1], 0) : null;
-  const r = b3 || { x: x, y: y, w: sz[0], h: sz[1] };
-  return { x: r.x + sh.dx, y: r.y + sh.dy, w: r.w, h: r.h };
-}
-function inRect(r, x, y) { return x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h; }
 
-// v3.5 taps by object: what a tap at canvas units (ux, uy) acts on. Stations, props and seats are
-// hit-tested by their sprite boxes, topmost (latest drawn) first. A station hit walks to the
-// station; a prop or seat hit walks to the tile under the tap when the player can stand there, else
-// the standable tile nearest the object. Open ground maps back through the projection: a station
-// tile walks to the station, else the standable tile nearest the tap. Returns { st } or { tile }.
-// A tap at canvas units (ux, uy): on the drawn tutorial arrow, its station (round 2); else tapTarget.
-// Fix 5: on a phone a guest is about 18 by 26 CSS px, so every object box also takes taps within
-// 6 CSS px of it (pad, in canvas units); a box hit straight on wins over a padded one.
-function tapPad() {
-  const r = el.cv.getBoundingClientRect();
-  return r.width > 0 ? 6 * SW / r.width : 0;
-}
-function hitAt(ux, uy, pad) {
-  const ab = arrowBox();
-  const ax = ab ? ab.x + ab.sh.dx : 0, ay = ab ? ab.y + ab.sh.dy : 0;
-  if (ab && ux >= ax - 2 && ux < ax + 10 && uy >= ay && uy < ay + 12) return { st: ab.st };
-  return tapTarget(ux, uy, pad === undefined ? tapPad() : pad);
-}
-// The angled picnic table's screen box (canvas units) for a v2 picnic draw at (x, y).
-function picnicRect(x, y) {
-  const g = picnicGeo(x, y), R = g.row * TILE, top = B3 && B3.PICNIC_Z ? B3.PICNIC_Z.top / RS : 10;
-  const x0 = isoX(g.x0, R + 20), x1 = isoX(g.x1, R - 9), y0 = isoY(g.x0, R - 9) - top, y1 = isoY(g.x1, R + 20);
-  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
-}
-// A person's screen box from the ground point (gx, gy) sim px their feet stand on, lift units up.
-function personRect(gx, gy, lift, seated) {
-  const fx = isoX(gx, gy), fy = isoY(gx, gy) - lift;
-  return seated ? { x: fx - 5, y: fy - 12, w: 10, h: 13 } : { x: fx - 5, y: fy - 13, w: 10, h: 14 };
-}
-// Where a seat's sitter sits: the far bench point of its angled table, else the seat tile centre.
-function seatPoint(seat) {
-  const g = seatPicnic(seat);
-  if (g && B3 && B3.ready && B3.PICNIC_Z) return { gx: seat.x * TILE + 8, gy: g.row * TILE + B3.PICNIC_Z.farV, lift: B3.PICNIC_Z.bench / RS };
-  return { gx: seat.x * TILE + 8, gy: seat.y * TILE + 8, lift: 0 };
-}
-function tapTarget(ux, uy, pad) {
-  const s = sim.state;
-  const g = unIso(ux, uy);
-  const objs = [];
-  pad = pad > 0 ? pad : 0;
-  for (let i = 0; i < MAP.stations.length; i++) {
-    const st = MAP.stations[i];
-    if (!owned(st)) continue;
-    objs.push({ d: stationShift(st).depth, k: st.sortRow, rects: stationRects(st), st: st });
-  }
-  for (let i = 0; i < MAP.props.length; i++) {
-    const p = MAP.props[i], sh = propShift(p);
-    objs.push({ d: sh.depth, k: p.sortRow, rects: [isPicnic(p.sprite) ? picnicRect(p.draw.x, p.draw.y) : spriteRect(p.sprite, p.draw.x, p.draw.y, sh)], sh: sh });
-  }
-  for (let i = 0; i < MAP.decor.length; i++) {
-    const spot = MAP.decor[i];
-    if (s.decor[spot.id] !== true) continue;
-    for (let j = 0; j < spot.draws.length; j++) {
-      const d = spot.draws[j];
-      if (d.overhead || d.sprite === 'bed') continue;
-      const sh = decorShift(spot, d);
-      objs.push({ d: sh.depth, k: d.sortRow, rects: [isPicnic(d.sprite) ? picnicRect(d.x, d.y) : spriteRect(d.sprite, d.x, d.y, sh)], sh: sh });
-    }
-  }
-  // Seats and the guests (standing or seated), each acting on the walkable tile nearest it.
-  for (let i = 0; i < MAP.seats.length; i++) {
-    const seat = MAP.seats[i];
-    if (seat.decor && s.decor[seat.decor] !== true) continue;
-    const q = seatPoint(seat), cx = isoX(q.gx, q.gy), cy = isoY(q.gx, q.gy) - q.lift;
-    objs.push({ d: q.gx + q.gy, k: seat.y, rects: [{ x: cx - 8, y: cy - 4, w: 16, h: 8 }], at: [seat.x * TILE + 8, seat.y * TILE + 8] });
-  }
-  for (let i = 0; i < s.customers.length; i++) {
-    const c = s.customers[i], seat = c.mode === 'eating' ? seatOf(c) : null;
-    if (seat) {
-      const q = seatPoint(seat);
-      objs.push({ d: q.gx + q.gy + 0.5, k: seat.y, rects: [personRect(q.gx, q.gy, q.lift, true)], at: [seat.x * TILE + 8, seat.y * TILE + 8] });
-    } else {
-      const gx = Math.round(c.px) + 8, gy = Math.round(c.py) + 8;
-      objs.push({ d: gx + gy, k: Math.floor(gy / TILE), rects: [personRect(gx, gy, 0, false)], at: [gx, gy] });
-    }
-  }
-  objs.sort(function (a, b) { return (b.d - a.d) || (b.k - a.k); });
-  const tx = Math.floor(g.x / TILE), ty = Math.floor(g.y / TILE);
-  const standable = tx >= 0 && tx < MAP.W && ty >= 0 && ty < MAP.H && sim.walkable(tx, ty);
-  const act = function (o) {
-    if (o.st) return { st: o.st };
-    if (standable) return { tile: { x: tx, y: ty } };
-    if (o.at) return { tile: nearestWalkable(o.at[0], o.at[1]) };
-    const f = o.sh.fp;
-    return { tile: nearestWalkable((f[0] + f[2] + 1) * TILE / 2, (f[1] + f[3] + 1) * TILE / 2) };
-  };
-  for (let i = 0; i < objs.length; i++) {
-    if (objs[i].rects.some(function (r) { return inRect(r, ux, uy); })) return act(objs[i]);
-  }
-  if (tx >= 0 && tx < MAP.W && ty >= 0 && ty < MAP.H) {
-    for (let i = 0; i < objs.length; i++) {
-      const st = objs[i].st;
-      if (st && st.tiles.some(function (t) { return t.x === tx && t.y === ty && owned(t); })) return { st: st };
-    }
-  }
-  if (pad > 0) {
-    const padded = function (r) { return ux >= r.x - pad && ux < r.x + r.w + pad && uy >= r.y - pad && uy < r.y + r.h + pad; };
-    for (let i = 0; i < objs.length; i++) {
-      if (objs[i].rects.some(padded)) return act(objs[i]);
-    }
-  }
-  if (standable) return { tile: { x: tx, y: ty } };
-  return { tile: nearestWalkable(g.x, g.y) };
-}
 function extRect() {
   const sz = size('counter_ext');
   return { x: extTile.x * TILE, y: (extTile.y + 1) * TILE - sz[1], w: sz[0], h: sz[1] };
 }
 
-// Active stations in y-sort draw order (key, draw x, list order); stations share one layer.
-function stationsInDrawOrder() {
-  const list = [];
-  for (let i = 0; i < MAP.stations.length; i++) {
-    const st = MAP.stations[i];
-    if (!owned(st)) continue;
-    list.push({ st: st, k: st.sortRow * TILE + 15, x: st.draw.x, o: i });
-  }
-  list.sort(function (a, b) { return (a.k - b.k) || (a.x - b.x) || (a.o - b.o); });
-  return list;
-}
 
-function stationAt(vx, vy) {
-  const list = stationsInDrawOrder();
-  for (let i = list.length - 1; i >= 0; i--) {
-    const rects = stationRects(list[i].st);
-    for (let j = 0; j < rects.length; j++) {
-      const r = rects[j];
-      if (vx >= r.x && vx < r.x + r.w && vy >= r.y && vy < r.y + r.h) return list[i].st;
-    }
-  }
-  return null;
-}
 
-function onPointer(e) {
+// v3.6 (spec C, F): a pointer that moves more than 8 CSS px is a drag that pans the camera, never a
+// tap; two pointers pinch (together: far view, apart: near view, centred on the pinch); a pointer
+// that lifts without dragging taps.
+const ptrs = new Map();
+let dragP = null, pinchP = null;
+function onPtrDown(e) {
   if (e.button !== undefined && e.button !== 0) return;
+  if (currentPanel) return;
+  ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  try { el.cv.setPointerCapture(e.pointerId); } catch (err) { /* capture is optional */ }
+  if (ptrs.size === 2) {
+    const p = Array.from(ptrs.values());
+    pinchP = { d0: Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y) || 1, done: false };
+    dragP = null;
+  } else if (ptrs.size === 1) {
+    dragP = { id: e.pointerId, x0: e.clientX, y0: e.clientY, lx: e.clientX, ly: e.clientY, moved: false };
+  }
+}
+function onPtrMove(e) {
+  const q = ptrs.get(e.pointerId);
+  if (!q) return;
+  q.x = e.clientX; q.y = e.clientY;
+  if (pinchP && ptrs.size >= 2) {
+    const p = Array.from(ptrs.values());
+    const r = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y) / pinchP.d0;
+    if (!pinchP.done && r < 0.8 && cam.mode === 'near') { camSet('far'); pinchP.done = true; }
+    else if (!pinchP.done && r > 1.25 && cam.mode === 'far') {
+      const w = clientToWorld((p[0].x + p[1].x) / 2, (p[0].y + p[1].y) / 2);
+      camSet('near', w.X, w.Y);
+      pinchP.done = true;
+    }
+    return;
+  }
+  if (!dragP || dragP.id !== e.pointerId) return;
+  if (!dragP.moved && Math.hypot(e.clientX - dragP.x0, e.clientY - dragP.y0) > 8) dragP.moved = true;
+  if (dragP.moved) camPan(e.clientX - dragP.lx, e.clientY - dragP.ly);
+  dragP.lx = e.clientX; dragP.ly = e.clientY;
+}
+function onPtrUp(e) {
+  const had = ptrs.delete(e.pointerId);
+  if (pinchP) { if (ptrs.size === 0) pinchP = null; dragP = null; return; }
+  const d = dragP;
+  if (d && d.id === e.pointerId) dragP = null;
+  if (had && e.type === 'pointerup' && d && d.id === e.pointerId && !d.moved) tapAt(e.clientX, e.clientY);
+}
+
+function tapAt(clientX, clientY) {
   if (currentPanel) return;
   const s = sim.state;
   if (s.paused || s.phase !== 'service') return;
-  const r = el.cv.getBoundingClientRect();
-  if (!(r.width > 0 && r.height > 0)) return;
-  const vx = (e.clientX - r.left) / r.width * SW;
-  const vy = (e.clientY - r.top) / r.height * SH;
-  // Round 2: a tap on the drawn tutorial arrow counts as a tap on its station, since the arrow sits
-  // on a use tile or a tile above the station and tapping it is the natural first move.
-  const hit = hitAt(vx, vy);
+  const w = clientToWorld(clientX, clientY);
+  if (!(w.r.width > 0 && w.r.height > 0)) return;
+  const hit = hitWorld(w.X, w.Y);
+  if (hit.plus) { openForSale(hit.plus); return; }
   let tx = -1, ty = -1;
   if (hit.st) { tx = hit.st.tiles[0].x; ty = hit.st.tiles[0].y; }
   else if (hit.tile) { tx = hit.tile.x; ty = hit.tile.y; }
   const ok = sim.walkTo(tx, ty) === true;
   pump();
+  if (ok) cam.follow = true;
   if (tx >= 0 && tx < MAP.W && ty >= 0 && ty < MAP.H) {
     rings.push({ x: tx * TILE, y: ty * TILE, at: tAnim, ok: ok });
     if (rings.length > 6) rings.shift();
@@ -5496,6 +5253,50 @@ function onPointer(e) {
     squashAt = tAnim;
     const p = sim.state.player;
     log('squash', Math.round(p.px) - 1, Math.round(p.py) + TILE - 22);
+  }
+}
+
+// A tap on a "+": the game pauses and the Gear list opens on that row, highlighted (spec D).
+function openForSale(id) {
+  const s = sim.state;
+  if (s.phase === 'service' && !s.paused) sim.setPaused(true);
+  openSheet('gear', null, 'yard');
+  syncSheetRows();
+  const row = el['sheet-body'] ? el['sheet-body'].querySelector('[data-item="' + id + '"]') : null;
+  if (row) {
+    row.classList.add('hl');
+    if (typeof row.scrollIntoView === 'function') row.scrollIntoView({ block: 'center' });
+  }
+  announce((CATALOG.find(function (r) { return r.id === id; }) || { label: id }).label + ', in the Gear list.');
+}
+function syncSheetRows() { for (let i = 0; i < sheetRows.length; i++) sheetRows[i](); }
+
+// The backyard patch with the draft look (spec E): the in-yard pitmaster on three by three pavers
+// with a kettle beside him, 1:1 rp at the phone near scale (round(1.5 dpr) device px per rp; the two
+// column layout round(2 dpr)).
+function drawCreatorScene() {
+  const cv = document.getElementById('cr-scene');
+  if (!cv || !B3) return;
+  if (!crOff) crOff = document.createElement('canvas');
+  const P = B3.PREVIEW;
+  if (crOff.width !== P.w || crOff.height !== P.h) { crOff.width = P.w; crOff.height = P.h; }
+  const g = crOff.getContext('2d');
+  B3.preview(g, null);
+  previewLook = B3.previewLook;
+  const d = dpr();
+  const phone = (document.documentElement.clientWidth || 375) < 900;
+  const k = Math.max(1, Math.round((phone ? 1.5 : 2) * d));
+  if (cv.width !== P.w * k || cv.height !== P.h * k) { cv.width = P.w * k; cv.height = P.h * k; }
+  cv.style.width = (P.w * k / d) + 'px';
+  cv.style.height = (P.h * k / d) + 'px';
+  const vg = cv.getContext('2d');
+  vg.imageSmoothingEnabled = false;
+  vg.drawImage(crOff, 0, 0, P.w, P.h, 0, 0, P.w * k, P.h * k);
+  // R-14 and Q-6: focused rows scroll clear of the sticky preview and the sticky Fire it up.
+  const pvw = document.getElementById('cr-preview'), foot = document.getElementById('cr-foot');
+  if (el.creator) {
+    el.creator.style.scrollPaddingTop = phone && pvw ? (pvw.offsetHeight + 8) + 'px' : '';
+    el.creator.style.scrollPaddingBottom = phone && foot ? (foot.offsetHeight + 8) + 'px' : '';
   }
 }
 
@@ -5619,6 +5420,8 @@ function clearFx() {
   shakeUntil = 0;
 }
 
+function ovW() { return ov ? ov.width / RS : SW; }
+function ovH() { return ov ? ov.height / RS : SH; }
 function birdGap() { return FX.BIRD_GAP_MIN + (FX.BIRD_GAP_MAX - FX.BIRD_GAP_MIN) * crng(); }
 
 function piecePos(st, p) {
@@ -5781,12 +5584,12 @@ function updateFx(dt) {
   if (s.rain && !reduced) {
     if (!rainDrops) {
       rainDrops = [];
-      for (let i = 0; i < 40; i++) rainDrops.push({ x: Math.floor(crng() * SW), y: crng() * SH, v: 70 + crng() * 40 });
+      for (let i = 0; i < 40; i++) rainDrops.push({ x: Math.floor(crng() * ovW()), y: crng() * ovH(), v: 70 + crng() * 40 });
     }
     for (let i = 0; i < rainDrops.length; i++) {
       const d = rainDrops[i];
       d.y += d.v * dt;
-      if (d.y > SH) { d.y = -3; d.x = Math.floor(crng() * SW); }
+      if (d.y > ovH()) { d.y = -3; d.x = Math.floor(crng() * ovW()); }
     }
   }
 }
@@ -5910,207 +5713,501 @@ function updateDog(dt) {
   if (dogAI.next) dog.frame = Math.floor(dogAI.anim * 6) % 2;
 }
 
-// ---------------------------------------------------------------- v3.5: the iso projection
+// ---------------------------------------------------------------- v3.6: the world, the camera, the depth pass
 
-// The yard turned 45 degrees on a 2:1 diamond grid (Joel's pick B). Sim px (sx, sy) on the ground
-// sits at render px X = OX + sx - sy, Y = OY + (sx + sy) / 2: a 16 px tile is a 32 by 16 diamond.
-// The canvas is 352 by 288 render px: the 368 px diamond less 8 px at its left and right corners,
-// with 100 px of sky, tree line and barn above the back corner. The sim, its grid and every capture
-// record stay in sim px; each object draws at its sim px with octx translated so its footprint
-// lands on its projected tile (shift). SW by SH is the canvas in octx units (render px / RS).
-const GEO = Object.freeze({ W: 352, H: 288, OX: 184, OY: 100 });
-const SW = GEO.W / RS, SH = GEO.H / RS;
-function isoX(sx, sy) { return (GEO.OX + sx - sy) / RS; }
-function isoY(sx, sy) { return (GEO.OY + (sx + sy) / 2) / RS; }
+// The angle redo (spec 2026-10-19 C): sim px (sx, sy) on the ground sits at world render px
+// X = OX + 1.5 (sx - sy), Y = OY + 0.75 (sx + sy), so a 16 px tile is a 48 by 24 diamond and a person
+// keeps its 47 rp. The off canvas holds the whole 656 by 434 rp world (the barn end and the fence corners inside); octx keeps the RS transform, so
+// octx units are rp / RS and every v2 draw (people, hand items, effects) still goes through D() in sim
+// px, moved onto the world by a shift. Stations, props and decor draw by their art3 anchors (rule.js)
+// at world rp. The camera picks the part of the world the yard canvas shows.
+const WORLD = Object.freeze({ W: 656, H: 434, OX: 300, OY: 150, SX: 1.5, SY: 0.75 });
+const OV_MIN_RW = 352;                        // the overlay (clock, rail, banner) keeps its v3.5 size
+const SKY = '#9fd8f2';
+let SW = WORLD.W / RS, SH = WORLD.H / RS;     // the canvas being drawn, in octx units (world, then overlay)
+const VIEW = { x0: 0, w: WORLD.W / RS };      // what the camera shows, in octx units (number clamps)
+let A3 = null;                                // PitSim.art3 once the bridge booted
+let wctx = null, ov = null, ovctx = null;     // the world's context, the overlay canvas and its context
+let zoomBtn = null;
+let ovRec = false;                            // drawing the overlay (records map to the v3.5 canvas)
+let previewLook = null;
+function isoX(sx, sy) { return (WORLD.OX + WORLD.SX * (sx - sy)) / RS; }
+function isoY(sx, sy) { return (WORLD.OY + WORLD.SY * (sx + sy)) / RS; }
 function halfPx(v) { return Math.round(v * RS) / RS; }
 // Screen units back to the sim px point on the ground.
 function unIso(ux, uy) {
-  const a = ux * RS - GEO.OX, b = 2 * (uy * RS - GEO.OY);
+  const a = (ux * RS - WORLD.OX) / WORLD.SX, b = (uy * RS - WORLD.OY) / WORLD.SY;
   return { x: (a + b) / 2, y: (b - a) / 2 };
+}
+function ptOf(t) { return Array.isArray(t) ? { x: t[0], y: t[1] } : t; }
+// World rp of a tile's ground centre, of a tile's top vertex, and of the centroid of tiles.
+function tileRp(tx, ty) { return [WORLD.OX + 24 * (tx - ty), WORLD.OY + 12 * (tx + ty + 1)]; }
+function vtxRp(tx, ty) { return [WORLD.OX + 24 * (tx - ty), WORLD.OY + 12 * (tx + ty)]; }
+function tilesRp(tiles) {
+  let x = 0, y = 0;
+  for (let i = 0; i < tiles.length; i++) { const c = tileRp(tiles[i].x, tiles[i].y); x += c[0]; y += c[1]; }
+  return [x / tiles.length, y / tiles.length];
 }
 // The shift that puts sim point (fx, fy) at the ground point (gx, gy) projected, lift units down.
 function shiftTo(gx, gy, fx, fy, lift) {
-  return { dx: halfPx(isoX(gx, gy) - fx), dy: halfPx(isoY(gx, gy) + lift - fy), depth: gx + gy };
+  return { dx: halfPx(isoX(gx, gy) - fx), dy: halfPx(isoY(gx, gy) + lift - fy) };
 }
-// A mover whose tile top left is (px, py): its feet (px + 8, py + 16) stand on its tile centre.
-function moverShift(px, py) { return shiftTo(px + 8, py + 8, px + 8, py + 16, 1); }
+// A mover whose tile top left is (px, py): its feet (px + 8, py + 16) stand 4 rp below its tile centre.
+function moverShift(px, py) { return shiftTo(px + 8, py + 8, px + 8, py + 16, 2); }
 // A point drawn 32 sim px above someone's feet (numbers, hearts, sparkles).
 function ptShift(x, y) { return moverShift(x - 8, y + 16); }
-// A sprite drawn in the v2 rect (x, y, w, h) on footprint tx0..tx1 by ty0..ty1: its bottom centre
-// lands on the footprint's front vertex, centred across the footprint.
-function fpShift(tx0, ty0, tx1, ty1, x, y, w, h) {
-  const gx = (tx0 + tx1 + 1) * TILE / 2, gy = (ty0 + ty1 + 1) * TILE / 2;
-  const sh = shiftTo(gx, gy, x + w / 2, y + h, (tx1 - tx0 + ty1 - ty0 + 2) * 2);
-  sh.fp = [tx0, ty0, tx1, ty1];
-  return sh;
-}
-function boxOf(tiles) {
-  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-  for (let i = 0; i < tiles.length; i++) {
-    x0 = Math.min(x0, tiles[i].x); y0 = Math.min(y0, tiles[i].y);
-    x1 = Math.max(x1, tiles[i].x); y1 = Math.max(y1, tiles[i].y);
-  }
-  return [x0, y0, x1, y1];
-}
+// The shift that puts octx point (fx, fy) on world rp (X, Y). D(name, x, y) puts the art3 anchor on
+// octx (x + w / 2, y + h), w by h the v2 size, so rpShift(X, Y, x + w / 2, y + h) puts it on (X, Y).
+function rpShift(X, Y, fx, fy) { return { dx: halfPx(X / RS - fx), dy: halfPx(Y / RS - fy) }; }
 function withShift(sh, fn) {
   if (!sh) { fn(); return; }
   octx.save();
   octx.translate(sh.dx, sh.dy);
   try { fn(); } finally { octx.restore(); }
 }
-// Stations: the footprint without the counter extension (it draws with the counter's shift).
-const ST_SHIFT = Object.create(null);
-function stationShift(st) {
-  let sh = ST_SHIFT[st.id];
-  if (!sh) {
-    let tiles = st.tiles.filter(function (t) { return !t.gear; });
-    if (!tiles.length) tiles = st.tiles;
-    const b = boxOf(tiles), sz = size(st.sprite);
-    sh = ST_SHIFT[st.id] = fpShift(b[0], b[1], b[2], b[3], st.draw.x, st.draw.y, sz[0], sz[1]);
-  }
-  return sh;
+// D() of v2 sprite `name` at legacy sim px (x, y) (its capture record) with its art3 anchor on rp (X, Y).
+function drawRp(name, frame, X, Y, x, y, flip) {
+  const sz = size(name);
+  withShift(rpShift(X, Y, x + sz[0] / 2, y + sz[1]), function () { D(name, x, y, frame, flip); });
 }
-// A fixed prop or a decor draw: its footprint is the blocks (or decor tiles) under its sprite's columns.
-function drawShift(sprite, x, y, sortRow, tiles) {
-  const sz = size(sprite);
-  let list = [];
-  if (tiles) for (let i = 0; i < tiles.length; i++) {
-    const t = tiles[i];
-    if (t.x * TILE < x + sz[0] && t.x * TILE + TILE > x) list.push(t);
-  }
-  if (!list.length) list = [{ x: Math.max(0, Math.min(MAP.W - 1, Math.floor((x + sz[0] / 2) / TILE))), y: sortRow }];
-  const b = boxOf(list);
-  return fpShift(b[0], b[1], b[2], Math.max(b[3], sortRow), x, y, sz[0], sz[1]);
+function onWorld(fn) {
+  const m = octx.getTransform();
+  octx.setTransform(1, 0, 0, 1, 0, 0);
+  try { fn(); } finally { octx.setTransform(m); }
 }
-const PROP_SHIFT = Object.create(null);
-function propShift(p) {
-  if (!PROP_SHIFT[p.id]) {
-    // The far bench rides with its table: same draw spot, the table's shift.
-    const tbl = p.sprite === 'picnic_bench' ? MAP.props.find(function (q) { return q.sprite === 'picnic' && q.draw.x === p.draw.x && q.draw.y === p.draw.y; }) : null;
-    PROP_SHIFT[p.id] = tbl ? propShift(tbl) : drawShift(p.sprite, p.draw.x, p.draw.y, p.sortRow, p.blocks && p.blocks.length ? p.blocks : null);
-  }
-  return PROP_SHIFT[p.id];
+// An art3 sprite with its anchor on world rp (X, Y).
+function put3(name, frame, X, Y, flip) {
+  if (!A3) return;
+  onWorld(function () { A3.drawAt(octx, name, Math.round(X), Math.round(Y), frame | 0, flip === true); });
 }
-const DECOR_SHIFT = new Map();
-function decorShift(spot, d) {
-  let sh = DECOR_SHIFT.get(d);
-  if (!sh) {
-    const tbl = d.sprite === 'picnic_bench' ? spot.draws.find(function (q) { return q.sprite === 'picnic' && q.x === d.x && q.y === d.y; }) : null;
-    sh = tbl ? decorShift(spot, tbl) : drawShift(d.sprite, d.x, d.y, d.sortRow, spot.tiles);
-    if (d.sprite === 'picnic') sh.fp = [sh.fp[0], sh.fp[1] - 1, sh.fp[2], sh.fp[3]];
-    DECOR_SHIFT.set(d, sh);
-  }
-  return sh;
-}
-// A seat sits with what holds it (a picnic table or a chair), so the sitter keeps the v2 placing.
-const SEAT_SHIFT = Object.create(null);
-function seatShiftV2(seat) {
-  if (SEAT_SHIFT[seat.id]) return SEAT_SHIFT[seat.id];
-  const cx = seat.x * TILE + 8;
-  const holds = function (sprite, x, y) {
-    if (sprite !== 'picnic' && sprite !== 'chair') return false;
-    const sz = size(sprite);
-    const row = Math.floor((y + sz[1] - 1) / TILE);
-    return cx >= x && cx < x + sz[0] && (seat.y === row || seat.y === row - 1);
-  };
-  let sh = null;
-  for (let i = 0; i < MAP.props.length && !sh; i++) {
-    const p = MAP.props[i];
-    if (holds(p.sprite, p.draw.x, p.draw.y)) sh = propShift(p);
-  }
-  for (let i = 0; i < MAP.decor.length && !sh; i++) {
-    const spot = MAP.decor[i];
-    for (let j = 0; j < spot.draws.length && !sh; j++) {
-      const d = spot.draws[j];
-      if (holds(d.sprite, d.x, d.y)) sh = decorShift(spot, d);
+// Opaque masks of art3 frames, for taps by object and for the anchor maths.
+const MASKS = Object.create(null);
+function maskOf(name, frame, flip) {
+  const k = name + ':' + (frame | 0) + (flip ? 'f' : '');
+  let m = MASKS[k];
+  if (m) return m;
+  const a = A3.anchor(name, frame | 0);
+  m = { w: a.w, h: a.h, ax: flip ? a.w - a.ax : a.ax, ay: a.ay, a: new Uint8Array(a.w * a.h), x0: a.w, x1: -1, y0: a.h, y1: -1 };
+  try {
+    const c = A3.frameCanvas(name, frame | 0, flip === true);
+    const d = c.getContext('2d').getImageData(0, 0, a.w, a.h).data;
+    for (let i = 0; i < a.w * a.h; i++) {
+      const al = d[i * 4 + 3];
+      m.a[i] = al;
+      if (al >= 128) {
+        const x = i % a.w, y = (i / a.w) | 0;
+        if (x < m.x0) m.x0 = x; if (x > m.x1) m.x1 = x; if (y < m.y0) m.y0 = y; if (y > m.y1) m.y1 = y;
+      }
     }
-  }
-  if (!sh) sh = moverShift(seat.x * TILE, seat.y * TILE);
-  SEAT_SHIFT[seat.id] = sh;
-  return sh;
+  } catch (e) { m.a.fill(255); m.x0 = 0; m.x1 = a.w - 1; m.y0 = 0; m.y1 = a.h - 1; }
+  MASKS[k] = m;
+  return m;
 }
-// v3.5: a picnic table seat's sitter sits on the angled table's far bench, at the seat's column;
-// a chair seat (or no art3) keeps seatShift. The depth stays the table's, so the far bench, the
-// sitters and the table draw in that order.
-function seatShift(seat) {
-  const base = seatShiftV2(seat), g = seatPicnic(seat);
-  if (!g || !B3 || !B3.ready || !B3.PICNIC_Z) return base;
-  const sz = size('cust0_sit');
-  const sh = shiftTo(seat.x * TILE + 8, g.row * TILE + B3.PICNIC_Z.farV, seat.x * TILE + sz[0] / 2, seat.y * TILE - 6 + sz[1], -B3.PICNIC_Z.bench / RS);
-  sh.depth = base.depth;
-  if (base.fp) sh.fp = base.fp;
-  return sh;
+
+// ---------------------------------------------------------------- v3.6: the MAP, read for drawing
+
+// The v2 box a station, prop or decor item records under (capture records stay in sim px): its MAP
+// draw spot when the MAP has one, else its first tile's top left.
+function drawOf(o) {
+  if (o.draw) return o.draw;
+  const t = ptOf((o.tiles && o.tiles[0]) || o.tile || (o.blocks && o.blocks[0]) || { x: 0, y: 0 });
+  return { x: t.x * TILE, y: t.y * TILE };
 }
-// An eater's plate on the angled table's top in front of the seat, else with the sitter.
-function plateShift(seat, want, px, py) {
-  const base = seatShiftV2(seat), g = seatPicnic(seat);
-  if (!g || !B3 || !B3.ready || !B3.PICNIC_Z) return seatShift(seat);
-  const sz = size('plate_' + want);
-  const sh = shiftTo(seat.x * TILE + 8, g.row * TILE + B3.PICNIC_Z.plateV, px + sz[0] / 2, py + sz[1], -B3.PICNIC_Z.top / RS);
-  sh.depth = base.depth;
-  return sh;
+function tilesOf(o) {
+  const b = o.blocks && o.blocks.length ? o.blocks : (o.tiles && o.tiles.length ? o.tiles : (o.tile ? [o.tile] : []));
+  return b.map(ptOf);
 }
-// The angled table (picnicGeo) a seat belongs to, or null for chairs.
-const SEAT_PIC = Object.create(null);
-function seatPicnic(seat) {
-  if (seat.id in SEAT_PIC) return SEAT_PIC[seat.id];
-  const cx = seat.x * TILE + 8;
-  let g = null;
-  const take = function (sprite, x, y) {
-    if (g || sprite !== 'picnic') return;
-    const sz = size(sprite), row = Math.floor((y + sz[1] - 1) / TILE);
-    if (cx >= x && cx < x + sz[0] && (seat.y === row || seat.y === row - 1)) g = picnicGeo(x, y);
-  };
-  for (let i = 0; i < MAP.props.length; i++) take(MAP.props[i].sprite, MAP.props[i].draw.x, MAP.props[i].draw.y);
-  for (let i = 0; i < MAP.decor.length; i++) for (let j = 0; j < MAP.decor[i].draws.length; j++) { const d = MAP.decor[i].draws[j]; take(d.sprite, d.x, d.y); }
-  SEAT_PIC[seat.id] = g;
-  return g;
+function hasTile(tiles, tx, ty) { for (let i = 0; i < tiles.length; i++) if (tiles[i].x === tx && tiles[i].y === ty) return true; return false; }
+function spanOf(tiles) {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  tiles.forEach(function (t) { x0 = Math.min(x0, t.x); y0 = Math.min(y0, t.y); x1 = Math.max(x1, t.x); y1 = Math.max(y1, t.y); });
+  return { x0: x0, y0: y0, x1: x1, y1: y1 };
 }
-// v3.5: a v2 picnic or picnic_bench draw at (x, y) as the angled table (both share the draw spot):
-// sim x0..x1 along the table and the table's row.
-function isPicnic(name) { return name === 'picnic' || name === 'picnic_bench'; }
-function picnicGeo(x, y) { const sz = size('picnic'); return { x0: x, x1: x + sz[0], row: Math.floor((y + sz[1] - 1) / TILE) }; }
-function picnicDraw(name, x, y, frame) {
-  const g = picnicGeo(x, y);
-  if (B3 && B3.picnic && B3.picnic(octx, GEO, g.x0, g.x1, g.row, name === 'picnic' ? 'table' : 'far')) { recOnly(name, x, y, frame); return; }
-  D(name, x, y, frame);
+function rectTiles(x0, y0, x1, y1) { const out = []; for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) out.push({ x: x, y: y }); return out; }
+// The art a station draws: the counter grows to counter_long with the extension.
+function stationArt(st, all) {
+  let tiles = st.tiles.filter(function (t) { return all || owned(t); }).map(ptOf);
+  if (!tiles.length) tiles = st.tiles.map(ptOf);
+  let name = st.sprite;
+  if (st.type === 'table') name = tiles.length >= 4 ? 'counter_long' : 'counter';
+  else if (st.type === 'cooker') name = st.sprite === 'drum' || st.id === 'drum' ? 'drum' : 'kettle';
+  else if (!name || !A3 || !A3.has(name)) name = st.type;
+  const c = tilesRp(tiles);
+  return { name: name, tiles: tiles, X: c[0], Y: c[1] };
 }
-// The footprints a walker sorts against: every object on more than one tile.
-function bigFootprints(s) {
+// The rp box of an art3 sprite's opaque pixels with its anchor on (X, Y).
+function boxRp(name, frame, X, Y) {
+  const m = maskOf(name, frame | 0, false);
+  return { x0: Math.round(X) - m.ax + m.x0, x1: Math.round(X) - m.ax + m.x1 + 1, y0: Math.round(Y) - m.ay + m.y0, y1: Math.round(Y) - m.ay + m.y1 + 1 };
+}
+// MAP.walk (the stone path) as tiles; v3.5 MAPs fall back on the customer route.
+function walkTiles() {
+  if (Array.isArray(MAP.walk)) return MAP.walk.map(ptOf);
   const out = [];
-  const add = function (sh) { if (sh && sh.fp && (sh.fp[2] > sh.fp[0] || sh.fp[3] > sh.fp[1])) out.push(sh); };
-  for (let i = 0; i < MAP.stations.length; i++) if (owned(MAP.stations[i])) add(stationShift(MAP.stations[i]));
-  for (let i = 0; i < MAP.props.length; i++) add(propShift(MAP.props[i]));
-  for (let i = 0; i < MAP.decor.length; i++) {
-    const spot = MAP.decor[i];
-    if (s.decor[spot.id] !== true) continue;
-    for (let j = 0; j < spot.draws.length; j++) if (!spot.draws[j].overhead) add(decorShift(spot, spot.draws[j]));
-  }
+  PATH_TILES.forEach(function (k) { const p = k.split(','); out.push({ x: +p[0], y: +p[1] }); });
   return out;
 }
-// A walker's depth: its feet (x + y), pushed past a big footprint it stands in front of and held
-// before one it stands behind.
-function walkerDepth(fps, px, py) {
-  const gx = px + 8, gy = py + 8, tx = Math.floor(gx / TILE), ty = Math.floor(gy / TILE);
-  let k = gx + gy;
-  for (let i = 0; i < fps.length; i++) {
-    const f = fps[i].fp, d = fps[i].depth;
-    const inX = tx >= f[0] && tx <= f[2], inY = ty >= f[1] && ty <= f[3];
-    if ((inX && ty > f[3]) || (inY && tx > f[2])) k = Math.max(k, d + 0.5);
-    else if ((inX && ty < f[1]) || (inY && tx < f[0])) k = Math.min(k, d - 0.5);
+// MAP.forSale (spec D) as [{ id, tiles }]; without it, unbought gear and decor spots.
+let SALE = null;
+function forSale() {
+  if (SALE) return SALE;
+  const fs = MAP.forSale;
+  if (fs) {
+    SALE = Array.isArray(fs) ? fs.map(function (e) { return { id: e.id, tiles: (e.tiles || []).map(ptOf) }; })
+      : Object.keys(fs).map(function (id) { return { id: id, tiles: (fs[id] || []).map(ptOf) }; });
+  } else {
+    SALE = [];
+    MAP.stations.forEach(function (st) {
+      if (st.gear) SALE.push({ id: st.gear, tiles: st.tiles.map(ptOf) });
+      st.tiles.forEach(function (t) { if (t.gear && !SALE.some(function (e) { return e.id === t.gear; })) SALE.push({ id: t.gear, tiles: [ptOf(t)] }); });
+    });
+    MAP.decor.forEach(function (d) { SALE.push({ id: d.id, tiles: d.id === 'lights' ? [ptOf(d.tiles[0])] : d.tiles.map(ptOf) }); });
   }
-  return k;
+  SALE = SALE.filter(function (e) { return e.tiles.length > 0; });
+  return SALE;
 }
-// The owned station whose drawn sprite holds sim point (x, y) or sits just under it (smoke).
-function stationShiftAt(x, y) {
-  for (let i = 0; i < MAP.stations.length; i++) {
-    const st = MAP.stations[i];
-    if (!owned(st)) continue;
-    const sz = size(st.sprite);
-    if (x >= st.draw.x - 4 && x < st.draw.x + sz[0] + 4 && y >= st.draw.y - 24 && y < st.draw.y + sz[1]) return stationShift(st);
+function idOwned(id) { const s = sim.state; return s.gear[id] === true || s.decor[id] === true; }
+function canopyTiles() {
+  const c = MAP.overhead && MAP.overhead.canopy;
+  if (c && Array.isArray(c.tiles) && c.tiles.length) { const b = spanOf(c.tiles.map(ptOf)); return rectTiles(b.x0, b.y0, b.x1, b.y1); }
+  return rectTiles(5, 1, 8, 2);
+}
+function lightsHooks() {
+  const L = MAP.overhead && MAP.overhead.lights;
+  const spot = MAP.decor.find(function (q) { return q.id === 'lights'; });
+  const post = L && L.post ? ptOf(L.post) : (spot ? ptOf(spot.tiles[0]) : { x: 0, y: 7 });
+  const hook = L && L.hook ? ptOf(L.hook) : { x: 8, y: 0 };
+  return { post: post, hook: hook };
+}
+// Picnic tables: every 'picnic' prop and the picnic decor, as { tiles, decor }.
+let TABLES = null;
+function picnicTables() {
+  if (TABLES) return TABLES;
+  TABLES = [];
+  MAP.props.forEach(function (p) { if (p.sprite === 'picnic') TABLES.push({ tiles: tilesOf(p), decor: null, rec: drawOf(p) }); });
+  MAP.decor.forEach(function (d) {
+    const dr = d.draws ? d.draws.find(function (q) { return q.sprite === 'picnic'; }) : null;
+    if (dr || d.id === 'picnic2') TABLES.push({ tiles: d.tiles.map(ptOf), decor: d.id, rec: dr ? { x: dr.x, y: dr.y } : drawOf(d) });
+  });
+  return TABLES;
+}
+// A seat's table and its index on the far bench (by column), or null for chairs.
+const SEAT_TB = Object.create(null);
+function seatTable(seat) {
+  if (seat.id in SEAT_TB) return SEAT_TB[seat.id];
+  let out = null;
+  picnicTables().forEach(function (tb) {
+    if (out || !hasTile(tb.tiles, seat.x, seat.y + 1)) return;
+    out = { tb: tb, i: seat.x - spanOf(tb.tiles).x0 };
+  });
+  SEAT_TB[seat.id] = out;
+  return out;
+}
+// Where a seat's sitter's anchor goes (rule seats('picnic_bench'), seats('chair')), world rp.
+function seatRp(seat) {
+  const st = seatTable(seat);
+  if (st) {
+    const c = tilesRp(st.tb.tiles), q = (A3.rule.seats('picnic_bench')[st.i]) || [0, -12];
+    return [c[0] + q[0], c[1] + q[1]];
   }
-  return ptShift(x, y);
+  const c = tileRp(seat.x, seat.y), q = A3.rule.seats('chair')[0] || [0, -7];
+  return [c[0] + q[0], c[1] + q[1]];
 }
+function seatShift(seat) {
+  const p = seatRp(seat);
+  return rpShift(p[0], p[1], seat.x * TILE + 8, seat.y * TILE + 16);
+}
+function stationShift(st) {
+  const a = stationArt(st), d = drawOf(st), sz = size(st.sprite || 'kettle');
+  return rpShift(a.X, a.Y, d.x + sz[0] / 2, d.y + sz[1]);
+}
+
+// ---------------------------------------------------------------- v3.6: the camera (spec C)
+
+// mode 'near' (phones: k device px per rp, k = round(1.5 dpr)), 'far' (phones: the whole world, any
+// scale) or 'fit' (desktop: the largest whole k that shows the whole world). x0, y0 is the view's top
+// left in world rp, vw by vh its size in rp, z the device px per rp.
+const cam = { mode: 'fit', phone: false, x0: 0, y0: 0, vw: WORLD.W, vh: WORLD.H, z: 1, nearK: 1, kOv: 1, follow: true, ease: null, homed: false, moved: false };
+const CAM_EASE_S = 0.25;
+// The far view on a phone fits the fenced yard (both front fence corners and a margin) to the stage
+// width; the stage then shrinks to the world's height at that scale, so no empty bands sit above or
+// below it. The barn's far end runs past the right edge, as in the mock.
+function farBox() {
+  const L = vtxRp(0, MAP.H), R = vtxRp(MAP.W, 0);
+  return { x0: Math.max(0, L[0] - 16), x1: Math.min(WORLD.W, R[0] + 16) };
+}
+function farZ(cw, ch) { const f = farBox(); return Math.min(cw / (f.x1 - f.x0), ch / WORLD.H); }
+function camClamp() {
+  if (cam.mode === 'far') {
+    const f = farBox();
+    cam.x0 = f.x0 - (cam.vw - (f.x1 - f.x0)) / 2;
+    cam.y0 = (WORLD.H - cam.vh) / 2;
+    return;
+  }
+  cam.x0 = cam.vw <= WORLD.W ? Math.max(0, Math.min(WORLD.W - cam.vw, cam.x0)) : (WORLD.W - cam.vw) / 2;
+  cam.y0 = cam.vh <= WORLD.H ? Math.max(0, Math.min(WORLD.H - cam.vh, cam.y0)) : (cam.mode === 'far' ? (WORLD.H - cam.vh) / 2 : WORLD.H - cam.vh);
+}
+function camView() {
+  const cw = el.cv.width, ch = el.cv.height;
+  cam.z = cam.mode === 'far' ? farZ(cw, ch) : cam.nearK;
+  cam.vw = cw / cam.z; cam.vh = ch / cam.z;
+}
+// The view's top left as drawn: whole rp in near and fit, so every art pixel is k device pixels.
+function camOrigin() {
+  if (cam.mode === 'far') return [cam.x0, cam.y0];
+  return [Math.round(cam.x0), Math.round(cam.y0)];
+}
+function camCenter(X, Y) { cam.x0 = X - cam.vw / 2; cam.y0 = Y - cam.vh / 2; camClamp(); }
+// MAP.home: the ids the home view frames (every station plus queue[0] and queue[1]).
+function homeBox() {
+  const H = MAP.home;
+  let ids = MAP.stations.map(function (st) { return st.id; }).concat(['queue0', 'queue1']);
+  if (Array.isArray(H)) ids = H;
+  else if (H && typeof H === 'object') ids = (H.stations || []).concat((H.queue || []).map(function (i) { return 'queue' + i; }));
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  const grow = function (b) { x0 = Math.min(x0, b.x0); x1 = Math.max(x1, b.x1); y0 = Math.min(y0, b.y0); y1 = Math.max(y1, b.y1); };
+  ids.forEach(function (id) {
+    const q = /^queue\[?(\d+)\]?$/.exec(String(id));
+    if (q) {
+      const t = MAP.queue[+q[1]];
+      if (t) { const c = tileRp(t.x, t.y); grow({ x0: c[0] - 12, x1: c[0] + 12, y0: c[1] - 47, y1: c[1] + 4 }); }
+      return;
+    }
+    const st = MAP.station(id);
+    if (!st) return;
+    const a = stationArt(st, true);
+    grow(boxRp(a.name, 0, a.X, a.Y));
+  });
+  if (!(x1 > x0)) return null;
+  return { x0: x0, x1: x1, y0: y0, y1: y1 };
+}
+function camHome() {
+  const b = homeBox();
+  cam.ease = null;
+  cam.follow = true;
+  cam.homed = true;
+  cam.moved = false;
+  if (cam.mode === 'near' && b) { camCenter((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2); camKeepWork(); }
+  else camClamp();
+}
+function camSet(mode, X, Y) {
+  if (!cam.phone) mode = 'fit';
+  else if (mode !== 'far') mode = 'near';
+  const cx = X !== undefined ? X : cam.x0 + cam.vw / 2, cy = Y !== undefined ? Y : cam.y0 + cam.vh / 2;
+  const was = cam.mode;
+  cam.mode = mode;
+  cam.ease = null;
+  if (cam.phone && was !== mode && el.cv && ov) resize();   // the far stage is only as tall as the world
+  camView();
+  if (mode === 'near') camCenter(cx, cy); else camClamp();
+  syncZoom();
+}
+// Puts tile (tx, ty)'s centre at least 24 CSS px inside the view, at once; follow waits for a walk.
+function camReveal(tx, ty) {
+  if (cam.mode !== 'near') return;
+  const c = tileRp(tx, ty), m = 24 / cssPerRp();
+  const o = camOrigin();
+  let x0 = o[0], y0 = o[1];
+  if (c[0] < x0 + m) x0 = c[0] - m; else if (c[0] > x0 + cam.vw - m) x0 = c[0] - cam.vw + m;
+  if (c[1] < y0 + m) y0 = c[1] - m; else if (c[1] > y0 + cam.vh - m) y0 = c[1] - cam.vh + m;
+  if (x0 !== o[0] || y0 !== o[1]) {
+    cam.x0 = x0; cam.y0 = y0; camClamp();
+    // Keep the counter and the head of the line in view too, the revealed tile first.
+    camKeepWork();
+    cam.x0 = Math.max(c[0] + m - cam.vw, Math.min(c[0] - m, cam.x0));
+    cam.y0 = Math.max(c[1] + m - cam.vh, Math.min(c[1] - m, cam.y0));
+    camClamp();
+    cam.follow = false; cam.moved = true;
+  }
+  cam.ease = null;
+}
+function camPan(dxCss, dyCss) {
+  if (cam.mode === 'fit') return;
+  const k = cssPerRp();
+  cam.x0 -= dxCss / k; cam.y0 -= dyCss / k;
+  camClamp();
+  cam.ease = null;
+  cam.follow = false;
+  cam.moved = true;
+}
+function cssPerRp() {
+  const r = el.cv.getBoundingClientRect();
+  return r.width > 0 ? r.width / cam.vw : cam.z / dpr();
+}
+// Auto follow: the pitmaster stays in the middle half of the width and 60 percent of the height;
+// out of it the camera eases back over 250 ms (jumps under reduced motion).
+function camFollow(dt) {
+  if (cam.mode !== 'near' || !sim) return;
+  if (cam.ease) {
+    const e = cam.ease;
+    e.t += dt;
+    const k = Math.min(1, e.t / CAM_EASE_S), q = 1 - (1 - k) * (1 - k);
+    cam.x0 = e.fx + (e.tx - e.fx) * q; cam.y0 = e.fy + (e.ty - e.fy) * q;
+    if (k >= 1) cam.ease = null;
+  }
+  const s = sim.state;
+  if (!cam.follow || s.phase !== 'service' || cam.ease) return;
+  const p = s.player, X = isoX(p.px + 8, p.py + 8) * RS, Y = isoY(p.px + 8, p.py + 8) * RS - 24;
+  const fx = cam.x0, fy = cam.y0;
+  const inMid = X >= cam.x0 + cam.vw * 0.25 && X <= cam.x0 + cam.vw * 0.75 && Y >= cam.y0 + cam.vh * 0.2 && Y <= cam.y0 + cam.vh * 0.8;
+  if (!inMid) camCenter(X, Y);
+  // The counter and the head of the line stay in frame while it follows (MAP.home's queue ids).
+  camKeepWork();
+  // The pitmaster always stays in view: when the work area and the pitmaster cannot both fit, the
+  // pitmaster wins.
+  cam.x0 = Math.max(X + 20 - cam.vw, Math.min(X - 20, cam.x0));
+  cam.y0 = Math.max(Y + 30 - cam.vh, Math.min(Y - 40, cam.y0));
+  camClamp();
+  const tx = cam.x0, ty = cam.y0;
+  if (reduced) return;
+  cam.x0 = fx; cam.y0 = fy;
+  if (Math.abs(tx - fx) < 0.5 && Math.abs(ty - fy) < 0.5) return;
+  cam.ease = { fx: fx, fy: fy, tx: tx, ty: ty, t: 0 };
+}
+// The work area the near view keeps in frame while it follows: the counter, the head of the line
+// (MAP.home's queue ids) and the pit sign over them, with a 12 rp margin where the view has room.
+function workBox() {
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  const grow = function (b) { x0 = Math.min(x0, b.x0); x1 = Math.max(x1, b.x1); y0 = Math.min(y0, b.y0); y1 = Math.max(y1, b.y1); };
+  MAP.stations.forEach(function (st) {
+    if (st.type !== 'table') return;
+    const a = stationArt(st);
+    grow(boxRp(a.name, 0, a.X, a.Y));
+  });
+  const H = MAP.home, qs = H && Array.isArray(H.queue) ? H.queue : [0];
+  qs.forEach(function (i) { const t = MAP.queue[i]; if (t) { const c = tileRp(t.x, t.y); grow({ x0: c[0] - 12, x1: c[0] + 12, y0: c[1] - 47, y1: c[1] + 4 }); } });
+  const sg = MAP.signText && MAP.signText.tiles;
+  if (sg && sg.length) {
+    const b = spanOf(sg.map(ptOf)), u = 12 * (b.x0 + b.x1 + 1), X = WORLD.OX + u, Y = WORLD.OY + u / 2;
+    grow({ x0: X - 32, x1: X + 32, y0: Y - 68, y1: Y - 36 });
+  }
+  return x1 > x0 ? { x0: x0, x1: x1, y0: y0, y1: y1 } : null;
+}
+function camKeepWork() {
+  if (cam.mode !== 'near') return;
+  const b = workBox();
+  if (!b) return;
+  const fit = function (v, lo0, hi0, span) {
+    const m = Math.max(0, Math.min(12, (span - (hi0 - lo0)) / 2));
+    const lo = hi0 + m - span, hi = lo0 - m;
+    return lo <= hi ? Math.max(lo, Math.min(hi, v)) : (lo + hi) / 2;
+  };
+  cam.x0 = fit(cam.x0, b.x0, b.x1, cam.vw);
+  cam.y0 = fit(cam.y0, b.y0, b.y1, cam.vh);
+  camClamp();
+}
+// The corner button: four brackets out (to far) or in (back to near). Phones only.
+const ZOOM_OUT = [[2, 2, 5, 1], [2, 2, 1, 5], [13, 2, 5, 1], [17, 2, 1, 5], [2, 17, 5, 1], [2, 13, 1, 5], [13, 17, 5, 1], [17, 13, 1, 5]];
+const ZOOM_IN = [[2, 6, 5, 1], [6, 2, 1, 5], [13, 6, 5, 1], [13, 2, 1, 5], [2, 13, 5, 1], [6, 13, 1, 5], [13, 13, 5, 1], [13, 13, 1, 5]];
+function syncZoom() {
+  if (!zoomBtn) return;
+  zoomBtn.hidden = !cam.phone;
+  const far = cam.mode === 'far';
+  if (zoomBtn.dataset.far === String(far)) return;
+  zoomBtn.dataset.far = String(far);
+  zoomBtn.setAttribute('aria-label', far ? 'Zoom in' : 'Zoom out');
+  zoomBtn.setAttribute('aria-pressed', far ? 'true' : 'false');
+  const c = zoomBtn.firstChild, g = c.getContext('2d');
+  g.clearRect(0, 0, 20, 20);
+  g.fillStyle = COLOR.C;
+  (far ? ZOOM_IN : ZOOM_OUT).forEach(function (r) { g.fillRect(r[0], r[1], r[2], r[3]); });
+}
+function makeZoom() {
+  zoomBtn = document.createElement('button');
+  zoomBtn.id = 'zoom';
+  zoomBtn.type = 'button';
+  const c = document.createElement('canvas');
+  c.width = 20; c.height = 20;
+  c.setAttribute('aria-hidden', 'true');
+  zoomBtn.appendChild(c);
+  zoomBtn.addEventListener('click', function () { camSet(cam.mode === 'far' ? 'near' : 'far'); });
+  el.wrap.appendChild(zoomBtn);
+  syncZoom();
+}
+
+// ---------------------------------------------------------------- v3.6: taps by object (spec F)
+
+// What the last render drew that a tap can hit, in draw order: { name, frame, flip, X0, Y0, w, h,
+// clip, st | at } in world rp. Stations act on themselves; seats, tables and decor walk to the tile
+// under the tap when it is standable, else to the standable tile nearest them.
+const hits = [];
+function hitPush(name, frame, X, Y, flip, clip, what) {
+  const m = maskOf(name, frame, flip);
+  hits.push({ name: name, frame: frame | 0, flip: !!flip, X0: Math.round(X) - m.ax, Y0: Math.round(Y) - m.ay, w: m.w, h: m.h, clip: clip || null, st: what.st || null, at: what.at || null });
+}
+function hitOne(h, X, Y) {
+  if (X < h.X0 || Y < h.Y0 || X >= h.X0 + h.w || Y >= h.Y0 + h.h) return false;
+  if (h.clip && (X < h.clip[0] || X >= h.clip[1])) return false;
+  const m = maskOf(h.name, h.frame, h.flip);
+  return m.a[((Y - h.Y0) | 0) * m.w + ((X - h.X0) | 0)] >= 128;
+}
+// A tap at world rp (X, Y): the tutorial arrow, sprites front to back, "+" marks by their tiles,
+// then the ground. Returns { st }, { tile } or { plus: id }.
+function hitWorld(X, Y) {
+  const ab = arrowBox();
+  if (ab && X >= ab.X - 8 && X < ab.X + 8 && Y >= ab.Y - 20 && Y < ab.Y + 2) return { st: ab.st };
+  const g = unIso(X / RS, Y / RS), tx = Math.floor(g.x / TILE), ty = Math.floor(g.y / TILE);
+  const inMap = tx >= 0 && tx < MAP.W && ty >= 0 && ty < MAP.H;
+  const standable = inMap && sim.walkable(tx, ty);
+  for (let i = hits.length - 1; i >= 0; i--) {
+    const h = hits[i];
+    if (!hitOne(h, X, Y)) continue;
+    if (h.st) return { st: h.st };
+    if (standable) return { tile: { x: tx, y: ty } };
+    return { tile: nearestWalkable(h.at[0], h.at[1]) };
+  }
+  const sale = forSale();
+  for (let i = 0; i < sale.length; i++) if (!idOwned(sale[i].id) && hasTile(sale[i].tiles, tx, ty)) return { plus: sale[i].id };
+  if (inMap) {
+    for (let i = 0; i < MAP.stations.length; i++) {
+      const st = MAP.stations[i];
+      if (owned(st) && st.tiles.some(function (t) { return t.x === tx && t.y === ty && owned(t); })) return { st: st };
+    }
+  }
+  if (standable) return { tile: { x: tx, y: ty } };
+  return { tile: nearestWalkable(g.x, g.y) };
+}
+function clientToWorld(cx, cy) {
+  const r = el.cv.getBoundingClientRect(), k = r.width > 0 ? r.width / cam.vw : 1, o = camOrigin();
+  return { X: o[0] + (cx - r.left) / k, Y: o[1] + (cy - r.top) / k, r: r, k: k, o: o };
+}
+// The client point of tile (tx, ty): its centre, or the nearest point that a tap there acts on the
+// tile (a station's own sprite, a walkable tile's diamond). Pans first unless opts.pan is false;
+// null when the point is off the canvas and pan is false.
+function tileToClient(tx, ty, opts) {
+  if (!(opts && opts.pan === false)) camReveal(tx, ty);
+  const w = clientToWorld(0, 0);
+  const c = tileRp(tx, ty);
+  let X = c[0], Y = c[1];
+  const st = MAP.stations.find(function (q) { return owned(q) && q.tiles.some(function (t) { return t.x === tx && t.y === ty && owned(t); }); });
+  const inMap = tx >= 0 && tx < MAP.W && ty >= 0 && ty < MAP.H;
+  const want = st ? function (h) { return h.st === st; } : function (h) { return !!(h.tile && h.tile.x === tx && h.tile.y === ty); };
+  if ((st || (inMap && sim.walkable(tx, ty))) && !want(hitWorld(X + 0.5, Y + 0.5))) {
+    let best = null, bd = Infinity;
+    const vis = function (x, y) { return x >= w.o[0] + 2 && x < w.o[0] + cam.vw - 2 && y >= w.o[1] + 2 && y < w.o[1] + cam.vh - 2; };
+    if (st) {
+      for (let i = 0; i < hits.length; i++) {
+        const h = hits[i];
+        if (h.st !== st) continue;
+        for (let yy = h.Y0; yy < h.Y0 + h.h; yy++) for (let xx = h.X0; xx < h.X0 + h.w; xx++) {
+          const d = (xx - X) * (xx - X) + (yy - Y) * (yy - Y);
+          if (d < bd && vis(xx, yy) && hitOne(h, xx + 0.5, yy + 0.5) && want(hitWorld(xx + 0.5, yy + 0.5))) { bd = d; best = [xx, yy]; }
+        }
+      }
+    } else {
+      for (let yy = -11; yy <= 11; yy++) for (let xx = -23; xx <= 23; xx++) {
+        if (Math.abs(xx) / 24 + Math.abs(yy) / 12 >= 0.92) continue;
+        const d = xx * xx + yy * yy;
+        if (d < bd && vis(X + xx, Y + yy) && want(hitWorld(X + xx + 0.5, Y + yy + 0.5))) { bd = d; best = [X + xx, Y + yy]; }
+      }
+    }
+    if (best) { X = best[0]; Y = best[1]; }
+  }
+  const px = w.r.left + (X + 0.5 - w.o[0]) * w.k, py = w.r.top + (Y + 0.5 - w.o[1]) * w.k;
+  if (opts && opts.pan === false && (px < w.r.left || px >= w.r.right || py < w.r.top || py >= w.r.bottom)) return null;
+  return { x: px, y: py };
+}
+
 // The sim tile nearest the sim point (x, y) that the player can stand on.
 function nearestWalkable(x, y) {
   let best = null, bd = Infinity;
@@ -6307,17 +6404,22 @@ function T(str, x, y, colorKey) {
 }
 
 // captureFrame records for a T() string at (x, y), in the v2 font's advances, whichever font drew it.
+// v3.6: the overlay is taller than the v3.5 canvas; its lower half records where that canvas had it
+// (SH 144), and a glyph past the sim yard (a number over the barn) keeps no record.
+function recY(y) { return ovRec && y > SH / 2 ? y - SH + 144 : y; }
 function recT(str, x, y) {
   if (!capturing) return;
   const fs = size('font');
   const s = String(str).toUpperCase();
   let cx = x;
+  y = recY(y);
+  if (y < 0 || y + fs[1] > VH) return;
   for (let i = 0; i < s.length; i++) {
     const ch = s[i];
     if (ch === ' ') { cx += fs[0] + 1; continue; }
     const g = glyphFrame(ch);
     if (g < 0) continue;
-    recs.push({ name: 'font', frame: g, x: cx, y: y, w: fs[0], h: fs[1] });
+    if (cx >= 0 && cx + fs[0] <= VW) recs.push({ name: 'font', frame: g, x: cx, y: y, w: fs[0], h: fs[1] });
     cx += fs[0] + 1;
   }
 }
@@ -6327,7 +6429,7 @@ function recT(str, x, y) {
 const FLOAT_KIND = { yellow: 'cash', white: 'tip', pink: 'fan' };
 function popText(str, x, y, colorKey) {
   const m = octx.getTransform();
-  const lo = -m.e / m.a, hi = lo + SW;
+  const lo = VIEW.x0 - m.e / m.a, hi = lo + VIEW.w;
   if (B3 && B3.floatNum(octx, str, x, y, FLOAT_KIND[colorKey] || 'plain', [lo, hi])) { recT(str, x, y); return; }
   art.textTinted(octx, str, x - 1, y, 'outline');
   art.textTinted(octx, str, x + 1, y, 'outline');
@@ -6357,30 +6459,18 @@ function boxText(str, x, y, colorKey) {
   T(str, x, y, colorKey);
 }
 
-// Dashed footprint outline: 1 px, 2 on and 2 off, clockwise from the top left pixel. Outline
-// colored on pavers (cream would vanish on the paver tan), cream on the lawn and hedge.
-function dashedBox(x, y, w, h) {
-  const col = paverAt(Math.floor(x / TILE), Math.floor(y / TILE)) ? COLOR.outline : COLOR.C;
-  if (B3) {
-    // v3.5: the footprint's diamond on the ground.
-    B3.footprint(octx, GEO, Math.floor(x / TILE), Math.floor(y / TILE), Math.floor((x + w - 1) / TILE), Math.floor((y + h - 1) / TILE), col);
-    if (capturing) recs.push({ name: '#outline', frame: 0, x: x, y: y, w: w, h: h });
-    return;
-  }
-  octx.fillStyle = col;
-  let i = 0;
-  for (let xx = x; xx < x + w; xx++, i++) if ((i & 3) < 2) octx.fillRect(xx, y, 1, 1);
-  for (let yy = y + 1; yy < y + h; yy++, i++) if ((i & 3) < 2) octx.fillRect(x + w - 1, yy, 1, 1);
-  for (let xx = x + w - 2; xx >= x; xx--, i++) if ((i & 3) < 2) octx.fillRect(xx, y + h - 1, 1, 1);
-  for (let yy = y + h - 2; yy > y; yy--, i++) if ((i & 3) < 2) octx.fillRect(x, yy, 1, 1);
-  if (capturing) recs.push({ name: '#outline', frame: 0, x: x, y: y, w: w, h: h });
-}
 
-function drawRing(x, y, frac, color) {
-  const n = Math.max(0, Math.min(RING.length, Math.round(frac * RING.length)));
-  if (n === 0) return;
-  octx.fillStyle = color;
-  for (let i = 0; i < n; i++) octx.fillRect(x + RING[i][0], y + RING[i][1], 1, 1);
+// A piece's timer (spec C): a bar w rp wide and 1 rp tall on a dark 3 rp tray at world rp (x, y),
+// filled left to right by frac.
+function drawRing(x, y, w, frac, color) {
+  const n = Math.max(0, Math.min(w, Math.round(frac * w)));
+  onWorld(function () {
+    octx.fillStyle = COLOR.outline;
+    octx.fillRect(x - 1, y - 1, w + 2, 3);
+    if (n === 0) return;
+    octx.fillStyle = color;
+    octx.fillRect(x, y, n, 1);
+  });
 }
 
 // ---------------------------------------------------------------- render: ground
@@ -6398,35 +6488,427 @@ function paverAt(x, y) {
   return MAP.at(x, y) === MAP.T.PAVER || PATH_TILES.has(x + ',' + y);
 }
 
+// v3.6: the world behind everything (bridge stage: sky, ground, back fence, barn, sign), then the
+// "+" marks on unbought spots (spec D), a ground mark under every object and person, hidden while
+// someone stands on the spot.
 function drawGround(s) {
-  const T_ = MAP.T;
-  const clover = new Set();      // unowned decor footprints take the clover frame (round 2)
-  for (let i = 0; i < MAP.decor.length; i++) {
-    const spot = MAP.decor[i];
-    if (s.decor[spot.id] === true) continue;
-    for (let j = 0; j < spot.tiles.length; j++) clover.add(spot.tiles[j].x + ',' + spot.tiles[j].y);
-  }
-  if (B3) {
-    const path = [], cl = [];
-    PATH_TILES.forEach(function (k) { const p = k.split(','); path.push({ x: +p[0], y: +p[1] }); });
-    clover.forEach(function (k) { const p = k.split(','); cl.push({ x: +p[0], y: +p[1] }); });
-    if (B3.stage(octx, GEO, MAP, path, cl)) return;
-  }
-  // No art3: flat diamonds.
-  octx.fillStyle = COLOR.K;
+  octx.fillStyle = SKY;
   octx.fillRect(0, 0, SW, SH);
-  for (let y = 0; y < MAP.H; y++) {
-    for (let x = 0; x < MAP.W; x++) {
-      const t = MAP.at(x, y);
-      const sh = moverShift(x * TILE, y * TILE);
-      withShift({ dx: sh.dx, dy: sh.dy + 4 - TILE / 2 }, function () {
-        if (t === T_.PAVER || PATH_TILES.has(x + ',' + y)) paverTile(x, y);
-        else if (t === T_.LAWN || t === T_.GATE) lawnTile(x, y, clover);
-        else if (y >= LAWN_FROM_ROW) lawnTile(x, y, clover);
-        else paverTile(x, y);
+  if (B3) {
+    const door = MAP.props.find(function (p) { return p.id === 'shed'; });
+    const sign = MAP.props.find(function (p) { return p.id === 'sign'; });
+    let sg = null;
+    if (sign) { const ts = tilesOf(sign).concat(sign.tiles ? sign.tiles.map(ptOf) : []), b = spanOf(ts); sg = [b.x0, b.x1 > b.x0 ? b.x1 : b.x0 + 1]; }
+    B3.stage(octx, MAP, { walk: walkTiles(), door: door ? ptOf(door.tile).x : null, sign: sg, name: pitName(s) });
+    if (sign && MAP.signText) { const info = signInfo(); if (info) recordGlyphs(info.font, info.text, info.x, info.font === 'font_s' ? MAP.signText.y + 1 : MAP.signText.y); }
+  }
+  const sale = forSale();
+  const people = [s.player, s.buddy, s.tender, s.prep].concat(s.customers.filter(function (c) { return c.mode !== 'eating'; }));
+  const onTile = function (tiles) {
+    return people.some(function (m) { return m && hasTile(tiles, Math.round(m.px / TILE), Math.round(m.py / TILE)); });
+  };
+  for (let i = 0; i < sale.length; i++) {
+    const e = sale[i];
+    if (idOwned(e.id) || onTile(e.tiles)) continue;
+    const c = tilesRp(e.tiles);
+    if (B3) B3.plus(octx, c[0], c[1]);
+    if (capturing) { const t = e.tiles[0]; recs.push({ name: 'plus', id: e.id, frame: 0, x: t.x * TILE, y: t.y * TILE, w: TILE, h: TILE }); }
+  }
+}
+
+// An art3 sprite on the footprint `tiles`, anchored on their centroid, in the depth pass. A long one
+// draws one slice per tile, clipped to that tile's column band (between the midpoints to its
+// neighbours' centres) and keyed by that tile, so someone beside one end sorts right against each part.
+// o: { flip, adj (depth adjust), rec [name, x, y, frame], hit { st } or { at }, top (drawn on top) }.
+function pushArt(push, name, frame, tiles, o) {
+  o = o || {};
+  const c = tilesRp(tiles), X = c[0], Y = c[1], adj = o.adj || 0;
+  let recd = false;
+  const rec = function () { if (!recd && o.rec) { recd = true; recOnly(o.rec[0], o.rec[1], o.rec[2], o.rec[3]); } };
+  const cs = tiles.map(function (t) { return { t: t, c: tileRp(t.x, t.y) }; }).sort(function (a, b) { return a.c[0] - b.c[0]; });
+  let front = -Infinity;
+  cs.forEach(function (e, i) {
+    const xa = i === 0 ? -1e4 : (cs[i - 1].c[0] + e.c[0]) / 2, xb = i === cs.length - 1 ? 1e4 : (e.c[0] + cs[i + 1].c[0]) / 2;
+    front = Math.max(front, e.t.x + e.t.y);
+    push(e.t.x + e.t.y + adj, 1, e.c[0], function () {
+      if (cs.length === 1) put3(name, frame, X, Y, o.flip);
+      else onWorld(function () {
+        octx.save();
+        octx.beginPath();
+        octx.rect(xa, -1e4, xb - xa, 2e4);
+        octx.clip();
+        A3.drawAt(octx, name, Math.round(X), Math.round(Y), frame | 0, o.flip === true);
+        octx.restore();
       });
+      if (o.hit) hitPush(name, frame, X, Y, o.flip, cs.length > 1 ? [xa, xb] : null, o.hit);
+      rec();
+    });
+  });
+  if (o.top) push(front + adj, 1.5, X, function () { o.top(X, Y); });
+  return { X: X, Y: Y };
+}
+
+// Meat on the grate (spec C): the spots and the piece scale come from the rule sprite's grate
+// (A3.rule.meta(name).grate, [x, y, rx, ry] rp from its anchor): the slots split the grate into a
+// grid, each piece drawn scaled to fit its cell with its opaque foot on the grate. A kettle with meat
+// on draws its open frame (the grate showing, the lid hung on its side); the drum's sits on its lid
+// rack. Each piece's timer is a short bar over it, as wide as the piece.
+const GRATE_DEF = Object.freeze({ kettle: [0, -15, 9, 3], drum: [0, -23, 8, 3] });
+function grateOf(name) {
+  let g = null;
+  try { const m = A3 && A3.rule && A3.rule.has && A3.rule.has(name) ? A3.rule.meta(name) : null; g = m && m.grate; } catch (e) { g = null; }
+  return Array.isArray(g) && g.length === 4 ? g : (GRATE_DEF[name] || GRATE_DEF.kettle);
+}
+function grateSpots(name, n) {
+  const g = grateOf(name), cols = Math.max(1, Math.min(2, n)), rows = Math.max(1, Math.ceil(n / cols));
+  const cw = 2 * g[2] / cols, out = [];
+  for (let i = 0; i < n; i++) {
+    const c = i % cols, r = (i / cols) | 0;
+    out.push([g[0] + (c - (cols - 1) / 2) * cw * 0.95, g[1] + (r - (rows - 1) / 2) * g[3] * 1.2]);
+  }
+  return { spots: out, cell: cw };
+}
+function drawPieces(st, ck, name, X, Y) {
+  const n = Math.max(1, st.slotPx ? st.slotPx.length : 2), G = grateSpots(name, n), spots = G.spots;
+  const list = ck.pieces.slice().sort(function (a, b) { return (spots[a.slot] ? spots[a.slot][1] : 0) - (spots[b.slot] ? spots[b.slot][1] : 0); });
+  for (let pass = 0; pass < 2; pass++) {
+    for (let i = 0; i < list.length; i++) {
+      const p = list[i];
+      const late = p.state === 'done' && p.warn === true;
+      if (late !== (pass === 1)) continue;
+      const q = spots[p.slot] || spots[0], pos = piecePos(st, p), f = pieceFrame(p), nm = 'piece_' + p.meat;
+      const me = MEATS[p.meat];
+      if (!A3 || !A3.has(nm)) { D(nm, pos.x, pos.y, f); continue; }
+      const m0 = maskOf(nm, 0, false), m = maskOf(nm, f, false);
+      const ow = m0.x1 >= m0.x0 ? m0.x1 - m0.x0 + 1 : m0.w;
+      const sc = Math.max(0.25, Math.min(1, Math.floor(G.cell * 4 / ow) / 4));
+      const foot = m.y1 >= 0 ? m.y1 + 1 : m.ay, top = m.y1 >= 0 ? m.y0 : 0;
+      const PX = Math.round(X + q[0]), PY = Math.round(Y + q[1] + 1 + (m.ay - foot) * sc);
+      onWorld(function () {
+        octx.save();
+        octx.translate(PX, PY);
+        octx.scale(sc, sc);
+        A3.drawAt(octx, nm, 0, 0, f);
+        octx.restore();
+      });
+      recOnly(nm, pos.x, pos.y, f);
+      if (!me) continue;
+      const bw = Math.max(4, Math.round((m.x1 >= m.x0 ? m.x1 - m.x0 + 1 : ow) * sc));
+      const bx = Math.round(PX + (m.x0 - m.ax) * sc + ((m.x1 - m.x0 + 1) * sc - bw) / 2), by = Math.round(PY + (top - m.ay) * sc) - 3;
+      if (p.state === 'cooking') drawRing(bx, by, bw, Math.min(1, p.prog / me.cook), COLOR.O);
+      else if (p.state === 'done') drawRing(bx, by, bw, Math.max(0, 1 - (p.prog - me.cook) / me.window), late ? COLOR.red : COLOR.lawnA);
+      else drawRing(bx, by, bw, 1, COLOR.K);
     }
   }
+}
+
+// The fire gauge beside a lit cooker: a 2 rp bar, 16 tall, right of the sprite (an out fire shows
+// on the cooker itself).
+function drawGauge(ck, X, Y) {
+  if (!(ck.fire > 0)) return;
+  onWorld(function () {
+    const gx = Math.round(X) + 14, top = Math.round(Y) - 20, h = 16;
+    octx.fillStyle = COLOR.outline;
+    octx.fillRect(gx - 1, top - 1, 4, h + 2);
+    const inner = h;
+    const f = Math.max(0, Math.min(1, ck.fire / C.FIRE_MAX));
+    const fh = Math.round(f * inner);
+    octx.fillStyle = COLOR.K;
+    octx.fillRect(gx, top, 2, h);
+    if (fh > 0) { octx.fillStyle = bandColor(PitSim.fireBand(ck.fire)); octx.fillRect(gx, top + (inner - fh), 2, fh); }
+    octx.fillStyle = COLOR.C;
+    const t1 = top + inner - Math.round(C.FIRE_GOOD / C.FIRE_MAX * inner), t2 = top + inner - Math.round(C.FIRE_HOT / C.FIRE_MAX * inner);
+    octx.fillRect(gx - 1, t1, 1, 1); octx.fillRect(gx + 2, t1, 1, 1);
+    octx.fillRect(gx - 1, t2, 1, 1); octx.fillRect(gx + 2, t2, 1, 1);
+  });
+}
+
+function drawStack(meat, count, x, y, max) {
+  const n = Math.min(count, max);
+  const name = 'plate_' + meat;
+  for (let k = 0; k < n; k++) D(name, x, y - k);
+}
+
+// Plate spots on the board's top (rp from its anchor), the stacks' v2 spots kept for the records.
+const BOARD_RP = [[-7, -17], [5, -18], [-4, -12], [8, -13], [0, -15]];
+function stationItems(st, s, push) {
+  const a = stationArt(st), d = drawOf(st), hit = { st: st };
+  const ck = st.type === 'cooker' ? s.stations[st.id] : null;
+  if (st.type === 'cooker') {
+    const band = PitSim.fireBand(ck ? ck.fire : 0);
+    const open = a.name === 'kettle' && ck && ck.pieces.length > 0;
+    const frame = open ? 4 : (BAND_FRAME[band] || 0);
+    pushArt(push, a.name, frame, a.tiles, { rec: [st.sprite || a.name, d.x, d.y, BAND_FRAME[band] || 0], hit: hit, top: function (X, Y) {
+      if (!ck) return;
+      drawGauge(ck, X, Y);
+      drawPieces(st, ck, a.name, X, Y);
+    } });
+  } else if (st.type === 'board') {
+    const b = s.stations.board;
+    pushArt(push, 'board', b && b.slicing ? 1 : 0, a.tiles, { rec: ['board', d.x, d.y, b && b.slicing ? 1 : 0], hit: hit, top: function (X, Y) {
+      if (b && b.stacks) {
+        for (let j = 0; j < b.stacks.length && j < BOARD_OFFS.length; j++) {
+          const stack = b.stacks[j];
+          if (!stack || !stack.times || !stack.times.length) continue;
+          const n = Math.min(stack.times.length, BOARD_DRAW_MAX), q = BOARD_RP[j];
+          for (let k = 0; k < n; k++) drawRp('plate_' + stack.meat, 0, X + q[0], Y + q[1] - k, d.x + BOARD_OFFS[j][0], d.y + BOARD_OFFS[j][1] - k);
+        }
+      }
+      // X13.7: up to two pieces left for the PREP card, at the board's two ends.
+      if (b && Array.isArray(b.waiting)) {
+        for (let j = 0; j < b.waiting.length && j < 2; j++) {
+          const w = b.waiting[j];
+          if (w && MEATS[w.meat]) drawRp('hand_cooked_' + w.meat, 0, X + (j === 0 ? -9 : 9), Y - 13, d.x + (j === 0 ? -1 : 9), d.y + 4);
+        }
+      }
+    } });
+  } else if (st.type === 'cooler') {
+    const f = s.gear.cooler ? (sim.reach() === 'cooler' ? 2 : 1) : 0;
+    pushArt(push, 'cooler', f, a.tiles, { rec: ['cooler', d.x, d.y, f], hit: hit });
+  } else if (st.type === 'table') {
+    const big = a.name === 'counter_long';
+    const recs2 = function () { if (big && extTile) { const e = extRect(); recOnly('counter_ext', e.x, e.y, 0); } };
+    pushArt(push, a.name, 0, a.tiles, { rec: ['counter', d.x, d.y, big ? 1 : 0], hit: hit, top: recs2 });
+    // Plates on the counter top, one spot per tile (two on the extension), each over its own tile.
+    const spots = s.stations.table ? s.stations.table.spots : [];
+    const slots = A3.rule.slots(a.name), an = A3.anchor(a.name, 0);
+    const byY = a.tiles.slice().sort(function (u, v) { return u.y - v.y; });
+    for (let i = 0; i < spots.length && i < slots.length; i++) {
+      const stack = spots[i];
+      if (!stack || !stack.times || !stack.times.length) continue;
+      if (i >= 3 && !big) continue;
+      const t = byY[Math.min(i, byY.length - 1)], sl = slots[i];
+      const leg = st.spotPx && st.spotPx[i] ? st.spotPx[i] : { x: t.x * TILE + 4, y: t.y * TILE + 4 };
+      const name = 'plate_' + stack.meat, n = Math.min(stack.times.length, C.TABLE_STACK);
+      push(t.x + t.y, 1.5, a.X, function () {
+        for (let k = 0; k < n; k++) { put3(name, 0, a.X - an.ax + sl[0], a.Y - an.ay + sl[1] - k); recOnly(name, leg.x, leg.y - k, 0); }
+      });
+    }
+  } else if (st.type === 'pile') {
+    const n = s.charcoal | 0, f = n >= 5 ? 0 : n >= 3 ? 1 : n >= 1 ? 2 : 3;
+    pushArt(push, 'pile', f, a.tiles, { rec: ['pile', d.x, d.y, f], hit: hit });
+  } else {
+    pushArt(push, a.name, 0, a.tiles, { rec: [st.sprite || a.name, d.x, d.y, 0], hit: hit });
+  }
+}
+
+// What each prop draws (rule art names), by its v2 sprite. Wall pieces (door, sign) are in the stage.
+const PROP_FRAME = { pot1: 0, pot2: 1, pot3: 0, pot4: 0, planter: 2, planter2: 1, woodpile: 0, woodpile2: 1, woodpile3: 1, woodpile4: 0 };
+function propItems(p, push) {
+  if (p.id === 'shed' || p.id === 'sign' || p.sprite === 'shed' || p.sprite === 'sign' || p.sprite === 'picnic_bench') return;
+  const tiles = tilesOf(p), d = drawOf(p);
+  if (!tiles.length) return;
+  if (p.sprite === 'picnic') { picnicItems(tiles, push, ['picnic', d.x, d.y, p.frame | 0]); return; }
+  const name = p.sprite === 'planter' ? 'pot' : p.sprite;
+  if (!A3.has(name)) return;
+  const f = p.id in PROP_FRAME ? PROP_FRAME[p.id] : (p.frame | 0);
+  // A prop on more than one tile (blocks) anchors on its first; one tile props on their tile.
+  pushArt(push, name, f, name === 'tree' || tiles.length === 1 ? [tiles[0]] : tiles, { rec: [p.sprite, d.x, d.y, p.frame | 0] });
+}
+// A picnic table: the far bench at the seat row's depth (drawn before its sitters), then the table
+// and the near bench.
+function picnicItems(tiles, push, rec) {
+  const c = tilesRp(tiles), at = [c[0], c[1]];
+  const g = unIso(c[0] / RS, c[1] / RS);
+  pushArt(push, 'picnic_bench', 0, tiles, { adj: -1, rec: rec ? ['picnic_bench', rec[1], rec[2], 0] : null, hit: { at: [g.x, g.y] } });
+  pushArt(push, 'picnic', 0, tiles, { rec: rec, hit: { at: [g.x, g.y] } });
+  return at;
+}
+function decorItems(spot, s, push) {
+  const tiles = spot.tiles.map(ptOf), d0 = spot.draws && spot.draws[0] ? spot.draws[0] : drawOf(spot);
+  const g = tilesRp(tiles), gs = unIso(g[0] / RS, g[1] / RS), hit = { at: [gs.x, gs.y] };
+  const rec = function (name) { const dr = spot.draws ? spot.draws.find(function (q) { return q.sprite === name; }) : null; return dr ? [name, dr.x, dr.y, dr.frame | 0] : [name, d0.x, d0.y, 0]; };
+  if (spot.id === 'picnic2' || (spot.draws && spot.draws.some(function (q) { return q.sprite === 'picnic'; }))) { picnicItems(tiles, push, rec('picnic')); return; }
+  if (spot.id === 'chair1' || spot.id === 'chair2') { pushArt(push, 'chair', 0, tiles, { rec: rec('chair'), hit: hit }); return; }
+  if (spot.id === 'flowers') { pushArt(push, 'flower_box', 0, tiles, { rec: rec('bed'), hit: hit }); return; }
+  if (spot.id === 'birdbath') {
+    const birdOn = birdUntil >= 0 && birdUntil > tAnim && !reduced;
+    pushArt(push, 'birdbath', birdOn ? 1 : 0, tiles, { rec: rec('birdbath'), hit: hit });
+    return;
+  }
+  if (spot.id === 'lights') { pushArt(push, 'lights_post', 0, [lightsHooks().post], { rec: rec('lights_post') }); return; }
+  const dr = spot.draws ? spot.draws.find(function (q) { return !q.overhead && A3.has(q.sprite); }) : null;
+  if (dr) pushArt(push, dr.sprite, dr.frame | 0, tiles, { rec: [dr.sprite, dr.x, dr.y, dr.frame | 0], hit: hit });
+}
+
+// v3.6: one depth sorted pass (spec F): key the footprint's front tile x + y, then the layer
+// (objects 1, what sits on them 1.5, people 2, what people hold 2.5), then X, then push order.
+function drawSorted(s) {
+  const items = [];
+  let order = 0;
+  const push = function (d, l, X, fn) { items.push({ d: d, l: l, x: X, o: order++, f: fn }); };
+  const T_ = MAP.T;
+  const open = gateOpen(s);
+
+  // Fence records (v2 names, sim px), then the front pickets and the gate on the two front edges.
+  for (let y = 0; y < MAP.H; y++) {
+    for (let x = 0; x < MAP.W; x++) {
+      const t = MAP.at(x, y), px = x * TILE;
+      if (t === T_.FENCE && y === 0) recOnly('fence_back', px, 0, x === 0 || x === MAP.W - 1 ? 1 : 0);
+      else if (t === T_.FENCE) { const n = fenceName(x, y); recOnly(n, px, (y + 1) * TILE - size(n)[1], 0); }
+      else if (t === T_.GATE) recOnly('gate', px, (y + 1) * TILE - size('gate')[1], open ? 1 : 0);
+    }
+  }
+  const mid = function (a, b) { return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]; };
+  for (let ty = 0; ty < MAP.H; ty++) {
+    const m = mid(vtxRp(MAP.W, ty), vtxRp(MAP.W, ty + 1));
+    push(MAP.W - 1 + ty + 0.95, 1, m[0], function () { put3('fence_side', ty === 0 ? 1 : 0, m[0], m[1]); });
+  }
+  const gx = MAP.gate ? MAP.gate.x : -1;
+  for (let tx = 0; tx < MAP.W; tx++) {
+    const m = mid(vtxRp(tx, MAP.H), vtxRp(tx + 1, MAP.H));
+    push(tx + MAP.H - 1 + 0.95, 1, m[0], function () { put3(tx === gx ? 'gate' : 'fence_front', tx === gx && open ? 1 : 0, m[0], m[1]); });
+  }
+
+  for (let i = 0; i < MAP.props.length; i++) propItems(MAP.props[i], push);
+  for (let i = 0; i < MAP.stations.length; i++) if (owned(MAP.stations[i])) stationItems(MAP.stations[i], s, push);
+  for (let i = 0; i < MAP.decor.length; i++) if (s.decor[MAP.decor[i].id] === true) decorItems(MAP.decor[i], s, push);
+
+  // People (layer 2): the player, the RUN, FIRE and PREP cards' movers, then customers by id.
+  const staff = [['player', s.player, ''], ['buddy', s.buddy, 'run'], ['tender', s.tender, 'fire'], ['prep', s.prep || null, 'prep']];
+  for (let i = 0; i < staff.length; i++) {
+    const m = staff[i][1], role = staff[i][2];
+    if (!m) continue;
+    let kind = staff[i][0];
+    if (role) {
+      const card = moverCard(m);
+      if (card && card.look) ensureCrewLook(role, card.look);
+      if (kind === 'prep' && !art.has('prep_down')) kind = 'buddy';
+    }
+    const mx = Math.round(m.px), my = Math.round(m.py);
+    push((mx + my) / TILE, 2, isoX(mx + 8, my + 8) * RS, function () { withShift(moverShift(mx, my), function () { drawMover(kind, m, s); }); });
+  }
+  const custs = s.customers.slice().sort(byId);
+  for (let i = 0; i < custs.length; i++) {
+    const c = custs[i];
+    const seat = c.mode === 'eating' ? seatOf(c) : null;
+    if (seat) {
+      const q = seatRp(seat);
+      push(seat.x + seat.y, 2, q[0], function () { drawSeated(c, seat); });
+      // The eater's plate: on the table top in front of the seat, or in the lap on a chair.
+      const tb = seatTable(seat), sx = seat.x * TILE, sy = seat.y * TILE;
+      const px = sx + 4, py = tb ? sy + 17 : sy + 9;
+      if (tb) push(seat.x + seat.y + 1, 1.5, q[0], function () { drawRp('plate_' + c.want, 0, q[0] + 1, q[1] + 4, px, py); });
+      else push(seat.x + seat.y, 2.5, q[0], function () { drawRp('plate_' + c.want, 0, q[0] + 1, q[1] - 9, px, py); });
+    } else {
+      const cx = Math.round(c.px), cy = Math.round(c.py);
+      push((cx + cy) / TILE, 2, isoX(cx + 8, cy + 8) * RS, function () { withShift(moverShift(cx, cy), function () { drawMover('cust', c, s); }); });
+    }
+  }
+  const dx = Math.round(dog.px), dy = Math.round(dog.py);
+  push((dx + dy) / TILE, 2, isoX(dx + 8, dy + 8) * RS, function () { withShift(moverShift(dx, dy), function () { D('dog', dx, dy, dog.frame, dog.flip); }); });
+
+  items.sort(function (a, b) { return (a.d - b.d) || (a.l - b.l) || (a.x - b.x) || (a.o - b.o); });
+  for (let i = 0; i < items.length; i++) items[i].f();
+  return custs;
+}
+
+function drawSeated(c, seat) {
+  const sx = seat.x * TILE, sy = seat.y * TILE;
+  const f = c.eat > 0 ? (reduced ? 0 : Math.floor(tAnim / FX.EAT_FRAME_S) % 2) : 2;
+  const q = seatRp(seat), name = 'cust' + (((c.body | 0) % 4 + 4) % 4) + '_sit';
+  if (B3) B3.person(c.id, false);
+  drawRp(name, f, q[0], q[1], sx, sy - 6);
+}
+
+// ---------------------------------------------------------------- render: overhead (spec A)
+
+// The string lights from the post along the back fence top to the back corner, then along the barn
+// eave to the hook; one smoke column per lit cooker at 70 percent (the canopy draws behind the depth
+// pass, drawCanopy).
+const BULBS = ['#f6d26a', '#ef6b4a', '#8fd25c', '#6fc3f0'];
+function drawOverhead(s) {
+  if (s.decor.lights === true) {
+    const fr = reduced ? 0 : Math.floor(tAnim / FX.TWINKLE_S) % 2;
+    const h = lightsHooks(), p0 = tileRp(h.post.x, h.post.y), b = vtxRp(0, 0), e = vtxRp(h.hook.x, h.hook.y);
+    const cA = [p0[0] + 2, p0[1] - 66], cB = [b[0], b[1] - 76], cC = [e[0] + 12, e[1] + 6 - 76];
+    onWorld(function () {
+      [[cA, cB, 14], [cB, cC, 6]].forEach(function (seg, si) {
+        const a = seg[0], z = seg[1], n = Math.round(Math.hypot(z[0] - a[0], z[1] - a[1]));
+        for (let i = 0; i <= n; i++) {
+          const u = i / n, x = Math.round(a[0] + (z[0] - a[0]) * u), y = Math.round(a[1] + (z[1] - a[1]) * u + seg[2] * 4 * u * (1 - u));
+          octx.fillStyle = '#3a2a20'; octx.fillRect(x, y, 1, 1);
+          if (i % 14 === 7) { octx.fillStyle = BULBS[((i / 14 | 0) + si + fr) % 4]; octx.fillRect(x - 1, y + 1, 3, 3); }
+        }
+      });
+    });
+    const L = MAP.overhead && MAP.overhead.lights;
+    recOnly('lights_string', L && typeof L.x === 'number' ? L.x : h.post.x * TILE, L && typeof L.y === 'number' ? L.y : h.post.y * TILE, fr);
+  }
+  if (A3 && A3.fx && typeof A3.fx.drawAt === 'function') {
+    const fr = reduced ? 0 : Math.floor(tAnim * 3) % 3;
+    for (let i = 0; i < MAP.stations.length; i++) {
+      const st = MAP.stations[i];
+      if (st.type !== 'cooker' || !owned(st)) continue;
+      const ck = s.stations[st.id];
+      if (!ck || PitSim.fireBand(ck.fire) === 'out') continue;
+      const a = stationArt(st), v = ventRp(a);
+      octx.save();
+      octx.globalAlpha = 0.7;
+      onWorld(function () { A3.fx.drawAt(octx, a.name === 'drum' ? 'smoke_column' : 'smoke_column_short', Math.round(v[0]), Math.round(v[1]), (fr + i) % 3); });
+      octx.restore();
+    }
+  }
+}
+// The canopy over the line (fix pass: nothing tall in front of the work area): drawn right after the
+// ground, behind the depth pass, so the counter, the plates and everyone in the line draw over its
+// roof and posts.
+function drawCanopy(s) {
+  if (s.gear.canopy !== true) return;
+  const tiles = canopyTiles(), c = tilesRp(tiles), cp = MAP.overhead && MAP.overhead.canopy;
+  put3('canopy', 0, c[0], c[1]);
+  recOnly('canopy', cp && typeof cp.x === 'number' ? cp.x : tiles[0].x * TILE, cp && typeof cp.y === 'number' ? cp.y : tiles[0].y * TILE, 0);
+}
+function ventRp(a) { return a.name === 'drum' ? [a.X + 5, a.Y - 38] : [a.X, a.Y - 21]; }
+// The v2 vent a cooker's puffs start from (sim px), as updateFx spawns them.
+function ventSim(st) {
+  const t = st.tiles[0], tx = t.x * TILE, ty = t.y * TILE;
+  return st.sprite === 'drum' || st.id === 'drum' ? { x: tx + 7, y: ty - 4 } : { x: tx + 11, y: ty - 10 };
+}
+
+// Puffs: every one keeps its capture record; the dark ones (a piece about to burn, burnt bursts and
+// columns) draw from their cooker's vent. The chimney smoke itself is the overhead column.
+function drawSmokeAndFire(s) {
+  const warnSet = Object.create(null);
+  for (let i = 0; i < MAP.stations.length; i++) {
+    const st = MAP.stations[i];
+    if (st.type === 'cooker' && cookerWarns(s.stations[st.id])) warnSet[st.id] = true;
+  }
+  for (let i = 0; i < puffs.length; i++) {
+    const p = puffs[i];
+    const age = tAnim - p.at;
+    if (age < 0 || age >= p.life) continue;
+    let x = p.x0 + p.vx * age;
+    if (p.sway) x += Math.sin(age * 2 * Math.PI / p.life) * FX.BURNT_COLUMN_SWAY_PX;
+    const y = p.y0 - p.rise * age;
+    const dark = p.dark || (p.src !== null && warnSet[p.src] === true);
+    const name = dark ? 'smoke_dark' : 'smoke', f = Math.min(2, Math.floor(3 * age / p.life));
+    const st = p.src ? MAP.station(p.src) : null;
+    if (!dark || !st || !owned(st)) { recOnly(name, Math.round(x), Math.round(y), f); continue; }
+    const v = ventRp(stationArt(st)), vs = ventSim(st);
+    drawRp(name, f, v[0] + (x - vs.x) * 1.5, v[1] + (y - vs.y) * 1.5, Math.round(x), Math.round(y));
+  }
+}
+
+function bandColor(band) {
+  if (band === 'hot') return COLOR.O;
+  if (band === 'good') return COLOR.lawnA;
+  if (band === 'low') return COLOR.woodL;
+  return COLOR.smokeD;
+}
+
+// The tap ring: a tile's diamond outline on the ground, then its four corners.
+function ringRp(tx, ty, color, corners) {
+  const t = vtxRp(tx, ty);
+  onWorld(function () {
+    octx.fillStyle = color;
+    for (let r = 0; r <= 24; r++) {
+      const w = r <= 12 ? r * 2 : (24 - r) * 2;
+      if (corners && r > 2 && r < 22 && w < 42) continue;
+      octx.fillRect(t[0] - w, t[1] + r, 2, 1);
+      octx.fillRect(t[0] + w - 2, t[1] + r, 2, 1);
+    }
+  });
 }
 
 // ---------------------------------------------------------------- render: the y-sorted pass
@@ -6450,126 +6932,8 @@ function pieceFrame(p) {
   return p.prog < cook / 2 ? 0 : 1;
 }
 
-function drawStack(meat, count, x, y, max) {
-  const n = Math.min(count, max);
-  const name = 'plate_' + meat;
-  for (let k = 0; k < n; k++) D(name, x, y - k);
-}
 
-function drawStation(st, s) {
-  const tx = st.tiles[0].x * TILE, ty = st.tiles[0].y * TILE;
-  if (st.type === 'cooker') {
-    const ck = s.stations[st.id];
-    const band = PitSim.fireBand(ck ? ck.fire : 0);
-    D(st.sprite, st.draw.x, st.draw.y, BAND_FRAME[band] || 0);
-    if (!ck) return;
-    drawGauge(st, ck);
-    // The flame sits under the grate (round 1): drawn before the pieces so it never covers a
-    // piece's charred warning edges or the top run of its ring.
-    if (band === 'good' || band === 'hot') {
-      D('fire', st.draw.x + 4, st.draw.y - 4, reduced ? 0 : Math.floor(tAnim * FX.FIRE_FPS) % 3);
-    }
-    // Kettle slots overlap by 4 px, so a piece about to burn draws after the others on its
-    // cooker (round 1): its charred frame and red ring stay on top.
-    for (let pass = 0; pass < 2; pass++) {
-      for (let i = 0; i < ck.pieces.length; i++) {
-        const p = ck.pieces[i];
-        const late = p.state === 'done' && p.warn === true;
-        if (late !== (pass === 1)) continue;
-        const pos = piecePos(st, p);
-        D('piece_' + p.meat, pos.x, pos.y, pieceFrame(p));
-        const m = MEATS[p.meat];
-        if (!m) continue;
-        if (p.state === 'cooking') drawRing(pos.x - 1, pos.y - 1, Math.min(1, p.prog / m.cook), COLOR.O);
-        else if (p.state === 'done') drawRing(pos.x - 1, pos.y - 1, Math.max(0, 1 - (p.prog - m.cook) / m.window), late ? COLOR.red : COLOR.lawnA);
-        else drawRing(pos.x - 1, pos.y - 1, 1, COLOR.K);
-      }
-    }
-  } else if (st.type === 'board') {
-    const b = s.stations.board;
-    D('board', st.draw.x, st.draw.y, b && b.slicing ? 1 : 0);
-    if (b && b.stacks) {
-      for (let j = 0; j < b.stacks.length && j < BOARD_OFFS.length; j++) {
-        const stack = b.stacks[j];
-        if (stack && stack.times && stack.times.length) {
-          drawStack(stack.meat, stack.times.length, st.draw.x + BOARD_OFFS[j][0], st.draw.y + BOARD_OFFS[j][1], BOARD_DRAW_MAX);
-        }
-      }
-    }
-    // X13.7: up to two pieces left for the PREP card, at the board's left and right thirds.
-    if (b && Array.isArray(b.waiting)) {
-      for (let j = 0; j < b.waiting.length && j < 2; j++) {
-        const w = b.waiting[j];
-        if (w && MEATS[w.meat]) D('hand_cooked_' + w.meat, st.draw.x + (j === 0 ? -1 : 9), st.draw.y + 4);
-      }
-    }
-  } else if (st.type === 'cooler') {
-    D('cooler', st.draw.x, st.draw.y, s.gear.cooler ? (sim.reach() === 'cooler' ? 2 : 1) : 0);
-  } else if (st.type === 'table') {
-    const big = !!(extTile && owned(extTile));
-    if (big) { const r = extRect(); D('counter_ext', r.x, r.y); }
-    D('counter', st.draw.x, st.draw.y, big ? 1 : 0);
-    const spots = s.stations.table ? s.stations.table.spots : [];
-    const px = st.spotPx || [];
-    // v3.5: on the iso table the plates fill its top end to end (the art3 slots, in the order the
-    // spots run across the yard); their capture records stay on the v2 spots.
-    const slots = B3 ? B3.counterSlots(big ? 'counter_long' : 'counter') : null;
-    const ranks = [];
-    for (let i = 0; i < px.length; i++) if (owned(px[i])) ranks.push(i);
-    ranks.sort(function (a, b) { return px[a].x - px[b].x; });
-    let ax = st.draw.x + size('counter')[0] / 2, ay = st.draw.y + size('counter')[1];
-    if (big) {
-      const e = extRect(), csz = size('counter');
-      ax = (Math.min(e.x, st.draw.x) + Math.max(e.x + e.w, st.draw.x + csz[0])) / 2;
-      ay = Math.max(e.y + e.h, st.draw.y + csz[1]);
-    }
-    for (let i = 0; i < spots.length && i < px.length; i++) {
-      const stack = spots[i];
-      if (!stack || !stack.times || !stack.times.length || !owned(px[i])) continue;
-      const r = ranks.indexOf(i);
-      if (slots && slots.length === ranks.length && r >= 0) {
-        const name = 'plate_' + stack.meat, psz = size(name), n = Math.min(stack.times.length, C.TABLE_STACK);
-        const q = slots[r];
-        for (let k = 0; k < n; k++) {
-          if (!B3.draw(octx, name, ax + q.x - psz[0] / 2, ay + q.y - psz[1] - k, psz[0], psz[1], 0, false)) art.draw(octx, name, px[i].x, px[i].y - k, 0, false);
-          recOnly(name, px[i].x, px[i].y - k, 0);
-        }
-      } else {
-        drawStack(stack.meat, stack.times.length, px[i].x, px[i].y, C.TABLE_STACK);
-      }
-    }
-  } else if (st.type === 'pile') {
-    const n = s.charcoal | 0;
-    // Round 2: full at 5 bags or more (day 1's cart), half at 3 or 4, low at 1 or 2.
-    D('pile', st.draw.x, st.draw.y, n >= 5 ? 0 : n >= 3 ? 1 : n >= 1 ? 2 : 3);
-  } else if (st.type === 'trash') {
-    D('trash', st.draw.x, st.draw.y);
-  } else {
-    D(st.sprite, tx, ty);
-  }
-}
 
-// 4 connected runs of footprint tiles, one box each, top left first.
-function runsOf(tiles) {
-  const left = tiles.map(function (t) { return { x: t.x, y: t.y }; });
-  const runs = [];
-  while (left.length) {
-    const comp = [left.shift()];
-    for (let i = 0; i < comp.length; i++) {
-      for (let j = left.length - 1; j >= 0; j--) {
-        if (Math.abs(comp[i].x - left[j].x) + Math.abs(comp[i].y - left[j].y) === 1) comp.push(left.splice(j, 1)[0]);
-      }
-    }
-    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-    for (let i = 0; i < comp.length; i++) {
-      x0 = Math.min(x0, comp[i].x); y0 = Math.min(y0, comp[i].y);
-      x1 = Math.max(x1, comp[i].x); y1 = Math.max(y1, comp[i].y);
-    }
-    runs.push({ tx: x0, ty: y0, x: x0 * TILE, y: y0 * TILE, w: (x1 - x0 + 1) * TILE, h: (y1 - y0 + 1) * TILE, row: y1 });
-  }
-  runs.sort(function (a, b) { return (a.ty - b.ty) || (a.tx - b.tx); });
-  return runs;
-}
 
 function staffBody(kind, m, s) {
   const wf = m.walking ? 1 + (Math.floor((m.anim || 0) * 8) % 2) : 0;
@@ -6639,299 +7003,16 @@ function drawMover(kind, m, s) {
   if (overHead) D(hand, bx + 4, feet - bh - 9 + yo);
 }
 
-function drawSeated(c, seat) {
-  const sx = seat.x * TILE, sy = seat.y * TILE;
-  const f = c.eat > 0 ? (reduced ? 0 : Math.floor(tAnim / FX.EAT_FRAME_S) % 2) : 2;
-  if (B3) B3.person(c.id, false);
-  D('cust' + (((c.body | 0) % 4 + 4) % 4) + '_sit', sx, sy - 6, f);
-}
 
 function seatOf(c) { return c.seat ? SEAT_BY_ID[c.seat] || null : null; }
 
-// A see-through preview of an unowned piece; its capture record carries ghost: true.
-function ghost(name, x, y, frame) {
-  const n = recs.length;
-  octx.globalAlpha = GHOST_ALPHA;
-  if (isPicnic(name)) picnicDraw(name, x, y, frame); else D(name, x, y, frame);
-  octx.globalAlpha = 1;
-  if (capturing) for (let i = n; i < recs.length; i++) recs[i].ghost = true;
-}
 
-// v3.5: one depth-sorted pass in the iso view. Every item carries its projected depth (the sim
-// x + y of its footprint centre, a walker's against big footprints), then the v2 key, layer and x,
-// and draws in its own shift. Fence, gate, hedge and bed tiles draw in iso directly (their v2 records
-// stay); everything else draws its v2 sprite at its sim px, translated onto its tile.
-function drawSorted(s) {
-  const items = [];
-  let order = 0;
-  function push(k, layer, dx, fn, sh, depth) {
-    items.push({ d: depth === undefined ? (sh ? sh.depth : k) : depth, k: k, l: layer, x: dx, o: order++, f: fn, sh: sh || null });
-  }
-  const T_ = MAP.T;
-  const open = gateOpen(s);
-  const fps = bigFootprints(s);
-
-  // Fence, gate, hedge and bed tiles (layer 0), each at its tile's depth.
-  for (let y = 0; y < MAP.H; y++) {
-    for (let x = 0; x < MAP.W; x++) {
-      const t = MAP.at(x, y);
-      const px = x * TILE, key = y * TILE + 15, depth = px + y * TILE + TILE;
-      const tsh = moverShift(px, y * TILE);
-      if (t === T_.FENCE && y === 0) {
-        const corner = x === 0 || x === MAP.W - 1;
-        push(key, 0, px, function () {
-          if (B3 && B3.fenceTile(octx, GEO, MAP, x, y)) recOnly('fence_back', px, 0, corner ? 1 : 0);
-          else withShift(tsh, function () { D('fence_back', px, 0, corner ? 1 : 0); });
-        }, null, depth);
-      } else if (t === T_.FENCE) {
-        const name = fenceName(x, y);
-        push(key, 0, px, function () {
-          if (B3 && B3.fenceTile(octx, GEO, MAP, x, y)) recOnly(name, px, (y + 1) * TILE - size(name)[1], 0);
-          else withShift(tsh, function () { D(name, px, (y + 1) * TILE - size(name)[1]); });
-        }, null, depth);
-      } else if (t === T_.GATE) {
-        push(key, 0, px, function () {
-          if (B3 && B3.gateTile(octx, GEO, MAP, x, y, open)) recOnly('gate', px, (y + 1) * TILE - size('gate')[1], open ? 1 : 0);
-          else withShift(tsh, function () { D('gate', px, (y + 1) * TILE - size('gate')[1], open ? 1 : 0); });
-        }, null, depth);
-      } else if (t === T_.HEDGE) {
-        push(key, 0, px, function () {
-          if (B3 && B3.block(octx, GEO, 'hedge', x, y, x % 2)) recOnly('hedge', px, (y + 1) * TILE - size('hedge')[1], x % 2);
-          else withShift(tsh, function () { D('hedge', px, (y + 1) * TILE - size('hedge')[1], x % 2); });
-        }, null, depth);
-      } else if (t === T_.BED) {
-        push(key, 0, px, function () {
-          if (B3 && B3.block(octx, GEO, 'bed', x, y, (x + y) % 3)) recOnly('bed', px, (y + 1) * TILE - size('bed')[1], (x + y) % 3);
-          else withShift(tsh, function () { D('bed', px, (y + 1) * TILE - size('bed')[1], (x + y) % 3); });
-        }, null, depth);
-      }
-    }
-  }
-  // A decor bed draw (the Flower bed) as an iso block on the tile under it.
-  function bedDraw(d, frame) {
-    const tx = Math.max(0, Math.min(MAP.W - 1, Math.floor((d.x + 8) / TILE)));
-    if (B3 && B3.block(octx, GEO, 'bed', tx, d.sortRow, frame)) recOnly('bed', d.x, d.y, frame);
-    else D('bed', d.x, d.y, frame);
-  }
-
-  // Fixed props (layer 1).
-  for (let i = 0; i < MAP.props.length; i++) {
-    const p = MAP.props[i];
-    push(p.sortRow * TILE + 15, 1, p.draw.x, function () {
-      if (isPicnic(p.sprite)) picnicDraw(p.sprite, p.draw.x, p.draw.y, p.frame); else D(p.sprite, p.draw.x, p.draw.y, p.frame);
-      if (p.id === 'sign' && MAP.signText) drawSign(s);
-    }, propShift(p));
-  }
-
-  // Active stations with their extras (layer 1).
-  for (let i = 0; i < MAP.stations.length; i++) {
-    const st = MAP.stations[i];
-    if (!owned(st)) continue;
-    push(st.sortRow * TILE + 15, 1, st.draw.x, function () { drawStation(st, s); }, stationShift(st));
-  }
-
-  // Owned decor, not the overhead draws (layer 1).
-  const birdOn = birdUntil >= 0 && birdUntil > tAnim && !reduced;
-  for (let i = 0; i < MAP.decor.length; i++) {
-    const spot = MAP.decor[i];
-    if (s.decor[spot.id] !== true) {
-      // The unbought Flower bed shows its box of tilled soil (bed frame 3, round 2).
-      if (spot.id === 'flowers') {
-        for (let j = 0; j < spot.draws.length; j++) {
-          const d = spot.draws[j];
-          if (d.sprite === 'bed') push(d.sortRow * TILE + 15, 1, d.x, function () { bedDraw(d, 3); }, null, decorShift(spot, d).depth);
-        }
-      }
-      continue;
-    }
-    for (let j = 0; j < spot.draws.length; j++) {
-      const d = spot.draws[j];
-      if (d.overhead) continue;
-      const frame = (spot.id === 'birdbath' && d.sprite === 'birdbath' && birdOn) ? 1 : d.frame;
-      if (d.sprite === 'bed') push(d.sortRow * TILE + 15, 1, d.x, function () { bedDraw(d, frame); }, null, decorShift(spot, d).depth);
-      else push(d.sortRow * TILE + 15, 1, d.x, function () { if (isPicnic(d.sprite)) picnicDraw(d.sprite, d.x, d.y, frame); else D(d.sprite, d.x, d.y, frame); }, decorShift(spot, d));
-    }
-  }
-
-  // Ghosts of unowned gear and decor (layer 1, the footprint's sort key), under their outlines.
-  // Morning and evening only (round 2): during service the yard shows what is really there.
-  if (s.phase !== 'service') {
-    for (let i = 0; i < MAP.stations.length; i++) {
-      const st = MAP.stations[i];
-      if (!owned(st)) {
-        push(st.sortRow * TILE + 15, 1, st.draw.x, function () { ghost(st.sprite, st.draw.x, st.draw.y, 0); }, stationShift(st));
-      } else if (st.type === 'table' && extTile && !owned(extTile)) {
-        const r = extRect();
-        push(st.sortRow * TILE + 15, 1, r.x, function () {
-          if (B3) {
-            octx.globalAlpha = GHOST_ALPHA;
-            const csz = size(st.sprite);
-            const hit = B3.extGhost(octx, r, { x: st.draw.x, y: st.draw.y, w: csz[0], h: csz[1] });
-            octx.globalAlpha = 1;
-            if (hit) { const n = recs.length; recOnly('counter_ext', r.x, r.y, 0); if (capturing) for (let i = n; i < recs.length; i++) recs[i].ghost = true; return; }
-          }
-          ghost('counter_ext', r.x, r.y, 0);
-        }, stationShift(st));
-      }
-    }
-    for (let i = 0; i < MAP.decor.length; i++) {
-      const spot = MAP.decor[i];
-      if (s.decor[spot.id] === true) continue;
-      for (let j = 0; j < spot.draws.length; j++) {
-        const d = spot.draws[j];
-        if (d.overhead) continue;
-        if (d.sprite === 'bed') continue;
-        push(d.sortRow * TILE + 15, 1, d.x, function () { ghost(d.sprite, d.x, d.y, d.frame); }, decorShift(spot, d));
-      }
-    }
-  }
-
-  // Dashed outlines of unowned footprints on the ground: stations, then decor (layer 2).
-  for (let i = 0; i < MAP.stations.length; i++) {
-    const st = MAP.stations[i];
-    const stOwned = owned(st);
-    const tiles = [];
-    for (let j = 0; j < st.tiles.length; j++) if (!stOwned || !owned(st.tiles[j])) tiles.push(st.tiles[j]);
-    if (!tiles.length) continue;
-    const runs = runsOf(tiles);
-    for (let j = 0; j < runs.length; j++) {
-      const r = runs[j];
-      push(r.row * TILE + 15, 2, r.x, function () { dashedBox(r.x, r.y, r.w, r.h); }, null, -1);
-    }
-  }
-  for (let i = 0; i < MAP.decor.length; i++) {
-    const spot = MAP.decor[i];
-    if (s.decor[spot.id] === true) continue;
-    const runs = runsOf(spot.tiles);
-    for (let j = 0; j < runs.length; j++) {
-      const r = runs[j];
-      push(r.row * TILE + 15, 2, r.x, function () { dashedBox(r.x, r.y, r.w, r.h); }, null, -1);
-    }
-  }
-
-  // People (layer 3): the player, the RUN, FIRE and PREP cards' movers (buddy, tender, prep), then
-  // customers by id. X13.7: each crew mover wears its card's look (deviation 54).
-  const staff = [['player', s.player, ''], ['buddy', s.buddy, 'run'], ['tender', s.tender, 'fire'], ['prep', s.prep || null, 'prep']];
-  for (let i = 0; i < staff.length; i++) {
-    const m = staff[i][1], role = staff[i][2];
-    if (!m) continue;
-    let kind = staff[i][0];
-    if (role) {
-      const card = moverCard(m);
-      if (card && card.look) ensureCrewLook(role, card.look);
-      if (kind === 'prep' && !art.has('prep_down')) kind = 'buddy';
-    }
-    const mx = Math.round(m.px), my = Math.round(m.py);
-    push(my + 15, 3, mx, function () { drawMover(kind, m, s); }, moverShift(mx, my), walkerDepth(fps, mx, my));
-  }
-  const custs = s.customers.slice().sort(byId);
-  for (let i = 0; i < custs.length; i++) {
-    const c = custs[i];
-    const seat = c.mode === 'eating' ? seatOf(c) : null;
-    if (seat) push(seat.y * TILE + 15, 3, seat.x * TILE, function () { drawSeated(c, seat); }, seatShift(seat));
-    else {
-      const cx = Math.round(c.px), cy = Math.round(c.py);
-      push(cy + 15, 3, cx, function () { drawMover('cust', c, s); }, moverShift(cx, cy), walkerDepth(fps, cx, cy));
-    }
-  }
-
-  // Eaters' plates (layer 5), by customer id, with their seat.
-  for (let i = 0; i < custs.length; i++) {
-    const c = custs[i];
-    if (c.mode !== 'eating') continue;
-    const seat = seatOf(c);
-    if (!seat) continue;
-    const sx = seat.x * TILE, sy = seat.y * TILE;
-    const chair = isChairSeat(seat);
-    const px = sx + 4, py = chair ? sy + 9 : sy + 17;
-    const key = chair ? seat.y * TILE + 15 : (seat.y + 1) * TILE + 15;
-    push(key, 5, px, function () { D('plate_' + c.want, px, py); }, plateShift(seat, c.want, px, py));
-  }
-
-  // The dog (layer 4).
-  const dx = Math.round(dog.px), dy = Math.round(dog.py);
-  push(dy + 15, 4, dx, function () { D('dog', dx, dy, dog.frame, dog.flip); }, moverShift(dx, dy), walkerDepth(fps, dx, dy));
-
-  items.sort(function (a, b) { return (a.d - b.d) || (a.k - b.k) || (a.l - b.l) || (a.x - b.x) || (a.o - b.o); });
-  for (let i = 0; i < items.length; i++) withShift(items[i].sh, items[i].f);
-  return custs;
-}
 
 // ---------------------------------------------------------------- render: the passes after the sort
 
-function drawOverhead(s) {
-  if (s.decor.lights === true && MAP.overhead && MAP.overhead.lights) {
-    const fr = reduced ? 0 : Math.floor(tAnim / FX.TWINKLE_S) % 2;
-    // v3.5: the string hangs between the two posts' hooks wherever they project.
-    const spot = MAP.decor.find(function (q) { return q.id === 'lights'; });
-    const posts = spot ? spot.draws.filter(function (d) { return d.sprite === 'lights_post'; }) : [];
-    const a3 = B3 && B3.anchorOf ? B3.anchorOf('lights_post', 0) : null;
-    if (a3 && posts.length === 2) {
-      const sz = size('lights_post');
-      const hook = posts.map(function (d) {
-        const sh = decorShift(spot, d);
-        return [(d.x + sh.dx) * RS + sz[0], (d.y + sz[1] + sh.dy) * RS - 104];
-      }).sort(function (u, v) { return u[0] - v[0]; });
-      if (B3.lights(octx, hook[0][0] + 4, hook[0][1], hook[1][0], hook[1][1], fr)) recOnly('lights_string', MAP.overhead.lights.x, MAP.overhead.lights.y, fr);
-    } else {
-      D('lights_string', MAP.overhead.lights.x, MAP.overhead.lights.y, fr);
-    }
-  }
-  if (s.gear.canopy === true && MAP.overhead && MAP.overhead.canopy) {
-    const cp = MAP.overhead.canopy, csz = size('canopy');
-    withShift(moverShift(cp.x + csz[0] / 2 - 8, cp.y + csz[1] - 16), function () { D('canopy', cp.x, cp.y); });
-  }
-}
 
-function drawSmokeAndFire(s) {
-  const warnSet = Object.create(null);
-  for (let i = 0; i < MAP.stations.length; i++) {
-    const st = MAP.stations[i];
-    if (st.type === 'cooker' && cookerWarns(s.stations[st.id])) warnSet[st.id] = true;
-  }
-  for (let i = 0; i < puffs.length; i++) {
-    const p = puffs[i];
-    const age = tAnim - p.at;
-    if (age < 0 || age >= p.life) continue;
-    let x = p.x0 + p.vx * age;
-    if (p.sway) x += Math.sin(age * 2 * Math.PI / p.life) * FX.BURNT_COLUMN_SWAY_PX;
-    const y = p.y0 - p.rise * age;
-    const dark = p.dark || (p.src !== null && warnSet[p.src] === true);
-    const st = p.src ? MAP.station(p.src) : null;
-    withShift(st ? stationShift(st) : stationShiftAt(p.x0, p.y0), function () {
-      D(dark ? 'smoke_dark' : 'smoke', Math.round(x), Math.round(y), Math.min(2, Math.floor(3 * age / p.life)));
-    });
-  }
-  // Flames draw with their cooker in pass 2, under the grate pieces (round 1).
-}
 
-function bandColor(band) {
-  if (band === 'hot') return COLOR.O;
-  if (band === 'good') return COLOR.lawnA;
-  if (band === 'low') return COLOR.woodL;
-  return COLOR.smokeD;
-}
 
-function drawGauge(st, ck) {
-  const gx = st.tiles[0].x * TILE + 18;
-  const top = st.draw.y + 4, bottom = st.draw.y + size(st.sprite)[1];
-  const h = bottom - top;
-  if (h < 4) return;
-  octx.fillStyle = COLOR.outline;
-  octx.fillRect(gx, top, 3, h);
-  const inner = h - 2;
-  const f = Math.max(0, Math.min(1, ck.fire / C.FIRE_MAX));
-  const fh = Math.round(f * inner);
-  if (fh > 0) {
-    octx.fillStyle = bandColor(PitSim.fireBand(ck.fire));
-    octx.fillRect(gx, top + 1 + (inner - fh), 3, fh);
-  }
-  octx.fillStyle = COLOR.C;
-  const t1 = top + 1 + inner - Math.round(C.FIRE_GOOD / C.FIRE_MAX * inner);
-  const t2 = top + 1 + inner - Math.round(C.FIRE_HOT / C.FIRE_MAX * inner);
-  octx.fillRect(gx, t1, 1, 1); octx.fillRect(gx + 2, t1, 1, 1);
-  octx.fillRect(gx, t2, 1, 1); octx.fillRect(gx + 2, t2, 1, 1);
-}
 
 function drawCues(s, custs) {
   // Bubbles: order icon or walk out mark, then food bubbles.
@@ -6969,7 +7050,8 @@ function drawCues(s, custs) {
       const st = MAP.stations[i];
       if (st.type !== 'cooker' || !owned(st) || !cookerWarns(s.stations[st.id])) continue;
       const bp = warnBubblePos(st);
-      withShift(stationShift(st), function () { D('bubble_warn', bp.x, bp.y, reduced ? 0 : Math.floor(tAnim / blink) % 2); });
+      const a3 = stationArt(st), bx = boxRp(a3.name, 0, a3.X, a3.Y);
+      drawRp('bubble_warn', reduced ? 0 : Math.floor(tAnim / blink) % 2, bx.x0 - 2, bx.y0 - 2, bp.x, bp.y);
     }
   }
   // Patience bars.
@@ -7059,14 +7141,15 @@ function drawTop(s) {
   // Slice bar over the board.
   const b = s.stations.board;
   if (b && b.slicing && b.slicing.total > 0) {
-    const st = MAP.station('board');
-    const bsh = stationShift(st);
-    const bx = st.draw.x + bsh.dx, by = st.draw.y + bsh.dy;
-    octx.fillStyle = COLOR.K;
-    octx.fillRect(bx, by - 5, 16, 3);
-    octx.fillStyle = COLOR.C;
-    const w = Math.round(14 * Math.max(0, Math.min(1, b.slicing.t / b.slicing.total)));
-    if (w > 0) octx.fillRect(bx + 1, by - 4, w, 1);
+    const a3 = stationArt(MAP.station('board')), bx = boxRp(a3.name, 0, a3.X, a3.Y);
+    const frac = Math.max(0, Math.min(1, b.slicing.t / b.slicing.total));
+    onWorld(function () {
+      const x = Math.round(a3.X) - 16, y = bx.y0 - 9;
+      octx.fillStyle = COLOR.K; octx.fillRect(x, y, 32, 6);
+      octx.fillStyle = COLOR.C;
+      const w = Math.round(28 * frac);
+      if (w > 0) octx.fillRect(x + 2, y + 2, w, 2);
+    });
   }
   // Floating numbers, then their coins.
   for (let i = 0; i < nums.length; i++) {
@@ -7102,9 +7185,7 @@ function drawTop(s) {
       const age = tAnim - m.at;
       if (age < 0 || age >= FX.TAP_RING_S) continue;
       if (B3) {
-        const tx0 = Math.floor(m.x / TILE), ty0 = Math.floor(m.y / TILE);
-        if (reduced || age < FX.TAP_RING_S * 0.6) B3.footprint(octx, GEO, tx0, ty0, tx0, ty0, m.ok ? COLOR.yellow : COLOR.O, true);
-        else B3.footprint(octx, GEO, tx0, ty0, tx0, ty0, m.ok ? COLOR.yellow : COLOR.O, 'corners');
+        ringRp(Math.floor(m.x / TILE), Math.floor(m.y / TILE), m.ok ? COLOR.yellow : COLOR.O, !(reduced || age < FX.TAP_RING_S * 0.6));
         continue;
       }
       octx.fillStyle = m.ok ? COLOR.yellow : COLOR.O;
@@ -7129,38 +7210,32 @@ function drawTop(s) {
 // him; the pulse on #act carries the step then), above or below the station alike. A corner that only
 // grazes his feet keeps it, so a step whose station is out of reach always has a pointer.
 function arrowBox() {
-  if (!art.has('arrow')) return null;
+  if (!art.has('arrow') || !A3) return null;
   const t = tutStep();
   const st = t ? targetStation(t.target) : null;
   if (!st) return null;
-  const r = stationRectsSim(st)[0];
-  const sh = stationShift(st);
-  const x = r.x + Math.floor(r.w / 2) - 4;
-  const above = r.y - 12 >= 22;
-  const y = above ? r.y - 12 : r.y + r.h;
+  const a = stationArt(st), b = boxRp(a.name, 0, a.X, a.Y), d = drawOf(st), sz = size(st.sprite || 'kettle');
+  const X = Math.round((b.x0 + b.x1) / 2), Y = b.y0 - 2;
   if (sim.state.phase === 'service') {
-    const p = sim.state.player;
-    const px = Math.round(p.px), py = Math.round(p.py);
-    const cx = x + 4, cy = y + 6;
-    if (cx >= px && cx < px + TILE && cy >= py - 8 && cy < py + TILE) return null;
+    const p = sim.state.player, px = isoX(p.px + 8, p.py + 8) * RS, py = isoY(p.px + 8, p.py + 8) * RS + 4;
+    if (Math.abs(X - px) < 12 && Y - 10 > py - 51 && Y - 10 < py) return null;
   }
-  return { st: st, x: x, y: y, above: above, sh: sh };
+  return { st: st, x: d.x + Math.floor(sz[0] / 2) - 4, y: d.y - 12, X: X, Y: Y, above: true };
 }
 
-// The tutorial arrow over (or under) the target station, last in pass 6 (K10). A tap on it is a tap
-// on the station (round 2, onPointer).
+// The tutorial arrow over the target station, pointing down at it, last in pass 6 (K10). A tap on it
+// is a tap on the station (round 2).
 function drawArrow() {
   const a = arrowBox();
   if (!a) return;
-  const base = a.above ? 0 : 2;
   const bob = FX.ARROW_BOB_S > 0 ? FX.ARROW_BOB_S : 0.3;
-  withShift(a.sh, function () { D('arrow', a.x, a.y, reduced ? base : base + (Math.floor(tAnim / bob) % 2)); });
+  drawRp('arrow', reduced ? 0 : Math.floor(tAnim / bob) % 2, a.X, a.Y, a.x, a.y);
 }
 
 // The tutorial banner, last before the blit so nothing covers it ([T 2.6], deviation 19).
 function drawBanner(b) {
   const st = targetStation(b.target);
-  if (st) bannerBottom = st.draw.y + stationShift(st).dy < SH / 3;
+  if (st && A3) { const a3 = stationArt(st), bx = boxRp(a3.name, 0, a3.X, a3.Y); bannerBottom = bx.y0 - camOrigin()[1] < cam.vh / 3; }
   const h = b.lines.length > 1 ? 21 : 11;
   const y = bannerBottom ? SH - 2 - h : 2;
   // The art3 font at 2x when every line fits the yard's width; the box grows to the widest line.
@@ -7204,18 +7279,31 @@ function drawRain() {
 function render() {
   const s = sim.state;
   const inService = s.phase === 'service';
+  hits.length = 0;
+  // The world, 1 px per rp.
+  octx = wctx;
+  SW = WORLD.W / RS; SH = WORLD.H / RS;
+  const o = camOrigin();
+  VIEW.x0 = o[0] / RS; VIEW.w = cam.vw / RS;
+  octx.setTransform(RS, 0, 0, RS, 0, 0);
   octx.globalAlpha = 1;
-  octx.fillStyle = COLOR.K;
-  octx.fillRect(0, 0, SW, SH);
-
-  drawGround(s);                      // 1. ground
-  const custs = drawSorted(s);        // 2. the y-sorted pass
-  drawOverhead(s);                    // 3. string lights, canopy
-  drawSmokeAndFire(s);                // 4. smoke, puffs, flames
+  drawGround(s);                      // 1. sky, ground, barn, back fence, "+" marks
+  drawCanopy(s);                      // 1b. the canopy, behind everything that stands
+  const custs = drawSorted(s);        // 2. the depth pass
+  drawOverhead(s);                    // 3. string lights, smoke columns
+  drawSmokeAndFire(s);                // 4. dark puffs
   drawCues(s, custs);                 // 5. bubbles, bars, sweat, zzz, hearts
-  drawTop(s);                         // 6. slice bar, numbers, coins, sparkles, tap rings
-  if (inService && s.rain) drawRain(); // 7. rain
+  drawTop(s);                         // 6. slice bar, numbers, coins, sparkles, tap rings, arrow
 
+  // The overlay over the view, at least 352 rp across (its v3.5 size).
+  octx = ovctx;
+  SW = ov.width / RS; SH = ov.height / RS;
+  VIEW.x0 = 0; VIEW.w = SW;
+  octx.setTransform(1, 0, 0, 1, 0, 0);
+  octx.clearRect(0, 0, ov.width, ov.height);
+  octx.setTransform(RS, 0, 0, RS, 0, 0);
+  ovRec = true;
+  if (inService && s.rain) drawRain(); // 7. rain
   // 8. The tutorial banner in place of the clock and GATE OPENS IN, else canvas text in umber boxes.
   if (inService) {
     const banner = bannerNow();
@@ -7232,14 +7320,86 @@ function render() {
   } else {
     bannerBottom = false;
   }
+  ovRec = false;
+  octx = wctx;
+  SW = WORLD.W / RS; SH = WORLD.H / RS;
 
-  // 9. Blit at the D13 scale, with the burnt shake.
+  // 9. Blit the camera's view, then the overlay, with the burnt shake.
+  const cw = el.cv.width, ch = el.cv.height, z = cam.z;
+  vctx.setTransform(1, 0, 0, 1, 0, 0);
   vctx.imageSmoothingEnabled = false;
-  vctx.fillStyle = COLOR.K;
-  vctx.fillRect(0, 0, el.cv.width, el.cv.height);
+  vctx.fillStyle = SKY;
+  vctx.fillRect(0, 0, cw, ch);
   let ox = 0;
-  if (!reduced && shakeUntil > nowMs) ox = (Math.floor(nowMs / 16) % 2 === 0 ? 1 : -1) * kpx;
-  vctx.drawImage(off, 0, 0, GEO.W, GEO.H, ox, 0, GEO.W * kpx, GEO.H * kpx);
+  if (!reduced && shakeUntil > nowMs) ox = (Math.floor(nowMs / 16) % 2 === 0 ? 1 : -1) * Math.max(1, Math.round(z));
+  const sx0 = Math.max(0, o[0]), sy0 = Math.max(0, o[1]);
+  const sx1 = Math.min(WORLD.W, o[0] + cam.vw), sy1 = Math.min(WORLD.H, o[1] + cam.vh);
+  if (sx1 > sx0 && sy1 > sy0) vctx.drawImage(off, sx0, sy0, sx1 - sx0, sy1 - sy0, (sx0 - o[0]) * z + ox, (sy0 - o[1]) * z, (sx1 - sx0) * z, (sy1 - sy0) * z);
+  if ((WORLD.H - o[1]) * z < ch) { vctx.fillStyle = '#5a9c3c'; vctx.fillRect(0, Math.floor((WORLD.H - o[1]) * z), cw, ch); }
+  vctx.drawImage(ov, 0, 0, ov.width, ov.height, ox, 0, ov.width * cam.kOv, ov.height * cam.kOv);
+}
+
+// ---------------------------------------------------------------- canvas
+
+function setupCanvas() {
+  A3 = PitSim.art3 || null;
+  off = document.createElement('canvas');
+  off.width = WORLD.W; off.height = WORLD.H;
+  wctx = octx = off.getContext('2d');
+  octx.setTransform(RS, 0, 0, RS, 0, 0);
+  ov = document.createElement('canvas');
+  ovctx = ov.getContext('2d');
+  vctx = el.cv.getContext('2d');
+  makeZoom();
+  resize();
+  window.addEventListener('resize', resize);
+  window.addEventListener('orientationchange', resize);
+}
+
+// v3.6 (spec C): phones (under 900 CSS px, the one column layout) get the near view, k = round(1.5
+// dpr) device px per rp, the canvas edge to edge and as tall as the room above the controls; the
+// two column layout fits the whole world at the largest whole k. The overlay takes the largest whole
+// scale that keeps it at least 352 rp across.
+function resize() {
+  const vw = document.documentElement.clientWidth || window.innerWidth || 375;
+  const vh = window.innerHeight || 0;
+  const d = dpr();
+  const was = cam.phone;
+  cam.phone = vw < 900;
+  el.root.classList.toggle('camnear', cam.phone);
+  if (cam.phone) {
+    cam.nearK = Math.max(1, Math.round(1.5 * d));
+    const cssW = (el.wrap && el.wrap.clientWidth) || vw;
+    const cssH = Math.max(240, (vh || 812) - 44 - CONTROLS_H);
+    const rw = Math.max(64, Math.floor(Math.floor(cssW * d) / cam.nearK));
+    const rh = Math.max(96, Math.min(WORLD.H + 24, Math.floor(Math.floor(cssH * d) / cam.nearK)));
+    el.cv.width = rw * cam.nearK;
+    el.cv.height = rh * cam.nearK;
+    if (cam.mode === 'fit') cam.mode = 'near';
+    if (cam.mode === 'far') el.cv.height = Math.max(96, Math.min(el.cv.height, Math.ceil(WORLD.H * farZ(el.cv.width, 1e9) - 1e-6)));
+  } else {
+    const colW = Math.min(vw, DESK_MAX_W) - 32 - 320 - 24;
+    const k = Math.min(colW * d / WORLD.W, (vh - 44 - 16 - CONTROLS_H) * d / WORLD.H);
+    cam.nearK = Math.max(1, Math.floor(k + 1e-6));
+    el.cv.width = WORLD.W * cam.nearK;
+    el.cv.height = WORLD.H * cam.nearK;
+    cam.mode = 'fit';
+  }
+  el.cv.style.width = (el.cv.width / d) + 'px';
+  el.cv.style.height = (el.cv.height / d) + 'px';
+  cam.kOv = Math.max(1, Math.floor(el.cv.width / OV_MIN_RW));
+  ov.width = Math.ceil(el.cv.width / cam.kOv);
+  ov.height = Math.ceil(el.cv.height / cam.kOv);
+  camView();
+  // A resize keeps a view the player moved; otherwise the home view, framed for the new size.
+  if (!cam.homed || was !== cam.phone || !cam.moved) camHome(); else camClamp();
+  syncZoom();
+  snapCanvas(d);
+  vctx.imageSmoothingEnabled = false;
+  octx.imageSmoothingEnabled = false;
+  if (sim) { try { render(); } catch (e) { fail(e); } }
+  if (currentPanel === 'creator') { drawCrSign(); drawCreatorScene(); }
+  if (currentPanel === 'week') fitWeek();
 }
 
 // ---------------------------------------------------------------- DOM per frame

@@ -810,8 +810,10 @@ function def(name, w, h, ax, ay, n, paint, meta) {
   ORDER.push(name);
 }
 // kit
-def('kettle', 36, 40, 18, 33, 5, kettle, { footprint: [1, 1], shadow: [12, 5] });
-def('drum', 32, 50, 16, 46, 4, drum, { footprint: [1, 2], shadow: [12, 5] });
+// grate: the cooking surface meat sits on, [x, y, rx, ry] rp from the anchor (kettle: the open
+// frame's grate at cy; drum: the rack on its lid top).
+def('kettle', 36, 40, 18, 33, 5, kettle, { footprint: [1, 1], shadow: [12, 5], grate: [0, -15, 9, 3] });
+def('drum', 32, 50, 16, 46, 4, drum, { footprint: [1, 2], shadow: [12, 5], grate: [0, -23, 8, 3] });
 def('cabinet', 36, 76, 18, 60, 4, cabinet, { footprint: [1, 1], shadow: [15, 6] });
 def('stick_burner', 84, 72, 40, 58, 4, stickBurner, { footprint: [2, 1], shadow: [30, 9] });
 def('trailer_rig', 96, 84, 46, 66, 4, trailerRig, { footprint: [2, 1], shadow: [34, 10] });

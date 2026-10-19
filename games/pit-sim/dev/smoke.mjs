@@ -255,7 +255,7 @@ const FILES = {
 };
 const EXPECTED_REQUEST_FILES = ['index.html', 'sprites.js', 'sim.js', 'game.js',
   // v3.4 (design 12): the art3 library and its adapter.
-  'art3/palette.js', 'art3/proj.js', 'art3/people.js', 'art3/kit.js', 'art3/yard.js', 'art3/fx.js', 'art3/index.js', 'art3/bridge.js'];
+  'art3/palette.js', 'art3/proj.js', 'art3/people.js', 'art3/kit.js', 'art3/yard.js', 'art3/fx.js', 'art3/rule.js', 'art3/index.js', 'art3/bridge.js'];
 
 const DEFAULT_SEED = 1;
 const SAVE_KEY = 'hs.pitsim.save';
@@ -325,13 +325,14 @@ const BURN_WARN = {
 // [T 2.6] and K10: banner lines, arrow and bubble positions on this map.
 const BANNER_CHARCOAL = ['GRAB CHARCOAL FROM THE PILE.'];
 const ARROW_AT = {
-  pile: { x: 68, y: 48, frames: [2, 3] }, kettle1: { x: 84, y: 48, frames: [2, 3] }, cooler: { x: 100, y: 32, frames: [2, 3] },
-  board: { x: 84, y: 52, frames: [0, 1] }, table: { x: 108, y: 76, frames: [0, 1] }
+  // The angle redo: the arrow always points down from above its station: draw.x + w / 2 - 4, draw.y - 12, frames 0 and 1.
+  pile: { x: 68, y: 116, frames: [0, 1] }, kettle1: { x: 68, y: 68, frames: [0, 1] }, cooler: { x: 68, y: 84, frames: [0, 1] },
+  board: { x: 36, y: 52, frames: [0, 1] }, table: { x: 76, y: 4, frames: [0, 1] }
 };
 const WARN_DRAW = {
-  piece: { name: 'piece_sausage', frame: 4, x: 80, y: 25 },
-  bubble: { name: 'bubble_warn', x: 78, y: 13 },   // round 1: draw.x - 2, left of the vent
-  smoke: { name: 'smoke_dark', xMin: 80, xMax: 100, yMax: 24 }
+  piece: { name: 'piece_sausage', frame: 4, x: 64, y: 73 },   // the angle redo: kettle 1 draw (64,80) plus its slotPx (0,-7)
+  bubble: { name: 'bubble_warn', x: 62, y: 69 },   // round 1: draw.x - 2, left of the vent
+  smoke: { name: 'smoke_dark', xMin: 64, xMax: 84, yMax: 80 }
 };
 const PULSE = 'tut-pulse';
 const DAY1_HINT = 'Tap the charcoal pile';
@@ -339,7 +340,7 @@ const MEAT_IDS = ['sausage', 'chicken', 'ribs', 'butt', 'brisket'];
 const GEAR_IDS = ['kettle2', 'cooler', 'bigtable', 'tray', 'canopy', 'drum'];
 const DECOR_IDS = ['chair1', 'chair2', 'flowers', 'birdbath', 'lights', 'picnic2'];
 const SEAT_IDS = ['pt1b', 'pt1a', 'chair1', 'chair2', 'pt2b', 'pt2a'];
-const DOG_HOME = { x: 4, y: 7, px: 64, py: 112, frame: 2 };
+const DOG_HOME = { x: 2, y: 9, px: 32, py: 144, frame: 2 };   // the angle redo plan A
 
 // Contract X12.1, copied verbatim (replaces the W16.2 literal; spliced from the contract text).
 const REQUIRED_SPRITES = [   // [name, w, h, frames]
@@ -451,7 +452,7 @@ const BOOKING_MENUS = {
   yard: []
 };
 // X1 and X5.3: the PREP card's tiles.
-const PREP_TILES = { prepIdle: { x: 2, y: 5, face: 'right' }, prepUse: { x: 4, y: 4, face: 'right' } };
+const PREP_TILES = { prepIdle: { x: 1, y: 3, face: 'right' }, prepUse: { x: 2, y: 3, face: 'down' } };   // the angle redo plan A
 // X9 event types.
 const EV31 = {
   hiringOpen: 'hiring_open', tryout: 'tryout', crewHired: 'crew_hired', roundDone: 'round_done', hiringDone: 'hiring_done',
@@ -511,8 +512,9 @@ const LOOK_TABLES = {
 const LEGEND = '0123456789abcdefghijklmnopqrstuvwxyz';
 const PLAYER_SPRITES = [['player_down', 3], ['player_up', 3], ['player_side', 3], ['player_slice', 2]];
 // W16.5 and W19 step 44.
-const SIGN_TEXT = { x: 67, y: 5, w: 58 };
-const SIGN_DRAW = { x: 65, y: 2 };
+// The angle redo: the board on the barn over (3,0) (4,0); w is the art board's text box (54 rp).
+const SIGN_TEXT = { x: 37, y: 0, w: 54, tiles: [{ x: 3, y: 0 }, { x: 4, y: 0 }] };
+const SIGN_DRAW = { x: 48, y: 0 };
 const FONT_FRAME = (ch) => {   // W16.2 font frame mapping
   if (ch >= '0' && ch <= '9') return ch.charCodeAt(0) - 48;
   if (ch >= 'A' && ch <= 'Z') return 10 + ch.charCodeAt(0) - 65;
@@ -1090,6 +1092,7 @@ const TEXT = {
   controls: 'Controls',
   skipTutorial: 'Skip tutorial',
   handsEmpty: 'Hands empty',
+  nothing: 'Nothing to do here',   // the angle redo: the spawn (3,2) faces the counter
   seatTipsRow: 'Seat tips',
   tillHeading: (day) => 'Day ' + day + ' till',
   cartLine: (total, after) => 'Total ' + total + '. Cash after ' + after + '.',
@@ -1145,33 +1148,27 @@ const ART_FIELDS = { built: 'built' };
 
 // Tiles the player taps (contract D15; tapping a station walks to its use tile).
 const TILE = {
-  pile: { x: 4, y: 2 },
-  kettle1: { x: 5, y: 2 },
-  cooler: { x: 6, y: 1 },
-  board: { x: 5, y: 4 },
-  table: { x: 6, y: 6 }
+  pile: { x: 4, y: 8 },
+  kettle1: { x: 4, y: 5 },
+  cooler: { x: 4, y: 6 },
+  board: { x: 2, y: 4 },
+  table: { x: 4, y: 1 }
 };
-const SPAWN = { x: 6, y: 3 };
-const ARROW_LEFT_X = 5;
+const SPAWN = { x: 3, y: 2 };
+const ARROW_DOWN_Y = 3;   // the angle redo: left of the spawn is the trash, so the key test walks down the lane
 
 // What the morning yard must draw (step 13), the first seat (step 23) and the chair (step 30).
 const MORNING_DRAWS = [
-  { name: 'picnic', x: 80, y: 136 },
-  { name: 'picnic_bench', x: 80, y: 136 },
+  { name: 'picnic', x: 96, y: 80 },
+  { name: 'picnic_bench', x: 96, y: 80 },
   { name: 'dog', x: DOG_HOME.px, y: DOG_HOME.py, frame: DOG_HOME.frame }
 ];
-// Unowned gear and decor also draw a see-through ghost (records marked ghost: true).
-const MORNING_GHOSTS = [
-  { name: 'kettle', x: 112, y: 24 },
-  { name: 'chair', x: 112, y: 136 }
-];
-const MORNING_OUTLINES = [
-  { what: 'kettle2', x: 112, y: 32, w: 16, h: 16 },
-  { what: 'chair1', x: 112, y: 144, w: 16, h: 16 }
-];
+// The angle redo D: no see-through ghosts; an unbought spot in MAP.forSale draws one "+" record
+// { name: 'plus', id } (hidden while a person stands on one of its marker tiles).
+const PLUS = 'plus';
 const CASH_ABOVE = 26;   // review round 2: the cash number sits over the served customer, at py - 26
-const FIRST_SEAT = { id: 'pt1b', x: 6, y: 8, px: 96, py: 128, bonus: 1, heart: { x: 96, y: 104 } };
-const DECOR_BUY = { id: 'chair1', draw: { name: 'chair', x: 112, y: 136 }, outlineGone: { x: 112, y: 144 }, seatsAfter: [3, 3, 1] };
+const FIRST_SEAT = { id: 'pt1b', x: 7, y: 4, px: 112, py: 64, bonus: 1, heart: { x: 112, y: 40 } };
+const DECOR_BUY = { id: 'chair1', draw: { name: 'chair', x: 144, y: 48 }, seatsAfter: [3, 3, 1] };
 const DECOR_SAVE = { day: 2, cash: 200 };
 
 // Step 33: records that may extend past a canvas edge (people at the gate or the spawn only;
@@ -1203,7 +1200,8 @@ const PLATE_CYCLES_MAX = 2;      // pieces to pull, slice and carry during the d
 const KEYS = {
   escape: { key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 },
   p: { key: 'p', code: 'KeyP', windowsVirtualKeyCode: 80 },
-  left: { key: 'ArrowLeft', code: 'ArrowLeft', windowsVirtualKeyCode: 37 }
+  left: { key: 'ArrowLeft', code: 'ArrowLeft', windowsVirtualKeyCode: 37 },
+  down: { key: 'ArrowDown', code: 'ArrowDown', windowsVirtualKeyCode: 40 }
 };
 const PHONE = { width: 375, height: 812, deviceScaleFactor: 2, mobile: true };
 const DESKTOP = { width: 1024, height: 820, deviceScaleFactor: 1, mobile: false };
@@ -1531,6 +1529,7 @@ async function nodeChecks() {
     return checks + ' routes over 128 yards, MAP.prepIdle and MAP.prepUse included';
   });
 
+  await step('angle redo floor plan: BFS from the spawn, cook legs (6), tall props and the hat rule (7)', () => floorPlanHeadless(globalThis[GLOBAL_NAME]));
   await step('tutorial rules, headless', () => tutorialHeadless(globalThis[GLOBAL_NAME]));
   await step('skipTutorial, headless', () => skipHeadless(globalThis[GLOBAL_NAME]));
   await step('burn warning at hot fire, headless', () => burnHeadless(globalThis[GLOBAL_NAME]));
@@ -1555,6 +1554,240 @@ async function nodeChecks() {
   await step('v3.2 days: the day loop, prices and save v6, headless', () => daysLoopHeadless(globalThis[GLOBAL_NAME]));
   await step('v3.2 days 73 and 75: the cooler keeps a Market run to Saturday; the overnight smoke, headless', () => daysStockHeadless(globalThis[GLOBAL_NAME]));
   await step('v3.2 playtest: empty Monday cart, spoil warnings, the half day gate, the day card lines, headless', () => daysPlaytestHeadless(globalThis[GLOBAL_NAME]));
+}
+
+// The angle redo world (C) and the check 1, 2 and 8 limits.
+const WORLD = { W: 656, H: 434, OX: 300, OY: 150, SX: 1.5, SY: 0.75 };
+const OCCLUDE_MAX = 0.25;
+const HOME_SPARE = 12;
+const MIN_TILE_CSS = 40;
+const HOME_PHONE = { width: 390, height: 844, deviceScaleFactor: 2, mobile: true };
+// Runs in the page: places every station, prop and decor sprite (all gear and decor) by plan A on the
+// world (rule sprites anchor on the ground centre of their footprint, wall pieces on the barn wall
+// foot), orders them by front tile x + y then X, and measures, per station and seat, the share of its
+// opaque pixels (alpha 200 and up) covered by sprites of other pieces drawn after it. Also the world
+// bounds of every station sprite and of the guests (24 by 51) on q0 and q1, for the home view.
+function planGeometry(W) {
+  const P = window.PitSim, A = P && P.art3, M = P && P.MAP;
+  if (!A || typeof A.drawAt !== 'function' || typeof A.has !== 'function') return { err: 'PitSim.art3.drawAt missing' };
+  const meta = (n) => { try { return (A.rule && typeof A.rule.meta === 'function' && A.rule.meta(n)) || {}; } catch (_e) { return {}; } };
+  const iso = (sx, sy) => ({ X: W.OX + W.SX * (sx - sy), Y: W.OY + W.SY * (sx + sy) });
+  const cv = document.createElement('canvas');
+  cv.width = W.W; cv.height = W.H;
+  const ctx = cv.getContext('2d', { willReadFrequently: true });
+  const objs = [];
+  const add = (target, group, name, tiles) => {
+    if (!A.has(name)) return;
+    let cx = 0, cy = 0;
+    for (const t of tiles) { cx += t.x * 16 + 8; cy += t.y * 16 + 8; }
+    cx /= tiles.length; cy /= tiles.length;
+    if (meta(name).wall === true) cy = 0;
+    const p = iso(cx, cy);
+    ctx.clearRect(0, 0, W.W, W.H);
+    A.drawAt(ctx, name, p.X, p.Y, 0, false);
+    const d = ctx.getImageData(0, 0, W.W, W.H).data;
+    const mask = new Uint8Array(W.W * W.H);
+    let n = 0, minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9;
+    for (let i = 0; i < mask.length; i++) {
+      if (d[i * 4 + 3] < 200) continue;
+      mask[i] = 1; n++;
+      const x = i % W.W, y = (i - x) / W.W;
+      if (x < minX) minX = x; if (x > maxX) maxX = x + 1; if (y < minY) minY = y; if (y > maxY) maxY = y + 1;
+    }
+    objs.push({ target, group, name, front: Math.max(...tiles.map((t) => t.x + t.y)), X: p.X, mask, n, box: { minX, maxX, minY, maxY } });
+  };
+  for (const s of M.stations) {
+    if (s.sprite === 'counter') for (const t of s.tiles) add('station:' + s.id, 'station:' + s.id, 'counter', [t]);
+    else add('station:' + s.id, 'station:' + s.id, s.sprite, s.tiles);
+  }
+  const picnic1 = M.props.find((p) => p.id === 'picnic1');
+  for (const p of M.props) {
+    const tiles = p.blocks.length ? p.blocks : (p.sprite === 'picnic_bench' ? picnic1.blocks : [p.tile]);
+    const group = p.id === 'bench1' || p.id === 'picnic1' ? 'picnic1' : 'prop:' + p.id;
+    add(p.id === 'bench1' ? 'bench:pt1' : null, group, p.sprite, tiles);
+  }
+  for (const d of M.decor) for (const dr of d.draws) {
+    if (dr.overhead) continue;
+    const target = dr.sprite === 'chair' ? 'seat:' + d.id : dr.sprite === 'picnic_bench' ? 'bench:pt2' : null;
+    add(target, 'decor:' + d.id, dr.sprite, d.tiles);
+  }
+  objs.sort((a, b) => a.front - b.front || a.X - b.X);
+  const seatTarget = { pt1a: 'bench:pt1', pt1b: 'bench:pt1', chair1: 'seat:chair1', chair2: 'seat:chair2', pt2a: 'bench:pt2', pt2b: 'bench:pt2' };
+  const targets = [...M.stations.map((s) => ['station:' + s.id, s.id]), ...M.seats.map((s) => [seatTarget[s.id], s.id])];
+  const occ = [];
+  for (const [tg, id] of targets) {
+    let total = 0, covered = 0;
+    const by = {};
+    objs.forEach((o, i) => {
+      if (o.target !== tg) return;
+      total += o.n;
+      const later = objs.slice(i + 1).filter((q) => q.group !== o.group);
+      for (let k = 0; k < o.mask.length; k++) {
+        if (!o.mask[k]) continue;
+        const q = later.find((l) => l.mask[k]);
+        if (q) { covered++; by[q.name] = (by[q.name] || 0) + 1; }
+      }
+    });
+    if (total === 0) return { err: 'no opaque pixels for ' + id + ' (' + tg + ')' };
+    occ.push({ id, px: total, frac: Math.round(covered / total * 1000) / 1000, by });
+  }
+  const home = { minX: 1e9, maxX: -1e9, minY: 1e9, maxY: -1e9 };
+  const grow = (b) => { home.minX = Math.min(home.minX, b.minX); home.maxX = Math.max(home.maxX, b.maxX); home.minY = Math.min(home.minY, b.minY); home.maxY = Math.max(home.maxY, b.maxY); };
+  for (const o of objs) if (o.target && o.target.indexOf('station:') === 0 && M.home.stations.includes(o.target.slice(8))) grow(o.box);
+  for (const qi of M.home.queue) {
+    const q = M.queue[qi], p = iso(q.x * 16 + 8, q.y * 16 + 8);
+    grow({ minX: p.X - 12, maxX: p.X + 12, minY: p.Y - 51, maxY: p.Y });
+  }
+  return { occ, home };
+}
+// The angle redo plan A and F, sim side. A BFS self test: with every gear state (and decor off and
+// on), the player's BFS reaches every active use tile and every crew tile from the spawn, and the
+// customers' BFS reaches every active queue spot and owned seat from the customer spawn. Check 6:
+// every cook loop leg is the plan's lane steps (1 to 3; 0 to the extension). Check 7: every prop or
+// decor piece over 20 rp stands on row 0 or column 0, and nothing stands on an apron tile 1 to 4 rows
+// straight behind a tile where the pitmaster or crew stands (the hat rule).
+const RULE_H = { shed: 52, sign: 66, tree: 128, woodpile: 14, tools: 28, pot: 16, hose: 14, planter: 16, mailbox: 26,
+  picnic: 13, picnic_bench: 7, shelf: 30, chair: 20, flower_box: 10, birdbath: 20, lights_post: 72 };
+const WALL_HUNG = ['shed', 'sign'];   // the barn door and the sign hang on the barn wall (exempt from the hat rule)
+// Plan A's own props table puts the mailbox (26 rp, table B) on the front fence line at (9,11), right of
+// the gate; nothing used stands behind it, so check 7 names it next to the drum as an exception.
+const TALL_EXCEPT = ['mailbox'];
+const FOR_SALE = { kettle2: [[4, 7]], drum: [[2, 5], [2, 6]], bigtable: [[4, 4]], canopy: [[7, 2]], chair1: [[9, 3]], chair2: [[9, 4]],
+  flowers: [[6, 10], [7, 10]], birdbath: [[3, 10]], lights: [[0, 7]], picnic2: [[6, 8], [7, 8]] };
+const COOK_LEGS = [   // [leg, from station, from tile, to station, to tile, steps]
+  ['charcoal to kettle 1', 'pile', [3, 8], 'kettle1', [3, 5], 3],
+  ['charcoal to kettle 2', 'pile', [3, 8], 'kettle2', [3, 7], 1],
+  ['meat to kettle 1', 'cooler', [3, 6], 'kettle1', [3, 5], 1],
+  ['meat to kettle 2', 'cooler', [3, 6], 'kettle2', [3, 7], 1],
+  ['kettle 1 to board', 'kettle1', [3, 5], 'board', [3, 4], 1],
+  ['kettle 2 to board', 'kettle2', [3, 7], 'board', [3, 4], 3],
+  ['drum to board', 'drum', [3, 5], 'board', [3, 4], 1],
+  ['board to counter', 'board', [3, 4], 'table', [3, 3], 1],
+  ['board to counter, bigtable', 'board', [3, 4], 'table', [3, 4], 0]
+];
+function walkSteps(sim, from, goal) {
+  const M = globalThis[GLOBAL_NAME].MAP;
+  const key = (x, y) => x + ',' + y;
+  const dist = new Map([[key(from.x, from.y), 0]]);
+  const q = [{ x: from.x, y: from.y }];
+  while (q.length) {
+    const c = q.shift();
+    const d = dist.get(key(c.x, c.y));
+    if (c.x === goal.x && c.y === goal.y) return d;
+    for (const [dx, dy] of [[0, -1], [0, 1], [-1, 0], [1, 0]]) {
+      const nx = c.x + dx, ny = c.y + dy;
+      if (nx < 0 || nx >= M.W || ny < 0 || ny >= M.H || dist.has(key(nx, ny))) continue;
+      if (!sim.walkable(nx, ny)) continue;
+      dist.set(key(nx, ny), d + 1);
+      q.push({ x: nx, y: ny });
+    }
+  }
+  return null;
+}
+function custReach(sim, from, goal) {
+  const M = globalThis[GLOBAL_NAME].MAP;
+  const key = (x, y) => x + ',' + y;
+  const seen = new Set([key(from.x, from.y)]);
+  const q = [{ x: from.x, y: from.y }];
+  while (q.length) {
+    const c = q.shift();
+    if (c.x === goal.x && c.y === goal.y) return true;
+    for (const [dx, dy] of [[0, -1], [0, 1], [-1, 0], [1, 0]]) {
+      const nx = c.x + dx, ny = c.y + dy;
+      if (nx < 0 || nx >= M.W || ny < 0 || ny > M.H || seen.has(key(nx, ny))) continue;
+      if (!sim.custWalkable(nx, ny, goal.x, goal.y)) continue;
+      seen.add(key(nx, ny));
+      q.push({ x: nx, y: ny });
+    }
+  }
+  return false;
+}
+function floorPlanHeadless(P) {
+  const M = P.MAP;
+  const T = (t) => '(' + t.x + ',' + t.y + ')';
+  // The plan's new MAP fields.
+  assert(sameJSON(Object.keys(M.forSale).sort(), Object.keys(FOR_SALE).sort()), 'MAP.forSale ids ' + describe(Object.keys(M.forSale || {})));
+  for (const [id, tiles] of Object.entries(FOR_SALE)) assert(sameJSON(M.forSale[id].map((t) => [t.x, t.y]), tiles), 'MAP.forSale.' + id + ' ' + describe(M.forSale[id]));
+  for (const id of ['kettle2', 'drum']) assert(sameJSON(M.station(id).tiles.map((t) => [t.x, t.y]), FOR_SALE[id]), id + ' marker tiles are not its footprint');
+  for (const d of M.decor) assert(sameJSON(d.tiles.map((t) => [t.x, t.y]), FOR_SALE[d.id]), d.id + ' marker tiles are not its footprint');
+  assert(sameJSON(M.home.stations, M.stations.map((s) => s.id)) && sameJSON(M.home.queue, [0, 1]), 'MAP.home ' + describe(M.home));
+  assert(M.walk.every((t) => M.at(t.x, t.y) === M.T.LAWN), 'a MAP.walk tile is not lawn');
+  assert(M.apron && M.apron.barn === 'y0' && M.apron.fence === 'x0', 'MAP.apron ' + describe(M.apron));
+  assert(sameJSON([M.spawn.x, M.spawn.y, M.spawn.face, M.gate.x, M.gate.y, M.custSpawn.x, M.custSpawn.y, M.passStop.x, M.passStop.y], [3, 2, 'right', 8, 11, 8, 12, 8, 10]), 'spawn, gate, custSpawn, passStop ' + describe([M.spawn, M.gate, M.custSpawn, M.passStop]));
+  assert(M.at(M.gate.x, M.gate.y) === M.T.GATE, 'the gate tile is not GATE');
+  // The BFS self test.
+  const startRep = P.C.START_REP;
+  const fails = [];
+  let routes = 0;
+  for (const decorOn of [false, true]) {
+    const decor = Object.fromEntries(DECOR_IDS.map((id) => [id, decorOn]));
+    const saved = P.validateSave(saveV2({ day: 3, decor }, startRep));
+    assert(saved, 'validateSave refused the floor plan save');
+    const sim = P.createSim(saved, 1);
+    const st = sim.state;
+    for (let mask = 0; mask < (1 << GEAR_IDS.length); mask++) {
+      GEAR_IDS.forEach((g, i) => { st.gear[g] = (mask & (1 << i)) !== 0; });   // fixture (W0)
+      const tag = 'gear ' + mask + (decorOn ? ' decor' : '');
+      const goals = [];
+      for (const s of M.stations) {
+        if (!P.tileOwned(s, st.gear)) continue;
+        for (const u of s.use) if (P.tileOwned(u, st.gear)) goals.push([s.id + ' use ' + T(u), u]);
+      }
+      for (const k of ['buddyIdle', 'tenderIdle', 'prepIdle', 'prepUse']) goals.push([k, M[k]]);
+      for (const [what, t] of goals) {
+        routes += 1;
+        if (!sim.walkable(t.x, t.y) || walkSteps(sim, M.spawn, t) === null) fails.push(tag + ': ' + what + ' unreachable from the spawn');
+      }
+      for (const qs of M.queue.filter((q) => P.tileOwned(q, st.gear, st.decor))) {
+        routes += 1;
+        if (!custReach(sim, M.custSpawn, qs)) fails.push(tag + ': queue ' + T(qs) + ' unreachable from the customer spawn');
+      }
+      for (const seat of M.seats.filter((x) => P.tileOwned(x, st.gear, st.decor))) {
+        routes += 1;
+        if (!custReach(sim, M.custSpawn, seat)) fails.push(tag + ': ' + seat.id + ' unreachable from the customer spawn');
+      }
+    }
+  }
+  assert(fails.length === 0, fails.length + ' unreachable, first ' + fails.slice(0, 3).join('; '));
+  // Check 6: the cook loop legs, every gear owned.
+  const sim6 = P.createSim(P.validateSave(saveV2({ day: 3 }, startRep)), 1);
+  for (const g of GEAR_IDS) sim6.state.gear[g] = true;   // fixture (W0)
+  const legs = [];
+  for (const [leg, a, from, b, to, want] of COOK_LEGS) {
+    const uf = M.station(a).use.find((u) => u.x === from[0] && u.y === from[1]);
+    const ut = M.station(b).use.find((u) => u.x === to[0] && u.y === to[1]);
+    assert(uf && ut, leg + ': ' + describe(from) + ' or ' + describe(to) + ' is not a use tile of ' + a + ' or ' + b);
+    const n = walkSteps(sim6, uf, ut);
+    assert(n === want && (n >= 1 && n <= 3 || (n === 0 && ut.gear === 'bigtable')), leg + ' is ' + n + ' lane steps, wanted ' + want);
+    legs.push(n);
+  }
+  // Check 7: tall props on row 0 or column 0; the hat rule.
+  const pieces = [];   // [id, sprite, tiles]
+  const picnic1 = M.props.find((p) => p.id === 'picnic1');
+  for (const p of M.props) pieces.push([p.id, p.sprite, p.blocks.length ? p.blocks : (p.sprite === 'picnic_bench' ? picnic1.blocks : [p.tile])]);
+  for (const d of M.decor) for (const dr of d.draws) if (!dr.overhead) pieces.push([d.id, dr.sprite, d.tiles]);
+  const tall = [];
+  for (const [id, sprite, tiles] of pieces) {
+    const h = RULE_H[sprite];
+    assert(typeof h === 'number', 'no rule height for ' + sprite + ' (' + id + ')');
+    if (h > 20 && !tiles.every((t) => t.x === 0 || t.y === 0) && !TALL_EXCEPT.includes(id)) tall.push(id + ' (' + sprite + ' ' + h + ' rp) on ' + tiles.map(T).join(' '));
+  }
+  assert(tall.length === 0, 'tall props off row 0 and column 0: ' + tall.join('; '));
+  const stand = [M.spawn, M.buddyIdle, M.tenderIdle, M.prepIdle, M.prepUse];
+  for (const s of M.stations) for (const u of s.use) stand.push(u);
+  const behind = new Set();
+  for (const t of stand) for (let k = 1; k <= 4; k++) {
+    const x = t.x - k, y = t.y - k;
+    if (x >= 0 && y >= 0 && (x === 0 || y === 0)) behind.add(x + ',' + y);
+  }
+  for (const k of ['0,0', '1,0', '2,0', '0,1', '0,2', '0,3', '0,4', '0,5', '0,6']) assert(behind.has(k), 'the hat rule set misses (' + k + '): ' + describe([...behind]));
+  const hats = [];
+  for (const [id, sprite, tiles] of pieces) {
+    if (WALL_HUNG.includes(id)) continue;
+    for (const t of tiles) if (behind.has(t.x + ',' + t.y)) hats.push(id + ' on ' + T(t));
+  }
+  assert(hats.length === 0, 'the hat rule: ' + hats.join('; '));
+  return routes + ' BFS routes over 64 gear states twice; cook legs ' + legs.join(', ') + '; ' + pieces.length + ' prop and decor pieces, ' + behind.size + ' hat tiles clear, ' + TALL_EXCEPT.join(', ') + ' and the drum named exceptions';
 }
 
 // [S 19.6] The counter used end to end: with the bigger table, four plates set down one at a time
@@ -1588,9 +1821,9 @@ function countersHeadless(P) {
     landed.push(grew[0]);
   }
   assert(new Set(landed).size === 4, 'four plates landed in ' + describe(landed) + ', wanted four different spots');
-  const qx = P.MAP.queue[0].x * 16 + 8;
+  const qx = P.MAP.queue[0].x * 16 + 8, qy = P.MAP.queue[0].y * 16 + 8;
   const px = P.MAP.station('table').spotPx;
-  const dist = landed.map((i) => Math.abs(px[i].x - qx));
+  const dist = landed.map((i) => Math.hypot(px[i].x - qx, px[i].y - qy));
   for (let k = 1; k < dist.length; k++) assert(dist[k] >= dist[k - 1], 'spot ' + landed[k] + ' is nearer the line than ' + landed[k - 1] + ': ' + describe(landed));
   const pts = landed.map((i) => px[i].x + ',' + px[i].y);
   assert(new Set(pts).size === 4, 'two spots share a draw point: ' + describe(pts));
@@ -2648,7 +2881,8 @@ function strandsHeadless(P) {
   assert(vb.label === 'Put ' + P.MEATS[MEAT].label + ' back' && vb.auto === false, '(b) verbAt() at the cooler with room on the grate ' + describe(vb));
   const cash0 = b.st().cash;
   const n0 = b.log.length;
-  b.sim.walkTo(3, 4);
+  const trashT = P.MAP.station('trash').tiles[0];   // the angle redo: the trash is (2,2)
+  b.sim.walkTo(trashT.x, trashT.y);
   b.drain();
   b.until(() => b.settled(), WAIT_S.headlessStep);
   b.sim.interact();
@@ -3674,8 +3908,8 @@ function daysStockHeadless(P) {
     'Saturday loadUp ' + describe({ lu, stockStart: t.stockStart.butt, butt: h.st().stock.butt, cartButt, overnight: t.overnight }));
   // Three butt on three grates: the first two start at half the cook, the third at 0.
   if (h.st().stock.butt < 3) { h.st().stock.butt = 3; }
-  TILE.kettle2 = { x: 7, y: 2 };
-  TILE.drum = { x: 7, y: 3 };
+  TILE.kettle2 = { x: 4, y: 7 };
+  TILE.drum = { x: 2, y: 5 };
   h.sim.selectMeat('butt');
   const pieces = () => ['kettle1', 'kettle2', 'drum'].flatMap((id) => h.st().stations[id].pieces.filter((p) => p.meat === 'butt'));
   for (const [i, ck] of ['kettle1', 'kettle2', 'drum'].entries()) {
@@ -4276,6 +4510,10 @@ function feltBotPick(P, s, leave) {
 // One full booking with a one card crew at skills [s, s]: kind 'birthday' (kettle 1) or 'picnic' (two
 // kettles, the fixture's second kettle, the week's picnic card at its size). Returns the till's
 // booked, fed and wait sum (an unfed guest counts WAIT_ZERO_S, W22.9) and the card's row.
+// The angle redo: the RUN card idles at (2,8), five lane steps from the board (v2: one), so the fed
+// window opens a second later than v2's 4 s.
+const RUN_FED_S = 5;
+const FIRE_SEEDS = [70, 71, 72, 73, 74, 75, 76, 77, 78, 79];
 function feltBooking(P, role, s, seed, kind) {
   const h = headless(P, null, seed);
   assert(h.sim.skipTutorial() === true, 'skipTutorial() did not return true');
@@ -4356,7 +4594,7 @@ function feltHeadless(P) {
     h.until(() => {
       const s2 = h.st();
       const td = s2.today;
-      if (fed4 === null && s2.clock >= t0 + 4 - 1e-9) fed4 = td.fed;
+      if (fed4 === null && s2.clock >= t0 + RUN_FED_S - 1e-9) fed4 = td.fed;
       if (plates10 === null && s2.clock >= t0 + 10 - 1e-9) plates10 = td.crew && td.crew['1'] ? td.crew['1'].plates : 0;
       if (s === 5 && td.pending > 0 && s2.clock < endAt - C.LAST_CALL_GUARD - 1e-9) {
         const lineEmpty = !s2.customers.some((c) => c.booked === true && (c.mode === 'arriving' || c.mode === 'waiting'));
@@ -4376,7 +4614,7 @@ function feltHeadless(P) {
     if (s === 5) worstGap = Math.round(maxGap * 100) / 100;
   }
   if (!(m.runPlates5 >= 1.25 * m.runPlates1)) fails.push('RUN plates in 10 s ' + m.runPlates1 + ' and ' + m.runPlates5 + ', under 1.25 times');
-  if (!(m.runFed5 >= 1.25 * m.runFed1)) fails.push('RUN fed in 4 s ' + m.runFed1 + ' and ' + m.runFed5 + ', under 1.25 times');
+  if (!(m.runFed5 >= 1.25 * m.runFed1)) fails.push('RUN fed in ' + RUN_FED_S + ' s ' + m.runFed1 + ' and ' + m.runFed5 + ', under 1.25 times');
   if (!(m.runWait5 <= 0.75 * m.runWait1)) fails.push('RUN mean wait ' + m.runWait1 + ' s and ' + m.runWait5 + ' s, over 0.75 times');
   if (!(worstGap <= C.ARRIVAL_PULL_S + 0.1 + 1e-9)) fails.push('carry-forward 3: the line sat empty ' + worstGap + ' s with food in progress, over ' + (C.ARRIVAL_PULL_S + 0.1));
   // PREP (seed 73): two pieces left at the gate.
@@ -4400,12 +4638,14 @@ function feltHeadless(P) {
   const full = {};
   for (const [role, seed] of [['run', 71], ['fire', 72], ['prep', 73]]) {
     for (const s of [1, 5]) {
-      const legs = ['birthday', 'picnic'].map((kind) => feltBooking(P, role, s, seed, kind));
+      // The angle redo: on the shorter lane the FIRE wait swings with the seed (one seed ran 0.43 to 0.91),
+      // so FIRE pools its wait over FIRE_SEEDS; RUN and PREP keep one seed each.
+      const legs = (role === 'fire' ? FIRE_SEEDS : [seed]).flatMap((sd) => ['birthday', 'picnic'].map((kind) => feltBooking(P, role, s, sd, kind)));
       const booked = legs.reduce((a, l) => a + l.booked, 0);
       full[role + s] = {
         tips: legs.reduce((a, l) => a + (l.stat ? l.stat.tips | 0 : 0), 0),
         wait: booked ? Math.round(100 * legs.reduce((a, l) => a + l.waitSum, 0) / booked) / 100 : 0,
-        fed: legs.map((l) => l.fed + '/' + l.booked).join(' and '),
+        fed: role === 'fire' ? legs.reduce((a, l) => a + l.fed, 0) + '/' + booked + ' over ' + FIRE_SEEDS.length + ' seeds' : legs.map((l) => l.fed + '/' + l.booked).join(' and '),
         lines: legs.map((l) => l.line)
       };
     }
@@ -4843,11 +5083,11 @@ const tapNotes = [];
 // grid). Until the swap builder lands it, fall back to the flat grid math so the harness runs.
 let tileToClientSeen = null;   // true once the renderer answered, false once we fell back
 async function canvasPoint(tx, ty) {
+  // The angle redo F: every tap goes through PitSim.game.tileToClient, which pans the camera first.
   const live = await ev('(() => { const g = window.PitSim && window.PitSim.game; if (!g || typeof g.tileToClient !== "function") return null; const p = g.tileToClient(' + Number(tx) + ', ' + Number(ty) + '); if (!p) return null; const x = Array.isArray(p) ? p[0] : p.x, y = Array.isArray(p) ? p[1] : p.y; return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null; })()');
-  if (live) { tileToClientSeen = true; return live; }
-  tileToClientSeen = false;
-  const r = await ev('(() => { const b = $(' + JSON.stringify(ID.cv) + ').getBoundingClientRect(); return { l: b.left, t: b.top, w: b.width, h: b.height }; })()');
-  return { x: r.l + (tx + 0.5) * r.w / MAP_SIZE.w, y: r.t + (ty + 0.5) * r.h / MAP_SIZE.h };
+  assert(live, 'PitSim.game.tileToClient(' + tx + ', ' + ty + ') gave no client point');
+  tileToClientSeen = true;
+  return live;
 }
 async function mouseTap(x, y) {
   await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y });
@@ -4936,11 +5176,14 @@ async function screenshot(name) {
 const PANELS_ID = 'panels';
 async function screenshotYard(name) {
   if (DESKTOP_MODE) return screenshot(name);
+  // The angle redo C: on a phone the whole yard is the far view; the near view comes back after.
+  const was = await ev('(() => { const c = g && g.camera; if (!c || typeof c.get !== "function") return null; const m = (c.get() || {}).mode; c.set("far"); g.advance(0); return m; })()');
   await ev('(document.getElementById(' + JSON.stringify(PANELS_ID) + ').style.visibility = "hidden", true)');
   try {
     return await screenshot(name);
   } finally {
     await ev('(document.getElementById(' + JSON.stringify(PANELS_ID) + ').style.visibility = "", true)');
+    if (was) await ev('(() => { g.camera.set(' + JSON.stringify(was) + '); g.advance(0); return true; })()');
   }
 }
 async function waitForGame() {
@@ -5102,15 +5345,43 @@ async function canvasScale() {
   return ev('(() => { const c = $(' + JSON.stringify(ID.cv) + '); const b = c.getBoundingClientRect(); return { w: b.width, h: b.height, left: b.left, top: b.top, bw: c.width, bh: c.height, dpr: window.devicePixelRatio || 1, vw: document.documentElement.clientWidth, vh: window.innerHeight }; })()');
 }
 function checkScale(r, css, label) {
-  const k = Math.max(1, Math.round(css * r.dpr));
-  assert(r.w === RENDER.w * css && r.h === RENDER.h * css, label + ': #cv rect ' + r.w + ' by ' + r.h + ', wanted ' + (RENDER.w * css) + ' by ' + (RENDER.h * css) + ' (viewport ' + r.vw + ' by ' + r.vh + ')');
-  assert(r.bw === RENDER.w * k && r.bh === RENDER.h * k, label + ': backing store ' + r.bw + ' by ' + r.bh + ', wanted k ' + k);
-  assert(Number.isInteger(r.w / RENDER.w), label + ': ' + r.w + ' / ' + RENDER.w + ' is not an integer');
-  return label + ' ' + r.w + 'x' + r.h + ' k ' + k;
+  // The angle redo C: the yard canvas is the camera's viewport, its backing store the CSS box times dpr.
+  assert(r.w > 0 && r.h > 0 && r.w <= r.vw, label + ': #cv rect ' + r.w + ' by ' + r.h + ' in a ' + r.vw + ' by ' + r.vh + ' viewport');
+  assert(Math.abs(r.w * r.dpr - r.bw) < 1 && Math.abs(r.h * r.dpr - r.bh) < 1, label + ': backing store ' + r.bw + ' by ' + r.bh + ', wanted the rect ' + r.w + ' by ' + r.h + ' times dpr ' + r.dpr);
+  return label + ' ' + r.w + 'x' + r.h + ' dpr ' + r.dpr;
 }
 // Ghost records (unowned previews) never count as the real draw.
 const hasRecord = (frame, want) => frame.some((d) => !d.ghost && d.name === want.name && d.x === want.x && d.y === want.y && (want.frame === undefined || d.frame === want.frame));
-const hasGhost = (frame, want) => frame.some((d) => d.ghost === true && d.name === want.name && d.x === want.x && d.y === want.y);
+// The angle redo check 3: zero ghost records; one "+" record per unowned MAP.forSale id (none while a
+// person stands on one of its marker tiles is allowed), none for owned ones, none for other ids.
+async function plusChecks(frame, label) {
+  const ghosts = frame.filter((d) => d.ghost === true);
+  assert(ghosts.length === 0, label + ': ' + ghosts.length + ' ghost records, first ' + describe(ghosts.slice(0, 3)));
+  const want = await ev('(() => { const s = S(); const ppl = [s.player, s.buddy, s.tender, s.prep].concat(s.customers || []).filter(Boolean).map((p) => p.x + "," + p.y); return Object.keys(MAP.forSale).map((id) => ({ id, owned: s.gear[id] === true || s.decor[id] === true, stood: MAP.forSale[id].some((t) => ppl.includes(t.x + "," + t.y)) })); })()');
+  const plus = frame.filter((d) => d.name === PLUS);
+  const bad = [];
+  for (const w of want) {
+    const n = plus.filter((d) => d.id === w.id).length;
+    if (w.owned ? n !== 0 : (w.stood ? n > 1 : n !== 1)) bad.push(w.id + (w.owned ? ' owned' : '') + ' has ' + n);
+  }
+  const stray = plus.filter((d) => !want.some((w) => w.id === d.id)).map((d) => d.id);
+  assert(bad.length === 0 && stray.length === 0, label + ': plus records ' + bad.join(', ') + (stray.length ? '; stray ' + describe(stray) : ''));
+  return plus.length + ' plus';
+}
+// The angle redo check 5: art3.drawPerson calls with their who and pose, spied in the page.
+async function spyPerson(on) {
+  if (on) {
+    return ev('(() => { const A = globalThis.' + GLOBAL_NAME + '.art3; if (!A || typeof A.drawPerson !== "function") return false; if (!window.__pitPersonOrig) { const orig = A.drawPerson; window.__pitPersonOrig = orig; A.drawPerson = function () { if (window.__pitPersonCalls) window.__pitPersonCalls.push([].slice.call(arguments, 1, 3).filter((a) => typeof a === "string")); return orig.apply(this, arguments); }; } window.__pitPersonCalls = []; return true; })()');
+  }
+  return ev('(() => { const c = window.__pitPersonCalls || []; window.__pitPersonCalls = []; return c; })()');
+}
+async function onePitmaster(yardCalls) {
+  const crCalls = await spyPerson(false);
+  await ev('(() => { const A = globalThis.' + GLOBAL_NAME + '.art3; if (window.__pitPersonOrig) { A.drawPerson = window.__pitPersonOrig; delete window.__pitPersonOrig; } delete window.__pitPersonCalls; return true; })()');
+  const isPlayer = (c) => c.includes('player');
+  assert(yardCalls.some(isPlayer), 'the yard drew no player through art3.drawPerson: ' + describe(yardCalls.slice(0, 6)));
+  assert(crCalls.some((c) => isPlayer(c) && c.includes('down')), 'the creator preview drew no ("player", "down") through art3.drawPerson: ' + describe(crCalls.slice(0, 6)));
+}
 const outlineAt = (frame, o) => frame.find((d) => d.name === OUTLINE && d.x === o.x && d.y === o.y && (o.w === undefined || (d.w === o.w && d.h === o.h)));
 // Every visible button in the document, smaller than the minimum.
 // v3.0: buttons and text fields (W19 steps 45 and 60).
@@ -6148,7 +6419,7 @@ async function browserChecks() {
       await advance(0);
     }
     const back = await canvasScale();
-    assert(back.w === RENDER.w * CSS_SCALE[own], 'after restoring ' + own + ' the canvas is ' + back.w + ' wide');
+    assert(back.w > 0 && back.w <= back.vw, 'after restoring ' + own + ' the canvas is ' + back.w + ' wide in a ' + back.vw + ' px viewport');
     return notes.join('; ');
   });
 
@@ -6161,10 +6432,9 @@ async function browserChecks() {
         await sleep(TIMEOUT_MS.resize);
         await advance(0);
         const r = await canvasScale();
-        const k = r.bw / RENDER.w;
-        assert(Number.isInteger(k) && k >= 1, label + ': backing store ' + r.bw + ' is not a whole multiple of ' + RENDER.w);
-        assert(r.bh === RENDER.h * k, label + ': backing store ' + r.bw + ' by ' + r.bh + ' is not k ' + k + ' on both axes');
-        assert(Math.abs(r.w * r.dpr - r.bw) < 0.1 && Math.abs(r.h * r.dpr - r.bh) < 0.1,
+        const k = r.dpr;
+        assert(r.bw >= 1 && r.bh >= 1, label + ': backing store ' + r.bw + ' by ' + r.bh);
+        assert(Math.abs(r.w * r.dpr - r.bw) < 1 && Math.abs(r.h * r.dpr - r.bh) < 1,
           label + ': rect ' + r.w + ' by ' + r.h + ' at dpr ' + r.dpr + ' is ' + (r.w * r.dpr) + ' device px, backing store ' + r.bw);
         const fx = Math.abs(r.left * r.dpr - Math.round(r.left * r.dpr)), fy = Math.abs(r.top * r.dpr - Math.round(r.top * r.dpr));
         assert(fx < 0.05 && fy < 0.05, label + ': canvas top left (' + r.left + ', ' + r.top + ') is not on a whole device pixel');
@@ -6179,7 +6449,78 @@ async function browserChecks() {
       await advance(0);
     }
     const back = await canvasScale();
-    assert(back.w === RENDER.w * CSS_SCALE[DESKTOP_MODE ? 'desktop' : 'phone'], 'after restoring the run size the canvas is ' + back.w + ' wide');
+    assert(back.w > 0 && back.w <= back.vw, 'after restoring the run size the canvas is ' + back.w + ' wide in a ' + back.vw + ' px viewport');
+    return notes.join('; ');
+  });
+
+  // The angle redo checks 1, 2, 4 and 8 (B, C, F). 4: the size rule is on and verifySizes() passes. 2:
+  // with every gear and decor piece placed as plan A says, nothing drawn after a station or seat covers
+  // over a quarter of its opaque pixels (overhead and people not counted). 8: at 390 by 844 the default
+  // near view frames every station sprite and the guests on q0 and q1 with 12 CSS px to spare. 1: the
+  // near view tile is at least 40 CSS px wide and every station tile, use tile, seat and queue spot
+  // can be brought on screen by tileToClient.
+  await step('angle redo: size rule (4), occlusion (2), home view (8) and near view (1) at 390 by 844', async () => {
+    const notes = [];
+    await advance(0);
+    const sz = await ev('(() => { const A = globalThis.' + GLOBAL_NAME + '.art3; if (!A || typeof A.verifySizes !== "function") return { err: "art3.verifySizes missing" }; const mode = A.sizes(); try { const r = A.verifySizes(); return { mode, rows: r.rows.length, misses: r.misses }; } catch (e) { return { mode, err: String((e && e.message) || e) }; } })()');
+    assert(!sz.err, 'art3: ' + sz.err);
+    assert(sz.mode === 'rule', 'art3.sizes() is ' + describe(sz.mode) + ', wanted rule');
+    assert(sz.misses.length === 0, 'verifySizes misses ' + describe(sz.misses));
+    notes.push('verifySizes ' + sz.rows + ' rows');
+    const geo = await ev('(' + planGeometry.toString() + ')(' + JSON.stringify(WORLD) + ')');
+    assert(!geo.err, geo.err);
+    const over = geo.occ.filter((o) => o.frac > OCCLUDE_MAX);
+    assert(over.length === 0, 'covered over ' + (OCCLUDE_MAX * 100) + ' percent: ' + describe(over));
+    notes.push('occlusion max ' + Math.round(Math.max(...geo.occ.map((o) => o.frac)) * 100) + ' percent over ' + geo.occ.length + ' stations and seats');
+    const camJs = '(() => { const c = g && g.camera; if (!c || typeof c.get !== "function") return { err: "PitSim.game.camera.get missing" }; const v = c.get() || {}; const r = $(' + JSON.stringify(ID.cv) + ').getBoundingClientRect(); return { mode: v.mode, x0: v.x0 !== undefined ? v.x0 : v.x, y0: v.y0 !== undefined ? v.y0 : v.y, z: v.cssPerRp !== undefined ? v.cssPerRp : v.z, cw: r.width, ch: r.height, left: r.left, top: r.top, dpr: window.devicePixelRatio || 1 }; })()';
+    const whole = (c) => c.x0 <= 0.5 && c.y0 <= 0.5 && c.x0 + c.cw / c.z >= WORLD.W - 0.5 && c.y0 + c.ch / c.z >= WORLD.H - 0.5;
+    if (DESKTOP_MODE) {
+      const c = await ev(camJs);
+      assert(!c.err, c.err);
+      assert(c.mode === 'fit' && c.z >= 1 && whole(c), 'desktop camera ' + describe(c) + ', wanted fit, z at least 1, the whole world');
+      notes.push('desktop fit z ' + c.z);
+    }
+    try {
+      await emulate(HOME_PHONE);
+      await sleep(TIMEOUT_MS.resize);
+      await advance(0);
+      const c = await ev(camJs);
+      assert(!c.err, c.err);
+      const kWant = Math.round(1.5 * c.dpr) / c.dpr;
+      assert(c.mode === 'near' && Math.abs(c.z - kWant) < 1e-6, '390 by 844 camera ' + describe(c) + ', wanted near at ' + kWant);
+      const h = geo.home;
+      const m = { left: (h.minX - c.x0) * c.z, right: (c.x0 + c.cw / c.z - h.maxX) * c.z, top: (h.minY - c.y0) * c.z, bottom: (c.y0 + c.ch / c.z - h.maxY) * c.z };
+      const tight = Object.entries(m).filter(([, v]) => v < HOME_SPARE);
+      assert(tight.length === 0, 'the home view keeps under ' + HOME_SPARE + ' CSS px: ' + describe(m) + ' (bounds ' + describe(h) + ', camera ' + describe(c) + ')');
+      notes.push('home spare ' + Object.values(m).map((v) => Math.round(v)).join('/') + ' CSS px');
+      const tileW = 48 * c.z;
+      assert(tileW >= MIN_TILE_CSS, 'near view tile ' + tileW + ' CSS px wide, wanted at least ' + MIN_TILE_CSS);
+      const tiles = await ev('(() => { const out = []; for (const s of MAP.stations) { for (const t of s.tiles) out.push([t.x, t.y]); for (const u of s.use) out.push([u.x, u.y]); } for (const s of MAP.seats) out.push([s.x, s.y]); for (const q of MAP.queue) out.push([q.x, q.y]); return out; })()');
+      const off = [];
+      for (const [tx, ty] of tiles) {
+        const p = await canvasPoint(tx, ty);
+        if (!(p.x >= c.left && p.x <= c.left + c.cw && p.y >= c.top && p.y <= c.top + c.ch)) off.push(tx + ',' + ty);
+      }
+      assert(off.length === 0, 'tileToClient left these off the canvas: ' + off.join(' '));
+      const c2 = await ev(camJs);
+      assert(c2.mode === 'near' && Math.abs(c2.z - c.z) < 1e-6, 'the camera left near while revealing tiles: ' + describe(c2));
+      notes.push(tiles.length + ' tiles at ' + tileW + ' CSS px');
+      await ev('(g.camera.set("far"), g.advance(0), true)');
+      const f = await ev(camJs);
+      // Fix pass: the far view fits the fenced yard (both front corners, 16 rp margin) to the stage
+      // width, as tall as the world, with no empty bands above or below.
+      const mwh = await ev('[PitSim.MAP.W, PitSim.MAP.H]');
+      const yx0 = Math.max(0, WORLD.OX - 24 * mwh[1] - 16), yx1 = Math.min(WORLD.W, WORLD.OX + 24 * mwh[0] + 16);
+      const yardWhole = f.x0 <= yx0 + 0.5 && f.x0 + f.cw / f.z >= yx1 - 0.5 && f.y0 <= 0.5 && f.y0 + f.ch / f.z >= WORLD.H - 0.5;
+      assert(f.mode === 'far' && yardWhole, 'far view ' + describe(f) + ' does not show the whole yard');
+      assert(f.ch / f.z <= WORLD.H + 2, 'far view ' + describe(f) + ' leaves empty bands above or below the world');
+      await ev('(g.camera.set("near"), g.advance(0), true)');
+      notes.push('far z ' + Math.round(f.z * 1000) / 1000);
+    } finally {
+      await emulate(RUN_METRICS);
+      await sleep(TIMEOUT_MS.resize);
+      await advance(0);
+    }
     return notes.join('; ');
   });
 
@@ -6216,8 +6557,7 @@ async function browserChecks() {
     const frame = await captureFrame();
     captures.morning = frame;
     for (const want of MORNING_DRAWS) assert(hasRecord(frame, want), 'captureFrame has no ' + describe(want) + '; dog records ' + describe(frame.filter((d) => d.name === 'dog')));
-    for (const o of MORNING_OUTLINES) assert(outlineAt(frame, o), 'no ' + OUTLINE + ' for ' + o.what + ' at ' + describe(o) + '; outlines ' + describe(frame.filter((d) => d.name === OUTLINE).slice(0, 12)));
-    for (const g of MORNING_GHOSTS) assert(hasGhost(frame, g), 'captureFrame has no ghost ' + describe(g) + '; ghosts ' + describe(frame.filter((d) => d.ghost).slice(0, 12)));
+    await plusChecks(frame, 'morning');   // the angle redo check 3
     const prefilled = await ev('JSON.parse(JSON.stringify(S().cart))');
     const prefillTotal = await ev('sim.cartTotal()');
     if (prefillTotal > 0) {
@@ -6273,7 +6613,7 @@ async function browserChecks() {
     assert(!status.startsWith(TEXT.gateOpensIn), '#status shows the gate countdown during the tutorial: ' + describe(status));
     assert(status === TEXT.handsEmpty, '#status is ' + describe(status) + ', wanted ' + describe(TEXT.handsEmpty));
     const act = await text(ID.act);
-    assert(act === TEXT.walk, '#act is ' + describe(act));
+    assert(act === TEXT.nothing, '#act is ' + describe(act) + ', wanted ' + describe(TEXT.nothing) + ' (the spawn faces the counter)');
     const opened = await eventsOfType(EVENT.yardOpen);
     assert(opened.length === 1, EVENT.yardOpen + ' events: ' + opened.length);
     // v2.1 step b: banner and arrow at the pile, clock held.
@@ -6283,7 +6623,7 @@ async function browserChecks() {
     const frame = await captureFrame();
     const ar = arrows(frame);
     const want = ARROW_AT.pile;
-    assert(ar.some((d) => d.x === want.x && d.y === want.y && want.frames.includes(d.frame)), 'no arrow at (' + want.x + ',' + want.y + ') frame 2 or 3; arrows ' + describe(ar));
+    assert(ar.some((d) => d.x === want.x && d.y === want.y && want.frames.includes(d.frame)), 'no arrow at (' + want.x + ',' + want.y + ') frame ' + want.frames.join(' or ') + '; arrows ' + describe(ar));
     captures.tutorial = frame;
     // v3.0 (W19 step 27): the tutorial day, and no rail while the banner shows.
     const kind = await ev('S().today.kind');
@@ -6447,7 +6787,8 @@ async function browserChecks() {
     assert(Array.isArray(spots) && spots.some((sp) => sp.x === e.x && sp.y === e.y), 'served at (' + e.x + ',' + e.y + ') is not a spotPx ' + describe(spots));
     const fx = await fxLog();
     const queue = await ev('MAP.queue.map((q) => ({ x: q.x, y: q.y }))');
-    const overQueue = (f) => queue.some((q) => f.y === q.y * TILE_PX - CASH_ABOVE && f.x >= q.x * TILE_PX - 9 && f.x <= q.x * TILE_PX + 16);
+    // The angle redo: the line stands on row 1, so py - 26 falls above the map and the number clamps at y 1.
+    const overQueue = (f) => queue.some((q) => f.y === Math.max(1, q.y * TILE_PX - CASH_ABOVE) && f.x >= q.x * TILE_PX - 9 && f.x <= q.x * TILE_PX + 16);
     const cashFx = fx.find((f) => f.kind === FX_KIND.cash && overQueue(f));
     assert(cashFx, 'fxLog has no ' + FX_KIND.cash + ' over a queue spot (py - ' + CASH_ABOVE + '); cash entries ' + describe(fx.filter((f) => f.kind === FX_KIND.cash)));
     captures.midService = await captureFrame();
@@ -6712,7 +7053,8 @@ async function browserChecks() {
     await advance(0);
     const frame = await captureFrame();
     assert(hasRecord(frame, DECOR_BUY.draw), 'captureFrame has no ' + describe(DECOR_BUY.draw));
-    assert(!outlineAt(frame, DECOR_BUY.outlineGone), 'the ' + OUTLINE + ' at ' + describe(DECOR_BUY.outlineGone) + ' is still drawn');
+    assert(!frame.some((d) => d.name === PLUS && d.id === DECOR_BUY.id), 'the ' + PLUS + ' for ' + DECOR_BUY.id + ' is still drawn after the purchase');
+    await plusChecks(frame, 'after the ' + DECOR_BUY.id + ' purchase');
     const stored = await run('try { const raw = JSON.parse(localStorage.getItem(' + JSON.stringify(SAVE_KEY) + ')); return { raw: raw && raw.v, v: ' + GLOBAL_NAME + '.validateSave(raw) }; } catch (e) { return { error: String(e) }; }');
     assert(stored && stored.v && stored.v.decor && stored.v.decor[DECOR_BUY.id] === true, 'stored save decor ' + describe(stored && ((stored.v && stored.v.decor) || stored.error)));
     assert(stored.v.v === 6 && stored.raw === 6, 'stored save v ' + describe(stored.raw));
@@ -6896,6 +7238,9 @@ async function browserChecks() {
 
   await step('pause and resume', async () => {
     if (!(await ev(inService))) await openYard(BUY_LATER);
+    await spyPerson(true);
+    await advance(0);
+    const yardCalls = await spyPerson(false);
     await keyPress(KEYS.escape);
     await advance(0);
     assert(await visible(ID.pause), '#pause not visible after Escape');
@@ -6909,6 +7254,7 @@ async function browserChecks() {
     await click(ID3.pauseLook);
     await advance(0);
     assert(await visible(ID3.creator), '#creator hidden after #pause-look');
+    await onePitmaster(yardCalls);   // the angle redo check 5
     assert(await visible(ID3.crBack), '#cr-back hidden on the creator opened from pause');
     assert(!(await present(ID3.crSub)) || !(await visible(ID3.crSub)), '#cr-sub shown on the creator opened from pause');
     const swatch = key0.split('-')[0] === '3' ? 'cr-skin-0' : 'cr-skin-3';
@@ -7040,7 +7386,7 @@ async function browserChecks() {
       const small = await ev(SMALL_BUTTONS);
       assert(small.length === 0, 'buttons under ' + MIN_CONTROL_PX + ' px in service: ' + describe(small.slice(0, 5)));
       const sc = await canvasScale();
-      assert(sc.w === RENDER.w * CSS_SCALE.phone && sc.h === RENDER.h * CSS_SCALE.phone, '#cv ' + sc.w + ' by ' + sc.h);
+      assert(sc.w > 0 && sc.w <= sc.vw && Math.abs(sc.w * sc.dpr - sc.bw) < 1, '#cv ' + sc.w + ' by ' + sc.h + ' in a ' + sc.vw + ' px viewport, backing ' + sc.bw);
       notes.push('service ok, #cv ' + sc.w + 'x' + sc.h);
       await reloadFresh();   // deviation 19
       notes.push(await ensureTutorialMorning());
@@ -7054,11 +7400,11 @@ async function browserChecks() {
       await advance(0);
       const p = await ev('({ x: ' + F.playerX + ', y: ' + F.playerY + ' })');
       assert(p.x === SPAWN.x && p.y === SPAWN.y, 'player at (' + p.x + ',' + p.y + '), wanted the spawn (' + SPAWN.x + ',' + SPAWN.y + ')');
-      await keyPress(KEYS.left);
+      await keyPress(KEYS.down);
       await advance(WAIT_S.arrow);
-      const x = await ev(F.playerX);
-      assert(x === ARROW_LEFT_X, 'after ArrowLeft player.x is ' + x);
-      notes.push('ArrowLeft to x ' + x);
+      const y = await ev(F.playerY);
+      assert(y === ARROW_DOWN_Y, 'after ArrowDown player.y is ' + y);
+      notes.push('ArrowDown to y ' + y);
       // One pause in service with the tutorial running: #pause-controls and #pause-skip.
       await keyPress(KEYS.escape);
       await advance(0);
@@ -7159,10 +7505,10 @@ async function browserChecks() {
     await advance(0);
     const want = ARROW_AT.pile;
     const a1 = arrows(await captureFrame());
-    assert(a1.some((d) => d.x === want.x && d.y === want.y && d.frame === 2), 'reduced arrow ' + describe(a1) + ', wanted frame 2 at (' + want.x + ',' + want.y + ')');
+    assert(a1.some((d) => d.x === want.x && d.y === want.y && d.frame === want.frames[0]), 'reduced arrow ' + describe(a1) + ', wanted frame ' + want.frames[0] + ' at (' + want.x + ',' + want.y + ')');
     await advance(0.6);
     const a2 = arrows(await captureFrame());
-    assert(a2.some((d) => d.x === want.x && d.y === want.y && d.frame === 2), 'reduced arrow after 0.6 s ' + describe(a2) + ', wanted frame 2 again');
+    assert(a2.some((d) => d.x === want.x && d.y === want.y && d.frame === want.frames[0]), 'reduced arrow after 0.6 s ' + describe(a2) + ', wanted frame ' + want.frames[0] + ' again');
     const n0 = (await fxLog()).length;
     const pt = await canvasPoint(TILE.pile.x, TILE.pile.y);
     await mouseTap(pt.x, pt.y);
@@ -7172,7 +7518,7 @@ async function browserChecks() {
     const fx = (await fxLog()).slice(n0);
     assert(fx.some((f) => f.kind === FX_KIND.ring), 'no ' + FX_KIND.ring + ' in fxLog after the tap; got ' + describe(fx.map((f) => f.kind)));
     assert(!fx.some((f) => f.kind === FX_KIND.squash), 'a ' + FX_KIND.squash + ' was logged under reduced motion');
-    return 'reduced (' + how + '), static pulse, arrow frame 2 twice, dog home in frame ' + DOG_HOME.frame + ', ring without squash';
+    return 'reduced (' + how + '), static pulse, arrow frame ' + ARROW_AT.pile.frames[0] + ' twice, dog home in frame ' + DOG_HOME.frame + ', ring without squash';
   });
 
   // W25 R-7: the one bold week 1 play. From cash 103 the picked picnic (a stretch on one kettle) turns
@@ -7619,7 +7965,7 @@ async function browserChecks() {
     taps,
     tapsPerPlate: served ? Math.round((taps / served) * 100) / 100 : null,
     tapFallbacks: tapNotes,
-    tapPoints: tileToClientSeen === true ? 'PitSim.game.tileToClient' : tileToClientSeen === false ? 'flat grid fallback' : 'no canvas taps',
+    tapPoints: tileToClientSeen === true ? 'PitSim.game.tileToClient' : 'no canvas taps',
     boredomSeconds: Math.round(before.bored * 100) / 100,
     boredomPrepSeconds: Math.round(before.boredPrep * 100) / 100,
     serviceSeconds: Math.round(daySecondsOfService * 100) / 100,

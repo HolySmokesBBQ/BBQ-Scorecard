@@ -583,24 +583,26 @@ const DIR_ORDER = Object.freeze(['up', 'down', 'left', 'right']);
 
 const MAP_W = 11;
 const MAP_H = 12;
-const GRID_H = MAP_H + 1;   // BFS rows: the map plus row 12, where only the customer spawn (9,12) lives
+const GRID_H = MAP_H + 1;   // BFS rows: the map plus row 12, where only the customer spawn (8,12) lives
 const TILE = 16;
 const T = Object.freeze({ PAVER: 0, FENCE: 1, GATE: 2, LAWN: 3, HEDGE: 4, BED: 5 });
 
-// Ground only, row by row, [V2.2] and contract D4. P paver, F fence, G gate, L lawn, H hedge, B bed.
+// Ground only, row by row, the angle redo plan A (2026-10-19). F fence or apron, P paver (the
+// pitmaster's patio, x 1 to 4, y 1 to 8), L lawn (guests), G gate. Row 0 is the barn apron, column 0
+// the fence apron; column 10 and row 11 carry the low picket on their outer edge.
 const GROUND_ROWS = Object.freeze([
-  'FPPPFFFFFFF',   // y0: (1..3, 0) are pavers under the shed, which blocks them
-  'FPPPPPPPPPF',   // y1
-  'FPPPPPPPPPF',   // y2
-  'FPPPPPPPPPF',   // y3
-  'FPPPPPPPPPF',   // y4
-  'FPPPPPPPPPF',   // y5
-  'FHHHHPPPHHF',   // y6: (4,6) (8,6) hedge under the light posts; (5,6) (6,6) (7,6) pavers under the counter
-  'FBLLLLLLLLF',   // y7
-  'FBLLLLLLLLF',   // y8
-  'FBLLLLLLLLF',   // y9
-  'FBBBBBBLLLF',   // y10: (7,10) (8,10) lawn under the decor flower bed footprint
-  'FFFFFFFFFGF'    // y11: (8,11) fence with the mailbox prop over it
+  'FFFFFFFFFFF',   // y0: the barn apron
+  'FPPPPLLLLLF',   // y1: the line stands on (5,1) to (8,1)
+  'FPPPPLLLLLF',   // y2
+  'FPPPPLLLLLF',   // y3
+  'FPPPPLLLLLF',   // y4
+  'FPPPPLLLLLF',   // y5
+  'FPPPPLLLLLF',   // y6
+  'FPPPPLLLLLF',   // y7
+  'FPPPPLLLLLF',   // y8
+  'FLLLLLLLLLF',   // y9
+  'FLLLLLLLLLF',   // y10
+  'FFFFFFFFGFF'    // y11: the gate (8,11)
 ]);
 const GROUND_CHAR = Object.freeze({ P: T.PAVER, F: T.FENCE, G: T.GATE, L: T.LAWN, H: T.HEDGE, B: T.BED });
 
@@ -628,44 +630,47 @@ function list(a) { return Object.freeze(a); }
 const KETTLE_SLOT_PX = list([px(0, -7), px(6, -7)]);
 const DRUM_SLOT_PX = list([px(-2, -4), px(8, -4), px(-2, 7), px(8, 7)]);
 
-// Stations, in the v1 order with v1 ids and types and the v2 data of [V2.3] and contract D4.
+// Stations, in the v1 order with v1 ids and types; tiles and use tiles from the angle redo plan A.
+// `draw` (top left sim px of the footprint) and `sortRow` (its front row) are kept for the v2 readers;
+// the iso renderer places by footprint. Table `spotPx`: one plate spot centred on each counter tile,
+// two on the extension (4,4).
 const STATIONS = list([
   Object.freeze({ id: 'kettle1', type: 'cooker', label: 'Kettle 1', spoken: 'kettle 1', gear: null,
-    tiles: list([xy(5, 2)]),
-    use: list([use(6, 2, 'left'), use(5, 3, 'up')]),
+    tiles: list([xy(4, 5)]),
+    use: list([use(3, 5, 'right')]),
     slots: C.KETTLE_SLOTS, decay: C.KETTLE_DECAY,
-    sprite: 'kettle', draw: px(80, 24), sortRow: 2, slotPx: KETTLE_SLOT_PX }),
+    sprite: 'kettle', draw: px(64, 80), sortRow: 5, slotPx: KETTLE_SLOT_PX }),
   Object.freeze({ id: 'kettle2', type: 'cooker', label: 'Kettle 2', spoken: 'kettle 2', gear: 'kettle2',
-    tiles: list([xy(7, 2)]),
-    use: list([use(6, 2, 'right'), use(8, 2, 'left'), use(7, 1, 'down')]),
+    tiles: list([xy(4, 7)]),
+    use: list([use(3, 7, 'right')]),
     slots: C.KETTLE_SLOTS, decay: C.KETTLE_DECAY,
-    sprite: 'kettle', draw: px(112, 24), sortRow: 2, slotPx: KETTLE_SLOT_PX }),
+    sprite: 'kettle', draw: px(64, 112), sortRow: 7, slotPx: KETTLE_SLOT_PX }),
   Object.freeze({ id: 'drum', type: 'cooker', label: 'Drum smoker', spoken: 'the drum', gear: 'drum',
-    tiles: list([xy(7, 3), xy(7, 4)]),
-    use: list([use(6, 3, 'right'), use(6, 4, 'right'), use(8, 3, 'left'), use(8, 4, 'left'), use(7, 5, 'up')]),
+    tiles: list([xy(2, 5), xy(2, 6)]),
+    use: list([use(3, 5, 'left'), use(3, 6, 'left'), use(1, 5, 'right'), use(1, 6, 'right')]),
     slots: C.DRUM_SLOTS, decay: C.DRUM_DECAY,
-    sprite: 'drum', draw: px(112, 48), sortRow: 4, slotPx: DRUM_SLOT_PX }),
+    sprite: 'drum', draw: px(32, 80), sortRow: 6, slotPx: DRUM_SLOT_PX }),
   Object.freeze({ id: 'board', type: 'board', label: 'Cutting board', spoken: '', gear: null,
-    tiles: list([xy(5, 4)]),
-    use: list([use(6, 4, 'left'), use(5, 3, 'down'), use(5, 5, 'up'), use(4, 4, 'right')]),
-    sprite: 'board', draw: px(80, 64), sortRow: 4 }),
+    tiles: list([xy(2, 4)]),
+    use: list([use(3, 4, 'left'), use(2, 3, 'down')]),
+    sprite: 'board', draw: px(32, 64), sortRow: 4 }),
   Object.freeze({ id: 'cooler', type: 'cooler', label: 'Cooler', spoken: '', gear: null,
-    tiles: list([xy(6, 1)]),
-    use: list([use(6, 2, 'up'), use(7, 1, 'left')]),
-    sprite: 'cooler', draw: px(96, 16), sortRow: 1 }),
+    tiles: list([xy(4, 6)]),
+    use: list([use(3, 6, 'right')]),
+    sprite: 'cooler', draw: px(64, 96), sortRow: 6 }),
   Object.freeze({ id: 'table', type: 'table', label: 'Serving table', spoken: '', gear: null,
-    tiles: list([xy(6, 6), xy(7, 6), xy(5, 6, { gear: 'bigtable' })]),
-    use: list([use(6, 5, 'down'), use(7, 5, 'down'), use(5, 5, 'down', 'bigtable')]),
-    sprite: 'counter', draw: px(96, 88), sortRow: 6,
-    spotPx: list([px(98, 92), px(108, 92), px(118, 92), xy(88, 92, { gear: 'bigtable' }), xy(80, 92, { gear: 'bigtable' })]) }),
+    tiles: list([xy(4, 1), xy(4, 2), xy(4, 3), xy(4, 4, { gear: 'bigtable' })]),
+    use: list([use(3, 1, 'right'), use(3, 2, 'right'), use(3, 3, 'right'), use(3, 4, 'right', 'bigtable')]),
+    sprite: 'counter', draw: px(64, 16), sortRow: 4,
+    spotPx: list([px(72, 24), px(72, 40), px(72, 56), xy(72, 68, { gear: 'bigtable' }), xy(72, 76, { gear: 'bigtable' })]) }),
   Object.freeze({ id: 'pile', type: 'pile', label: 'Charcoal pile', spoken: '', gear: null,
-    tiles: list([xy(4, 2)]),
-    use: list([use(4, 3, 'up')]),
-    sprite: 'pile', draw: px(64, 32), sortRow: 2 }),
+    tiles: list([xy(4, 8)]),
+    use: list([use(3, 8, 'right')]),
+    sprite: 'pile', draw: px(64, 128), sortRow: 8 }),
   Object.freeze({ id: 'trash', type: 'trash', label: 'Trash', spoken: '', gear: null,
-    tiles: list([xy(3, 4)]),
-    use: list([use(4, 4, 'left'), use(3, 3, 'down'), use(3, 5, 'up'), use(2, 4, 'right')]),
-    sprite: 'trash', draw: px(48, 64), sortRow: 4 })
+    tiles: list([xy(2, 2)]),
+    use: list([use(3, 2, 'left'), use(1, 2, 'right')]),
+    sprite: 'trash', draw: px(32, 32), sortRow: 2 })
 ]);
 
 function prop(id, sprite, frame, tx, ty, dx, dy, blocks, sortRow) {
@@ -673,27 +678,28 @@ function prop(id, sprite, frame, tx, ty, dx, dy, blocks, sortRow) {
     blocks: list(blocks.map((b) => px(b[0], b[1]))), sortRow });
 }
 
-// Fixed props, [V2.2.2] and contract D4, in this order.
+// Fixed props, the same 19 ids in the same order, on the angle redo plan A tiles. Tall props (over
+// 20 rp) stand only on row 0 or column 0; nothing stands on (0,0) to (2,0) or (0,0) to (0,6) (the hat rule).
 const PROPS = list([
-  prop('shed', 'shed', 0, 1, 1, 16, 0, [[1, 0], [2, 0], [3, 0], [1, 1], [2, 1], [3, 1]], 1),
-  prop('sign', 'sign', 0, 4, 0, 65, 2, [], 0),
-  prop('tree', 'tree', 0, 9, 2, 128, 0, [[9, 2]], 2),
-  prop('woodpile', 'woodpile', 0, 9, 1, 144, 16, [[9, 1]], 1),
-  prop('tools', 'tools', 0, 1, 2, 16, 24, [[1, 2]], 2),
-  prop('pot1', 'pot', 0, 1, 3, 16, 48, [[1, 3]], 3),
-  prop('pot2', 'pot', 0, 9, 3, 144, 48, [[9, 3]], 3),
-  prop('hose', 'hose', 0, 1, 5, 16, 80, [[1, 5]], 5),
-  prop('planter', 'planter', 0, 9, 5, 144, 72, [[9, 5]], 5),
-  prop('mailbox', 'mailbox', 0, 8, 11, 128, 168, [], 11),
-  prop('picnic1', 'picnic', 0, 5, 9, 80, 136, [[5, 9], [6, 9]], 9),
-  prop('bench1', 'picnic_bench', 0, 5, 8, 80, 136, [], 8),
-  prop('woodpile2', 'woodpile', 0, 4, 1, 64, 16, [[4, 1]], 1),
-  prop('woodpile3', 'woodpile', 0, 5, 1, 80, 16, [[5, 1]], 1),
-  prop('planter2', 'planter', 0, 1, 4, 16, 56, [[1, 4]], 4),
-  prop('shelf', 'shelf', 0, 2, 3, 32, 40, [[2, 3]], 3),
-  prop('pot3', 'pot', 0, 4, 8, 64, 128, [[4, 8]], 8),
-  prop('pot4', 'pot', 0, 2, 2, 32, 32, [[2, 2]], 2),
-  prop('woodpile4', 'woodpile', 0, 9, 4, 144, 64, [[9, 4]], 4)
+  prop('shed', 'shed', 0, 5, 0, 80, 0, [[5, 0]], 0),              // the barn door
+  prop('sign', 'sign', 0, 3, 0, 48, 0, [], 0),                    // board on the barn wall over (3,0) (4,0)
+  prop('tree', 'tree', 0, 0, 9, 0, 144, [[0, 9]], 9),
+  prop('woodpile', 'woodpile', 0, 1, 11, 16, 176, [[1, 11]], 11),
+  prop('tools', 'tools', 0, 3, 0, 48, 0, [[3, 0]], 0),
+  prop('pot1', 'pot', 0, 10, 2, 160, 32, [[10, 2]], 2),
+  prop('pot2', 'pot', 0, 10, 6, 160, 96, [[10, 6]], 6),
+  prop('hose', 'hose', 0, 8, 0, 128, 0, [[8, 0]], 0),
+  prop('planter', 'planter', 0, 10, 7, 160, 112, [[10, 7]], 7),
+  prop('mailbox', 'mailbox', 0, 9, 11, 144, 176, [], 11),
+  prop('picnic1', 'picnic', 0, 6, 5, 96, 80, [[6, 5], [7, 5]], 5),
+  prop('bench1', 'picnic_bench', 0, 6, 5, 96, 80, [], 5),
+  prop('woodpile2', 'woodpile', 0, 2, 11, 32, 176, [[2, 11]], 11),
+  prop('woodpile3', 'woodpile', 0, 0, 10, 0, 160, [[0, 10]], 10),
+  prop('planter2', 'planter', 0, 10, 8, 160, 128, [[10, 8]], 8),
+  prop('shelf', 'shelf', 0, 9, 0, 144, 0, [[9, 0]], 0),
+  prop('pot3', 'pot', 0, 1, 10, 16, 160, [[1, 10]], 10),
+  prop('pot4', 'pot', 0, 10, 10, 160, 160, [[10, 10]], 10),
+  prop('woodpile4', 'woodpile', 0, 0, 8, 0, 128, [[0, 8]], 8)
 ]);
 
 function decorDraw(sprite, frame, x, y, sortRow, overhead) {
@@ -708,31 +714,30 @@ function decorSpot(id, tiles, blocks, seats, draws) {
     seats: list(seats.slice()), draws: list(draws) });
 }
 
-// Decor spots, [V2.7] and contract D4, in DecorId order.
+// Decor spots, in DecorId order, on the angle redo plan A tiles.
 const DECOR = list([
-  decorSpot('chair1', [[7, 9]], [], ['chair1'], [decorDraw('chair', 0, 112, 136, 9)]),
-  decorSpot('chair2', [[8, 9]], [], ['chair2'], [decorDraw('chair', 0, 128, 136, 9)]),
-  decorSpot('flowers', [[7, 10], [8, 10]], [[7, 10], [8, 10]], [],
-    [decorDraw('bed', 0, 112, 156, 10), decorDraw('bed', 1, 128, 156, 10)]),
-  decorSpot('birdbath', [[4, 9]], [[4, 9]], [], [decorDraw('birdbath', 0, 64, 136, 9)]),
-  decorSpot('lights', [[4, 6], [8, 6]], [], [],
-    [decorDraw('lights_post', 0, 64, 80, 6), decorDraw('lights_post', 0, 128, 80, 6), decorDraw('lights_string', 0, 71, 80, 6, true)]),
-  decorSpot('picnic2', [[2, 9], [3, 9]], [[2, 9], [3, 9]], ['pt2b', 'pt2a'],
-    [decorDraw('picnic_bench', 0, 32, 136, 8), decorDraw('picnic', 0, 32, 136, 9)])
+  decorSpot('chair1', [[9, 3]], [], ['chair1'], [decorDraw('chair', 0, 144, 48, 3)]),
+  decorSpot('chair2', [[9, 4]], [], ['chair2'], [decorDraw('chair', 0, 144, 64, 4)]),
+  decorSpot('flowers', [[6, 10], [7, 10]], [[6, 10], [7, 10]], [], [decorDraw('flower_box', 0, 96, 160, 10)]),
+  decorSpot('birdbath', [[3, 10]], [[3, 10]], [], [decorDraw('birdbath', 0, 48, 160, 10)]),
+  decorSpot('lights', [[0, 7]], [], [],
+    [decorDraw('lights_post', 0, 0, 112, 7), decorDraw('lights_string', 0, 0, 112, 7, true)]),
+  decorSpot('picnic2', [[6, 8], [7, 8]], [[6, 8], [7, 8]], ['pt2b', 'pt2a'],
+    [decorDraw('picnic_bench', 0, 96, 128, 7), decorDraw('picnic', 0, 96, 128, 8)])
 ]);
 
 function seat(id, x, y, decor) {
   return Object.freeze({ kind: 'seat', id, x, y, face: 'down', decor });
 }
 
-// Seats, [V2.2.4] and contract D4, in SeatId order. Every seat faces down.
+// Seats, in SeatId order. Every seat faces down.
 const SEATS = list([
-  seat('pt1b', 6, 8, null),
-  seat('pt1a', 5, 8, null),
-  seat('chair1', 7, 9, 'chair1'),
-  seat('chair2', 8, 9, 'chair2'),
-  seat('pt2b', 3, 8, 'picnic2'),
-  seat('pt2a', 2, 8, 'picnic2')
+  seat('pt1b', 7, 4, null),
+  seat('pt1a', 6, 4, null),
+  seat('chair1', 9, 3, 'chair1'),
+  seat('chair2', 9, 4, 'chair2'),
+  seat('pt2b', 7, 7, 'picnic2'),
+  seat('pt2a', 6, 7, 'picnic2')
 ]);
 
 const STATION_BY_ID = Object.freeze(STATIONS.reduce((acc, s) => { acc[s.id] = s; return acc; }, {}));
@@ -761,25 +766,50 @@ const MAP = Object.freeze({
   decor: DECOR,
   seats: SEATS,
   SEAT_ORDER: SEAT_IDS,
-  spawn: Object.freeze({ x: 6, y: 3, face: 'up' }),
-  gate: px(9, 11),
-  custSpawn: px(9, 12),
-  passStop: px(9, 10),
+  spawn: Object.freeze({ x: 3, y: 2, face: 'right' }),
+  gate: px(8, 11),
+  custSpawn: px(8, 12),
+  passStop: px(8, 10),
   queue: list([
-    Object.freeze({ x: 7, y: 7, face: 'up', gear: null }),
-    Object.freeze({ x: 8, y: 7, face: 'left', gear: null }),
-    Object.freeze({ x: 9, y: 7, face: 'left', gear: null }),
-    Object.freeze({ x: 9, y: 8, face: 'up', gear: 'bigtable' }),
-    Object.freeze({ x: 9, y: 9, face: 'up', gear: 'bigtable' })
+    Object.freeze({ x: 5, y: 1, face: 'left', gear: null }),
+    Object.freeze({ x: 6, y: 1, face: 'left', gear: null }),
+    Object.freeze({ x: 7, y: 1, face: 'left', gear: null }),
+    Object.freeze({ x: 8, y: 1, face: 'left', gear: 'bigtable' }),
+    Object.freeze({ x: 8, y: 2, face: 'up', gear: 'bigtable' })
   ]),
-  buddyIdle: Object.freeze({ x: 4, y: 5, face: 'up' }),
-  tenderIdle: Object.freeze({ x: 3, y: 2, face: 'right' }),
-  prepIdle: Object.freeze({ x: 2, y: 5, face: 'right' }),   // X5.3: the PREP card's home
-  prepUse: Object.freeze({ x: 4, y: 4, face: 'right' }),    // X5.3: where the PREP card slices (the board's use tile 3)
-  dogHome: px(4, 7),
-  dogRoam: list([px(2, 7), px(3, 7), px(4, 7), px(5, 7), px(6, 7), px(7, 8), px(8, 8)]),
-  overhead: Object.freeze({ lights: px(71, 80), canopy: px(76, 106) }),
-  signText: Object.freeze({ x: 67, y: 5, w: 58 })   // W16.5: the pit name is drawn into this box
+  buddyIdle: Object.freeze({ x: 2, y: 8, face: 'right' }),
+  tenderIdle: Object.freeze({ x: 1, y: 7, face: 'right' }),
+  prepIdle: Object.freeze({ x: 1, y: 3, face: 'right' }),   // X5.3: the PREP card's home
+  prepUse: Object.freeze({ x: 2, y: 3, face: 'down' }),     // X5.3: where the PREP card slices (the board's back use)
+  dogHome: px(2, 9),
+  dogRoam: list([px(1, 9), px(2, 9), px(4, 9), px(5, 9), px(5, 8), px(5, 6), px(4, 10)]),
+  // The string runs from the post on the fence apron along the fence top to the back corner, then
+  // along the barn eave to a hook over (8,0). The canopy covers the line, (5,1) to (8,2), on 4 posts.
+  // x and y are the post's and the canopy's top left in sim px, for the v2 readers.
+  overhead: Object.freeze({
+    lights: Object.freeze({ x: 0, y: 112, post: px(0, 7), via: 'eave', hook: px(8, 0) }),
+    canopy: Object.freeze({ x: 80, y: 16, tiles: list([px(5, 1), px(6, 1), px(7, 1), px(8, 1), px(5, 2), px(6, 2), px(7, 2), px(8, 2)]) })
+  }),
+  // W16.5: the pit name is drawn into this box: the board hung on the barn over (3,0) and (4,0).
+  // x, y, w: the record box (sim px, centred over the two tiles), w the art board text box (54 rp).
+  signText: Object.freeze({ x: 37, y: 0, w: 54, tiles: list([px(3, 0), px(4, 0)]) }),
+  // The angle redo plan A: the stone path (cosmetic lawn), the aprons, the "+" marker tiles of every
+  // unbought station, gear and decor spot (D), and what the phone home view frames (C).
+  walk: list([px(5, 1), px(6, 1), px(7, 1), px(8, 1), px(8, 2), px(8, 3), px(8, 4), px(8, 5), px(8, 6), px(8, 7), px(8, 8), px(8, 9), px(8, 10)]),
+  apron: Object.freeze({ barn: 'y0', fence: 'x0' }),
+  forSale: Object.freeze({
+    kettle2: list([px(4, 7)]),
+    drum: list([px(2, 5), px(2, 6)]),
+    bigtable: list([px(4, 4)]),
+    canopy: list([px(7, 2)]),
+    chair1: list([px(9, 3)]),
+    chair2: list([px(9, 4)]),
+    flowers: list([px(6, 10), px(7, 10)]),
+    birdbath: list([px(3, 10)]),
+    lights: list([px(0, 7)]),
+    picnic2: list([px(6, 8), px(7, 8)])
+  }),
+  home: Object.freeze({ stations: list(STATIONS.map((s) => s.id)), queue: list([0, 1]) })
 });
 
 // Contract D4: works on stations, footprint tiles, use tiles, queue entries and seats. The v1
@@ -2667,7 +2697,7 @@ function createSim(saved, seed) {
 
   // Breadth first search, 4 directions, neighbor order up, down, left, right. `goal(x, y)` ends
   // the search; `passable(x, y)` says whether a tile may be entered. The grid has one row below
-  // the map so the customer spawn (9,12) can be reached. Returns the path after the start tile
+  // the map so the customer spawn (8,12) can be reached. Returns the path after the start tile
   // (array of {x, y}), [] when the start is a goal, or null.
   function bfs(sx, sy, goal, passable) {
     if (goal(sx, sy)) return [];
@@ -2943,15 +2973,16 @@ function createSim(saved, seed) {
     return null;
   }
 
-  // [S 19.6] Spot indexes nearest first to a point (sim px): the counter used end to end.
-  function spotsNearest(x) {
+  // [S 19.6] Spot indexes nearest first to a point (sim px): the counter used end to end. The angle
+  // redo counter runs along y, so the distance is taken in both axes.
+  function spotsNearest(x, y) {
     const spots = state.stations.table.spots;
     const spx = STATION_BY_ID.table.spotPx;
     const order = [];
     for (let i = 0; i < spots.length; i++) order.push(i);
     order.sort((a, b) => {
-      const da = spx[a] ? Math.abs(spx[a].x - x) : 1e9;
-      const db = spx[b] ? Math.abs(spx[b].x - x) : 1e9;
+      const da = spx[a] ? Math.hypot(spx[a].x - x, spx[a].y - y) : 1e9;
+      const db = spx[b] ? Math.hypot(spx[b].x - x, spx[b].y - y) : 1e9;
       return da - db || a - b;
     });
     return order;
@@ -2959,6 +2990,7 @@ function createSim(saved, seed) {
 
   // The end of the counter nearest the line: the first queue spot's centre.
   function lineEndX() { return MAP.queue[0].x * 16 + 8; }
+  function lineEndY() { return MAP.queue[0].y * 16 + 8; }
 
   // [S 19.6] Each set-down fills the next free spot from the end nearest the line outward;
   // only with no spot free does a plate stack on a spot of its meat with room (TABLE_STACK).
@@ -2985,7 +3017,7 @@ function createSim(saved, seed) {
   // than the old one meat a spot rule did.
   function tableSpotIndexFor(meat) {
     const spots = state.stations.table.spots;
-    const order = spotsNearest(lineEndX());
+    const order = spotsNearest(lineEndX(), lineEndY());
     let free = -1, freeN = 0, stack = -1;
     for (const i of order) {
       const sp = spots[i];
@@ -3117,8 +3149,9 @@ function createSim(saved, seed) {
     // [S 19.6] The plate in front of the guest, else the nearest one with their meat.
     const qs = c.queueIndex >= 0 ? MAP.queue[c.queueIndex] : null;
     const gx = (qs ? qs.x : c.x) * 16 + 8;
+    const gy = (qs ? qs.y : c.y) * 16 + 8;
     let idx = -1;
-    for (const i of spotsNearest(gx)) {
+    for (const i of spotsNearest(gx, gy)) {
       if (spots[i] && spots[i].meat === c.want && spots[i].times.length > 0) { idx = i; break; }
     }
     if (idx < 0) return false;
@@ -3868,8 +3901,8 @@ function createSim(saved, seed) {
     if (!b) return;
     const speed = b.vals ? b.vals.runSpeed : C.NPC_TILES_PER_S;   // a mover without vals plays v2's 3 star numbers
     const handle = b.vals ? b.vals.runHandle : C.BUDDY_HANDLE;
-    const boardUse = STATION_BY_ID.board.use[2];    // (5,5), facing up
-    const tableUse = STATION_BY_ID.table.use[0];    // (6,5), facing down
+    const boardUse = STATION_BY_ID.board.use[0];    // the angle redo: (3,4) on the lane, facing left ((2,3) is the PREP card's)
+    const tableUse = STATION_BY_ID.table.use[2];    // (3,3), facing right, one step from the board as in v2
     if (b.task === 'idle') {
       const stack = chooseBoardStack();
       if (stack && tableFits(stack.meat)) {
