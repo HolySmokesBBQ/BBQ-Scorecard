@@ -327,6 +327,43 @@ function frameCanvas(name, frame, flip) {
   return frameCache[key + 'f'] || (frameCache[key + 'f'] = mirrorOf(c));
 }
 
+/* ================================================================ outlines (v3.4 playtest) */
+// "Make it clearer": a dark ring around a frame, so stations, plates and guests read against
+// the ground. One ringed canvas per cached frame canvas.
+const OUTLINE = '#1b1410';
+const RING = 2;
+const ringCache = new WeakMap();
+function outlined(src) {
+  let c = ringCache.get(src);
+  if (c) return c;
+  c = document.createElement('canvas');
+  // v3.4 review: 2 px thick (a disc of radius 2 without its corners), so it reads at 2x.
+  c.width = src.width + 2 * RING; c.height = src.height + 2 * RING;
+  const g = c.getContext('2d');
+  g.imageSmoothingEnabled = false;
+  for (let dy = -RING; dy <= RING; dy++) for (let dx = -RING; dx <= RING; dx++) {
+    if ((dx === 0 && dy === 0) || Math.abs(dx) + Math.abs(dy) > RING + 1 || (Math.abs(dx) === RING && Math.abs(dy) === RING)) continue;
+    g.drawImage(src, RING + dx, RING + dy);
+  }
+  g.globalCompositeOperation = 'source-in';
+  g.fillStyle = OUTLINE;
+  g.fillRect(0, 0, c.width, c.height);
+  g.globalCompositeOperation = 'source-over';
+  g.drawImage(src, RING, RING);
+  ringCache.set(src, c);
+  return c;
+}
+// drawAt with the ring: the same anchor, the frame one px bigger on every side.
+function drawAtOutlined(ctx, name, ax, ay, frame, flip) {
+  const s = need(name);
+  if (s === 'people') { drawAt(ctx, name, ax, ay, frame, flip); return; }
+  const src = frameCanvas(name, frame, flip === true);
+  if (!src || !(src.width > 0)) { drawAt(ctx, name, ax, ay, frame, flip); return; }
+  const a = anchor(name, wrapFrame(name, frame));
+  const x = flip === true ? ax - (a.w - a.ax) : ax - a.ax;
+  ctx.drawImage(outlined(src), Math.round(x) - RING, Math.round(ay - a.ay) - RING);
+}
+
 /* ================================================================ draw shims (v2 shape) */
 // Top left, as PitSim.art.draw.
 function draw(ctx, name, x, y, frame, flip) {
@@ -503,6 +540,7 @@ const api = {
   SETS: SETS, MANIFEST: MANIFEST, PEOPLE_MANIFEST: PEOPLE_MANIFEST, V2_COLOR: V2_COLOR,
   build: build, has: has, frames: frames, setOf: setOf, anchor: anchor,
   draw: draw, drawAt: drawAt, drawTile: drawTile, placeTile: placeTile,
+  drawAtOutlined: drawAtOutlined, outlined: outlined,
   drawScaled: drawScaled, canvasFor: canvasFor, frameCanvas: frameCanvas,
   text: fxText, textTinted: textTinted, textWidth: SETS.fx.textWidth,
   look: look,

@@ -716,11 +716,8 @@ function seasonRun(policy, seed, seasons, length) {
       count(sim.drainEvents());
     };
     levels();
-    // 5. v3.2 (D10.2) Monday to Friday the way [S 19.6]'s weekend player taps them: Monday a Market
-    // run of the prefill when the cooler holds it, else Prep; Tuesday Prep when not prepped, else a
-    // Day off; Wednesday Train (the lowest id card) when there is a card; Thursday off; Friday
-    // Load-in. A Yard week trains on Wednesday and rests. The grinder cooks a Yard day every weekday
-    // it can and skips Load-in.
+    // 5. v3.4 Monday to Friday: Rest (the first Rest trains a card), the Monday shop when the cooler
+    // holds the cart. The grinder cooks a Yard day every weekday it can.
     const weekNo = s.season.week, yearNo = s.season.year;
     const inThisWeek = () => s.loop === 'week' && s.season.week === weekNo && s.season.year === yearNo;
     const isBookingWeek = booked.type !== 'yard';
@@ -749,19 +746,14 @@ function seasonRun(policy, seed, seasons, length) {
         sim.bookOffer(s.season.booking.id);   // the booking's prefill back in the cart
         sim.drainEvents();
       }
-      let kind = 'off';
-      let opt;
-      if (d === 2 && s.crew.length && s.season.trained === null) { kind = 'train'; opt = { id: s.crew.slice().sort((a, b) => a.id - b.id)[0].id }; }
-      if (isBookingWeek && !policy.grinder) {
-        if (d === 0) {
-          const cartMeat = MEAT_IDS.reduce((a, m) => a + s.cart.meat[m], 0);
-          const holds = cartMeat > 0 && MEAT_IDS.reduce((a, m) => a + s.stock[m], 0) + cartMeat <= sim.coolerCap();
-          kind = holds && dayOk(sim, 'market') ? 'market' : 'prep';
-        } else if (d === 1) kind = s.season.prepped ? 'off' : 'prep';
-        else if (d === 4) kind = 'loadin';
+      // v3.4: weekdays are a Yard day or Rest; prep and training are automatic. A booking week buys a
+      // Monday cart the cooler holds in the morning shop (Confirm with no day), then rests.
+      if (isBookingWeek && !policy.grinder && d === 0) {
+        const cartMeat = MEAT_IDS.reduce((a, m) => a + s.cart.meat[m], 0);
+        const holds = cartMeat > 0 && MEAT_IDS.reduce((a, m) => a + s.stock[m], 0) + cartMeat <= sim.coolerCap();
+        if (holds && sim.cartTotal() <= s.cash) sim.shopConfirm();
       }
-      if (!dayOk(sim, kind)) { kind = 'off'; opt = undefined; }
-      quick(kind, opt);
+      quick('off');
       levels();
     }
     // The weekend: the booked day, the other day off. A Yard week cooks Saturday's Yard day (Sunday's

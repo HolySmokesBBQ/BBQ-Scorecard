@@ -286,7 +286,7 @@ const DEVICE_SIZES = [
 ];
 
 // Contract D2 and D3.
-const C_EXPECT = { WALK_TILES_PER_S: 6, SAVE_VERSION: 7, PATIENCE_MID_FRAC: 0.5, GEAR_RESERVE: 30, QUEUE_SPOTS: 3, QUEUE_SPOTS_BIG: 5, TABLE_SPOTS: 3, TABLE_SPOTS_BIG: 5 };
+const C_EXPECT = { WALK_TILES_PER_S: 6, SAVE_VERSION: 8, PATIENCE_MID_FRAC: 0.5, GEAR_RESERVE: 30, QUEUE_SPOTS: 3, QUEUE_SPOTS_BIG: 5, TABLE_SPOTS: 3, TABLE_SPOTS_BIG: 5 };
 const C_NEW_KEYS = ['EAT_MIN', 'EAT_MAX', 'HEART_SECONDS', 'SEAT_BONUS_BASE', 'SEAT_BONUS_MAX', 'CHARM_STEP', 'CHARM_MAX', 'REP_TOGO_QUICK', 'SWEAT_FRAC', 'ZZZ_AFTER', 'FX', 'PATIENCE_MID_FRAC', 'GEAR_RESERVE'];
 const FX_KEYS = ['NUMBER_S', 'NUMBER_RISE_PX', 'NUMBER_FADE_AT', 'TIP_GAP_PX', 'SPARKLE_S', 'SPARKLE_FRAME_S', 'SPARKLE_STAGGER_S',
   'HEART_S', 'HEART_FRAME_S', 'HEART_RISE_PX', 'HEART_FADE_S', 'EAT_FRAME_S', 'PUFF_EVERY_LOW', 'PUFF_EVERY_GOOD', 'PUFF_EVERY_HOT',
@@ -411,7 +411,7 @@ const C_W2 = {
 };
 const C_W2_FIXED = ['SAVE_VERSION', 'SEASON_WEEKS', 'NAME_MAX', 'NAME_PUNCT', 'LENGTHS', 'LENGTH_ORDER'];
 // W2 changed values and the v2.1 keys that stay (W2 last paragraph).
-const C_W2_EXACT = { SAVE_VERSION: 7, DRIVEWAY_PRICE: 400, GATE_OPENS: 30, LAST_CALL: 110, DAY_SECONDS: 125, STEPPER_MAX: 99, START_CASH: 80, START_REP: 20 };
+const C_W2_EXACT = { SAVE_VERSION: 8, DRIVEWAY_PRICE: 400, GATE_OPENS: 30, LAST_CALL: 110, DAY_SECONDS: 125, STEPPER_MAX: 99, START_CASH: 80, START_REP: 20 };
 // W22.18: the keys whose starting values the W19 literals assume.
 const LITERAL_KEYS = ['FEE_MULT', 'FEE_ROUND', 'DEPOSIT_FRAC', 'PAY_BASE', 'PAY_PER_STAR', 'STAR_FANS', 'REP_DAY_MIN', 'SPARE_FRAC', 'BAGS_PER_COOKER',
   'SCORE_FED', 'SCORE_WAIT', 'SCORE_QUALITY', 'STAR_EDGES', 'WAIT_FULL_S', 'WAIT_ZERO_S', 'BURNT_PENALTY', 'OFFMENU_PENALTY', 'COOLER_CAP', 'SEASON_CARRY_REP', 'SEASON_REP_FLOOR',
@@ -1063,6 +1063,15 @@ const D32 = {
   cardMoodTop: 'The crew was already {mood} or better. Nothing changed.',
   dayName: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 };
+// v3.4 (sim.js, the note at the top): the start button and the morning shop, exact text.
+const D34 = {
+  startDay: 'Start {day}: {kind}',
+  changePlan: 'Change plan',
+  shopConfirm: 'Confirm',
+  shopBack: 'Back',
+  shopWarn: 'This leaves {left}. {day} needs about {need} for the booking.',
+  advanceLocked: 'You took an advance on this booking. It stays booked.'
+};
 const NULL7 = () => [null, null, null, null, null, null, null];
 
 // DOM ids (contract 4.4 and D14). Functions build the per item ids.
@@ -1188,7 +1197,7 @@ const SAVE_V1_SAMPLE = {
   drivewayShown: false
 };
 const SAVE_DIRTY = { v: 1, day: 'abc', cash: -50, rep: 400, stock: { sausage: 200, bogus: 1 }, gear: { drum: true, kettle2: false }, hires: { tender: true }, extra: 1 };
-const INVALID_SAVES = [null, 'x', [], {}, undefined, 42, { v: '5' }, { v: 0 }, { v: '3' }, { v: '4' }, { v: 8 }];   // v3.3: v 1 to 7 accepted
+const INVALID_SAVES = [null, 'x', [], {}, undefined, 42, { v: '5' }, { v: 0 }, { v: '3' }, { v: '4' }, { v: 9 }];   // v3.4: v 1 to 8 accepted
 
 // The shopping list for day 1 and later days. Two sausage units give four plates, so later
 // customers walk out and the walk out step has something to assert.
@@ -1413,7 +1422,7 @@ async function nodeChecks() {
     }
     const allFalse = (o) => o && DECOR_IDS.every((d) => o[d] === false) && Object.keys(o).length === DECOR_IDS.length;
     const v = P.validateSave(JSON.parse(JSON.stringify(SAVE_DIRTY)));
-    assert(v && v.v === 7, 'dirty v1 sample returned v ' + describe(v && v.v));
+    assert(v && v.v === 8, 'dirty v1 sample returned v ' + describe(v && v.v));
     assert(v.day === 1, 'day ' + describe(v.day));
     assert(v.cash === 0, 'cash ' + v.cash);
     assert(v.rep === 100, 'rep ' + v.rep);
@@ -1427,7 +1436,7 @@ async function nodeChecks() {
     assert(allFalse(v.decor), 'dirty sample decor ' + describe(v.decor));
     assert(v.stats && v.stats.seated === 0, 'dirty sample stats.seated ' + describe(v.stats && v.stats.seated));
     const s = P.validateSave(JSON.parse(JSON.stringify(SAVE_V1_SAMPLE)));
-    assert(s && s.v === 7, 'v1 sample returned v ' + describe(s && s.v));
+    assert(s && s.v === 8, 'v1 sample returned v ' + describe(s && s.v));
     migratedDefaults(s, 'v1 sample');
     assert(s.tutorial && s.tutorial.done === true, 'v1 sample tutorial ' + describe(s.tutorial));
     for (const k of ['day', 'cash', 'rep', 'stock', 'charcoal', 'gear', 'drivewayShown']) {
@@ -1437,7 +1446,7 @@ async function nodeChecks() {
     assert(s.stats.seated === 0, 'v1 sample stats.seated ' + s.stats.seated);
     assert(allFalse(s.decor), 'v1 sample decor ' + describe(s.decor));
     const d = P.validateSave({ v: 2, decor: { chair2: true, bogus: true } });
-    assert(d && d.v === 7, 'v2 decor sample returned ' + describe(d));
+    assert(d && d.v === 8, 'v2 decor sample returned ' + describe(d));
     migratedDefaults(d, 'v2 decor sample');
     assert(d.decor.chair2 === false, 'decor.chair2 not forced false without chair1');
     assert(!('bogus' in d.decor), 'decor.bogus kept');
@@ -1447,19 +1456,19 @@ async function nodeChecks() {
     assert(!threw, 'cyclic threw: ' + (threw && threw.message));
     // v2.1 (K6, K11 step 6).
     const v2 = P.validateSave(saveV2({}, P.C.START_REP));
-    assert(v2 && v2.v === 7 && v2.tutorial && v2.tutorial.done === true, 'v2 day 1 sample returned ' + describe(v2 && { v: v2.v, tutorial: v2.tutorial }));
+    assert(v2 && v2.v === 8 && v2.tutorial && v2.tutorial.done === true, 'v2 day 1 sample returned ' + describe(v2 && { v: v2.v, tutorial: v2.tutorial }));
     migratedDefaults(v2, 'v2 day 1 sample');
     const t1 = P.validateSave({ v: 3, day: 1, tutorial: { done: false, bogus: 1 } });
-    assert(t1 && t1.v === 7 && t1.tutorial && t1.tutorial.done === false, 'v3 day 1 done false returned ' + describe(t1 && t1.tutorial));
+    assert(t1 && t1.v === 8 && t1.tutorial && t1.tutorial.done === false, 'v3 day 1 done false returned ' + describe(t1 && t1.tutorial));
     assert(!('bogus' in t1.tutorial), 'tutorial.bogus kept');
     const t3 = P.validateSave({ v: 3, day: 3, tutorial: { done: false, bogus: 1 } });
     assert(t3 && t3.tutorial && t3.tutorial.done === true, 'v3 day 3 done false returned ' + describe(t3 && t3.tutorial));
     const t0 = P.validateSave({ v: 3 });
-    assert(t0 && t0.v === 7 && t0.tutorial && t0.tutorial.done === true, '{ v: 3 } returned ' + describe(t0 && t0.tutorial));
+    assert(t0 && t0.v === 8 && t0.tutorial && t0.tutorial.done === true, '{ v: 3 } returned ' + describe(t0 && t0.tutorial));
     migratedDefaults(t0, '{ v: 3 }');
     migratedDefaults(P.validateSave(JSON.parse(JSON.stringify(SAVE_V3_SAMPLE))), 'v3 sample');
     const ser = P.createSim(null, 1)[SIM_METHODS.serialize]();
-    assert(ser && ser.v === 7, 'serialize() v ' + describe(ser && ser.v));
+    assert(ser && ser.v === 8, 'serialize() v ' + describe(ser && ser.v));
     assert(ser.tutorial && ser.tutorial.done === false, 'serialize() tutorial ' + describe(ser.tutorial));
     const back = P.validateSave(JSON.parse(JSON.stringify(ser)));
     assert(deepEq(back, ser), 'serialize() does not round trip: ' + describe(ser) + ' became ' + describe(back));
@@ -1552,7 +1561,7 @@ async function nodeChecks() {
   await step('four plates set down land in four counter spots, headless', () => countersHeadless(globalThis[GLOBAL_NAME]));
   // v3.2 (D10.1): the Node legs of steps 73 to 75, the day loop and save v6.
   await step('v3.2 days: the day loop, prices and save v6, headless', () => daysLoopHeadless(globalThis[GLOBAL_NAME]));
-  await step('v3.2 days 73 and 75: the cooler keeps a Market run to Saturday; the overnight smoke, headless', () => daysStockHeadless(globalThis[GLOBAL_NAME]));
+  await step('v3.4 days: the morning shop (Confirm, Back, the reserve warning), the start pick, automatic prep and training, the broke rescue, headless', () => daysStockHeadless(globalThis[GLOBAL_NAME]));
   await step('v3.2 playtest: empty Monday cart, spoil warnings, the half day gate, the day card lines, headless', () => daysPlaytestHeadless(globalThis[GLOBAL_NAME]));
   // v3.3 (design [S 3.5], [S 3.6], [S 6.7], [S 6.8], [S 19.8], names in [S 19.9]).
   await step('v3.3 the competition by real moves: turn-ins, hold, judging, placing, headless', () => compHeadless(globalThis[GLOBAL_NAME]));
@@ -2654,7 +2663,7 @@ function surfaceV3(P, sim) {
 }
 
 function migratedDefaults(s, label) {
-  assert(s && s.v === 7, label + ': v ' + describe(s && s.v));
+  assert(s && s.v === 8, label + ': v ' + describe(s && s.v));
   assert(s.player === null, label + ': player ' + describe(s.player));
   assert(s.pitName === W15.defaultPit, label + ': pitName ' + describe(s.pitName));
   assert(s.season && s.season.year === 1 && s.season.week === 1 && sameJSON(s.season.results, []), label + ': season ' + describe(s.season));
@@ -2675,13 +2684,13 @@ function validateV4(P) {
   // true (it has results), and nothing else moves.
   const rt = V(SAVE_V4_SAMPLE);
   const want4 = base();
-  want4.v = 7;
+  want4.v = 8;
   delete want4.hires;
   Object.assign(want4, { crew: [], crewSeq: 1, hiring: null });
   // v3.3: the shelf, the ribbons and no open Offseason.
   Object.assign(want4, { trophies: [], ribbons: { sausage: 0, chicken: 0, ribs: 0, butt: 0, brisket: 0 }, offseason: null });
   // D9: and the five day keys, on that week's Monday.
-  Object.assign(want4.season, { drafted: true, trained: null, walkins: [], day: 0, dayLog: [null, null, null, null, null, null, null], prepped: false, loadin: false, overnight: null });
+  Object.assign(want4.season, { drafted: true, trained: null, walkins: [], day: 0, dayLog: [null, null, null, null, null, null, null], prepped: false, loadin: false, overnight: null, advance: 0 });
   assert(deepEq(rt, want4), 'the W13.1 sample migrates to ' + describe(rt) + ', wanted ' + describe(want4));
   const cases = [
     ['charcoal 500', (s) => { s.charcoal = 500; }, (r) => r.charcoal === 200],
@@ -2705,7 +2714,7 @@ function validateV4(P) {
     mut(s);
     let r;
     try { r = V(s); } catch (e) { throw new Error('v4 ' + label + ' threw: ' + e.message); }
-    assert(r && r.v === 7, 'v4 ' + label + ' returned ' + describe(r && r.v));
+    assert(r && r.v === 8, 'v4 ' + label + ' returned ' + describe(r && r.v));
     assert(!('hires' in r), 'v4 ' + label + ' kept a hires key');
     assert(ok(r), 'v4 ' + label + ' gave ' + describe({ charcoal: r.charcoal, wood: r.wood, season: r.season, player: r.player, pitName: r.pitName, settings: r.settings, crew: r.crew }));
   }
@@ -2723,8 +2732,8 @@ function validateV5(P) {
   const rt = V(SAVE_V5_SAMPLE);
   // D9: a v5 save migrates to v 6 on that week's Monday, nothing else moves.
   const want5 = base();
-  want5.v = 7;
-  Object.assign(want5.season, { day: 0, dayLog: [null, null, null, null, null, null, null], prepped: false, loadin: false, overnight: null });
+  want5.v = 8;
+  Object.assign(want5.season, { day: 0, dayLog: [null, null, null, null, null, null, null], prepped: false, loadin: false, overnight: null, advance: 0 });
   // v3.3: the shelf, the ribbons and no open Offseason.
   Object.assign(want5, { trophies: [], ribbons: { sausage: 0, chicken: 0, ribs: 0, butt: 0, brisket: 0 }, offseason: null });
   assert(deepEq(rt, want5), 'the X11.1 sample does not migrate to v 6 on Monday: ' + describe(rt));
@@ -2765,7 +2774,7 @@ function validateV5(P) {
     mut(s);
     let r;
     try { r = V(s); } catch (e) { throw new Error('v5 ' + label + ' threw: ' + e.message); }
-    assert(r && r.v === 7, 'v5 ' + label + ' returned ' + describe(r && r.v));
+    assert(r && r.v === 8, 'v5 ' + label + ' returned ' + describe(r && r.v));
     assert(ok(r), 'v5 ' + label + ' gave crew ' + describe(r.crew) + ', crewSeq ' + describe(r.crewSeq) + ', hiring ' + describe(r.hiring && { round: r.hiring.round, n: r.hiring.pool && r.hiring.pool.length }) + ', season ' + describe(r.season));
   }
   const cyc = base(); cyc.crew[0].look.loop = cyc; cyc.season.walkins[0].self = cyc;
@@ -3601,7 +3610,7 @@ function compSave(P, over = {}) {
 }
 function compFrom(P, over = {}) {
   const v = P.validateSave(JSON.parse(JSON.stringify(compSave(P, over))));
-  assert(v && v.v === 7, 'validateSave refused the week 9 fixture');
+  assert(v && v.v === 8, 'validateSave refused the week 9 fixture');
   return headless(P, v, over.seed || 33, { days: true });
 }
 // Book the competition and load up on the Saturday.
@@ -3757,7 +3766,7 @@ function shelfHeadless(P) {
   assert(ev.length === 1 && ev[0].place === 1 && ev[0].trophy === true, 'comp_results ' + describe(ev.map(strip)));
   // Saved and reloaded: v7 keeps the shelf and the ribbons, and drops a bad entry.
   const sv = h.sim.serialize();
-  assert(sv.v === 7 && deepEq(sv.trophies, [{ year: 1, contest: 'backyard', place: 1 }]) && deepEq(sv.ribbons, rib), 'saved shelf ' + describe({ t: sv.trophies, r: sv.ribbons }));
+  assert(sv.v === 8 && deepEq(sv.trophies, [{ year: 1, contest: 'backyard', place: 1 }]) && deepEq(sv.ribbons, rib), 'saved shelf ' + describe({ t: sv.trophies, r: sv.ribbons }));
   const dirty = JSON.parse(JSON.stringify(sv));
   dirty.trophies = dirty.trophies.concat([{ year: 2, contest: 'nope' }, 'x', { year: 'q', contest: 'regional' }]);
   dirty.ribbons.ribs = -4;
@@ -3765,7 +3774,7 @@ function shelfHeadless(P) {
   assert(v && v.trophies.length === 2 && v.trophies[1].contest === 'regional' && v.trophies[1].year === 1 && v.ribbons.ribs === 0, 'dirty shelf ' + describe(v && { t: v.trophies, r: v.ribbons }));
   const v6 = Object.assign(JSON.parse(JSON.stringify(sv)), { v: 6 });
   const m6 = P.validateSave(v6);
-  assert(m6 && m6.v === 7 && m6.trophies.length === 0, 'a v6 save reads no shelf ' + describe(m6 && m6.trophies));
+  assert(m6 && m6.v === 8 && m6.trophies.length === 0, 'a v6 save reads no shelf ' + describe(m6 && m6.trophies));
   // A full shelf: the win still counts, no seventh trophy.
   const six = new Array(C.TROPHY_MAX).fill(0).map((x, i) => ({ year: 1, contest: 'backyard', place: 1 }));
   const hf = compFrom(P, { seed: 35, trophies: six });
@@ -4056,7 +4065,7 @@ function v6Save(over = {}) {
 }
 function daysFrom(P, save, seed) {
   const v = P.validateSave(JSON.parse(JSON.stringify(save)));
-  assert(v && v.v === 7, 'validateSave refused the v6 fixture ' + describe(save).slice(0, 200));   // v3.3: a v6 save loads as 7
+  assert(v && v.v === 8, 'validateSave refused the v6 fixture ' + describe(save).slice(0, 200));   // v3.3: a v6 save loads as 7
   return headless(P, v, seed, { days: true });
 }
 const ZERO_STOCK = { sausage: 0, chicken: 0, ribs: 0, butt: 0, brisket: 0 };
@@ -4079,13 +4088,13 @@ function daysLoopHeadless(P) {
   const C = P.C;
   const notes = [];
   assert(sameJSON(P.DAY_IDS, ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']), 'DAY_IDS ' + describe(P.DAY_IDS));
-  assert(C.SAVE_VERSION === 7 && C.WEEK_DAYS === 7 && sameJSON(C.BOOK_DAY, { birthday: 5, picnic: 6, finale: 5, yard: null }), 'D2 keys');
+  assert(C.SAVE_VERSION === 8 && C.WEEK_DAYS === 7 && sameJSON(C.BOOK_DAY, { birthday: 5, picnic: 6, finale: 5, yard: null }), 'D2 keys');
   // The week by the sim: the options each day, the tick, the save on every day change.
   const h = daysFrom(P, v6Save({ season: { pick: 'birthday' } }), 7201);
   const s = () => h.st().season;
   assert(h.st().loop === 'week' && s().day === 0 && s().booking.type === 'birthday' && s().booking.day === 5, 'the fixture week ' + describe({ loop: h.st().loop, day: s().day, b: s().booking && s().booking.type }));
   const kinds = () => h.sim.dayOptions().options.map((o) => o.kind);
-  assert(sameJSON(kinds(), ['yard', 'prep', 'market', 'train', 'off']), 'Monday options ' + describe(kinds()));
+  assert(sameJSON(kinds(), ['yard', 'off']), 'Monday options ' + describe(kinds()));   // v3.4: a Yard day or Rest
   assert(h.sim.loadUp().ok === false && h.sim.loadUp().message === fill(D32.goNotToday, { day: 'Saturday' }), 'loadUp on Monday ' + describe(h.sim.loadUp()));
   // D4.2 and step 74 (Node): the same cart costs round(5 x price x m) + round(5 x bag x m) each weekday.
   const priceOf = (id) => P.CATALOG.find((r) => r.id === id).price;
@@ -4097,14 +4106,17 @@ function daysLoopHeadless(P) {
     const want = Math.round(5 * priceOf('chicken') * m) + Math.round(5 * priceOf('charcoal') * m);
     const cash0 = h.st().cash;
     assert(h.sim.cartTotal() === want, 'day ' + d + ' cart total ' + h.sim.cartTotal() + ', wanted ' + want);
-    const card = quickNode(h, 'market');
-    assert(h.st().cash === cash0 - want && card.spent === want, 'day ' + d + ' cash ' + h.st().cash + ' after ' + cash0 + ' less ' + want);
+    // v3.4: the morning shop's Confirm buys at today's price and stays in the morning; then Rest.
+    const bought = h.sim.shopConfirm();
+    h.drain();
+    assert(bought.ok && bought.spent === want && h.st().cash === cash0 - want && h.st().phase === 'morning' && s().day === d, 'day ' + d + ' cash ' + h.st().cash + ' after ' + cash0 + ' less ' + want + ' ' + describe(bought));
+    quickNode(h, 'off');
     seen.push(want);
     const sv = h.sim.serialize();
-    assert(sv.v === 7 && sv.season.day === d + 1 && sv.season.dayLog[d] === 'market' && sv.season.dayLog[d + 1] === null, 'save after day ' + d + ' ' + describe(sv.season.dayLog));
+    assert(sv.v === 8 && sv.season.day === d + 1 && sv.season.dayLog[d] === 'off' && sv.season.dayLog[d + 1] === null, 'save after day ' + d + ' ' + describe(sv.season.dayLog));
     assert(h.of(EVENT.saveWanted).some((e) => e.reason === 'day'), 'no save_wanted day');
   }
-  assert(sameJSON(kinds(), ['loadin', 'yard', 'off']), 'Friday options ' + describe(kinds()));
+  assert(sameJSON(kinds(), ['yard', 'off']), 'Friday options ' + describe(kinds()));
   quickNode(h, 'off');
   assert(sameJSON(kinds(), ['event']), 'Saturday options ' + describe(kinds()));
   // D9: a Saturday save reloads on Saturday; a report save is Sunday's morning.
@@ -4160,8 +4172,8 @@ function daysLoopHeadless(P) {
   assert(d3.season.day === 5 && d3.season.loadin === false && sameJSON(d3.season.dayLog, ['off', 'off', 'off', 'off', 'off', null, null]), 'no pick keeps the day, never the Load-in ' + describe(d3.season));
   const d4 = V(v6Save({ season: { week: 5, pick: 'birthday', day: 3 } }));
   assert(d4.season.week === 3 && d4.season.day === 0, 'a week that does not hold opens Monday ' + describe(d4.season));
-  assert(V({ v: 8 }) === null, '{ v: 8 } accepted');
-  notes.push('market runs cost ' + seen.join(', ') + ' Monday to Thursday');
+  assert(V({ v: 9 }) === null, '{ v: 9 } accepted');
+  notes.push('morning shops cost ' + seen.join(', ') + ' Monday to Thursday');
   return notes.join('; ') + '; the report save reloads on Sunday, a Yard week writes { yard, 0 }, dirty v6 keys clamp';
 }
 
@@ -4173,9 +4185,9 @@ function daysPlaytestHeadless(P) {
   // V32-8 and V32-9: Monday opens empty; with no cooler a Market run and a Yard day warn before the tap.
   const h = daysFrom(P, v6Save({ gear: { cooler: false }, stock: ZERO_STOCK, season: { pick: 'birthday' } }), 7901);
   assert(sum(h.st().cart.meat) === 0 && h.st().cart.charcoal === 0, 'the Monday cart ' + describe(h.st().cart));
-  assert(opt(h, 'yard').ok === false && opt(h, 'market').ok === false, 'Monday yard and market with nothing ' + describe(h.sim.dayOptions().options));
+  assert(opt(h, 'yard').ok === false && opt(h, 'market') === undefined, 'Monday yard with nothing, no Market run ' + describe(h.sim.dayOptions().options));
   h.sim.buy('sausage', 4); h.sim.buy('charcoal', 2);
-  assert(opt(h, 'market').warn === fill(D32.marketSpoil, { n: 4 }) && opt(h, 'yard').warn === D32.yardSpoil && opt(h, 'off').warn === '', 'the warnings ' + describe(h.sim.dayOptions().options));
+  assert(h.sim.shopView().spoil === fill(D32.marketSpoil, { n: 4 }) && opt(h, 'yard').warn === D32.yardSpoil && opt(h, 'off').warn === '', 'the warnings ' + describe([h.sim.shopView(), h.sim.dayOptions().options]));
   // V32-10: the weekday Yard day halves the gate too.
   const y = h.sim.chooseDay('yard');
   h.drain();
@@ -4183,33 +4195,31 @@ function daysPlaytestHeadless(P) {
   const gate = Math.round(C.GATE_OPENS * C.YARD_DAY_FRAC);
   assert(y.ok && t.gateAt === gate && t.endAt === Math.round(L.seconds * C.YARD_DAY_FRAC)
     && t.lastCallAt === Math.min(gate + Math.round(L.window * C.YARD_DAY_FRAC), t.endAt - C.LAST_CALL_GUARD) && h.st().spawnAt === gate, 'the half day ' + describe({ gateAt: t.gateAt, lastCallAt: t.lastCallAt, endAt: t.endAt, spawnAt: h.st().spawnAt }));
-  // V32-11: Train names the card and the xp; a Day off at the cap says nothing changed.
+  // V32-11, v3.4: the first Rest trains the card and names it; at the mood cap it says nothing changed.
   const happy = Object.assign({}, DAY_CARD, { mood: C.DAYOFF_MOOD_CAP });
   const g = daysFrom(P, v6Save({ cash: 300, crew: [happy], season: { pick: 'birthday' } }), 7902);
-  const tc = quickNode(g, 'train', { id: 1 });
-  assert(tc.trained && tc.trained.name === 'Rosa' && tc.trained.xp === C.TRAIN_XP, 'the Train card ' + describe(tc));
   const oc = quickNode(g, 'off');
-  assert(oc.moodTop === true && oc.mood.length === 0, 'the Day off card ' + describe(oc));
-  // V32-9: Prep, then a Friday Load-in with nothing to put on overnight only locks the booking.
-  quickNode(g, 'prep');
-  quickNode(g, 'off');
-  const rail = g.sim.railFor(g.st().season.booking, g.st().season.addon);
-  assert(C.OVERNIGHT_MEATS.every((m) => !(rail[m] > 0)), 'the Birthday rail holds an overnight meat ' + describe(rail));
-  assert(opt(g, 'loadin').ok === true && opt(g, 'loadin').warn === D32.loadinSame, 'the Friday Load-in ' + describe(opt(g, 'loadin')));
-  const lc = quickNode(g, 'loadin');
-  assert(lc.loadinSame === true && lc.prepBonus === 0 && g.st().season.loadin === true, 'the Load-in card ' + describe(lc));
-  return 'Monday cart empty, spoil warnings, gate ' + gate + ' s on the half day, Train and Day off lines, Load-in after Prep only locks';
+  assert(oc.moodTop === true && oc.mood.length === 0 && oc.trained && oc.trained.name === 'Rosa' && oc.trained.xp === C.TRAIN_XP, 'the Rest card ' + describe(oc));
+  return 'Monday cart empty, spoil warnings, gate ' + gate + ' s on the half day, the Rest card trains and says nothing changed';
 }
 
 function daysStockHeadless(P) {
   const C = P.C;
   const notes = [];
-  // 73 (Node): no cooler, 4 sausage spoil Monday night; with the cooler all 4 keep to Saturday.
+  const sum = (o) => Object.values(o).reduce((a, b) => a + b, 0);
+  const U = P.STRINGS.ui;
+  for (const [k, v] of Object.entries(D34)) assert(U[k] === v, 'STRINGS.ui.' + k + ' is ' + describe(U[k]));
+  assert(P.STRINGS.dayKind.off === 'Rest', 'Day off is not Rest: ' + describe(P.STRINGS.dayKind.off));
+  // 73 (Node), v3.4: the Monday shop's Confirm (no day) buys 4 sausage. No cooler: they spoil Monday
+  // night; with the cooler all 4 keep to Saturday.
   for (const cooler of [false, true]) {
     const h = daysFrom(P, v6Save({ gear: { cooler }, stock: ZERO_STOCK, season: { pick: 'birthday' } }), 7301);
     emptyCartNode(h.sim);
     h.sim.buy('sausage', 4);
-    const card = quickNode(h, 'market');
+    const bought = h.sim.shopConfirm();
+    h.drain();
+    assert(bought.ok && h.st().stock.sausage === 4 && h.st().season.day === 0 && h.st().phase === 'morning', 'the Monday shop ' + describe({ bought, stock: h.st().stock }));
+    const card = quickNode(h, 'off');
     if (!cooler) {
       assert(card.spoiled === 4 && h.st().stock.sausage === 0, 'no cooler: spoiled ' + card.spoiled + ', Tuesday sausage ' + h.st().stock.sausage);
       assert(h.of('spoiled').some((e) => e.units === 4), 'no spoiled event');
@@ -4219,46 +4229,107 @@ function daysStockHeadless(P) {
     }
   }
   notes.push('no cooler 4 spoil Monday night, the cooler keeps 4 to Saturday');
-  // 75: a Saturday booking with butt on the rail (the Birthday plus butt), 2 butt and 4 bags on Friday.
-  const fri = { day: 4, dayLog: ['off', 'off', 'off', 'off', null, null, null] };
-  const h = daysFrom(P, v6Save({ gear: { kettle2: true, cooler: true, drum: true }, stock: Object.assign({}, ZERO_STOCK, { butt: 2 }), charcoal: 4,
-    season: Object.assign({ pick: 'birthday', addon: 'butt' }, fri) }), 7501);
-  const s = () => h.st().season;
-  assert(s().day === 4 && s().booking.type === 'birthday' && s().addon === 'butt' && h.sim.railFor(s().booking, 'butt').butt > 0, 'the Friday fixture ' + describe({ day: s().day, addon: s().addon }));
-  const card = quickNode(h, 'loadin');
-  assert(h.st().charcoal === 2 && h.st().stock.butt === 0 && sameJSON(s().overnight, { meat: 'butt', n: 2 }) && s().prepped && s().loadin, 'after Load-in ' + describe({ charcoal: h.st().charcoal, butt: h.st().stock.butt, overnight: s().overnight }));
-  assert(sameJSON(card.overnight, { meat: 'butt', n: 2 }) && card.prepBonus === C.PREP_QUALITY && h.of('overnight_on').length === 1, 'the Load-in card ' + describe(card));
-  assert(h.sim.bookOffer(s().offers.find((o) => o.type !== 'birthday').id).message === D32.bookLocked && s().booking.type === 'birthday', 'the booking is locked');
-  const sv = h.sim.serialize();
-  assert(sameJSON(sv.season.overnight, { meat: 'butt', n: 2 }) && sv.season.loadin === true && sv.season.day === 5, 'the Saturday save ' + describe(sv.season));
-  const cartButt = h.st().cart.meat.butt;
-  const lu = h.sim.chooseDay('event');
-  h.drain();
-  const t = h.st().today;
-  assert(lu.ok && t.stockStart.butt === 2 && h.st().stock.butt === 2 + cartButt && sameJSON(t.overnight, { meat: 'butt', n: 2, left: 2 }) && t.prepBonus === C.PREP_QUALITY,
-    'Saturday loadUp ' + describe({ lu, stockStart: t.stockStart.butt, butt: h.st().stock.butt, cartButt, overnight: t.overnight }));
-  // Three butt on three grates: the first two start at half the cook, the third at 0.
-  if (h.st().stock.butt < 3) { h.st().stock.butt = 3; }
-  TILE.kettle2 = { x: 4, y: 7 };
-  TILE.drum = { x: 2, y: 5 };
-  h.sim.selectMeat('butt');
-  const pieces = () => ['kettle1', 'kettle2', 'drum'].flatMap((id) => h.st().stations[id].pieces.filter((p) => p.meat === 'butt'));
-  for (const [i, ck] of ['kettle1', 'kettle2', 'drum'].entries()) {
-    h.sim.selectMeat('butt');
-    assert(h.goSettled('cooler', () => carryIs(h, CARRY_KIND.raw, 'butt')), 'butt ' + (i + 1) + ': carrying ' + describe(h.st().player.carrying));
-    assert(h.goSettled(ck, () => pieces().length >= i + 1), ck + ': butt pieces ' + pieces().length);
-  }
-  const head = Math.round(C.OVERNIGHT_HEAD * P.MEATS.butt.cook);
-  const progs = pieces().sort((a, b) => a.id - b.id).map((p) => p.prog);
-  assert(progs.length === 3 && progs[0] >= head && progs[0] < head + 1 && progs[1] >= head && progs[1] < head + 1 && progs[2] < 1, 'butt progs ' + describe(progs) + ', wanted ' + head + ', ' + head + ', 0');
-  notes.push('Load-in 4 bags to 2, 2 butt held overnight, Saturday puts them back, progs ' + progs.map((p) => Math.round(p)).join(' '));
-  // A Sunday booking's Load-in is the prep only.
-  const p = daysFrom(P, v6Save({ gear: { kettle2: true, cooler: true }, stock: Object.assign({}, ZERO_STOCK, { butt: 2 }), charcoal: 4,
-    season: Object.assign({ pick: 'picnic' }, fri) }), 7502);
-  assert(p.st().season.booking.type === 'picnic', 'the picnic fixture ' + describe(p.st().season.booking && p.st().season.booking.type));
-  quickNode(p, 'loadin');
-  assert(p.st().season.overnight === null && p.st().charcoal === 4 && p.st().stock.butt === 2 && p.st().season.prepped === true, 'a Sunday Load-in ' + describe({ overnight: p.st().season.overnight, charcoal: p.st().charcoal }));
-  notes.push('a Sunday Load-in sets no overnight');
+  // The four old day kinds are gone; every day but the booked one is a Yard day or Rest.
+  const g = daysFrom(P, v6Save({ stock: ZERO_STOCK, season: { pick: 'birthday' } }), 7302);
+  for (const k of ['market', 'prep', 'train', 'loadin']) assert(g.sim.chooseDay(k).ok === false, k + ' is still a day choice');
+  // The morning shop: nothing is spent until Confirm, Back puts the cart back, Confirm starts the day.
+  const m = daysFrom(P, v6Save({ gear: { cooler: false }, stock: ZERO_STOCK, charcoal: 0, cash: 200, season: { pick: 'birthday' } }), 7303);
+  const cash0 = m.st().cash;
+  assert(m.sim.shopNeeded('yard') === true && m.sim.shopNeeded('off') === false, 'shopNeeded ' + describe([m.sim.shopNeeded('yard'), m.sim.shopNeeded('off')]));
+  const v = m.sim.shopOpen('yard');
+  assert(v && v.kind === 'yard' && v.total > 0 && v.lines.length > 0 && v.ok === true && v.day === 0 && v.price === C.DAY_PRICE[0] && m.st().cash === cash0, 'shopOpen(yard) ' + describe(v));
+  assert(m.sim.shopBack().ok && sum(m.st().cart.meat) + m.st().cart.charcoal === 0 && m.st().cash === cash0, 'Back ' + describe(m.st().cart));
+  m.sim.shopOpen('yard');
+  const spend = m.sim.cartTotal();
+  const cf = m.sim.shopConfirm('yard');
+  m.drain();
+  assert(cf.ok && cf.spent === spend && m.st().cash === cash0 - spend && m.st().loop === 'prep' && m.st().today.weekday === true, 'Confirm starts the Yard day ' + describe({ cf, cash: m.st().cash, loop: m.st().loop }));
+  notes.push('shop Back spent 0, Confirm spent ' + spend + ' and opened the Yard day');
+  // The warning before spending below what the weekend booking needs.
+  const w = daysFrom(P, v6Save({ stock: ZERO_STOCK, charcoal: 0, season: { pick: 'birthday' } }), 7304);
+  const need = w.sim.shopView().reserve;
+  assert(need > 0, 'the weekend reserve ' + need);
+  const rail = w.sim.railFor(w.st().season.booking, w.st().season.addon);
+  const off = ['sausage', 'chicken', 'ribs', 'butt'].find((x) => !(rail[x] > 0));
+  w.st().cash = need + 5;   // fixture
+  emptyCartNode(w.sim);
+  w.sim.buy(off, 3);
+  const wv = w.sim.shopView();
+  assert(wv.after < wv.reserve && wv.warn === fill(D34.shopWarn, { left: wv.after, day: 'Saturday', need: wv.reserve }), 'the reserve warning ' + describe(wv));
+  emptyCartNode(w.sim);
+  assert(w.sim.shopView().warn === '', 'a warning on an empty cart');
+  notes.push('reserve ' + need + ', the warning reads "' + wv.warn + '"');
+  // The start button: Yard day when stocked, Rest when cash and stock fall short, the booking on its day.
+  const r = daysFrom(P, v6Save({ stock: Object.assign({}, ZERO_STOCK, { sausage: 4 }), charcoal: 6, cash: 300, season: { pick: 'birthday' } }), 7305);
+  const rec = r.sim.recommendDay();
+  assert(rec.kind === 'yard' && rec.start === fill(D34.startDay, { day: 'Monday', kind: 'Yard day' }) && sameJSON(rec.alt.map((a) => a.kind), ['off']) && rec.alt[0].label === 'Rest'
+    && rec.shop === false && rec.rescue === false, 'the Monday pick ' + describe(rec));
+  const firstRest = quickNode(r, 'off');
+  for (let d = 1; d < 5; d++) quickNode(r, 'off');
+  const sat = r.sim.recommendDay();
+  const label = r.st().season.booking.label;
+  assert(sat.kind === 'event' && sat.label === label && sat.start === fill(D34.startDay, { day: 'Saturday', kind: label }) && sat.shop === true, 'the Saturday pick ' + describe(sat));
+  r.sim.shopOpen('event');
+  const ev = r.sim.shopConfirm('event');
+  r.drain();
+  assert(ev.ok && r.st().today.prepBonus === C.PREP_QUALITY && r.st().season.prepped === true, 'automatic prep ' + describe({ ev, prepBonus: r.st().today.prepBonus }));
+  assert(firstRest.trained === null, 'a Rest with no crew trained ' + describe(firstRest.trained));
+  notes.push('picks: ' + rec.start + ', ' + sat.start + ' with the prep bonus');
+  // Automatic training: the week's first Rest trains the card with the least xp, once.
+  const t = daysFrom(P, v6Save({ cash: 300, crew: [Object.assign({}, DAY_CARD, { xp: 5 }), Object.assign({}, DAY_CARD, { id: 2, name: 'Lou', xp: 1 })], crewSeq: 3, season: { pick: 'birthday' } }), 7306);
+  const t1 = quickNode(t, 'off');
+  const t2 = quickNode(t, 'off');
+  assert(t1.trained && t1.trained.id === 2 && t1.trained.xp === C.TRAIN_XP && t2.trained === null && t.st().season.trained === 2, 'Rest training ' + describe([t1.trained, t2.trained]));
+  // The broke rescue: Monday, 3 cash, no stock, a cooler.
+  const b = daysFrom(P, v6Save({ gear: { cooler: true }, stock: ZERO_STOCK, charcoal: 0, cash: 3, season: { pick: 'birthday' } }), 7307);
+  const bs = () => b.st().season;
+  const dep = bs().booking.deposit;
+  const rv = b.sim.rescueView();
+  assert(rv && rv.cash === 3 && rv.need > 3 && rv.gear.some((x) => x.id === 'cooler' && x.price === 30) && rv.gear.every((x) => x.price === Math.floor(P.CATALOG.find((c) => c.id === x.id).price * C.SELL_BACK)) && rv.advance === dep && rv.restart === true, 'rescueView ' + describe(rv));
+  const brec = b.sim.recommendDay();
+  assert(brec.rescue === true && brec.kind === 'off', 'the broke pick ' + describe(brec));
+  const other = bs().offers.find((o) => o.id !== bs().booking.id);
+  const adv = b.sim.rescueAdvance();
+  b.drain();
+  assert(adv.ok && b.st().cash === 3 + dep && bs().advance === dep && b.of('advance').length === 1 && b.sim.rescueAdvance().ok === false, 'rescueAdvance ' + describe({ adv, cash: b.st().cash, advance: bs().advance }));
+  if (other) assert(b.sim.bookOffer(other.id).message === D34.advanceLocked && bs().booking.type === 'birthday', 'the advance did not lock the booking');
+  const sv = b.sim.serialize();
+  assert(sv.v === 8 && sv.season.advance === dep, 'the save keeps the advance ' + describe(sv.season.advance));
+  assert(daysFrom(P, sv, 7308).st().season.advance === dep, 'the reload keeps the advance');
+  const v7 = P.validateSave(JSON.parse(JSON.stringify(Object.assign({}, sv, { v: 7 }))));
+  assert(v7 && v7.v === 8 && v7.season.advance === 0, 'a v7 save reads advance 0 ' + describe(v7 && v7.season.advance));
+  for (let d = 0; d < 5; d++) quickNode(b, 'off');
+  b.st().charcoal = 6;   // fixture: Saturday's cook
+  const before = b.st().cash;
+  b.sim.shopOpen('event');
+  const paid = b.sim.cartTotal();
+  const lu = b.sim.shopConfirm('event');
+  b.drain();
+  assert(lu.ok && b.st().cash === before - paid && bs().advance === 0, 'Saturday with the advance taken: no second deposit ' + describe({ lu, before, paid, cash: b.st().cash }));
+  notes.push('advance ' + dep + ' up front, none at the load');
+  // An advance on a week that never plays the event goes back Sunday night.
+  const k = daysFrom(P, v6Save({ stock: ZERO_STOCK, charcoal: 0, cash: 3, season: { pick: 'birthday' } }), 7309);
+  assert(k.sim.rescueAdvance().ok, 'the second advance');
+  const kd = k.st().season.booking.deposit;
+  for (let d = 0; d < 5; d++) quickNode(k, 'off');
+  emptyCartNode(k.sim);
+  assert(sameJSON(k.sim.dayOptions().options.map((o) => o.kind), ['event', 'off']), 'Saturday with nothing to cook ' + describe(k.sim.dayOptions().options));
+  quickNode(k, 'off');
+  const sunCash = k.st().cash;
+  quickNode(k, 'off');
+  assert(k.st().cash === Math.max(0, sunCash - kd) && k.st().season.advance === 0 && k.of('advance_back').length === 1, 'the advance back ' + describe({ sunCash, cash: k.st().cash }));
+  // Sell at half, and the season restart.
+  const sold = daysFrom(P, v6Save({ gear: { cooler: true }, stock: ZERO_STOCK, charcoal: 0, cash: 3, season: { pick: 'birthday' } }), 7310);
+  const so = sold.sim.rescueSell('cooler');
+  assert(so.ok && so.price === 30 && sold.st().cash === 33 && sold.st().gear.cooler === false, 'rescueSell ' + describe(so));
+  const rs = daysFrom(P, v6Save({ stock: ZERO_STOCK, charcoal: 0, cash: 0, season: { pick: 'birthday' } }), 7311);
+  const gearWas = JSON.stringify(rs.st().gear), repWas = rs.st().rep;
+  assert(rs.st().season.week > 1, 'the restart fixture is week 1');
+  const rr = rs.sim.rescueRestart();
+  rs.drain();
+  assert(rr.ok && rs.st().season.week === 1 && rs.st().season.results.length === 0 && rs.st().cash === C.START_CASH && rs.st().loop === 'week' && rs.st().phase === 'morning'
+    && rs.st().season.day === 0 && JSON.stringify(rs.st().gear) === gearWas && rs.st().rep === repWas && rs.of('season_restart').length === 1, 'rescueRestart ' + describe({ rr, week: rs.st().season.week, cash: rs.st().cash }));
+  notes.push('sell 30, the advance back on Sunday, restart to week 1 at ' + C.START_CASH);
   return notes.join('; ');
 }
 
@@ -4528,7 +4599,7 @@ function hiringHeadless(P) {
   assert(h.of(EVENT.saveWanted, n1).some((e) => e.reason === 'hiring'), 'no save_wanted hiring after the round');
   // A reload mid Hiring Day restores the pool, the statuses and the round.
   const ser = h.sim.serialize();
-  assert(ser && ser.v === 7 && ser.hiring && ser.hiring.round === 2 && ser.season.week === 1 && ser.season.pick === null, 'serialize() on Hiring Day ' + describe(ser && { v: ser.v, hiring: ser.hiring && ser.hiring.round, week: ser.season && ser.season.week, pick: ser.season && ser.season.pick }));
+  assert(ser && ser.v === 8 && ser.hiring && ser.hiring.round === 2 && ser.season.week === 1 && ser.season.pick === null, 'serialize() on Hiring Day ' + describe(ser && { v: ser.v, hiring: ser.hiring && ser.hiring.round, week: ser.season && ser.season.week, pick: ser.season && ser.season.pick }));
   const back = P.validateSave(JSON.parse(JSON.stringify(ser)));
   assert(back && back.hiring && back.hiring.pool.length === C.POOL_SIZE, 'validateSave dropped the Hiring Day ' + describe(back && back.hiring));
   const again = P.createSim(back, 641);
@@ -5038,7 +5109,7 @@ function migrateHeadless(P) {
   const { v3, v4 } = migratedSamples();
   for (const [label, raw] of [['v3 (v2.1)', v3], ['v4 (v3.0)', v4]]) {
     const r = P.validateSave(JSON.parse(JSON.stringify(raw)));
-    assert(r && r.v === 7 && !('hires' in r), label + ': ' + describe(r && { v: r.v, hires: r.hires }));
+    assert(r && r.v === 8 && !('hires' in r), label + ': ' + describe(r && { v: r.v, hires: r.hires }));
     assert(Array.isArray(r.crew) && r.crew.length === 2, label + ': crew ' + describe(r.crew));
     const [run, fire] = r.crew;
     const common = (c, id) => c.id === id && c.mood === 0 && c.xp === 0 && c.banked === 0 && c.seasons === 0 && c.rookie === false && c.trait === null && c.bring === true && c.raised === false && c.notice === false && c.worked === 1 && c.bench === 0 && c.contract === 1 && c.potential === 4;
@@ -5559,9 +5630,30 @@ async function nextDayTap() {
   await click('daycard-next');
   await advance(0);
 }
+// v3.4 playtest: the game's pick is the one big #hub-start; the other choice is #day-<kind> behind
+// #hub-change (Change plan). A pick that needs stock goes through the morning shop, confirmed here.
 async function quickTap(kind) {
+  if (!(await present('day-' + kind))) {
+    const rk = await ev('(sim.recommendDay() || {}).kind');
+    if (rk === kind) {
+      await click('hub-start');
+      await advance(0);
+      if (await visible('mshop')) { await click('shop-confirm'); await advance(0); }
+      return;
+    }
+    if ((await present('hub-change')) && (await attrOf('hub-change', 'aria-expanded')) !== 'true') { await click('hub-change'); await advance(0); }
+  }
   await click('day-' + kind);
   await advance(0);
+  if (await visible('mshop')) { await click('shop-confirm'); await advance(0); }
+}
+// v3.4: today offers this kind (as the pick on #hub-start or behind Change plan).
+async function dayOffered(kind) {
+  return ev('(sim.dayOptions().options || []).some((o) => o.kind === ' + JSON.stringify(kind) + ')');
+}
+// v3.4: the booked event is today (the old #go showing in the day choice).
+async function goShown() {
+  return (await visible(ID3.week)) && (await dayOffered('event'));
 }
 async function savedDayIsLit(label) {
   const raw = await storedSave();
@@ -5573,7 +5665,7 @@ async function savedDayIsLit(label) {
 // Day off and Next day once.
 async function restOfWeek() {
   const st = await ev('({ loop: S().loop, phase: S().phase, day: S().season.day, played: S().season.dayLog.includes("event") })');
-  if (st.loop !== 'week' || st.day !== 6 || !st.played || !(await present('day-off'))) return false;
+  if (st.loop !== 'week' || st.day !== 6 || !st.played || !(await dayOffered('off'))) return false;
   await quickTap('off');
   await nextDayTap();
   return true;
@@ -5582,13 +5674,13 @@ async function restOfWeek() {
 // until #go shows.
 async function toBookedDay() {
   for (let i = 0; i < 7; i++) {
-    if (await visible(ID3.go)) return i;
+    if (await goShown()) return i;
     if (await visible('daycard')) { await nextDayTap(); continue; }
-    if (!(await present('day-off'))) break;
+    if (!(await dayOffered('off'))) break;
     await quickTap('off');
     await nextDayTap();
   }
-  assert(await visible(ID3.go), '#go never showed; day ' + describe(await ev('S().season.day')));
+  assert(await goShown(), 'the booked day never came; day ' + describe(await ev('S().season.day')));
   return 7;
 }
 // The cart by taps on the shop sheet: every line to 0, then `lines` (+1 taps, +5 for charcoal).
@@ -5688,6 +5780,13 @@ const hasRecord = (frame, want) => frame.some((d) => !d.ghost && d.name === want
 async function plusChecks(frame, label) {
   const ghosts = frame.filter((d) => d.ghost === true);
   assert(ghosts.length === 0, label + ': ' + ghosts.length + ' ghost records, first ' + describe(ghosts.slice(0, 3)));
+  // v3.4 playtest: the "+" marks show only while the Shop or Gear sheet is open.
+  const shown = await ev('!!(g.saleShown && g.saleShown())');
+  if (!shown) {
+    const pl = frame.filter((d) => d.name === PLUS);
+    assert(pl.length === 0, label + ': ' + pl.length + ' "+" records with no Shop or Gear sheet open');
+    return '0 plus (no sheet open)';
+  }
   const want = await ev('(() => { const s = S(); const ppl = [s.player, s.buddy, s.tender, s.prep].concat(s.customers || []).filter(Boolean).map((p) => p.x + "," + p.y); return Object.keys(MAP.forSale).map((id) => ({ id, owned: s.gear[id] === true || s.decor[id] === true, stood: MAP.forSale[id].some((t) => ppl.includes(t.x + "," + t.y)) })); })()');
   const plus = frame.filter((d) => d.name === PLUS);
   const bad = [];
@@ -6117,7 +6216,7 @@ async function v3BrowserSteps(captures) {
     key = await lookKeyNow();
     assert(key === lookKeyOf(MARTY.look), 'art.lookKey() after Fire it up ' + describe(key));
     const raw = await storedSave();
-    assert(raw && raw.v === 7 && raw.player && raw.player.name === MARTY.name && deepEq(raw.player.look, MARTY.look) && raw.pitName === MARTY.pit && !('hires' in raw), 'stored save ' + describe(raw && { v: raw.v, player: raw.player, pitName: raw.pitName, hires: raw.hires }));
+    assert(raw && raw.v === 8 && raw.player && raw.player.name === MARTY.name && deepEq(raw.player.look, MARTY.look) && raw.pitName === MARTY.pit && !('hires' in raw), 'stored save ' + describe(raw && { v: raw.v, player: raw.player, pitName: raw.pitName, hires: raw.hires }));
     return CREATOR_TAPS.length + ' taps to ' + key + ', Marty of ' + MARTY.pit + ', saved v 5, on Hiring Day';
   }, { fatal: true });
 
@@ -6255,7 +6354,7 @@ async function v3BrowserSteps(captures) {
     await advance(0);
     assert((await loop()) === LOOP.week && (await visible(ID3.week)), 'after Start week 1: loop ' + describe(await loop()));
     const raw = await storedSave();
-    assert(raw && raw.v === 7 && raw.hiring === null && raw.season.drafted === true && raw.crew.length === 1 && raw.crew[0].name === target.name, 'stored save after Hiring Day ' + describe(raw && { v: raw.v, hiring: raw.hiring, drafted: raw.season && raw.season.drafted, crew: raw.crew }));
+    assert(raw && raw.v === 8 && raw.hiring === null && raw.season.drafted === true && raw.crew.length === 1 && raw.crew[0].name === target.name, 'stored save after Hiring Day ' + describe(raw && { v: raw.v, hiring: raw.hiring, drafted: raw.season && raw.season.drafted, crew: raw.crew }));
     return 'two pages, a tryout showed ' + pot + ' stars, Pass kept focus, hired ' + target.name + ' (RUN, wage ' + target.wage + (onPage2 ? ', page 2' : '') + '), three taken, then the week 1 hub';
   }, { fatal: true });
 
@@ -6293,9 +6392,21 @@ async function v3BrowserSteps(captures) {
       assert(got === want, '#wk-' + w + ' aria-label ' + describe(got) + ', wanted ' + describe(want));
     }
     const offers = await ev('S().season.offers.map((o) => ({ id: o.id, type: o.type, label: o.label, host: o.host, headcount: o.headcount, menu: o.menu, pay: o.pay, deposit: o.deposit, difficulty: o.difficulty }))');
+    // v3.4 review: under the Start button the picked booking is one line and the offers sit behind
+    // See offers; the Yard day card is gone (a weekday choice now).
+    const startHub = await present('hub-start');
+    if (startHub && (await present('offers-more'))) {
+      const ln = await text('offer-line');
+      const bk = await ev('S().season.booking');
+      assert(ln.startsWith(bk.label + ' ') && ln.endsWith(', pay ' + bk.pay) && !(await visible('offer-grid')), '#offer-line reads ' + describe(ln) + ' with the grid ' + ((await visible('offer-grid')) ? 'open' : 'closed'));
+      await click('offers-more');
+      await advance(0);
+      assert(await visible('offer-grid'), 'See offers left the grid closed');
+    }
     const order = await ev('[...$(' + JSON.stringify(ID3.offers) + ').querySelectorAll("article")].map((a) => a.id)');
-    assert(sameJSON(order, ['offer-birthday', 'offer-picnic', 'offer-yard']), 'offer cards ' + describe(order));
+    assert(sameJSON(order, startHub ? ['offer-birthday', 'offer-picnic'] : ['offer-birthday', 'offer-picnic', 'offer-yard']), 'offer cards ' + describe(order));
     for (const o of offers) {
+      if (startHub && o.type === 'yard') continue;
       const card = await accText(ID3.offer(o.id));
       const lines = o.type === 'yard'
         ? [o.label, UI.walkIns, UI.yourPick, W15.venue.backyard, W15.flames[o.difficulty - 1], UI.perPlate, UI.noFee]
@@ -6307,8 +6418,11 @@ async function v3BrowserSteps(captures) {
     // v3.1 (X15.1 step 45): the tags, the third line and the Crew tile for the card Hiring Day left.
     const tags = await ev('({ b: $("offer-birthday-tag") ? acc("offer-birthday-tag") : null, p: $("offer-picnic-tag") ? acc("offer-picnic-tag") : null, y: !!$("offer-yard-tag") })');
     assert(tags.b === UI.tagSafe && tags.p === UI.tagStretch && tags.y === false, 'offer tags ' + describe(tags) + ', wanted ' + describe([UI.tagSafe, UI.tagStretch]) + ' and none on the Yard day');
-    const third = await accText(ID31.thirdLine);
-    assert(third === UI.thirdNow[0], '#third-line reads ' + describe(third) + ', wanted ' + describe(UI.thirdNow[0]));
+    if (startHub) assert(!(await present(ID31.thirdLine)), '#third-line still under the Cash tiles with the Start button');
+    else {
+      const third = await accText(ID31.thirdLine);
+      assert(third === UI.thirdNow[0], '#third-line reads ' + describe(third) + ', wanted ' + describe(UI.thirdNow[0]));
+    }
     assert(hired70, 'step 70 left no hire');
     const ct = await crewTile();
     const ctWant = [fill(UI.crewLine, { n: 1, s: CC.ROSTER_SLOTS ? CC.ROSTER_SLOTS[0] : 2 }), fill(UI.crewSub, { p: hired70.wage, b: CC.PAYROLL ? CC.PAYROLL[0] : 60 })];
@@ -6515,6 +6629,7 @@ async function v3BrowserSteps(captures) {
     assert(deepEq(t.coolerAfter, zeroMeat()), 'coolerAfter ' + describe(t.coolerAfter));
     assert(s46.spoilText === fill(UI.spoilNone, { n: spoiled }), "step 46's #rep-spoil read " + describe(s46.spoilText));
     assert(sumOf(await ev('S().stock')) === 0, 'stock now ' + describe(await ev('S().stock')));
+    if (await present('hub-tab-pit')) { await click('hub-tab-pit'); await advance(0); }   // v3.4: the inventory is on the Your pit tab
     assert(await visible(ID3.invEmpty), '#inv-empty hidden with an empty cooler');
     assert((await accText(ID3.invEmpty)) === UI.invEmpty, '#inv-empty reads ' + describe(await accText(ID3.invEmpty)));
     return describe(inv) + ', ' + spoiled + ' units spoiled overnight, cooler empty';
@@ -6634,7 +6749,7 @@ async function v3BrowserSteps(captures) {
     const wl = await accText(ID3.weekLabel);
     assert(wl.includes(fill(UI.weekOf, { w: 1 })), '#week-label reads ' + describe(wl));
     const raw = await storedSave();
-    assert(raw && raw.v === 7 && raw.season && raw.season.year === 2 && sameJSON(raw.season.results, []) && raw.season.drafted === true && raw.hiring === null, 'stored save season ' + describe(raw && raw.season));
+    assert(raw && raw.v === 8 && raw.season && raw.season.year === 2 && sameJSON(raw.season.results, []) && raw.season.drafted === true && raw.hiring === null, 'stored save season ' + describe(raw && raw.season));
     return 'competition report (' + th + '), season end ' + describe(lines[ID3.seRep]) + ', Hiring Day for year 2, season 2 week 1';
   });
 
@@ -6656,7 +6771,7 @@ async function v3BrowserSteps(captures) {
     await hireGo(4);
     assert((await loop()) === LOOP.week && (await visible(ID3.week)), 'after hire-go four times: loop ' + describe(await loop()));
     const raw = await storedSave();
-    assert(raw && raw.v === 7 && raw.player && deepEq(raw.player.look, DEFAULT_LOOK) && raw.cash === SAVE_V3_SAMPLE.cash && raw.charcoal === SAVE_V3_SAMPLE.charcoal && raw.gear.kettle2 === true && sameJSON(raw.crew, []) && !('hires' in raw),
+    assert(raw && raw.v === 8 && raw.player && deepEq(raw.player.look, DEFAULT_LOOK) && raw.cash === SAVE_V3_SAMPLE.cash && raw.charcoal === SAVE_V3_SAMPLE.charcoal && raw.gear.kettle2 === true && sameJSON(raw.crew, []) && !('hires' in raw),
       'stored save ' + describe(raw && { v: raw.v, player: raw.player, cash: raw.cash, charcoal: raw.charcoal, gear: raw.gear, crew: raw.crew }));
     return 'creator with ' + describe(sub) + ', notice shown, Hiring Day, week 1 hub, stored v 5 cash ' + raw.cash + ' charcoal ' + raw.charcoal;
   });
@@ -6809,8 +6924,13 @@ async function browserChecks() {
     if (DESKTOP_MODE) {
       const c = await ev(camJs);
       assert(!c.err, c.err);
-      assert(c.mode === 'fit' && c.z >= 1 && whole(c), 'desktop camera ' + describe(c) + ', wanted fit, z at least 1, the whole world');
-      notes.push('desktop fit z ' + c.z);
+      // v3.4 playtest: desktop opens on the near view of the kitchen at a whole scale, the yard filling
+      // the window left of the side column; the zoom button shows here too.
+      const lay = await ev('({ iw: document.documentElement.clientWidth, side: $("panels").hidden ? 0 : $("panels").getBoundingClientRect().width })');
+      const k = c.z * c.dpr;
+      assert(c.mode === 'near' && c.z >= 1 && Math.abs(k - Math.round(k)) < 1e-6 && c.cw >= lay.iw - lay.side - 64, 'desktop camera ' + describe(c) + ' in ' + describe(lay) + ', wanted near at a whole z, the canvas the width left of the side column');
+      assert(await visible('zoom'), '#zoom hidden on desktop');
+      notes.push('desktop near z ' + c.z + ', canvas ' + c.cw + ' of ' + lay.iw + ' (side ' + Math.round(lay.side) + ')');
     }
     try {
       await emulate(HOME_PHONE);
@@ -6946,6 +7066,7 @@ async function browserChecks() {
     assert(status === TEXT.handsEmpty, '#status is ' + describe(status) + ', wanted ' + describe(TEXT.handsEmpty));
     const act = await text(ID.act);
     assert(act === TEXT.nothing, '#act is ' + describe(act) + ', wanted ' + describe(TEXT.nothing) + ' (the spawn faces the counter)');
+    assert(await ev('$("act").classList.contains("idle") && getComputedStyle($("act")).visibility === "hidden"'), '#act shows a bar with nothing to do');   // v3.4 review
     const opened = await eventsOfType(EVENT.yardOpen);
     assert(opened.length === 1, EVENT.yardOpen + ' events: ' + opened.length);
     // v2.1 step b: banner and arrow at the pile, clock held.
@@ -7327,7 +7448,7 @@ async function browserChecks() {
     assert(r.v, 'validateSave returned null');
     assert(r.v.day === 2 && r.day === 2, 'save day ' + r.v.day + ', state day ' + r.day);
     assert(r.v.cash === r.cash, 'save cash ' + r.v.cash + ', state cash ' + r.cash);
-    assert(r.parsed.v === 7 && !('hires' in r.parsed) && Array.isArray(r.parsed.crew) && r.parsed.crew.length === 0, 'raw save v is ' + describe(r.parsed.v) + ', crew ' + describe(r.parsed.crew));   // X11.1
+    assert(r.parsed.v === 8 && !('hires' in r.parsed) && Array.isArray(r.parsed.crew) && r.parsed.crew.length === 0, 'raw save v is ' + describe(r.parsed.v) + ', crew ' + describe(r.parsed.crew));   // X11.1
     assert(r.parsed.tutorial && r.parsed.tutorial.done === true, 'raw save tutorial is ' + describe(r.parsed.tutorial));
     assert(r.parsed.decor && typeof r.parsed.decor === 'object', 'raw save has no decor');
     assert(r.parsed.stats && r.parsed.stats.seated >= 1, 'raw save stats.seated is ' + describe(r.parsed.stats && r.parsed.stats.seated));
@@ -7381,6 +7502,10 @@ async function browserChecks() {
     const seats = await text(ID.seats);
     const want = TEXT.seats(...DECOR_BUY.seatsAfter);
     assert(seats === want, '#seats is ' + describe(seats) + ', wanted ' + describe(want));
+    // v3.4: with the Gear sheet open the "+" marks show, one per unowned id; closed, none.
+    const open = await captureFrame();
+    assert(open.some((d) => d.name === PLUS), 'no "+" records with the Gear sheet open');
+    await plusChecks(open, 'with the Gear sheet open');
     await click(ID3.sheetBack);
     await advance(0);
     const frame = await captureFrame();
@@ -7389,7 +7514,7 @@ async function browserChecks() {
     await plusChecks(frame, 'after the ' + DECOR_BUY.id + ' purchase');
     const stored = await run('try { const raw = JSON.parse(localStorage.getItem(' + JSON.stringify(SAVE_KEY) + ')); return { raw: raw && raw.v, v: ' + GLOBAL_NAME + '.validateSave(raw) }; } catch (e) { return { error: String(e) }; }');
     assert(stored && stored.v && stored.v.decor && stored.v.decor[DECOR_BUY.id] === true, 'stored save decor ' + describe(stored && ((stored.v && stored.v.decor) || stored.error)));
-    assert(stored.v.v === 7 && stored.raw === 7, 'stored save v ' + describe(stored.raw));
+    assert(stored.v.v === 8 && stored.raw === 8, 'stored save v ' + describe(stored.raw));
     await screenshotYard(SCREENSHOTS.decor);
     return seats + ' cash ' + (await ev(F.cash)) + ', stored v 5';
   });
@@ -7409,7 +7534,7 @@ async function browserChecks() {
     const status = await text(ID.status);
     assert(status === TEXT.notice, '#status is ' + describe(status) + ', wanted ' + describe(TEXT.notice));
     const raw = await storedSave();
-    assert(raw && raw.v === 7 && !('hires' in raw), 'stored save v is ' + describe(raw && raw.v) + ', hires ' + describe(raw && raw.hires));
+    assert(raw && raw.v === 8 && !('hires' in raw), 'stored save v is ' + describe(raw && raw.v) + ', hires ' + describe(raw && raw.hires));
     assert(raw.tutorial && raw.tutorial.done === true, 'stored save tutorial ' + describe(raw.tutorial));
     await click(ID3.crGo);
     await advance(0);
@@ -7454,7 +7579,7 @@ async function browserChecks() {
     const ar = arrows(await captureFrame());
     assert(ar.length === 0, 'arrow drawn with the tutorial done: ' + describe(ar));
     const ser = await ev('sim.' + SIM_METHODS.serialize + '()');
-    assert(ser.v === 7 && ser.tutorial && ser.tutorial.done === true, 'serialize() ' + describe({ v: ser.v, tutorial: ser.tutorial }));
+    assert(ser.v === 8 && ser.tutorial && ser.tutorial.done === true, 'serialize() ' + describe({ v: ser.v, tutorial: ser.tutorial }));
     return 'v2 day 1 save: creator, no tutorial, notice, Hiring Day, then a cook with ' + describe(st2);
   });
 
@@ -7940,35 +8065,30 @@ async function browserChecks() {
     const joined = await ev('(sim.crewView(' + ch[0].id + ') || {}).bring === true');
     const pm2 = await meterOf(ID31.crewPayroll);
     assert(pm2.now === String(pay0 + (joined ? wk[0].wage : 0)), '#crew-payroll after the hire ' + describe(pm2) + ', wanted ' + (pay0 + (joined ? wk[0].wage : 0)) + (joined ? ' (joined the lineup)' : ' (resting)'));
-    // Train the first card.
-    await click(ID31.crew(1));
+    // v3.4 playtest: training is automatic. The week's first Rest trains the card with the least XP;
+    // the crew sheet has no Train button.
+    assert(!(await present(ID31.train(1))), '#' + ID31.train(1) + ' still on the crew sheet');
+    const xpB = await ev('S().crew.map((c) => ({ id: c.id, xp: c.xp, name: c.name }))');
+    await click(ID3.sheetBack);
     await advance(0);
-    const xp0 = Number(await attrOf(ID31.cardXp, 'aria-valuenow'));
-    await backFromCard();
-    await click(ID31.train(1));
+    await quickTap('off');
+    const spent = await visible('daycard');
+    if (spent) await nextDayTap();
+    const xpA = await ev('S().crew.map((c) => ({ id: c.id, xp: c.xp, name: c.name }))');
+    const gained = xpA.filter((c) => { const b = xpB.find((x) => x.id === c.id); return b && c.xp === b.xp + PC.TRAIN_XP; });
+    const least = xpB.slice().sort((u, v) => u.xp - v.xp || u.id - v.id)[0];
+    assert(gained.length === 1 && gained[0].id === least.id, 'the Rest trained ' + describe(gained) + ', wanted ' + describe(least));
+    const xp0 = least.xp, xp1 = gained[0].xp;
+    await click(ID3.cardCrew);
     await advance(0);
-    // v3.2 (D4.6): a Train tap on the crew sheet spends the day too; the result card, then reopen.
-    let spent = false;
-    if (await visible('daycard')) {
-      await nextDayTap();
-      spent = (await ev('S().season.day')) === 1;
-      assert(spent, 'Train from the crew sheet left the day at ' + describe(await ev('S().season.day')));
-      await click(ID3.cardCrew);
-      await advance(0);
-    }
-    await click(ID31.crew(1));
-    await advance(0);
-    const xp1 = Number(await attrOf(ID31.cardXp, 'aria-valuenow'));
-    await backFromCard();
-    assert(xp0 === rosa.xp && xp1 === xp0 + PC.TRAIN_XP, '#card-xp ' + xp0 + ' to ' + xp1 + ', wanted +' + PC.TRAIN_XP);
     const tl = await accText(ID31.crewTrainLine);
-    assert(tl === fill(UI.trainedLine, { name: 'Rosa' }), '#crew-train-line reads ' + describe(tl));
+    assert(tl === fill(UI.trainedLine, { name: gained[0].name }), '#crew-train-line reads ' + describe(tl));
     const allOff = await ev('[...document.querySelectorAll("[id^=\\"train-\\"]")].filter((b) => b.tagName === "BUTTON").every((b) => b.disabled)');
     assert(allOff, 'a train- button is still enabled after the pick');
     await screenshot(SCREENSHOTS.crew);
     await click(ID3.sheetBack);
     await advance(0);
-    return 'payroll ' + rosa.wage + ' of ' + budget31 + ', 1 then 2 of ' + slots31 + ', mood read on ' + moodHow + ', ' + wk[0].name + ' signed for ' + wk[0].wage + (joined ? ' and joined the lineup' : ' and rests') + ', Rosa trained ' + xp0 + ' to ' + xp1 + ' XP' + (spent ? ' (the day spent, Tuesday next)' : '');
+    return 'payroll ' + rosa.wage + ' of ' + budget31 + ', 1 then 2 of ' + slots31 + ', mood read on ' + moodHow + ', ' + wk[0].name + ' signed for ' + wk[0].wage + (joined ? ' and joined the lineup' : ' and rests') + ', the first Rest trained ' + least.name + ' ' + xp0 + ' to ' + xp1 + ' XP' + (spent ? ' (Tuesday next)' : '');
   });
 
   await step('level-up choice by real taps', async () => {
@@ -7981,7 +8101,8 @@ async function browserChecks() {
     await advance(0);
     assert(await visible(ID31.card), '#card hidden after #crew-1');
     assert((await accText(ID31.cardBanked)) === fill(UI.banked, { n: 1 }), '#card-banked reads ' + describe(await accText(ID31.cardBanked)));
-    for (const id of [ID31.cardBring, ID31.cardTrain, ID31.cardRaise, ID31.cardLetGo, ID31.cardXp]) assert(await visible(id), '#' + id + ' not shown in crew mode');
+    for (const id of [ID31.cardBring, ID31.cardRaise, ID31.cardLetGo, ID31.cardXp]) assert(await visible(id), '#' + id + ' not shown in crew mode');
+    assert(!(await present(ID31.cardTrain)), '#' + ID31.cardTrain + ' on the card (v3.4: training is automatic)');
     await screenshot(SCREENSHOTS.cardCrew);   // deviation 34: the card sheet in crew mode
     await click(ID31.cardLevel);
     await advance(0);
@@ -8011,8 +8132,16 @@ async function browserChecks() {
     assert((await loop()) === LOOP.week && (await visible(ID3.week)), 'the fixture loaded as ' + describe(await loop()));
     const pay = await ev('sim.payroll()');
     assert(pay.now === runC.wage + fireC.wage && pay.now === 50, 'payroll ' + describe(pay) + ', wanted 50');
-    const third = await accText(ID31.thirdLine);
-    assert(third === UI.thirdNow[1], '#third-line reads ' + describe(third) + ', wanted ' + describe(UI.thirdNow[1]));
+    // v3.4 review: the third line under the Cash tiles is cut under the Start button; the Word of
+    // mouth pill's thirds bar carries it.
+    let third = 'on the Word of mouth pill';
+    if (await present('hub-start')) {
+      const th = await ev('({ on: [...$("week-thirds").querySelectorAll(".seg")].findIndex((x) => x.classList.contains("on")), aria: $("week-thirds").getAttribute("aria-label"), name: PitSim.STRINGS.thirdName[1] })');
+      assert(th.on === 1 && th.aria.includes(th.name) && !(await present(ID31.thirdLine)), 'the thirds bar ' + describe(th));
+    } else {
+      third = await accText(ID31.thirdLine);
+      assert(third === UI.thirdNow[1], '#third-line reads ' + describe(third) + ', wanted ' + describe(UI.thirdNow[1]));
+    }
     const first = await ev('S().season.offers[0].id');
     await click(ID3.book(first));
     await advance(0);
@@ -8079,7 +8208,7 @@ async function browserChecks() {
     const ct2 = await crewTile();
     assert(tileWant.every((t) => ct2.includes(t)), '#card-crew reads ' + describe(ct2));
     const raw = await storedSave();
-    assert(raw && raw.v === 7 && !('hires' in raw) && Array.isArray(raw.crew) && raw.crew.length === 2, 'stored save ' + describe(raw && { v: raw.v, hires: raw.hires, crew: raw.crew && raw.crew.length }));
+    assert(raw && raw.v === 8 && !('hires' in raw) && Array.isArray(raw.crew) && raw.crew.length === 2, 'stored save ' + describe(raw && { v: raw.v, hires: raw.hires, crew: raw.crew && raw.crew.length }));
     return 'v3 sample: creator, ' + describe(st1) + ', the week hub with two cards; v4 sample: the week hub directly; ' + describe(tileWant);
   });
 
@@ -8111,63 +8240,68 @@ async function browserChecks() {
 
   // ---- v3.2 days of the week (D10.1 steps 72 to 78) ----------------------------------------------
 
-  await step('v3.2 days 72: a full week by taps', async () => {
+  // v3.4 playtest: the hub's kinds as the UI offers them (the pick on #hub-start, the rest behind
+  // Change plan), in D32.dayKinds order.
+  const PU = await ev('JSON.parse(JSON.stringify(PitSim.STRINGS.ui))');   // v3.4: the page's own strings
+  const hubKinds = () => ev('(() => { const r = sim.recommendDay(); if (!r) return []; return ' + JSON.stringify(D32.dayKinds) + '.filter((k) => k === r.kind || r.alt.some((a) => a.kind === k)); })()');
+  const OLD_DAY_IDS = ['day-market', 'day-prep', 'day-train', 'day-loadin'];
+
+  await step('v3.4 days 72: a full week by the start button, Rest trains, the event preps itself', async () => {
     const C = await pageC();
     await reload(saveV6({ cash: 300, season: { pick: 'birthday' }, crew: [Object.assign({}, DAY_CARD)] }));
     assert(await visible(ID3.week) && sameJSON(await litDays(), [0]), 'the Monday hub ' + describe(await litDays()));
     assert(await ev('S().season.booking.type') === 'birthday', 'the fixture booking ' + describe(await ev('S().season.booking.type')));
     const notes = [];
-    // Monday: chicken into the cart, then the Market run.
+    // The start button: one big button with the game's pick, Change plan hides the other choice.
+    const rv = await ev('sim.recommendDay()');
+    assert(rv && (await present('hub-start')) && (await accText('hub-start')).includes(rv.start), '#hub-start reads ' + describe(await present('hub-start') ? await accText('hub-start') : null) + ', wanted ' + describe(rv && rv.start));
+    const first = await ev('(() => { const b = $("hub-start").getBoundingClientRect(), o = $(' + JSON.stringify(ID3.offers) + ').getBoundingClientRect(); return { b: b.top, o: o.top }; })()');
+    assert(first.b < first.o, '#hub-start sits below the offers ' + describe(first));
+    for (const id of OLD_DAY_IDS) assert(!(await present(id)), '#' + id + ' is still on the hub');
+    assert((await present('hub-change')) && (await visible('hub-plan')) === false, 'Change plan is open before a tap');
+    await click('hub-change');
+    await advance(0);
+    const alt = rv.alt.map((o) => o.kind);
+    for (const k of alt) assert(await visible('day-' + k), '#day-' + k + ' hidden after Change plan');
+    await click('hub-change');
+    await advance(0);
+    assert(!(await visible('hub-plan')), '#hub-plan still open after a second tap');
+    notes.push('#hub-start "' + rv.start + '", Change plan shows ' + alt.join(', '));
     await screenshot(SCREENSHOTS.daysWeek);
-    // v3.2 playtest: on a phone every day option shows a hint or its reason (never five bare buttons).
-    const hints = await ev('[...document.querySelectorAll("#day-choice .dopt .dhint")].map((p) => ({ id: p.id, on: getComputedStyle(p).display !== "none" && p.getClientRects().length > 0 && p.innerText.trim() !== "" }))');
-    const fit = await ev('({ cls: $(' + JSON.stringify(ID3.week) + ').className, h: $(' + JSON.stringify(ID3.week) + ').scrollHeight, ih: window.innerHeight, opts: document.querySelector("#day-choice .day-opts").getBoundingClientRect().height, offers: $(' + JSON.stringify(ID3.offers) + ').getBoundingClientRect().height })');
-    assert(hints.length > 0 && hints.every((x) => x.on), 'Monday day hints hidden ' + describe({ hints, fit }));
-    notes.push('Monday hints ' + hints.length + ' shown, hub ' + fit.h + ' of ' + (2 * fit.ih) + ' (' + fit.cls + ')');
-    await cartByTaps({ chicken: 2 });
-    await quickTap('market');
-    assert(await visible('daycard') && (await present('daycard-bought')), '#daycard or #daycard-bought missing after the Market run');
+    // Monday to Friday: Rest. The week's first Rest trains the card; the next Rest lifts its mood.
+    const xp0 = await ev('S().crew[0].xp');
+    await quickTap('off');
+    assert(await visible('daycard'), '#daycard missing after Rest');
+    assert((await ev('S().crew[0].xp')) === xp0 + C.TRAIN_XP, 'the first Rest trained ' + (await ev('S().crew[0].xp')) + ' after ' + xp0);
     await screenshot(SCREENSHOTS.daysCard);
     await nextDayTap();
     assert(sameJSON(await litDays(), [1]) && (await ev('$("day-0").classList.contains("done")')), 'Tuesday lit, Monday done');
     await savedDayIsLit('after Monday');
-    // Tuesday: Prep.
-    await quickTap('prep');
-    assert((await text('daycard-prep')) === fill(D32.cardPrep, { n: 4 }), '#daycard-prep reads ' + describe(await text('daycard-prep')));
-    await nextDayTap();
-    await savedDayIsLit('after Tuesday');
-    // Wednesday: Train, the first card from the crew sheet.
-    const xp0 = await ev('S().crew[0].xp');
-    await click('day-train');
-    await advance(0);
-    await click(ID31.train(1));
-    await advance(0);
-    assert((await ev('S().crew[0].xp')) === xp0 + C.TRAIN_XP, 'the trained card xp ' + (await ev('S().crew[0].xp')) + ' after ' + xp0);
-    if (!(await visible('daycard'))) { await keyPress(KEYS.escape); await advance(0); }
-    await nextDayTap();
-    await savedDayIsLit('after Wednesday');
-    // Thursday: a Day off lifts the card a mood step.
     const m0 = await ev('S().crew[0].mood');
     await quickTap('off');
-    assert((await ev('S().crew[0].mood')) === Math.min(C.DAYOFF_MOOD_CAP, m0 + 1) && (await visible('daycard-mood')), 'the Day off mood ' + (await ev('S().crew[0].mood')) + ' after ' + m0);
+    assert((await ev('S().crew[0].mood')) === Math.min(C.DAYOFF_MOOD_CAP, m0 + 1), 'the Rest mood ' + (await ev('S().crew[0].mood')) + ' after ' + m0);
+    assert((await ev('S().crew[0].xp')) === xp0 + C.TRAIN_XP, 'a second Rest trained again');
     await nextDayTap();
-    await savedDayIsLit('after Thursday');
-    // Friday: Load-in locks the booking.
-    await quickTap('loadin');
-    assert((await present('daycard-loadin')) && (await text('daycard-loadin')) === D32.cardLoadinSame, 'a Load-in after Prep: #daycard-loadin missing');
-    await nextDayTap();
-    if (await present(ID3.book('picnic'))) {
-      assert((await ev('$(' + JSON.stringify(ID3.book('picnic')) + ').disabled')) === true && (await text('offer-picnic-why')) === D32.bookLocked, 'the picnic Pick after Load-in is not shut with ui.bookLocked');
-      await ev('$(' + JSON.stringify(ID3.book('picnic')) + ').click()'); await advance(0);
-    }
-    assert((await ev('S().season.booking.id')) === 'birthday' && (await ev('S().season.loadin')) === true, 'the booking after Load-in ' + describe(await ev('S().season.booking.id')));
+    for (let d = 2; d < 5; d++) { await quickTap('off'); await nextDayTap(); }
     await savedDayIsLit('after Friday');
-    // Saturday: #go in #day-choice, the event to the report.
-    assert(await visible(ID3.go) && (await ev('$("day-choice").contains($(' + JSON.stringify(ID3.go) + '))')), '#go not shown in #day-choice on Saturday');
-    await toBookedDay();   // D10.1
-    await click(ID3.go);
+    // Saturday: the booked event on #hub-start; Back from the morning shop spends nothing.
+    assert(await goShown(), 'the Birthday is not on Saturday ' + describe(await hubKinds()));
+    const sat = await ev('sim.recommendDay()');
+    assert(sat.kind === 'event' && sat.start === fill(PU.startDay, { day: 'Saturday', kind: sat.label }) && (await accText('hub-start')).includes(sat.start), 'Saturday pick ' + describe(sat));
+    const cash0 = await ev('S().cash');
+    await click('hub-start');
     await advance(0);
-    assert((await ev('S().today.prepBonus')) === 4, 'today.prepBonus ' + (await ev('S().today.prepBonus')));
+    if (await visible('mshop')) {
+      await click('shop-back');
+      await advance(0);
+      assert((await ev('S().cash')) === cash0 && (await ev('S().phase')) === 'morning' && (await visible(ID3.week)), 'Back from the shop moved cash or left the hub');
+      await click('hub-start');
+      await advance(0);
+      await click('shop-confirm');
+      await advance(0);
+      notes.push('Saturday through the morning shop');
+    }
+    assert((await ev('S().today.prepBonus')) === 4, 'today.prepBonus ' + (await ev('S().today.prepBonus')) + ' (prep is automatic)');
     for (let i = 0; i < 40 && (await ev('S().phase')) !== 'service'; i++) await advance(0.5);
     await advance(4);
     await screenshotYard(SCREENSHOTS.daysWeekend);
@@ -8178,29 +8312,63 @@ async function browserChecks() {
     await click(ID.next);
     await advance(0);
     assert(sameJSON(await litDays(), [6]), 'Sunday lit after the report ' + describe(await litDays()));
-    assert((await text(ID3.goWhy)) === fill(D32.bookPlayed, { day: 'Saturday' }), 'Sunday #go-why reads ' + describe(await text(ID3.goWhy)));
     await savedDayIsLit('after Saturday');
-    // Sunday: a Day off, then week 2's Monday.
     await quickTap('off');
     await nextDayTap();
     assert((await ev('S().season.week')) === 2 && sameJSON(await litDays(), [0]), 'week 2 Monday ' + describe({ week: await ev('S().season.week'), lit: await litDays() }));
     await savedDayIsLit('week 2');
-    notes.push('Market, Prep (4), Train (+' + C.TRAIN_XP + ' xp), Day off, Load-in (locked), the Birthday at prepBonus 4, Sunday off, week 2 Monday; the stored day matched the lit tile each day');
+    notes.push('Rest x6 (first trained +' + C.TRAIN_XP + ' xp, then mood), the Birthday at prepBonus 4, week 2 Monday');
     return notes.join('; ');
   });
 
-  await step('v3.2 days 73: spoilage across days, no cooler', async () => {
-    await reload(saveV6({ season: { pick: 'birthday' } }));
-    await cartByTaps({ sausage: 4 });
-    assert(sameJSON(await ev('S().cart.meat'), Object.assign({}, ZERO_STOCK, { sausage: 4 })) && (await ev('S().cart.charcoal')) === 0, 'the cart ' + describe(await ev('S().cart')));
-    await quickTap('market');
-    assert((await text('daycard-spoiled')) === fill(D32.cardSpoiled, { n: 4 }), '#daycard-spoiled reads ' + describe(await present('daycard-spoiled') ? await text('daycard-spoiled') : null));
-    await nextDayTap();
-    assert((await ev('S().stock.sausage')) === 0 && (await ev('S().season.day')) === 1, 'Tuesday sausage ' + (await ev('S().stock.sausage')));
-    return '4 sausage bought Monday, 4 spoiled that night, Tuesday stock 0';
+  await step('v3.4 days 73: the morning shop, Back spends nothing, the weekend warning, Confirm starts the day', async () => {
+    // The Sunday picnic's meat costs more than its deposit, so the weekend holds money back.
+    await reload(saveV6({ cash: 60, charcoal: 0, stock: Object.assign({}, ZERO_STOCK), gear: { cooler: true, kettle2: true }, season: { pick: 'picnic' } }));
+    assert((await ev('S().season.booking.type')) === 'picnic' && (await ev('sim.shopView("yard").reserve')) > 0, 'the picnic fixture holds no reserve ' + describe(await ev('sim.shopView("yard")')));
+    const rk = await ev('sim.recommendDay().kind');
+    if (rk !== 'yard') { await click('hub-change'); await advance(0); }
+    const cash0 = await ev('S().cash');
+    const cart0 = await ev('JSON.parse(JSON.stringify(S().cart))');
+    await click(rk === 'yard' ? 'hub-start' : 'day-yard');
+    await advance(0);
+    assert((await visible('mshop')) && (await visible(ID3.sheet)), 'the morning shop did not open for a Yard day with nothing in stock');
+    assert((await accText(ID3.sheetH)).includes(fill(PU.shopTitle, { day: 'Monday' })), '#sheet-h reads ' + describe(await accText(ID3.sheetH)));
+    assert((await text('shop-price')) === fill(PU.shopPrice, { p: Math.round((await ev('C.DAY_PRICE[0]')) * 100) }), '#shop-price ' + describe(await text('shop-price')));
+    // v3.4 review: the booked event's meats come first, pre-filled and tagged ("Sun needs N").
+    const bn = await ev('sim.bookingNeeds()');
+    const tags = await ev('[...document.querySelectorAll(".needtag")].map((t) => t.id + "=" + t.textContent)');
+    const railM = Object.keys(bn.units).filter((m) => bn.units[m] > 0);
+    const dshort = bn.dayShort.charAt(0) + bn.dayShort.slice(1).toLowerCase();
+    assert(railM.length && railM.every((m) => tags.includes('need-' + m + '=' + dshort + ' needs ' + bn.units[m])), 'needs tags ' + describe(tags) + ' for ' + describe(bn.units));
+    const cartM = await ev('Object.keys(S().cart.meat).filter((m) => S().cart.meat[m] > 0)');
+    assert(cartM.length && cartM.every((m) => bn.rail[m] > 0), 'the Yard day cart ' + describe(cartM) + ' is not the booked meats');
+    const fx = await ev('PitSim.CATALOG.filter((r) => r.kind === "meat").map((r) => [r.label, r.effect])');
+    assert(fx.every((r) => !r[1].startsWith(r[0] + ':')), 'meat effects still repeat the name ' + describe(fx));
+    // More chicken until the cart eats into the weekend's booking money: the warning shows.
+    let taps = 0;
+    while (!(await ev('sim.shopView("yard").warn')) && taps < 30) {
+      const id = (await ev('!!$("inc-sausage") && !$("inc-sausage").disabled')) ? 'inc-sausage' : (await ev('!!$("inc-ribs") && !$("inc-ribs").disabled')) ? 'inc-ribs' : null;
+      if (!id) break;
+      await click(id); await advance(0); taps++;
+    }
+    const v = await ev('sim.shopView("yard")');
+    assert(v.warn && (await visible('shop-warn')) && (await text('shop-warn')) === v.warn, '#shop-warn ' + describe({ warn: v.warn, shown: await visible('shop-warn'), taps, view: v }));
+    assert((await ev('S().cash')) === cash0, 'cash moved before Confirm');
+    await click('shop-back');
+    await advance(0);
+    assert(!(await visible(ID3.sheet)) && (await visible(ID3.week)) && (await ev('S().cash')) === cash0 && sameJSON(await ev('JSON.parse(JSON.stringify(S().cart))'), cart0), 'Back: cash ' + (await ev('S().cash')) + ', cart ' + describe(await ev('S().cart')));
+    // Confirm: the cart is bought at today's price and the Yard day starts.
+    await click(rk === 'yard' ? 'hub-start' : 'day-yard');
+    if (rk !== 'yard' && !(await present('day-yard'))) { await click('hub-change'); await advance(0); await click('day-yard'); }
+    await advance(0);
+    const total = await ev('sim.shopView("yard").total');
+    await click('shop-confirm');
+    await advance(0);
+    assert((await ev('S().phase')) !== 'morning' && (await ev('S().cash')) === cash0 - total, 'Confirm: phase ' + (await ev('S().phase')) + ', cash ' + (await ev('S().cash')) + ', wanted ' + (cash0 - total));
+    return taps + ' taps (sausage, ribs) to the warning ("' + v.warn + '"), Back kept ' + cash0 + ', Confirm spent ' + total + ' and opened the Yard day';
   });
 
-  await step('v3.2 days 74: day prices Monday to Thursday', async () => {
+  await step('v3.4 days 74: day prices Monday to Thursday in the morning shop', async () => {
     const C = await pageC();
     await reload(saveV6({ cash: 400, season: { pick: 'birthday' } }));
     const price = await ev('({ c: PitSim.CATALOG.find((r) => r.id === "chicken").price, b: PitSim.CATALOG.find((r) => r.id === "charcoal").price })');
@@ -8212,17 +8380,64 @@ async function browserChecks() {
       await cartByTaps({ chicken: 5, charcoal: 5 });
       const shop = await accText(ID3.cardShop);
       assert(shop.includes(fill(UI.shopLine || 'Cart {t}', { t: want })), 'day ' + d + ' the shop tile reads ' + describe(shop) + ', wanted cart ' + want);
-      cls.push(await ev('$("day-price").className'));
-      const cash0 = await ev('S().cash');
-      await quickTap('market');
+      const rk = await ev('sim.recommendDay().kind');
+      if (rk !== 'yard') { await click('hub-change'); await advance(0); }
+      await click(rk === 'yard' ? 'hub-start' : 'day-yard');
+      await advance(0);
+      assert(await visible('mshop'), 'day ' + d + ': the morning shop did not open with a cart to pay');
+      cls.push(await ev('$("shop-price").className'));
+      assert((await ev('sim.shopView("yard").total')) === want && (await text('shop-total')).includes(String(want)), 'day ' + d + ' #shop-total ' + describe(await text('shop-total')) + ', wanted ' + want);
+      await click('shop-back');
+      await advance(0);
+      await quickTap('off');
       await nextDayTap();
-      const cash1 = await ev('S().cash');
-      assert(cash0 - cash1 === want, 'day ' + d + ' cash ' + cash0 + ' to ' + cash1 + ', wanted less ' + want);
       got.push(want);
     }
     const has = (c, k) => c.split(/\s+/).includes(k);
-    assert(has(cls[0], 'low') && has(cls[1], 'low') && !has(cls[2], 'low') && !has(cls[2], 'high') && has(cls[3], 'high'), '#day-price classes ' + describe(cls));
-    return 'the same cart cost ' + got.join(', ') + ' Monday to Thursday; #day-price ' + cls.join(' | ');
+    assert(has(cls[0], 'low') && has(cls[1], 'low') && !has(cls[2], 'low') && !has(cls[2], 'high') && has(cls[3], 'high'), '#shop-price classes ' + describe(cls));
+    return 'the same cart cost ' + got.join(', ') + ' Monday to Thursday; #shop-price ' + cls.join(' | ');
+  });
+
+  await step('v3.4 the broke rescue: an advance, a sale at half, a restart that asks twice', async () => {
+    const C = await pageC();
+    await reload(saveV6({ cash: 0, charcoal: 0, stock: Object.assign({}, ZERO_STOCK), gear: { cooler: true }, season: { pick: 'birthday' } }));
+    const v = await ev('sim.rescueView()');
+    assert(v && (await visible('rescue')), '#rescue hidden with cash 0 ' + describe(v));
+    const pick = await ev('sim.recommendDay()');
+    assert(pick && (await present('hub-start')), 'no start button beside the rescue');
+    // v3.4 review: the Start button comes first, the rescue under it with plain buttons and a Sell gear row.
+    const lay = await ev('(() => { const a = $("hub-startsec"), b = $("rescue"); const btns = [...b.querySelectorAll("button")]; return { after: !!(a.compareDocumentPosition(b) & 4), quiet: btns.every((x) => x.classList.contains("quiet")), sellRow: !!$("rescue-sell-h"), sell: btns.filter((x) => x.id.indexOf("rescue-sell-") === 0).length }; })()');
+    assert(lay.after && lay.quiet && lay.sellRow && lay.sell >= 1, 'rescue layout ' + describe(lay));
+    const notes = ['need ' + v.need + ', pick ' + pick.kind];
+    if (v.advance > 0) {
+      const c0 = await ev('S().cash');
+      await click('rescue-advance');
+      await advance(0);
+      assert((await ev('S().cash')) === c0 + v.advance && (await ev('S().season.advance')) === v.advance, 'the advance: cash ' + (await ev('S().cash')));
+      notes.push('advance ' + v.advance);
+    }
+    await reload(saveV6({ cash: 0, charcoal: 0, stock: Object.assign({}, ZERO_STOCK), gear: { cooler: true }, season: { pick: 'yard' } }));
+    const v2 = await ev('sim.rescueView()');
+    assert(v2 && v2.gear.some((g) => g.id === 'cooler'), 'no cooler to sell ' + describe(v2));
+    const row = v2.gear.find((g) => g.id === 'cooler');
+    const c1 = await ev('S().cash');
+    await click('rescue-sell-cooler');
+    await advance(0);
+    assert((await ev('S().cash')) === c1 + row.price && (await ev('S().gear.cooler')) !== true, 'the sale: cash ' + (await ev('S().cash')) + ', wanted ' + (c1 + row.price));
+    notes.push('sold the cooler for ' + row.price);
+    await reload(saveV6({ cash: 0, charcoal: 0, stock: Object.assign({}, ZERO_STOCK), season: { week: 3, results: resultsOf(2), pick: 'yard' } }));
+    assert(await present('rescue-restart'), '#rescue-restart missing with cash 0 in week 3');
+    assert((await present('rescue-sell-none')) && (await ev('$("rescue-sell-none").disabled')), 'no Sell gear row with nothing to sell');
+    {
+      await click('rescue-restart');
+      await advance(0);
+      assert((await ev('S().season.week')) === 3 && (await text('rescue-restart')) !== '', 'one tap restarted the season');
+      await click('rescue-restart');
+      await advance(0);
+      assert((await ev('S().season.week')) === 1 && (await ev('S().cash')) >= C.START_CASH, 'the restart: week ' + (await ev('S().season.week')) + ', cash ' + (await ev('S().cash')));
+      notes.push('restart on the second tap');
+    }
+    return notes.join('; ');
   });
 
   await step('v3.2 days 76: a weekday Yard day', async () => {
@@ -8231,8 +8446,7 @@ async function browserChecks() {
     await quickTap('off');
     await nextDayTap();
     const r0 = await ev('S().season.results.length');
-    await click('day-yard');
-    await advance(0);
+    await quickTap('yard');   // v3.4: #hub-start or Change plan
     const L = C.LENGTHS[await ev('S().settings.length')];
     assert((await ev('S().today.endAt')) === Math.round(L.seconds * 0.5) && (await ev('S().today.weekday')) === true, 'the Tuesday Yard day endAt ' + (await ev('S().today.endAt')));
     for (let i = 0; i < 40 && !(await visible(ID.till)); i++) await advance(3);
@@ -8250,35 +8464,36 @@ async function browserChecks() {
     for (const k of ['day', 'dayLog', 'prepped', 'loadin', 'overnight']) delete v5.season[k];
     await reload(v5);
     assert((await ev('S().season.week')) === 4 && sameJSON(await litDays(), [0]), 'after the v5 load ' + describe({ week: await ev('S().season.week'), lit: await litDays() }));
-    assert((await ev('$("day-train").disabled')) === true && (await text('day-train-hint')) === D32.trainDone, '#day-train ' + describe({ dis: await ev('$("day-train").disabled'), hint: await text('day-train-hint') }));
+    for (const id of OLD_DAY_IDS) assert(!(await present(id)), '#' + id + ' on the migrated hub');   // v3.4: training is automatic
+    assert(await present('hub-start'), 'no #hub-start after the v5 load');
     const raw = await storedSave();
-    assert(raw && raw.v === 7, 'the stored save v ' + describe(raw && raw.v));
-    return 'week 4 Monday, #day-train disabled (' + D32.trainDone + '), stored v 6';
+    assert(raw && raw.v === 8, 'the stored save v ' + describe(raw && raw.v));
+    return 'week 4 Monday, #hub-start and no Train button, stored v 8';
   });
 
   await step('v3.2 days 78: booking day rules', async () => {
     await reload(saveV6({ gear: { kettle2: true }, season: { pick: 'picnic' } }));
     assert((await ev('S().season.booking.type')) === 'picnic', 'the picnic fixture ' + describe(await ev('S().season.booking.type')));
     for (let d = 0; d < 5; d++) { await quickTap('off'); await nextDayTap(); }
-    const sat = await ev(JSON.stringify(D32.dayKinds) + '.filter((k) => !!$("day-" + k))');
-    assert(sameJSON(sat, ['yard', 'off']) && !(await visible(ID3.go)), 'Saturday before a Sunday picnic ' + describe(sat));
+    const sat = await hubKinds();
+    assert(sameJSON(sat, ['yard', 'off']) && !(await goShown()), 'Saturday before a Sunday picnic ' + describe(sat));
     await quickTap('off');
     await nextDayTap();
-    const sun = await ev(JSON.stringify(D32.dayKinds.filter((k) => k !== 'event')) + '.filter((k) => !!$("day-" + k))');
-    assert(sun.length === 0 && (await visible(ID3.go)), 'Sunday options ' + describe(sun));
+    const sun = (await hubKinds()).filter((k) => k !== 'event');
+    assert(sun.length === 0 && (await goShown()) && (await accText('hub-start')).includes('Sunday'), 'Sunday options ' + describe(sun));
     // A Yard week: both weekend days offer Yard day and Day off; Sunday writes { yard, 0 }.
     await reload(saveV6({ season: { pick: 'yard' } }));
     for (let d = 0; d < 5; d++) { await quickTap('off'); await nextDayTap(); }
     const ws = [];
     for (let d = 5; d < 7; d++) {
-      ws.push(await ev(JSON.stringify(D32.dayKinds) + '.filter((k) => !!$("day-" + k))'));
+      ws.push(await hubKinds());
       await quickTap('off');
       await nextDayTap();
     }
     assert(ws.every((x) => sameJSON(x, ['yard', 'off'])), 'the Yard week weekend ' + describe(ws));
     const last = await ev('S().season.results[S().season.results.length - 1]');
     assert(sameJSON(last, { type: 'yard', stars: 0 }) && (await ev('S().season.week')) === 2, 'the Yard week result ' + describe(last) + ', week ' + (await ev('S().season.week')));
-    return 'Sunday picnic: Saturday yard and off, Sunday only #go; a Yard week: yard and off both days, then { yard, 0 }';
+    return 'Sunday picnic: Saturday yard and off, Sunday only the event on #hub-start; a Yard week: yard and off both days, then { yard, 0 }';
   });
 
   // v3.3 (design [S 3.5], [S 3.6], [S 19.8]): the competition and Offseason screens (game.js
@@ -8293,8 +8508,7 @@ async function browserChecks() {
     await reload(saveV6({ crew: [Object.assign({}, FIRE_CARD)], gear: { cooler: true }, stock: Object.assign({}, ZERO_STOCK, { sausage: 6, chicken: 4 }), charcoal: 20, season: { pick: 'birthday' } }));
     await quickTap('off');
     await nextDayTap();
-    await click('day-yard');
-    await advance(0);
+    await quickTap('yard');   // v3.4: #hub-start or Change plan
     for (let i = 0; i < 20 && (await ev('S().phase')) !== 'service'; i++) await advance(1);
     assert((await ev('S().phase')) === 'service' && (await ev('!!S().tender')), 'no service with the FIRE card ' + describe(await ev('({ phase: S().phase, tender: !!S().tender })')));
     const real = await ev('typeof sim.compView === "function"');
@@ -8343,6 +8557,7 @@ async function browserChecks() {
     assert(!(await present('hub-shelf')), '#hub-shelf on a hub with no trophies');
     await ev('(S().trophies = [{ year: 1, contest: "backyard", place: 1 }, { year: 2, contest: "regional", place: 1 }], S().ribbons = Object.assign({}, S().ribbons || {}, { ribs: 2, chicken: 1 }), true)');
     await ev('g.refresh()');
+    if (await present('hub-tab-pit')) { await click('hub-tab-pit'); await advance(0); }   // v3.4: the shelf is on the Your pit tab
     assert(await visible('hub-shelf'), '#hub-shelf hidden with two trophies');
     const won = await ev('$("hub-shelf").querySelectorAll("li.won").length');
     const slots = await ev('$("hub-shelf").querySelectorAll("li").length');

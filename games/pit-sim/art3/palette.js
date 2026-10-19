@@ -61,9 +61,10 @@ const RAMP = {
   // round 2 (art director): the round 1 lawn read lime and the grout made a loud orange checker.
   // Lawn one step greener and darker toward mock B's PNG; cobbles soft cream with a light grout
   // and a narrow base to alt step, so the patio reads as texture, not a checkerboard.
-  lawnA:    ramp('#98d866', '#7cc84a', '#6ab83e', '#58a234'),           // the lit checker diamond (mock #7cc84a)
-  lawnB:    ramp('#8acc5a', '#6cb840', '#5ea836', '#4e942e'),           // the darker checker diamond (mock #6cb840)
-  paver:    ramp('#f6e4bc', '#e6c896', '#dcbc88', '#b98650', { alt: '#ecd2a4', grout: '#c8935a' }), // soft cream cobbles; light tan grout
+  // v3.4 review: lawn and cobbles one step darker so stations, guests and plates pop.
+  lawnA:    ramp('#86c45a', '#6aae42', '#5c9e38', '#4c8a2e'),           // the lit checker diamond (mock #7cc84a)
+  lawnB:    ramp('#7ab650', '#5e9e3a', '#529030', '#447e28'),           // the darker checker diamond (mock #6cb840)
+  paver:    ramp('#e4d0a8', '#d2b484', '#c8a878', '#a87646', { alt: '#dabe92', grout: '#b5844e' }), // soft cream cobbles; light tan grout
   stone:    ramp('#e8e1d1', '#cfc6b4', '#b3a994', '#8e8572'),           // stepping stone; shade, dark filled
   sky:      ramp('#ffffff', '#b9e6f8', '#9fd9f4', '#7cc4e6'),           // hi = cloud; dark filled
   // plants

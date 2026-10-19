@@ -95,8 +95,15 @@ function wrap(name, f) { const n = art3.frames(name) || 1; return ((f | 0) % n +
 function drawPerson(ctx, look, pose, frame, fx, fy, flip) {
   const p3 = POSE3[pose] || 'down';
   const n = art3.people && art3.people.POSES ? (art3.people.POSES[p3] || 1) : 1;
-  art3.drawPerson(ctx, look, p3, ((frame | 0) % n + n) % n, fx, fy, flip);
+  const f = ((frame | 0) % n + n) % n;
+  // v3.4 playtest: guests carry the dark ring so they read on the ground.
+  if (typeof look === 'string' && look.charAt(0) === 'g' && art3.outlined && art3.person) {
+    const cv = art3.person(look, p3, f, flip === true);
+    if (cv && cv.width > 0) { ctx.drawImage(art3.outlined(cv), Math.round(fx) - PERSON_AX - 1, Math.round(fy) - cv.height - 1); return; }
+  }
+  art3.drawPerson(ctx, look, p3, f, fx, fy, flip);
 }
+const PERSON_AX = 16;   // art3/people.js AX: a person frame's foot centre from its left edge
 
 // Draws the art3 version of v2 sprite `name` drawn at (x, y) sim px with v2 size w by h.
 // ctx is the 2x transformed off canvas; returns false when art3 has nothing for the name.
@@ -129,7 +136,8 @@ function draw(ctx, name, x, y, w, h, frame, flip) {
     // The v2 bubble frames the plate drawn inside it; the art3 bubble is taller, so it drops to
     // keep that plate on its body above the tail.
     const dy = /^bubble/.test(n3) && n3 !== 'bubble_warn' ? BUBBLE_DROP : 0;
-    a = function () { art3.drawAt(ctx, n3, fx, fy + dy, wrap(n3, f3), flip === true); };
+    const ring = /^(plate|platter)_/.test(n3) && art3.drawAtOutlined;   // v3.4: plates carry the dark ring
+    a = function () { (ring ? art3.drawAtOutlined : art3.drawAt)(ctx, n3, fx, fy + dy, wrap(n3, f3), flip === true); };
   }
   const mt = toRender(ctx);
   try { a(); } finally { ctx.setTransform(mt); }
@@ -160,7 +168,9 @@ function inRender(ctx, f) {
 // projected tile), rounded to whole px. Returns the matrix to put back.
 function toRender(ctx) {
   const m = ctx.getTransform();
-  ctx.setTransform(1, 0, 0, 1, Math.round(m.e), Math.round(m.f));
+  // v3.4 playtest: a caller's extra scale over the 2x (game.js draws food and warn bubbles bigger) is kept.
+  const k = m.a > S + 1e-6 && Math.abs(m.a - m.d) < 1e-6 ? m.a / S : 1;
+  ctx.setTransform(k, 0, 0, k, Math.round(m.e), Math.round(m.f));
   return m;
 }
 // The art3 font at (x, y) sim px, top left of the caps, upper cased with a v2 colour key.
@@ -320,6 +330,10 @@ function stage(ctx, map, opts) {
         if (walk[tx + ',' + ty] || t === T_.GATE) put(g, 'stone_step', (tx + ty) & 1, c0[0], c0[1]);
       }
     }
+    // v3.4 playtest: a calmer, slightly darker ground under everything, so stations and guests pop.
+    const G0 = vtx(0, 0), G1 = vtx(MW, 0), G2 = vtx(MW, MH), G3 = vtx(0, MH);
+    g.fillStyle = 'rgba(22, 30, 14, 0.26)';
+    g.beginPath(); g.moveTo(G0[0], G0[1]); g.lineTo(G1[0], G1[1]); g.lineTo(G2[0], G2[1]); g.lineTo(G3[0], G3[1]); g.closePath(); g.fill();
     const T0 = vtx(0, 0);
     put(g, 'fence_diag', 0, T0[0], T0[1]);
     put(g, 'wall_barn', 0, T0[0], T0[1]);

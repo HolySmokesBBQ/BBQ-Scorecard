@@ -3,6 +3,44 @@
 // no browser storage. Randomness only through the seeded generator on the sim object. Runs in
 // Node under vm.runInThisContext and in the browser as a classic deferred script.
 //
+// v3.4 Simpler days (2026-10-19, Joel's playtest). NOTE FOR THE GAME BUILDER, the names this step adds:
+//   Days. dayOptions() now offers only 'yard' and 'off' on every day but the booked one, which offers
+//     'event' (plus 'off' when it cannot load). Market run, Prep, Train and Load-in are gone as choices
+//     (chooseDay refuses them). STRINGS.dayKind.off reads 'Rest'. Prep is automatic: every booked
+//     event loads with the prep bonus. Training is automatic: the week's first Rest trains the crew card
+//     with the least xp (the day card's trained), or the week's last day does when no Rest came.
+//   recommendDay() -> { kind, label, start, day, alt: [{ kind, label, ok, reason }], shop, rescue }.
+//     start is the big button's text, 'Start Tuesday: Yard day'. Yard day when stocked (or a starter
+//     cart fits the cash past the weekend reserve), else Rest; the booked event on its day. alt is the
+//     other choice for the 'Change plan' link (STRINGS.ui.changePlan). shop: the pick needs the morning
+//     shop first. rescue: rescueView() is up.
+//   Morning shop (nothing is spent until Confirm):
+//     shopNeeded(kind) -> boolean: the day needs stock you lack, or the cart holds something to pay.
+//     shopOpen(kind) -> shopView(): keeps the cart to put back on Back; a Yard day with an empty cart and
+//       no stock gets a starter cart. shopView() -> { day, dayName, price, lines, total, cash, after,
+//       reserve, warn, ok, reason, kind }. warn (STRINGS.ui.shopWarn) when the cart would leave less
+//       than the weekend booking needs.
+//     shopConfirm(kind) -> { ok, message, spent }: kind 'yard' / 'event' / 'off' buys and starts that
+//       day (chooseDay); no kind buys at today's price and stays in the morning.
+//     shopBack() -> { ok }: puts the cart back as shopOpen() found it; nothing spent.
+//     STRINGS.ui: shopTitle, shopConfirm ('Confirm'), shopBack ('Back'), shopWarn, startDay, changePlan.
+//   Broke rescue: rescueView() -> null or { need, cash, gear: [{ id, label, price }], advance, restart }.
+//     Up on any morning when cash cannot cover the day's needs. rescueSell(id) sells gear or decor at
+//     half (as sell() did on the Broke card); rescueAdvance() takes the booked event's deposit now
+//     (advance > 0 only when booked and not taken; the event then pays no deposit, and a week that
+//     never plays the event takes it back on Sunday night); rescueRestart() restarts the season at
+//     week 1 (gear, crew, word of mouth kept; cash floored at START_CASH). STRINGS.rescue holds the text.
+//   Save v8: season.advance (0 on a v7 or older save).
+//   MAP: UNCHANGED from v3.3 (item 7's packing was tried and dropped). Kettle 2 at (2,7) spilled the
+//     phone near view (z 1.5) by 25 px on the left; the pile and kettle 2 swapped broke the 1 to 3
+//     step cook legs and the FIRE felt difference check. The kitchen reads as one block once the "+"
+//     markers hide outside the Shop and Gear sheets (item 5); the rest of item 7 is drawing.
+//   DOM ids smoke.mjs expects from game.js: #hub-start (the big button), #hub-change (Change plan),
+//     #day-<kind> (the other choice once Change plan is open), #mshop, #shop-confirm, #shop-back,
+//     #shop-warn, #rescue, #rescue-sell-<id>, #rescue-advance, #rescue-restart.
+//   Game builder, a loose end: game.js onTrain() calls chooseDay('train'), which is refused now (drop
+//     the crew sheet Train button, or call sim.train(id), which still works once a week).
+//
 // v3.3 Competition (2026-10-19): week 9 is a competition BBQ weekend [S 3.5], the Offseason screen
 //           [S 3.6, 6.7, 6.8], season scaling [S 3.3] and the FIRE feed event [S 19.8]. The names this
 //           step exposes are listed in the season design, section 19.9. Sim builder calls:
@@ -431,7 +469,7 @@ const C = Object.freeze({
   // weather
   RAIN_FROM_DAY: 4, RAIN_CHANCE: 0.15, RAIN_ARRIVALS: 0.6,
   // save clamps
-  SAVE_VERSION: 7, MAX_DAY: 999, MAX_CASH: 999999, MAX_STAT: 9999999,   // v3.3: 7 (was 6)
+  SAVE_VERSION: 8, MAX_DAY: 999, MAX_CASH: 999999, MAX_STAT: 9999999,   // v3.4: 8 (season.advance)
   // v3.0 season and week [S 3], contract W2
   SEASON_WEEKS: 9,
   YEAR_MAX: 99,
@@ -876,11 +914,11 @@ function decorRow(id, label, price, seats, charm, effect, needs, needsText, sets
 }
 
 const CATALOG = Object.freeze([
-  row('sausage', 'meat', 'Sausage', 4, 'Sausage: 2 plates a unit, quickest cook, sells for 5.', null, '', 'cart.meat.sausage, then stock.sausage on open'),
-  row('chicken', 'meat', 'Chicken thighs', 6, 'Chicken thighs: 2 plates, 22 seconds on good fire, sells for 8.', null, '', 'cart.meat.chicken'),
-  row('ribs', 'meat', 'Pork ribs', 12, 'Pork ribs: 3 plates, 32 seconds, sells for 11.', null, '', 'cart.meat.ribs'),
-  row('butt', 'meat', 'Pork butt', 20, 'Pork butt: 5 plates of pulled pork, 40 seconds, both grate slots, sells for 14.', null, '', 'cart.meat.butt'),
-  row('brisket', 'meat', 'Brisket', 38, 'Brisket: 7 plates, 50 seconds on the drum, sells for 18.', { gear: 'drum' }, 'Needs the drum smoker.', 'cart.meat.brisket'),
+  row('sausage', 'meat', 'Sausage', 4, '2 plates a unit, quickest cook, sells for 5.', null, '', 'cart.meat.sausage, then stock.sausage on open'),
+  row('chicken', 'meat', 'Chicken thighs', 6, '2 plates, 22 seconds on good fire, sells for 8.', null, '', 'cart.meat.chicken'),
+  row('ribs', 'meat', 'Pork ribs', 12, '3 plates, 32 seconds, sells for 11.', null, '', 'cart.meat.ribs'),
+  row('butt', 'meat', 'Pork butt', 20, '5 plates of pulled pork, 40 seconds, both grate slots, sells for 14.', null, '', 'cart.meat.butt'),
+  row('brisket', 'meat', 'Brisket', 38, '7 plates, 50 seconds on the drum, sells for 18.', { gear: 'drum' }, 'Needs the drum smoker.', 'cart.meat.brisket'),
   row('charcoal', 'fuel', 'Charcoal', 2, 'One bag lights a cold cooker to 60 or adds 30 to a lit one. A kettle burns about six bags a cook. Bags left over keep.', null, '', 'cart.charcoal, then charcoal on open'),
   row('kettle2', 'gear', 'Second kettle', 90, 'Two more grate slots. Twice the meat on the fire.', null, '', 'gear.kettle2, stations.kettle2 becomes active'),
   row('cooler', 'gear', 'Cooler', 60, 'Keeps ' + C.COOLER_CAP[1] + ' units of raw meat overnight. Without it, meat left after a cook spoils.', null, '', 'gear.cooler'),
@@ -1057,13 +1095,13 @@ const STRINGS = Object.freeze({
   // v3.2 days of the week (contract D8.1, exact text)
   dayName: Object.freeze(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']),
   dayShort: Object.freeze(['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']),
-  dayKind: Object.freeze({ yard: 'Yard day', prep: 'Prep', market: 'Market run', train: 'Train', off: 'Day off', loadin: 'Load-in', event: 'Booked event' }),
+  dayKind: Object.freeze({ yard: 'Yard day', prep: 'Prep', market: 'Market run', train: 'Train', off: 'Rest', loadin: 'Load-in', event: 'Booked event' }),   // v3.4: Rest
   dayHint: Object.freeze({
     yard: 'Open the yard for a short cook. Walk-ins pay.',
     prep: 'Trim and rub the weekend meat. Quality starts higher.',
     market: "Buy what is in the cart at today's price.",
     train: 'One crew card trains this week.',
-    off: 'Crew mood goes up. Nothing earned.',
+    off: 'Crew mood goes up. One crew card trains. Nothing earned.',
     loadin: 'Prep the booking and put the big meat on overnight.',
     event: 'Today is the booking. Load up and go.'
   }),
@@ -1112,6 +1150,21 @@ const STRINGS = Object.freeze({
     dayDone: Object.freeze({ prep: 'Prep done.', market: 'Market run done.', train: 'Training done.', off: 'A day off.', loadin: 'Loaded in.' }),
     dayStart: 'It is {day}.',
     overnight: '{meat} on overnight.'
+  }),
+  // v3.4 the broke rescue
+  rescue: Object.freeze({
+    title: 'Short on cash',
+    body: 'You have {cash}. Today needs about {need} to cook.',
+    sell: 'Sell {label} for {price}',
+    sellHead: 'Sell gear at half',
+    sellNone: 'No gear to sell yet',
+    advance: 'Take {n} now from the {label}',
+    advanceNote: 'The host pays the deposit early. The event pays no deposit.',
+    restart: 'Restart the season',
+    restartNote: 'Back to week 1. Gear, crew and word of mouth stay.',
+    advanced: 'Took {n} up front.',
+    restarted: 'The season starts over.',
+    payback: 'The booking never ran. The {n} advance went back.'
   }),
   ui: Object.freeze({
     // header and HUD
@@ -1172,6 +1225,16 @@ const STRINGS = Object.freeze({
     prepNeedsBooking: 'Pick a booking to prep for.',
     prepDone: 'Already prepped this week.',
     cartEmpty: 'Put something in the cart first.',
+    // v3.4 the start button, the morning shop
+    startDay: 'Start {day}: {kind}',
+    changePlan: 'Change plan',
+    shopTitle: '{day} morning shop',
+    shopConfirm: 'Confirm',
+    shopBack: 'Back',
+    shopPrice: "Today's prices: {p} percent",
+    shopWarn: 'This leaves {left}. {day} needs about {need} for the booking.',
+    shopFor: 'Buy for {kind}',
+    advanceLocked: 'You took an advance on this booking. It stays booked.',
     loadinDone: 'Already loaded in.',
     nextDay: 'Next day',
     cardBought: 'Bought {list}. {n} spent.',
@@ -2498,7 +2561,7 @@ function validateSave(obj) {
   try {
     if (!isPlainObject(obj)) return null;
     const v = readKey(obj, 'v');
-    if (v !== 1 && v !== 2 && v !== 3 && v !== 4 && v !== 5 && v !== 6 && v !== 7) return null;
+    if (v !== 1 && v !== 2 && v !== 3 && v !== 4 && v !== 5 && v !== 6 && v !== 7 && v !== 8) return null;
     const day = toInt(readKey(obj, 'day'), 1, 1, C.MAX_DAY);
     const cash = toInt(readKey(obj, 'cash'), C.START_CASH, 0, C.MAX_CASH);
     const rep = toInt(readKey(obj, 'rep'), C.START_REP, 0, 100);
@@ -2587,6 +2650,9 @@ function validateSave(obj) {
     season.loadin = sameWeek && season.pick !== null && season.day >= 5 && toBool(readKey(seasonIn, 'loadin'));
     const onIn = sameWeek && season.loadin && season.day === 5 ? readKey(seasonIn, 'overnight') : undefined;
     const onMeat = readKey(onIn, 'meat'), onN = readKey(onIn, 'n');
+    // v3.4: a deposit taken early, only while this week's booking has not played.
+    season.advance = v >= 8 && sameWeek && season.pick !== null && season.pick !== 'yard' && !season.dayLog.includes('event')
+      ? toInt(readKey(seasonIn, 'advance'), 0, 0, C.MAX_CASH) : 0;
     season.overnight = (typeof onMeat === 'string' && C.OVERNIGHT_MEATS.includes(onMeat) && (!MEATS[onMeat].drumOnly || gear.drum)
       && typeof onN === 'number' && Number.isInteger(onN) && onN >= 1 && onN <= C.OVERNIGHT_PIECES) ? { meat: onMeat, n: onN } : null;
     // X11.2 and X11.3: the crew, the next card id, Hiring Day and the three season keys.
@@ -2828,7 +2894,8 @@ function createSim(saved, seed) {
       dayLog: new Array(C.WEEK_DAYS).fill(null),
       prepped: false,
       loadin: false,
-      overnight: null
+      overnight: null,
+      advance: 0   // v3.4: a deposit taken early (rescueAdvance)
     };
     state.dayCard = null;
     // v3.3: the trophy shelf, the lifetime ribbons, the Offseason screen (built when it opens).
@@ -5298,6 +5365,13 @@ function createSim(saved, seed) {
     const isDecor = DECOR_IDS.includes(id);
     if (!isGear && !isDecor) return { ok: false, message: '', price: 0 };
     if ((isGear ? state.gear[id] : state.decor[id]) !== true) return { ok: false, message: '', price: 0 };
+    const r = sellCore(id);
+    state.broke = brokeTest();
+    return r;
+  }
+
+  // The sale itself (the Broke card's sell() and v3.4's rescueSell()).
+  function sellCore(id) {
     const sales = [];
     if (id === 'kettle2' && state.gear.drum) {
       sales.push(sellOne('kettle2'));
@@ -5312,7 +5386,6 @@ function createSim(saved, seed) {
     }
     reconfigureYard();
     emit('save_wanted', { reason: 'sell' });
-    state.broke = brokeTest();
     let total = 0;
     const parts = sales.map((s) => { total += s.price; return s.label + ' for ' + s.price; });
     return { ok: true, message: 'Sold ' + parts.join(' and ') + '.', price: total };
@@ -5473,6 +5546,7 @@ function createSim(saved, seed) {
     s.prepped = false;
     s.loadin = false;
     s.overnight = null;
+    s.advance = 0;
     state.dayCard = null;
     state.cart = morningCart();   // V32-8
     crewSpend = [];
@@ -5526,6 +5600,7 @@ function createSim(saved, seed) {
     const o = s.offers.find((x) => x.id === id) || null;
     if (o === null) return { ok: false, message: '' };
     if (s.loadin) return { ok: false, message: STRINGS.ui.bookLocked };   // D4.5
+    if ((s.advance | 0) > 0 && (s.booking === null || s.booking.id !== o.id)) return { ok: false, message: STRINGS.ui.advanceLocked };   // v3.4
     if ((o.day !== null && o.day < s.day) || eventPlayed()) return { ok: false, message: STRINGS.ui.bookPast };   // D5
     s.booking = o;
     s.addon = null;
@@ -5570,7 +5645,7 @@ function createSim(saved, seed) {
     if (b.comp) {
       // v3.3: nothing is paid up front at the competition, so cash covers the cart, the entry and the day.
       if (cartTotal() + compDayCost(b) > state.cash) return { ok: false, reason: fillText(STRINGS.comp.goEntry, { n: b.comp.entry }) };
-    } else if (cartTotal() > state.cash + b.deposit) return { ok: false, reason: STRINGS.ui.goCash };
+    } else if (cartTotal() > state.cash + b.deposit - (state.season.advance | 0)) return { ok: false, reason: STRINGS.ui.goCash };
     return { ok: true, reason: '' };
   }
 
@@ -5601,7 +5676,10 @@ function createSim(saved, seed) {
       s.overnight = null;
     }
     const charcoalStart = state.charcoal, stockStart = Object.assign({}, state.stock);   // Q-9
-    state.cash += b.deposit;
+    // v3.4: an advance already paid the deposit (rescueAdvance()).
+    const adv = isBooking ? Math.min(s.advance | 0, b.deposit) : 0;
+    state.cash += b.deposit - adv;
+    s.advance = 0;
     commitCart();
     const entry = isBooking && b.comp ? b.comp.entry : 0;
     state.cash = Math.max(0, state.cash - entry);   // v3.3: the entry fee at Load up and go
@@ -5616,7 +5694,8 @@ function createSim(saved, seed) {
     t.endAt = endAt;
     t.weekday = weekday;
     t.dayIdx = s.day;
-    t.prepBonus = isBooking && s.prepped ? C.PREP_QUALITY : 0;
+    t.prepBonus = isBooking ? C.PREP_QUALITY : 0;   // v3.4: prep is automatic for a booked event
+    if (isBooking) s.prepped = true;
     t.overnight = overnight;
     if (isBooking) {
       t.booking = Object.freeze(Object.assign({}, b));
@@ -5694,16 +5773,6 @@ function createSim(saved, seed) {
   function spillTonight() {
     return Math.max(0, totalStock() + sumValues(state.cart.meat) - coolerCap());
   }
-  // V32-9: whether a Load-in today would put meat on overnight (D4.5), the cart bought first.
-  function overnightCan() {
-    const s = state.season;
-    if (bookedDay() !== 5) return false;
-    const pay = cartCount() > 0 && cartTotal() <= state.cash;
-    if (state.charcoal + (pay ? state.cart.charcoal : 0) < C.OVERNIGHT_BAGS) return false;
-    const rail = railFor(s.booking, s.addon);
-    return C.OVERNIGHT_MEATS.some((m) => rail[m] > 0 && state.stock[m] + (pay ? state.cart.meat[m] : 0) > 0);
-  }
-
   // D4.1
   function dayOptions() {
     if (!inWeek()) return { ok: false, message: '' };
@@ -5715,29 +5784,277 @@ function createSim(saved, seed) {
     const add = (kind, why, warn) => options.push({ kind, ok: why === null, reason: why === null ? '' : why, warn: why === null && warn ? warn : '' });
     const U = STRINGS.ui;
     const spill = spillTonight();
-    const buyWarn = spill > 0 ? fillText(U.marketSpoil, { n: spill }) : '';
     const yardWarn = spill > 0 ? U.yardSpoil : '';
-    if (d <= 3) {
-      add('yard', yardWhy(), yardWarn);
-      add('prep', bd === null ? U.prepNeedsBooking : (s.prepped ? U.prepDone : null));
-      add('market', cartCount() === 0 ? U.cartEmpty : (cartTotal() > state.cash ? U.goCash : null), buyWarn);
-      add('train', state.crew.length === 0 ? U.crewEmpty : (s.trained !== null ? U.trainDone : null));
-      add('off', null);
-    } else if (d === 4) {
-      const buys = cartCount() > 0 && cartTotal() <= state.cash;
-      add('loadin', bd === null ? U.prepNeedsBooking : (s.loadin ? U.loadinDone : null),
-        s.prepped && !overnightCan() ? U.loadinSame : (buys ? buyWarn : ''));
-      add('yard', yardWhy(), yardWarn);
-      add('off', null);
-    } else if (booked) {
+    if (booked) {
       const can = canLoadUp();
       add('event', can.ok ? null : can.reason);
       if (!can.ok) add('off', null);   // a booking that cannot load never strands the week
-    } else {
+    } else {   // v3.4: every other day is a Yard day or Rest
       add('yard', yardWhy(), yardWarn);
       add('off', null);
     }
     return { day: d, booked, price: C.DAY_PRICE[d], options };
+  }
+
+  // ---- v3.4 the start button, the morning shop, automatic training, the broke rescue ---------------
+
+  // The week's training (v3.4): the crew card with the least xp, ties to the lowest id. Once a week.
+  function autoTrain() {
+    const s = state.season;
+    if (s.trained !== null || state.crew.length === 0) return null;
+    const c = state.crew.slice().sort((a, b) => a.xp - b.xp || a.id - b.id)[0];
+    const r = trainRule(c.id);
+    return r.ok ? { id: c.id, name: c.name, xp: C.TRAIN_XP } : null;
+  }
+
+  // What the booked event still needs bought, at its own day's price, past what is in stock (and the
+  // cart, unless `cartCooks`: a Yard day cooks its cart today), less the deposit it brings. 0 with no
+  // booking ahead (today's booking counts as ahead).
+  function weekendReserve(cartCooks) {
+    const keep = cartCooks === true ? 0 : 1;
+    const s = state.season;
+    const b = s.booking;
+    const bd = bookedDay();
+    if (b === null || bd === null || eventPlayed() || bd < s.day) return { need: 0, day: null };
+    const rail = railFor(b, s.addon);
+    const mult = C.DAY_PRICE[bd];
+    const cost = (id, n) => (n > 0 ? Math.round(n * CATALOG_BY_ID[id].price * mult) : 0);
+    let total = 0;
+    for (const m of MEAT_IDS) {
+      if (!(rail[m] > 0)) continue;
+      const plates = rail[m] - (state.stock[m] + keep * state.cart.meat[m]) * MEATS[m].plates;
+      if (plates > 0) total += cost(m, Math.ceil(plates / MEATS[m].plates));
+    }
+    total += cost('charcoal', Math.max(0, C.BAGS_PER_COOKER * ownedCookers() - state.charcoal - keep * state.cart.charcoal));
+    const cashIn = b.deposit - (s.advance | 0);
+    return { need: Math.max(0, total - cashIn + (b.comp ? compDayCost(b) : 0)), day: bd };
+  }
+
+  // The least today's cook needs bought (nothing already in stock), at today's price.
+  function dayNeed() {
+    const s = state.season;
+    const bd = bookedDay();
+    const bag = state.charcoal > 0 ? 0 : lineCost('charcoal', 1);
+    if (bd !== null && bd === s.day && !eventPlayed()) {
+      const b = s.booking;
+      const rail = railFor(b, s.addon);
+      let meat = Infinity;
+      for (const m of MEAT_IDS) {
+        if (!(rail[m] > 0)) continue;
+        if (state.stock[m] > 0) { meat = 0; break; }
+        meat = Math.min(meat, lineCost(m, 1));
+      }
+      if (meat === Infinity) meat = 0;
+      return Math.max(0, meat + bag - (b.deposit - (s.advance | 0)) + (b.comp ? compDayCost(b) : 0));
+    }
+    let meat = totalStock() > 0 ? 0 : Infinity;
+    if (meat !== 0) for (const m of MEAT_IDS) if (!MEATS[m].drumOnly || state.gear.drum) meat = Math.min(meat, lineCost(m, 1));
+    return meat + bag;
+  }
+
+  // A Yard day's starter cart: the Yard prefill, half for a weekday, kept inside the weekend reserve.
+  function yardCart() {
+    const s = state.season;
+    const keep = s.booking;
+    let c;
+    s.booking = null;
+    try { c = prefill(); } finally { s.booking = keep; }
+    if (s.day <= 4) for (const m of MEAT_IDS) c.meat[m] = Math.ceil(c.meat[m] * C.YARD_DAY_FRAC);
+    // v3.4 review: with an event booked ahead, today cooks that event's meats (the same units).
+    const bn = bookingNeeds();
+    if (bn !== null) {
+      const on = MEAT_IDS.filter((m) => bn.rail[m] > 0 && (!MEATS[m].drumOnly || state.gear.drum));
+      if (on.length) {
+        const units = Math.max(on.length, sumValues(c.meat));
+        for (const m of MEAT_IDS) c.meat[m] = 0;
+        for (let i = 0; i < units; i++) c.meat[on[i % on.length]] += 1;
+      }
+    }
+    const was = state.cart;
+    state.cart = c;
+    const budget = state.cash - weekendReserve(true).need;
+    const costliest = () => {
+      let p = null;
+      for (const m of MEAT_IDS) if (c.meat[m] > 0 && (p === null || CATALOG_BY_ID[m].price > CATALOG_BY_ID[p].price)) p = m;
+      return p;
+    };
+    while (cartTotal() > budget && sumValues(c.meat) > 1) c.meat[costliest()] -= 1;
+    while (cartTotal() > budget && c.charcoal > (state.charcoal > 0 ? 0 : 1)) c.charcoal -= 1;
+    state.cart = was;
+    return c;
+  }
+
+  // v3.4 review: the booked event ahead and the units of each meat it still needs past stock, for
+  // the morning shop's "Sat needs N" tags. null with no event ahead.
+  function bookingNeeds() {
+    if (!inWeek()) return null;
+    const s = state.season;
+    const b = s.booking;
+    const bd = bookedDay();
+    if (b === null || b.type === 'yard' || bd === null || eventPlayed() || bd < s.day) return null;
+    const rail = railFor(b, s.addon);
+    const units = zeroByMeat();
+    for (const m of MEAT_IDS) {
+      if (!(rail[m] > 0)) continue;
+      const plates = rail[m] - state.stock[m] * MEATS[m].plates;
+      units[m] = plates > 0 ? Math.ceil(plates / MEATS[m].plates) : 0;
+    }
+    return { day: bd, dayShort: STRINGS.dayShort ? STRINGS.dayShort[bd] : '', rail, units };
+  }
+
+  function railStocked() {
+    const s = state.season;
+    const rail = railFor(s.booking, s.addon);
+    return MEAT_IDS.some((m) => rail[m] > 0 && state.stock[m] > 0);
+  }
+
+  // v3.4: the chosen day goes through the morning shop first (it lacks stock, or the cart would spend).
+  function shopNeeded(kind) {
+    if (!inWeek()) return false;
+    if (kind !== 'yard' && kind !== 'event') return false;
+    if (cartCount() > 0) return true;
+    if (state.charcoal === 0) return true;
+    return kind === 'yard' ? totalStock() === 0 : !railStocked();
+  }
+
+  let shopKeep = null;   // the cart as shopOpen() found it, for Back (not saved)
+
+  function shopOpen(kind) {
+    if (!inWeek()) return null;
+    shopKeep = { meat: Object.assign({}, state.cart.meat), charcoal: state.cart.charcoal };
+    if (cartCount() === 0) {
+      if (kind === 'yard' && (totalStock() === 0 || state.charcoal === 0)) state.cart = yardCart();
+      else if (kind === 'event' && (state.charcoal === 0 || !railStocked())) state.cart = prefill();
+    }
+    return shopView(kind);
+  }
+
+  function shopView(kind) {
+    if (!inWeek()) return null;
+    const s = state.season;
+    const U = STRINGS.ui;
+    const k = kind === 'yard' || kind === 'event' || kind === 'off' ? kind : null;
+    const total = cartTotal();
+    const r = k === 'event' ? { need: 0, day: null } : weekendReserve(k === 'yard');
+    const after = state.cash - total;
+    let ok = true, reason = '';
+    if (k === 'yard') { const w = yardWhy(); ok = w === null; reason = w || ''; }
+    else if (k === 'event') { const c = canLoadUp(); ok = c.ok; reason = c.reason; }
+    else if (total > state.cash) { ok = false; reason = U.goCash; }
+    let warn = '';
+    if (total > 0 && r.need > 0 && after < r.need) warn = fillText(U.shopWarn, { left: Math.max(0, after), day: STRINGS.dayName[r.day], need: r.need });
+    const spill = spillTonight();
+    const spoil = spill > 0 && k !== 'event' ? (k === 'yard' ? U.yardSpoil : fillText(U.marketSpoil, { n: spill })) : '';
+    return { kind: k, day: s.day, dayName: STRINGS.dayName[s.day], price: C.DAY_PRICE[s.day],
+      lines: cartLines(), total, cash: state.cash, after, reserve: r.need, warn, spoil, ok, reason };
+  }
+
+  // v3.4 Confirm: 'yard' or 'event' starts the day (its load buys the cart); 'off' buys, then rests;
+  // no kind buys at today's price and stays in the morning.
+  function shopConfirm(kind) {
+    if (!inWeek()) return { ok: false, message: '', spent: 0 };
+    const spent = cartTotal();
+    if (kind === 'yard' || kind === 'event') {
+      const r = chooseDay(kind);
+      if (r.ok) shopKeep = null;
+      return { ok: r.ok, message: r.message, spent: r.ok ? spent : 0 };
+    }
+    if (cartCount() > 0) {
+      if (spent > state.cash) return { ok: false, message: STRINGS.ui.goCash, spent: 0 };
+      const lines = cartLines();
+      commitCart();
+      emit('shop_bought', { spent, lines: lines.map((l) => ({ id: l.id, qty: l.qty, cost: l.cost })) });
+      emit('save_wanted', { reason: 'shop' });
+    }
+    shopKeep = null;
+    if (kind === 'off') {
+      const r = chooseDay('off');
+      return { ok: r.ok, message: r.message, spent };
+    }
+    return { ok: true, message: '', spent };
+  }
+
+  function shopBack() {
+    if (shopKeep !== null) state.cart = { meat: Object.assign({}, shopKeep.meat), charcoal: shopKeep.charcoal };
+    shopKeep = null;
+    return { ok: true, message: '' };
+  }
+
+  // v3.4 the hub's one big button: the game's pick for today, and the other choice.
+  function recommendDay() {
+    if (!inWeek()) return null;
+    const s = state.season;
+    const view = dayOptions();
+    const U = STRINGS.ui;
+    const pr = payroll();
+    let kind;
+    if (view.booked) kind = s.booking.safe && pr.now <= pr.budget ? 'event' : 'off';
+    else {
+      const room = state.cash - weekendReserve(true).need;
+      const meat = totalStock() + sumValues(state.cart.meat), bags = state.charcoal + state.cart.charcoal;
+      const stocked = meat > 0 && bags > 0 && cartTotal() <= room;
+      kind = pr.now <= pr.budget && (stocked || dayNeed() <= room) ? 'yard' : 'off';
+    }
+    const labelOf = (k) => (k === 'event' && s.booking !== null ? s.booking.label : STRINGS.dayKind[k]);
+    const label = labelOf(kind);
+    return {
+      kind, label, day: s.day,
+      start: fillText(U.startDay, { day: STRINGS.dayName[s.day], kind: label }),
+      alt: view.options.filter((o) => o.kind !== kind).map((o) => ({ kind: o.kind, label: labelOf(o.kind), ok: o.ok, reason: o.reason })),
+      shop: shopNeeded(kind),
+      rescue: rescueView() !== null
+    };
+  }
+
+  // v3.4: up on any morning when cash cannot cover the day's needs.
+  function rescueView() {
+    if (!inWeek()) return null;
+    const need = dayNeed();
+    if (state.cash >= need) return null;
+    const s = state.season;
+    const gear = [];
+    const row = (id) => ({ id, label: CATALOG_BY_ID[id].label, price: Math.floor(CATALOG_BY_ID[id].price * C.SELL_BACK) });
+    for (const id of GEAR_IDS) if (state.gear[id] === true) gear.push(row(id));
+    for (const id of DECOR_IDS) if (state.decor[id] === true) gear.push(row(id));
+    const b = s.booking;
+    const advance = b !== null && b.type !== 'yard' && !b.comp && b.deposit > 0 && (s.advance | 0) === 0 && !eventPlayed() && bookedDay() !== null ? b.deposit : 0;
+    return { need, cash: state.cash, gear, advance, label: advance > 0 ? b.label : '', restart: true };
+  }
+
+  function rescueSell(id) {
+    if (rescueView() === null) return { ok: false, message: '', price: 0 };
+    const isGear = GEAR_IDS.includes(id);
+    const isDecor = DECOR_IDS.includes(id);
+    if (!isGear && !isDecor) return { ok: false, message: '', price: 0 };
+    if ((isGear ? state.gear[id] : state.decor[id]) !== true) return { ok: false, message: '', price: 0 };
+    return sellCore(id);
+  }
+
+  function rescueAdvance() {
+    const v = rescueView();
+    if (v === null || !(v.advance > 0)) return { ok: false, message: '' };
+    state.season.advance = v.advance;
+    state.cash = Math.min(C.MAX_CASH, state.cash + v.advance);
+    emit('advance', { amount: v.advance, booking: state.season.booking.type });
+    emit('save_wanted', { reason: 'advance' });
+    return { ok: true, message: fillText(STRINGS.rescue.advanced, { n: v.advance }) };
+  }
+
+  // Back to week 1 of this season: gear, crew and word of mouth stay, stock goes, cash is floored.
+  function rescueRestart() {
+    if (!inWeek()) return { ok: false, message: '' };
+    const s = state.season;
+    s.week = 1;
+    s.results = [];
+    s.advance = 0;
+    for (const m of MEAT_IDS) state.stock[m] = 0;
+    state.cash = Math.max(state.cash, C.START_CASH);
+    beginMorning('week');
+    emit('season_restart', { year: s.year });
+    emit('week_start', { year: s.year, week: s.week });
+    startWeek();
+    emit('save_wanted', { reason: 'season' });
+    return { ok: true, message: STRINGS.rescue.restarted };
   }
 
   function cartLines() {
@@ -5776,6 +6093,15 @@ function createSim(saved, seed) {
     const spoiled = cooked ? 0 : spoilTonight();
     if (moodChanges && moodChanges.length > 0) emit('crew_mood', { changes: moodChanges });
     s.dayLog[s.day] = kind;
+    if (s.day === C.WEEK_DAYS - 1) {
+      autoTrain();   // v3.4: no Rest this week, the last day trains one card
+      if ((s.advance | 0) > 0) {   // v3.4: the booking never ran, the advance goes back
+        const back = Math.min(state.cash, s.advance);
+        state.cash -= back;
+        emit('advance_back', { amount: s.advance, paid: back });
+        s.advance = 0;
+      }
+    }
     if (s.day < C.WEEK_DAYS - 1) {
       s.day += 1;
       beginMorning('week');
@@ -5809,46 +6135,7 @@ function createSim(saved, seed) {
     const day = s.day;
     const card = { day, kind, bought: [], spent: 0, prepBonus: 0, overnight: null, mood: [], spoiled: 0, trained: null, moodTop: false, loadinSame: false };
     const changes = [];
-    if (kind === 'train') {
-      const tid = isPlainObject(opt) ? readKey(opt, 'id') : undefined;
-      const r = trainRule(tid);
-      if (!r.ok) return r;
-      const tc = findCard(tid);
-      if (tc !== null) card.trained = { id: tc.id, name: tc.name, xp: C.TRAIN_XP };   // V32-11
-    } else if (kind === 'market' || kind === 'loadin') {
-      // D4.2: the cart commits at today's price (a Load-in it cannot pay for keeps it for the booked day).
-      if (cartCount() > 0 && cartTotal() <= state.cash) {
-        card.bought = cartLines();
-        card.spent = cartTotal();
-        commitCart();
-      }
-      if (kind === 'loadin') {
-        const wasPrepped = s.prepped;
-        s.prepped = true;
-        s.loadin = true;
-        card.prepBonus = wasPrepped ? 0 : C.PREP_QUALITY;   // V32-9: no second Prep line
-        // D4.5: the overnight smoke, Saturday bookings only.
-        if (bookedDay() === 5) {
-          const rail = railFor(s.booking, s.addon);
-          let meat = null;
-          for (const m of C.OVERNIGHT_MEATS) {
-            if (rail[m] > 0 && state.stock[m] > 0 && (meat === null || MEATS[m].cook > MEATS[meat].cook)) meat = m;
-          }
-          if (meat !== null && state.charcoal >= C.OVERNIGHT_BAGS) {
-            state.charcoal -= C.OVERNIGHT_BAGS;
-            const n = Math.min(C.OVERNIGHT_PIECES, state.stock[meat]);
-            state.stock[meat] -= n;
-            s.overnight = { meat, n };
-            card.overnight = { meat, n };
-            emit('overnight_on', { meat, n });
-          }
-        }
-        card.loadinSame = wasPrepped && card.overnight === null;
-      }
-    } else if (kind === 'prep') {
-      s.prepped = true;
-      card.prepBonus = C.PREP_QUALITY;
-    } else if (kind === 'off') {
+    if (kind === 'off') {
       // D4.6: a step of mood up to the cap; notice clears above Done. No wages, no daily costs.
       for (const c of state.crew.slice().sort(byId)) {
         const from = c.mood;
@@ -5860,6 +6147,7 @@ function createSim(saved, seed) {
         }
       }
       card.moodTop = state.crew.length > 0 && card.mood.length === 0;   // V32-11
+      card.trained = autoTrain();   // v3.4: the week's first Rest trains one card
     }
     emit('day_done', { day, kind, spent: card.spent, prepBonus: card.prepBonus,
       overnight: card.overnight !== null ? { meat: card.overnight.meat, n: card.overnight.n } : null, moodUp: card.mood.length });
@@ -6182,7 +6470,7 @@ function createSim(saved, seed) {
     const b = state.loop === 'week' ? state.season.booking : null;
     const isBooking = b !== null && b.type !== 'yard';
     const comp = isBooking && b.comp ? b.comp : null;
-    const budget = state.cash + (b !== null ? b.deposit : 0) - (comp ? compDayCost(b) : 0);
+    const budget = state.cash + (b !== null ? b.deposit - (state.loop === 'week' ? state.season.advance | 0 : 0) : 0) - (comp ? compDayCost(b) : 0);
     const rail = isBooking ? railFor(b, state.season.addon) : null;
     const priceOf = (m) => CATALOG_BY_ID[m].price;
     const room = Math.max(0, coolerCap() + eventUnits() - totalStock());
@@ -7134,7 +7422,8 @@ function createSim(saved, seed) {
       dayLog: logOut,
       prepped: live && s.prepped === true,
       loadin: live && s.loadin === true,
-      overnight: live && s.overnight !== null ? { meat: s.overnight.meat, n: s.overnight.n } : null
+      overnight: live && s.overnight !== null ? { meat: s.overnight.meat, n: s.overnight.n } : null,
+      advance: live && !eventPlayed() ? s.advance | 0 : 0   // v3.4
     };
     out.crew = state.crew.slice().sort(byId).map(copyCard);
     out.crewSeq = clamp(Math.trunc(state.crewSeq), 1, 9999);
@@ -7219,6 +7508,9 @@ function createSim(saved, seed) {
     s.overnight = save.season.overnight !== null && s.loadin && s.day === 5 && bookedDay() === 5
       ? { meat: save.season.overnight.meat, n: save.season.overnight.n } : null;
     if (eventPlayed()) s.offers = [];
+    // v3.4: the advance stays with the booking it came from (never more than its deposit).
+    const bk = s.booking;
+    s.advance = bk !== null && bk.type !== 'yard' && !bk.comp && !eventPlayed() ? Math.min(save.season.advance | 0, bk.deposit) : 0;
     state.cart = morningCart();
   }
 
@@ -7241,6 +7533,8 @@ function createSim(saved, seed) {
     setBring, train, levelUp, giveRaise, letGo,
     // v3.2 (D5)
     dayOptions, chooseDay, advanceDay, dayCardView,
+    // v3.4 (the note at the top)
+    recommendDay, bookingNeeds, shopNeeded, shopOpen, shopView, shopConfirm, shopBack, rescueView, rescueSell, rescueAdvance, rescueRestart,
     // v3.3 (design 19.9)
     compView, compJudges, resign, release, hireReferral
   };

@@ -501,7 +501,7 @@ let capturing = false;
 // with a 2x transform so every sim px position and step in this file scales with it.
 let B3 = null;
 const RS = 2;
-const DESK_MAX_W = 1120;          // v3.5: #root max-width at 900 px and up (index.html)
+const SIDE_W = 380;               // v3.4 playtest: the side column's width at 900 px and up (index.html)
 let recs = [];
 const SIZE = Object.create(null);
 
@@ -1169,6 +1169,7 @@ function exposeGame() {
     },
     get previewLook() { return previewLook; },
     tileRp: tileRp,
+    saleShown: function () { return saleShown(); },   // v3.4: the "+" marks show only with Shop or Gear open
     version: VERSION,
     sim: sim,
     el: el,
@@ -1697,24 +1698,29 @@ function focusBack() {
   else el.cv.focus();
 }
 
+// v3.4: the yard beside an open Shop or Gear sheet (two column layout) takes taps on its "+" marks.
+function saleTaps() { return saleShown() && !!(mqDesktop && mqDesktop.matches); }
 function setInert(on) {
   if (!('inert' in HTMLElement.prototype)) return;
-  el.stage.inert = on;
+  el.stage.inert = on && !saleTaps();
   el.hdr.inert = on;
   el.foot.inert = on;
 }
 
-function wantHowto() {
-  const desktop = !!(mqDesktop && mqDesktop.matches);
-  return howtoOpen || (!currentPanel && desktop && sim.state.phase === 'service');
-}
+// v3.4 playtest: the side column shows only while something is open, so the Controls card no
+// longer sits beside the yard through service; the Controls button opens it.
+function wantHowto() { return howtoOpen; }
 
 function syncPanels() {
   const showHow = wantHowto();
   if (el.howto.hidden !== !showHow) el.howto.hidden = !showHow;
   if (howtoClose && howtoClose.hidden !== !howtoOpen) howtoClose.hidden = !howtoOpen;
   const hidePanels = !currentPanel && !showHow;
-  if (el.panels.hidden !== hidePanels) el.panels.hidden = hidePanels;
+  if (el.panels.hidden !== hidePanels) {
+    el.panels.hidden = hidePanels;
+    // v3.4: the side column opens and closes beside the yard, which takes the room it leaves.
+    if (mqDesktop && mqDesktop.matches && vctx) resize();
+  }
   lastHow = showHow;
 }
 
@@ -2083,7 +2089,8 @@ function lockedBy(item, s) {
 // Cash a cart line may still spend: the deposit of the picked booking counts in the week (W5.2).
 function cartRoom(s) {
   const se = s.season;
-  const dep = loopOf(s) === 'week' && se && se.booking ? se.booking.deposit | 0 : 0;
+  // v3.4: the morning shop for a Yard day or Rest spends cash only (the deposit comes with the event).
+  const dep = loopOf(s) === 'week' && se && se.booking && !(sheetFrom === 'morning' && currentPanel === 'sheet' && shopKind !== 'event') ? se.booking.deposit | 0 : 0;
   return s.cash + dep - sim.cartTotal();
 }
 // D4.2: in the week a meat or charcoal unit costs its price times today's C.DAY_PRICE, rounded; gear
@@ -2133,6 +2140,14 @@ function cartRow(item, extras, rail) {
     after = mk('span', { id: 'after-' + item.id, cls: 'have' });
     if (want > 0) covers = mk('span', { id: 'covers-' + item.id, cls: 'have covers' });
     name.appendChild(mk('span', { cls: 'haves' }, [have, after, covers]));
+  }
+  // v3.4 review: in the morning shop for a Yard day, a meat the booked event needs says so ("Sat needs 2").
+  const bn = extras && isMeat && sheetFrom === 'morning' && shopKind !== 'event' && typeof sim.bookingNeeds === 'function' ? sim.bookingNeeds() : null;
+  const nu = bn && bn.units[item.id] > 0 ? bn.units[item.id] : 0;
+  if (nu > 0) {
+    const d = String(bn.dayShort || '');
+    const tag = mk('span', { id: 'need-' + item.id, cls: 'needtag', text: d.charAt(0) + d.slice(1).toLowerCase() + ' needs ' + nu });
+    name.insertBefore(tag, name.querySelector('.effect'));
   }
   const row = mk('div', { cls: 'row' }, [name, price, step]);
   rowSink.push(function () {
@@ -2976,7 +2991,7 @@ function weekSig(s) {
     rail ? !!mixHint(rail) : '', se.week | 0, !!s.gear.bigtable,   // R-7, R-3, Q-4: the hint line and the finale news lines
     typeof sim.fanThird === 'function' ? sim.fanThird() : 0,     // X13.6: #third-line and the notice lines
     crewList().filter(function (c) { return c.notice; }).map(function (c) { return c.id; }).join('.'),
-    daySig(s)].join('|');
+    daySig(s), hubTab, planOpen, restartArm, hubSig()].join('|');
 }
 function fitWeek() {
   const w = el.week;
@@ -3061,49 +3076,84 @@ function buildWeekAt(level) {
   pills.appendChild(mk('div', { id: 'week-fans', cls: 'pill' }, [sprEl('heart', 0, 2, null), pillLabel(U('fans')), pillValue(String(s.rep)), thirds]));
   top.appendChild(pills);
   // X13.6 carry-forward 2: the third word of mouth is in and what it brings, one line under the pills.
-  const tl = mk('p', { id: 'third-line', cls: 'muted t' + third, text: UA('thirdNow', third) });
-  tl.hidden = !tl.textContent;
-  top.appendChild(tl);
+  // v3.4 review: cut under the Start button hub (the Word of mouth pill carries it in its label).
+  const startHub = !!(dayView(s) && typeof sim.recommendDay === 'function' && sim.recommendDay());
+  if (!startHub) {
+    const tl = mk('p', { id: 'third-line', cls: 'muted t' + third, text: UA('thirdNow', third) });
+    tl.hidden = !tl.textContent;
+    top.appendChild(tl);
+  }
 
-  // The season strip.
+  // The season strip (v3.4: on the Season tab).
   const strip = mk('ol', { id: 'season-strip', attrs: { 'aria-label': U('stripAria', { y: se.year || 1 }) } });
   const n = C.SEASON_WEEKS || 9;
   for (let i = 1; i <= n; i++) strip.appendChild(stripTile(se, i, n));
-  body.appendChild(strip);
 
-  // v3.2 Days (D8.2): the day strip, then what today is spent on. On the booked day Load up and go
-  // moves into the day choice with its ids; on other days it stays hidden on the next event card.
+  // v3.4 playtest ("too many options", "not clear how to start a day"): the day strip, the broke
+  // rescue when cash cannot cover today, then ONE big Start button with the game's pick and a small
+  // Change plan link for the other choice. Everything else sits below it on three tabs.
   const dv = dayView(s);
   const goEls = goControls(s, se, dv);
-  if (dv) {
-    body.appendChild(dayStrip(se));
+  const rv = dv && typeof sim.recommendDay === 'function' ? sim.recommendDay() : null;
+  if (dv) body.appendChild(dayStrip(se));
+  if (rv) {
+    body.appendChild(startCard(se, rv));
+    const rq = rescueCard(s);   // v3.4 review: under the one Start button, plain buttons only
+    if (rq) body.appendChild(rq);
+    goEls[0].hidden = true;   // the Start button loads up on the booked day
+  } else if (dv) {
     body.appendChild(dayChoice(se, dv, goEls));
   }
+  const tabs = hubTabs(!!rv);
+  if (rv) body.appendChild(tabs.bar);
 
   // The phone rings: this week's offers.
   const offers = mk('section', { id: 'offers', attrs: { 'aria-labelledby': 'offers-h' } });
   const oh = mk('div', { cls: 'offers-head' });
   oh.appendChild(uiPut(mk('h3', { id: 'offers-h' }), U('thisWeek').toUpperCase(), 3, UI.white, { bold: true, shadow: UI.ink }, U('thisWeek')));
-  const list = se.offers || [];
-  if (list.length > 1 && !se.loadin) oh.appendChild(mk('span', { cls: 'pick-one', text: U('pickOne') }));   // R-8; not once Load-in locked it
-  offers.appendChild(oh);
-  const grid = mk('div', { cls: 'offer-grid' });
+  // v3.4 review: with the Start button, the Yard day card goes (a weekday choice now) and a picked
+  // booking folds to one line ("Birthday Sat, pay 120") with the other offers behind See offers.
+  const list = rv ? (se.offers || []).filter(function (o) { return o.type !== 'yard'; }) : (se.offers || []);
   const pickedId = se.booking ? se.booking.id : null;
+  const pickedO = rv && se.booking && se.booking.type !== 'yard' ? se.booking : null;
+  if (offersWeek !== (se.week | 0)) { offersOpen = false; offersWeek = se.week | 0; }
+  const gridOpen = !pickedO || offersOpen;
+  if (list.length > 1 && !se.loadin && gridOpen) oh.appendChild(mk('span', { cls: 'pick-one', text: U('pickOne') }));   // R-8; not once Load-in locked it
+  offers.appendChild(oh);
+  if (pickedO) {
+    const d = STRINGS.dayShort && typeof pickedO.day === 'number' ? String(STRINGS.dayShort[pickedO.day]) : '';
+    const day = d ? ' ' + d.charAt(0) + d.slice(1).toLowerCase() : '';
+    const money = pickedO.comp ? fill((STRINGS.comp && STRINGS.comp.entry) || 'Entry {n}', { n: pickedO.comp.entry | 0 }).toLowerCase() : 'pay ' + (pickedO.pay | 0);
+    const line = mk('div', { cls: 'offer-line' });
+    line.appendChild(mk('p', { id: 'offer-line', text: pickedO.label + day + ', ' + money }));
+    const more = mk('button', { id: 'offers-more', cls: 'linkish', type: 'button', text: offersOpen ? 'Hide offers' : 'See offers' });
+    more.setAttribute('aria-expanded', offersOpen ? 'true' : 'false');
+    more.setAttribute('aria-controls', 'offer-grid');
+    more.addEventListener('click', function () { offersOpen = !offersOpen; rebuildKeepFocus(buildWeek, 'week'); });
+    line.appendChild(more);
+    offers.appendChild(line);
+  }
+  const grid = mk('div', { id: 'offer-grid', cls: 'offer-grid' });
+  grid.hidden = !gridOpen;
   for (let i = 0; i < list.length; i++) grid.appendChild(offerCard(list[i], pickedId, level, i));
   offers.appendChild(grid);
-  body.appendChild(offers);
+  const tWeek = tabs.panel('week'), tPit = tabs.panel('pit'), tSeason = tabs.panel('season');
+  tWeek.appendChild(offers);
 
   // Next event and Load up and go.
-  body.appendChild(nextCard(s, se, dv && dv.goHere ? null : goEls));
+  tWeek.appendChild(nextCard(s, se, !rv && dv && dv.goHere ? null : goEls));
 
   // The 2 by 2 grid of sheets.
-  body.appendChild(hubGrid(s, se));
+  tPit.appendChild(hubGrid(s, se));
   const shelf = trophyShelf(s, 'hub-shelf', false);   // deviation 77
-  if (shelf) body.appendChild(shelf);
+  if (shelf) tPit.appendChild(shelf);
 
   // Inventory and Pit news.
-  body.appendChild(invCard(s));
-  body.appendChild(newsCard(s));
+  tPit.appendChild(invCard(s));
+  tSeason.appendChild(strip);
+  tSeason.appendChild(newsCard(s));
+  if (rv) { body.appendChild(tWeek); body.appendChild(tPit); body.appendChild(tSeason); }
+  else { body.insertBefore(strip, body.firstChild); body.appendChild(tWeek); body.appendChild(tPit); body.appendChild(tSeason); }
 
   // Event length, Controls, New game.
   foot.appendChild(lengthSection(s));
@@ -3757,6 +3807,11 @@ function dayView(s) {
   v.goHere = v.options.some(function (o) { return o.kind === 'event'; });
   return v;
 }
+// v3.4: the start card's pick and the rescue (weekSig).
+function hubSig() {
+  const r = typeof sim.recommendDay === 'function' && loopOf(sim.state) === 'week' ? sim.recommendDay() : null;
+  return r ? r.kind + (r.rescue ? 'R' : '') + (r.alt || []).length : '';
+}
 // What changes the day part of the hub's height (weekSig).
 function daySig(s) {
   const v = dayView(s);
@@ -3852,6 +3907,187 @@ function onDay(kind) {
   updateDom();
 }
 
+// ---------------------------------------------------------------- v3.4 the start button, tabs, morning shop, rescue
+
+let planOpen = false;         // Change plan shows the other choice
+let planDay = -1;             // the day planOpen belongs to (a new day closes it)
+let hubTab = 'week';          // the hub's open tab: 'week' | 'pit' | 'season'
+let shopKind = null;          // the day kind the morning shop is buying for
+let restartArm = false;       // Restart the season asks for a second tap
+let offersOpen = false;       // See offers shows the offer cards under a picked booking
+let offersWeek = -1;          // the week offersOpen belongs to
+const HUB_TABS = Object.freeze([['week', 'This week'], ['pit', 'Your pit'], ['season', 'Season']]);
+
+// The three hub tabs: a tab bar and a panel per tab (without the start button, all panels show).
+function hubTabs(on) {
+  const bar = mk('div', { id: 'hub-tabs', cls: 'hub-tabs', attrs: { role: 'tablist', 'aria-label': 'Hub sections' } });
+  const panels = {};
+  for (let i = 0; i < HUB_TABS.length; i++) {
+    const id = HUB_TABS[i][0], word = HUB_TABS[i][1];
+    const t = mk('button', { id: 'hub-tab-' + id, cls: 'alt htab', type: 'button', text: word, attrs: { role: 'tab', 'aria-controls': 'hub-pane-' + id } });
+    t.setAttribute('aria-selected', hubTab === id ? 'true' : 'false');
+    t.addEventListener('click', function () { hubTab = id; rebuildKeepFocus(buildWeek, 'week'); });
+    bar.appendChild(t);
+    const pane = mk('div', { id: 'hub-pane-' + id, cls: 'hub-pane', attrs: on ? { role: 'tabpanel', 'aria-labelledby': 'hub-tab-' + id } : {} });
+    pane.hidden = on && hubTab !== id;
+    panels[id] = pane;
+  }
+  return { bar: bar, panel: function (id) { return panels[id]; } };
+}
+
+// section#hub-startsec: "Start Tuesday: Yard day" big, then Change plan and the other choice.
+function startCard(se, rv) {
+  const day = se.day | 0;
+  if (planDay !== day) { planOpen = false; planDay = day; }
+  const sec = mk('section', { id: 'hub-startsec', attrs: { 'aria-label': rv.start } });
+  const b = mk('button', { id: 'hub-start', cls: 'primary big go hub-start', type: 'button' });
+  const fl = flameEl(true, 2);
+  if (fl) b.appendChild(fl);
+  const words = mk('span', { cls: 'hs-words', attrs: { 'aria-hidden': 'true' } });
+  const top = U('startDay', { day: dayNameOf(day), kind: '' }).replace(/[:\s]+$/, '');
+  words.appendChild(uiPut(mk('span', { cls: 'hs-l1' }), top.toUpperCase(), 3, UI.white, { bold: true, shadow: '#8a3a14' }, top));
+  words.appendChild(uiPut(mk('span', { cls: 'hs-l2' }), String(rv.label).toUpperCase(), 2, '#fff4dc', { bold: true, shadow: '#8a3a14' }, rv.label));
+  b.appendChild(words);
+  b.appendChild(mk('span', { cls: 'sr', text: rv.start }));
+  b.addEventListener('click', function () { startDay(rv.kind); });
+  sec.appendChild(b);
+  const why = mk('p', { id: 'hub-why', cls: 'muted' });
+  sec.appendChild(why);
+  const alt = Array.isArray(rv.alt) ? rv.alt : [];
+  if (alt.length) {
+    const ch = mk('button', { id: 'hub-change', cls: 'linkish', type: 'button', text: U('changePlan') });
+    ch.setAttribute('aria-expanded', planOpen ? 'true' : 'false');
+    ch.setAttribute('aria-controls', 'hub-plan');
+    ch.addEventListener('click', function () { planOpen = !planOpen; rebuildKeepFocus(buildWeek, 'week'); });
+    sec.appendChild(ch);
+    const box = mk('div', { id: 'hub-plan', cls: 'day-opts' });
+    box.hidden = !planOpen;
+    if (planOpen) {
+      for (let i = 0; i < alt.length; i++) {
+        const o = alt[i];
+        const cell = mk('div', { cls: 'dopt' });
+        const ob = pixBtn('day-' + o.kind, String(o.label), 'alt', function () { startDay(o.kind); }, 16);
+        ob.disabled = !o.ok;
+        ob.setAttribute('aria-describedby', 'day-' + o.kind + '-hint');
+        cell.appendChild(ob);
+        const hint = STRINGS.dayHint && STRINGS.dayHint[o.kind] ? STRINGS.dayHint[o.kind] : '';
+        cell.appendChild(mk('p', { id: 'day-' + o.kind + '-hint', cls: 'dhint muted' + (o.ok ? '' : ' why'), text: o.ok ? hint : String(o.reason || '') }));
+        box.appendChild(cell);
+      }
+    }
+    sec.appendChild(box);
+  }
+  return sec;
+}
+
+// Start (or a Change plan choice): through the morning shop when the day needs stock or the cart
+// would spend; nothing is bought until the shop's Confirm.
+function startDay(kind) {
+  if (kind !== 'off' && typeof sim.shopNeeded === 'function' && sim.shopNeeded(kind)) { openMorning(kind); return; }
+  const r = sim.chooseDay(kind);
+  pump();
+  if (!r || !r.ok) {
+    if (currentPanel === 'week') rebuildKeepFocus(buildWeek, 'week');
+    const h = document.getElementById('hub-why');
+    if (h && r && r.message) h.textContent = String(r.message);
+  }
+  updateDom();
+}
+
+// The morning shop: the Shop sheet in its morning mode, with Confirm and Back.
+function openMorning(kind) {
+  if (typeof sim.shopOpen !== 'function') return;
+  shopKind = kind;
+  sim.shopOpen(kind);
+  openSheet('shop', 'hub-start', 'morning');
+}
+function morningFoot() {
+  const sec = mk('section', { id: 'mshop', cls: 'mshop', attrs: { 'aria-label': U('shopFor', { kind: dayKindWord(shopKind) || '' }) } });
+  const total = mk('p', { id: 'shop-total', cls: 'mtotal' });
+  const warn = mk('p', { id: 'shop-warn', cls: 'mwarn' });
+  const spoil = mk('p', { id: 'shop-spoil', cls: 'mwarn' });
+  const why = mk('p', { id: 'shop-why', cls: 'muted' });
+  const back = btn('shop-back', U('shopBack'), 'alt', closeSheet);
+  const ok = btn('shop-confirm', U('shopConfirm'), 'primary', onShopConfirm);
+  sec.appendChild(total);
+  sec.appendChild(warn);
+  sec.appendChild(spoil);
+  sec.appendChild(why);
+  sec.appendChild(mk('div', { cls: 'mrow' }, [back, ok]));
+  rowSink.push(function () {
+    const v = typeof sim.shopView === 'function' ? sim.shopView(shopKind) : null;
+    if (!v) return;
+    total.textContent = 'Total ' + v.total + '. Cash after ' + v.after + '.';
+    warn.textContent = v.warn || '';
+    warn.hidden = !v.warn;
+    spoil.textContent = v.spoil || '';
+    spoil.hidden = !v.spoil;
+    why.textContent = v.ok ? '' : String(v.reason || '');
+    ok.disabled = !v.ok;
+  });
+  return sec;
+}
+function onShopConfirm() {
+  const k = shopKind;
+  const r = sim.shopConfirm(k);
+  if (!r || !r.ok) {
+    pump();
+    runSheetRows();
+    const w = document.getElementById('shop-why');
+    if (w && r && r.message) w.textContent = String(r.message);
+    updateDom();
+    return;
+  }
+  shopKind = null;
+  pump();
+  if (currentPanel === 'sheet') { dropSheet(); openWeek(); }
+  updateDom();
+}
+
+// section#rescue: never a dead end when cash cannot cover the day (sell gear at half, an advance on
+// the booking, or restart the season, which asks twice).
+function rescueCard(s) {
+  const v = typeof sim.rescueView === 'function' ? sim.rescueView() : null;
+  if (!v) { restartArm = false; return null; }
+  const R = STRINGS.rescue || {};
+  const fill = function (t, o) { return String(t || '').replace(/\{(\w+)\}/g, function (m, k) { return o[k] !== undefined ? String(o[k]) : m; }); };
+  const sec = mk('section', { id: 'rescue', cls: 'rescue card3', attrs: { 'aria-labelledby': 'rescue-h' } });
+  sec.appendChild(mk('h3', { id: 'rescue-h', text: R.title || 'Short on cash' }));
+  sec.appendChild(mk('p', { id: 'rescue-body', text: fill(R.body, { cash: v.cash, need: v.need }) }));
+  const act = function (fn) { return function () { const r = fn(); restartArm = false; afterRescue(r); }; };
+  // Sell gear at half: always a row, a button per piece, or a disabled one when there is nothing to sell.
+  sec.appendChild(mk('p', { id: 'rescue-sell-h', cls: 'rescue-sub', text: R.sellHead || 'Sell gear at half' }));
+  for (let i = 0; i < v.gear.length; i++) {
+    const g = v.gear[i];
+    sec.appendChild(btn('rescue-sell-' + g.id, fill(R.sell, { label: g.label, price: g.price }), 'alt quiet', act(function () { return sim.rescueSell(g.id); })));
+  }
+  if (!v.gear.length) {
+    const none = btn('rescue-sell-none', R.sellNone || 'No gear to sell yet', 'alt quiet', null);
+    none.disabled = true;
+    sec.appendChild(none);
+  }
+  if (v.advance > 0) {
+    sec.appendChild(btn('rescue-advance', fill(R.advance, { n: v.advance, label: v.label }), 'alt quiet', act(function () { return sim.rescueAdvance(); })));
+    if (R.advanceNote) sec.appendChild(mk('p', { cls: 'muted', text: R.advanceNote }));
+  }
+  const rs = btn('rescue-restart', restartArm ? 'Tap again to restart' : (R.restart || 'Restart the season'), 'alt quiet', function () {
+    if (!restartArm) { restartArm = true; rebuildKeepFocus(buildWeek, 'week'); return; }
+    restartArm = false;
+    afterRescue(sim.rescueRestart());
+  });
+  sec.appendChild(rs);
+  if (R.restartNote) sec.appendChild(mk('p', { cls: 'muted', text: R.restartNote }));
+  sec.appendChild(mk('p', { id: 'rescue-msg', cls: 'muted' }));
+  return sec;
+}
+function afterRescue(r) {
+  pump();
+  if (currentPanel === 'week') rebuildKeepFocus(buildWeek, 'week');
+  const m = document.getElementById('rescue-msg') || document.getElementById('hub-why');
+  if (m && r && r.message) { m.textContent = String(r.message); announce(String(r.message)); }
+  updateDom();
+}
+
 // The offer's day tag (offer-{id}-day): SAT or SUN on a booking card, none on the Yard card.
 function offerDay(o) {
   if (!o || o.type === 'yard' || typeof o.day !== 'number' || !STRINGS.dayShort) return null;
@@ -3921,7 +4157,7 @@ function onNextDay() {
 function openSheet(kind, openerId, from) {
   sheetKind = kind;
   sheetOpener = openerId || null;
-  sheetFrom = from === 'hiring' || from === 'yard' ? from : 'week';
+  sheetFrom = from === 'hiring' || from === 'yard' || from === 'morning' ? from : 'week';
   sheetMsg = '';
   shopOther = false;
   crewMsg = '';
@@ -3934,6 +4170,16 @@ function openSheet(kind, openerId, from) {
 function closeSheet() {
   const opener = sheetOpener;
   const from = sheetFrom;
+  if (from === 'morning') {
+    // v3.4 the morning shop's Back: the cart goes back as it was, nothing spent.
+    if (typeof sim.shopBack === 'function') sim.shopBack();
+    shopKind = null;
+    dropSheet();
+    openWeek();
+    const f = document.getElementById('hub-start');
+    if (f) f.focus();
+    return;
+  }
   dropSheet();
   if (from === 'yard') {
     resumeFromPause();
@@ -3955,16 +4201,18 @@ function dropSheet() {
   sheetMsg = '';
   if (el['sheet-body']) clear(el['sheet-body']);
   if (el['sheet-h']) clear(el['sheet-h']);
+  if (currentPanel === 'sheet') setInert(true);   // v3.4: the yard's "+" taps end with the sheet
 }
 
 function buildSheet() {
   const s = sim.state;
   const se = s.season || {};
   const titles = { shop: U('shop'), gear: U('gear'), menu: U('menu'), crew: U('crew') };
-  const title = titles[sheetKind] || '';
+  const morning = sheetKind === 'shop' && sheetFrom === 'morning';
+  const title = morning ? U('shopTitle', { day: dayNameOf(se.day | 0) }) : (titles[sheetKind] || '');
   const h = el['sheet-h'];
   clear(h);
-  uiPut(h, title.toUpperCase(), 3, UI.white, { bold: true, shadow: UI.ink }, title);
+  uiPut(h, title.toUpperCase(), morning ? 2 : 3, UI.white, { bold: true, shadow: UI.ink }, title);
   const body = el['sheet-body'];
   clear(body);
   sheetRows = [];
@@ -3980,9 +4228,13 @@ function buildSheet() {
   if (sheetKind === 'shop') {
     // Q-2: at a booking only the rail meats show; guests order nothing else, so the rest fold away.
     const ob = se.booking;
-    const rail = ob && ob.type !== 'yard' && typeof sim.railFor === 'function' ? sim.railFor(ob, se.addon || null) : null;
+    // v3.4: the morning shop for a Yard day shows every meat (a Yard day has no rail).
+    const rail = ob && ob.type !== 'yard' && !(morning && shopKind !== 'event') && typeof sim.railFor === 'function' ? sim.railFor(ob, se.addon || null) : null;
     const meats = CATALOG.filter(function (r) { return r.kind === 'meat'; });
-    const onRail = rail ? meats.filter(function (r) { return (rail[r.id] | 0) > 0; }) : meats;
+    let onRail = rail ? meats.filter(function (r) { return (rail[r.id] | 0) > 0; }) : meats;
+    // v3.4 review: a Yard day's morning shop lists the booked event's meats first.
+    const bnx = !rail && morning && typeof sim.bookingNeeds === 'function' ? sim.bookingNeeds() : null;
+    if (bnx) onRail = onRail.filter(function (r) { return bnx.rail[r.id] > 0; }).concat(onRail.filter(function (r) { return !(bnx.rail[r.id] > 0); }));
     const offRail = rail ? meats.filter(function (r) { return !((rail[r.id] | 0) > 0); }) : [];
     if (offRail.some(function (r) { return (s.cart.meat[r.id] | 0) > 0; })) shopOther = true;
     card.appendChild(h3('Meat'));
@@ -4009,6 +4261,11 @@ function buildSheet() {
     card.appendChild(mk('p', { id: 'shop-room', cls: 'muted' }));
     card.appendChild(mk('p', { id: 'shop-spare', cls: 'muted' }));
     card.appendChild(mk('p', { id: 'cart' }));
+    if (morning) {
+      const pct = Math.round((Array.isArray(C.DAY_PRICE) ? C.DAY_PRICE[se.day | 0] : 1) * 100);
+      card.insertBefore(mk('p', { id: 'shop-price', cls: 'muted' + (pct < 100 ? ' low' : pct > 100 ? ' high' : ''), text: U('shopPrice', { p: pct }) }), card.firstChild);
+      card.appendChild(morningFoot());
+    }
     card.appendChild(mk('p', { cls: 'muted', text: 'Game numbers. Not real prices and not a cooking guide.' }));
   } else if (sheetKind === 'gear') {
     card.appendChild(h3('Gear'));
@@ -4067,7 +4324,7 @@ function buildCrewSheet(body) {
     const bring = bringBtn('bring-' + c.id, c, function () { onBring(c.id, !c.bring); }, 10);
     bring.disabled = !crewLoops();
     ctl.appendChild(bring);
-    if (week) {
+    if (week && !autoTrain()) {
       const tr = pixBtn('train-' + c.id, U('train'), 'alt', function () { onTrain(c.id); }, 10);
       tr.disabled = tid !== null;
       ctl.appendChild(tr);
@@ -4083,7 +4340,8 @@ function buildCrewSheet(body) {
   body.appendChild(ul);
   if (week) {
     const who = tid !== null ? (crewCard(tid) ? crewCard(tid).name : (nameCache.get(tid) || '')) : '';
-    const line = tid === null ? U('trainLine', { xp: C.TRAIN_XP || 40 }) : (who ? U('trainedLine', { name: who }) : U('trainDone'));
+    const line = tid === null ? (autoTrain() ? 'The first Rest of the week trains the card with the least XP (+' + (C.TRAIN_XP || 40) + ').' : U('trainLine', { xp: C.TRAIN_XP || 40 }))
+      : (who ? U('trainedLine', { name: who }) : U('trainDone'));
     body.appendChild(mk('p', { id: 'crew-train-line', cls: 'muted', text: line }));
   }
   body.appendChild(mk('p', { id: 'crew-why', cls: 'muted', text: crewMsg }));
@@ -4146,6 +4404,8 @@ function onBring(id, on) {
   crewMsg = r && r.message ? String(r.message) : '';
   afterAct();
 }
+// v3.4 playtest: training is automatic (the week's first Rest), so no Train buttons.
+function autoTrain() { return typeof sim.recommendDay === 'function'; }
 function onTrain(id) {
   if (typeof sim.train !== 'function') return;
   // v3.2 (D4.6): with days on, every Train tap spends the day, from the pick sheet or not.
@@ -4685,7 +4945,7 @@ function cardCrewActs(act, d) {
     focusOr(keep, el['card-h']);
   };
   if (crewLoops()) act.appendChild(bringBtn('card-bring', d, function () { done(sim.setBring(id, !d.bring), 'card-bring'); }, 22));
-  if (weekOnly()) {
+  if (weekOnly() && !autoTrain()) {
     const tid = trainedId();
     const tr = pixBtn('card-train', tid !== null ? U('trainDone') : U('train'), 'alt', function () {
       const r = typeof sim.chooseDay === 'function' ? sim.chooseDay('train', { id: id }) : sim.train(id);
@@ -5623,7 +5883,7 @@ const ptrs = new Map();
 let dragP = null, pinchP = null;
 function onPtrDown(e) {
   if (e.button !== undefined && e.button !== 0) return;
-  if (currentPanel) return;
+  if (currentPanel && !saleTaps()) return;
   ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
   try { el.cv.setPointerCapture(e.pointerId); } catch (err) { /* capture is optional */ }
   if (ptrs.size === 2) {
@@ -5663,7 +5923,14 @@ function onPtrUp(e) {
 }
 
 function tapAt(clientX, clientY) {
-  if (currentPanel) return;
+  if (currentPanel) {
+    // v3.4: with the Shop or Gear sheet open beside the yard (desktop), a "+" picks its row there.
+    if (!saleTaps()) return;
+    const w0 = clientToWorld(clientX, clientY);
+    const h0 = w0.r.width > 0 ? hitWorld(w0.X, w0.Y) : {};
+    if (h0.plus) openForSale(h0.plus);
+    return;
+  }
   const s = sim.state;
   if (s.paused || s.phase !== 'service') return;
   const w = clientToWorld(clientX, clientY);
@@ -5691,8 +5958,11 @@ function tapAt(clientX, clientY) {
 // A tap on a "+": the game pauses and the Gear list opens on that row, highlighted (spec D).
 function openForSale(id) {
   const s = sim.state;
-  if (s.phase === 'service' && !s.paused) sim.setPaused(true);
-  openSheet('gear', null, 'yard');
+  if (currentPanel === 'sheet') { openSheet('gear', sheetOpener, sheetFrom); }   // v3.4: from the open sheet
+  else {
+    if (s.phase === 'service' && !s.paused) sim.setPaused(true);
+    openSheet('gear', null, 'yard');
+  }
   syncSheetRows();
   const row = el['sheet-body'] ? el['sheet-body'].querySelector('[data-item="' + id + '"]') : null;
   if (row) {
@@ -6156,6 +6426,7 @@ function updateDog(dt) {
 // at world rp. The camera picks the part of the world the yard canvas shows.
 const WORLD = Object.freeze({ W: 656, H: 434, OX: 300, OY: 150, SX: 1.5, SY: 0.75 });
 const OV_MIN_RW = 352;                        // the overlay (clock, rail, banner) keeps its v3.5 size
+const OV_MIN_RW_DESK = 480;                  // v3.4 desktop: 2x at a 1400 px canvas, not 3x or 4x
 const SKY = '#9fd8f2';
 let SW = WORLD.W / RS, SH = WORLD.H / RS;     // the canvas being drawn, in octx units (world, then overlay)
 const VIEW = { x0: 0, w: WORLD.W / RS };      // what the camera shows, in octx units (number clamps)
@@ -6212,6 +6483,110 @@ function onWorld(fn) {
 function put3(name, frame, X, Y, flip) {
   if (!A3) return;
   onWorld(function () { A3.drawAt(octx, name, Math.round(X), Math.round(Y), frame | 0, flip === true); });
+}
+// v3.4 playtest: put3 with the dark ring (stations and plates).
+function put3o(name, frame, X, Y, flip) {
+  if (!A3) return;
+  const f = typeof A3.drawAtOutlined === 'function' ? A3.drawAtOutlined : A3.drawAt;
+  onWorld(function () { f(octx, name, Math.round(X), Math.round(Y), frame | 0, flip === true); });
+}
+
+// v3.4 playtest: an icon badge over each station (flame cooker, snowflake cooler, knife board, bag pile,
+// plate counter), on a dark chip.
+const BADGE = Object.freeze({
+  flame: ['...o...', '..ooo..', '..oyo..', '.oyyyo.', '.oyyyo.', 'oyywyyo', '.ooooo.'],
+  snow: ['...w...', '.w.w.w.', '..www..', 'wwwwwww', '..www..', '.w.w.w.', '...w...'],
+  knife: ['......w', '.....ww', '....ww.', '...ww..', '..ww...', '.b.....', 'b......'],
+  plate: ['.......', '..www..', '.wgggw.', 'wgwwwgw', '.wgggw.', '..www..', '.......'],
+  bag: ['..b.b..', '...b...', '.bbbbb.', 'bbkkkbb', 'bbkkkbb', 'bbbbbbb', '.bbbbb.']
+});
+const BADGE_PAL = Object.freeze({ o: '#f2702a', y: '#ffd35a', w: '#ffffff', b: '#a0622e', g: '#c9d3e0', k: '#4a4a4a' });
+// v3.4 review: the chip is 1.5x the first cut (the icon at 2 rp a pixel on a 16 by 16 chip) and sits
+// centred over the sprite's own drawn pixels (its opaque box), 2 rp above its top.
+const opaqueBoxes = new Map();
+function opaqueBox(name, frame) {
+  const key = name + '|' + (frame | 0);
+  if (opaqueBoxes.has(key)) return opaqueBoxes.get(key);
+  let box = null;
+  try {
+    const src = typeof A3.frameCanvas === 'function' ? A3.frameCanvas(name, frame | 0, false) : null;
+    if (src && src.width > 0) {
+      const d = src.getContext('2d').getImageData(0, 0, src.width, src.height).data;
+      let x0 = src.width, x1 = -1, y0 = src.height;
+      for (let y = 0; y < src.height; y++) for (let x = 0; x < src.width; x++) {
+        if (d[(y * src.width + x) * 4 + 3] < 128) continue;
+        if (x < x0) x0 = x;
+        if (x > x1) x1 = x;
+        if (y < y0) y0 = y;
+      }
+      if (x1 >= 0) box = { cx: (x0 + x1 + 1) / 2, top: y0 };
+    }
+  } catch (e) { box = null; }
+  opaqueBoxes.set(key, box);
+  return box;
+}
+function drawBadge(kind, name, frame, X, Y) {
+  const m = BADGE[kind];
+  if (!m || !A3) return;
+  const an = A3.anchor(name, frame | 0);
+  const ob = opaqueBox(name, frame);
+  const cx = ob ? Math.round(X) - an.ax + ob.cx : Math.round(X);
+  const top = ob ? Math.round(Y) - an.ay + ob.top : Math.round(Y) - an.ay;
+  const x0 = Math.round(cx - 8), y0 = top - 18;
+  onWorld(function () {
+    octx.fillStyle = '#1b1410';
+    octx.fillRect(x0 + 1, y0, 14, 16); octx.fillRect(x0, y0 + 1, 16, 14);
+    octx.fillStyle = '#3a2a1e';
+    octx.fillRect(x0 + 2, y0 + 2, 12, 12);
+    octx.fillStyle = '#1b1410';
+    octx.fillRect(x0 + 7, y0 + 16, 2, 1);   // a small stem toward its station
+    for (let r = 0; r < 7; r++) for (let c = 0; c < 7; c++) {
+      const k = m[r].charAt(c);
+      if (k === '.') continue;
+      octx.fillStyle = BADGE_PAL[k];
+      octx.fillRect(x0 + 1 + 2 * c, y0 + 1 + 2 * r, 2, 2);
+    }
+  });
+}
+// v3.4 playtest: a soft ring on the ground under what the player can act on next: the station in
+// reach, and any cooker with a piece done (pull it).
+function actTargets(s) {
+  const out = [];
+  if (s.phase !== 'service') return out;
+  const r = typeof sim.reach === 'function' ? sim.reach() : null;
+  for (let i = 0; i < MAP.stations.length; i++) {
+    const st = MAP.stations[i];
+    if (!owned(st)) continue;
+    const ck = st.type === 'cooker' ? s.stations[st.id] : null;
+    const done = !!(ck && ck.pieces && ck.pieces.some(function (p) { return p.state === 'done'; }));
+    if (st.id === r || done) out.push({ st: st, hot: done });
+  }
+  return out;
+}
+function drawActRings(s) {
+  const list = actTargets(s);
+  if (!list.length) return;
+  const a = reduced ? 0.55 : 0.4 + 0.25 * Math.sin(tAnim * 5);
+  onWorld(function () {
+    for (let i = 0; i < list.length; i++) {
+      const ts = list[i].st.tiles;
+      let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+      for (let j = 0; j < ts.length; j++) { x0 = Math.min(x0, ts[j].x); x1 = Math.max(x1, ts[j].x); y0 = Math.min(y0, ts[j].y); y1 = Math.max(y1, ts[j].y); }
+      const P = [vtxRp(x0, y0), vtxRp(x1 + 1, y0), vtxRp(x1 + 1, y1 + 1), vtxRp(x0, y1 + 1)];
+      octx.beginPath();
+      octx.moveTo(P[0][0], P[0][1] - 9);
+      octx.lineTo(P[1][0] + 18, P[1][1]);
+      octx.lineTo(P[2][0], P[2][1] + 9);
+      octx.lineTo(P[3][0] - 18, P[3][1]);
+      octx.closePath();
+      const col = list[i].hot ? '255, 120, 60' : '255, 214, 90';
+      octx.fillStyle = 'rgba(' + col + ', ' + (a * 0.35).toFixed(3) + ')';
+      octx.fill();
+      octx.lineWidth = 2;
+      octx.strokeStyle = 'rgba(' + col + ', ' + a.toFixed(3) + ')';
+      octx.stroke();
+    }
+  });
 }
 // Opaque masks of art3 frames, for taps by object and for the anchor maths.
 const MASKS = Object.create(null);
@@ -6280,6 +6655,8 @@ function walkTiles() {
   PATH_TILES.forEach(function (k) { const p = k.split(','); out.push({ x: +p[0], y: +p[1] }); });
   return out;
 }
+// v3.4 playtest: the "+" marks show (and take taps) only while the Shop or Gear sheet is open.
+function saleShown() { return currentPanel === 'sheet' && (sheetKind === 'shop' || sheetKind === 'gear'); }
 // MAP.forSale (spec D) as [{ id, tiles }]; without it, unbought gear and decor spots.
 let SALE = null;
 function forSale() {
@@ -6369,7 +6746,10 @@ function farBox() {
   const L = vtxRp(0, MAP.H), R = vtxRp(MAP.W, 0);
   return { x0: Math.max(0, L[0] - 16), x1: Math.min(WORLD.W, R[0] + 16) };
 }
-function farZ(cw, ch) { const f = farBox(); return Math.min(cw / (f.x1 - f.x0), ch / WORLD.H); }
+function farZ(cw, ch) {
+  const f = farBox(), z = Math.min(cw / (f.x1 - f.x0), ch / WORLD.H);
+  return !cam.phone && z >= 1 ? Math.floor(z + 1e-6) : z;   // v3.4: whole device px per rp on desktop
+}
 function camClamp() {
   if (cam.mode === 'far') {
     const f = farBox();
@@ -6424,8 +6804,7 @@ function camHome() {
   else camClamp();
 }
 function camSet(mode, X, Y) {
-  if (!cam.phone) mode = 'fit';
-  else if (mode !== 'far') mode = 'near';
+  if (mode !== 'far') mode = 'near';   // v3.4: desktop has the near view and the zoom button too
   const cx = X !== undefined ? X : cam.x0 + cam.vw / 2, cy = Y !== undefined ? Y : cam.y0 + cam.vh / 2;
   const was = cam.mode;
   cam.mode = mode;
@@ -6509,11 +6888,7 @@ function workBox() {
   });
   const H = MAP.home, qs = H && Array.isArray(H.queue) ? H.queue : [0];
   qs.forEach(function (i) { const t = MAP.queue[i]; if (t) { const c = tileRp(t.x, t.y); grow({ x0: c[0] - 12, x1: c[0] + 12, y0: c[1] - 47, y1: c[1] + 4 }); } });
-  const sg = MAP.signText && MAP.signText.tiles;
-  if (sg && sg.length) {
-    const b = spanOf(sg.map(ptOf)), u = 12 * (b.x0 + b.x1 + 1), X = WORLD.OX + u, Y = WORLD.OY + u / 2;
-    grow({ x0: X - 32, x1: X + 32, y0: Y - 68, y1: Y - 36 });
-  }
+  // v3.4 review: the pit sign no longer pulls the view up to the barn; the kitchen stays centred.
   return x1 > x0 ? { x0: x0, x1: x1, y0: y0, y1: y1 } : null;
 }
 function camKeepWork() {
@@ -6534,7 +6909,7 @@ const ZOOM_OUT = [[2, 2, 5, 1], [2, 2, 1, 5], [13, 2, 5, 1], [17, 2, 1, 5], [2, 
 const ZOOM_IN = [[2, 6, 5, 1], [6, 2, 1, 5], [13, 6, 5, 1], [13, 2, 1, 5], [2, 13, 5, 1], [6, 13, 1, 5], [13, 13, 5, 1], [13, 13, 1, 5]];
 function syncZoom() {
   if (!zoomBtn) return;
-  zoomBtn.hidden = !cam.phone;
+  zoomBtn.hidden = false;
   const far = cam.mode === 'far';
   if (zoomBtn.dataset.far === String(far)) return;
   zoomBtn.dataset.far = String(far);
@@ -6589,7 +6964,7 @@ function hitWorld(X, Y) {
     if (standable) return { tile: { x: tx, y: ty } };
     return { tile: nearestWalkable(h.at[0], h.at[1]) };
   }
-  const sale = forSale();
+  const sale = saleShown() ? forSale() : [];
   for (let i = 0; i < sale.length; i++) if (!idOwned(sale[i].id) && hasTile(sale[i].tiles, tx, ty)) return { plus: sale[i].id };
   if (inMap) {
     for (let i = 0; i < MAP.stations.length; i++) {
@@ -6677,12 +7052,16 @@ function normFrame(frame, n) {
   return ((f % n) + n) % n;
 }
 
+// v3.4 playtest: a guest's food bubble draws wherever the iso yard puts it (a guest at the counter
+// sits near the legacy top edge, so its bubble never showed); its capture record stays legacy bounded.
+const CUE_ANY = /^(bubble|icon_|plate_|mark_x)/;
 function D(name, x, y, frame, flip) {
   const sz = size(name);
-  if (!inView(name, x, y, sz[0], sz[1])) return;
+  const vis = inView(name, x, y, sz[0], sz[1]);
+  if (!vis && !(B3 && CUE_ANY.test(name))) return;
   const f = normFrame(frame, sz[2]);
-  if (!(B3 && B3.draw(octx, name, x, y, sz[0], sz[1], f, flip === true))) art.draw(octx, name, x, y, f, flip === true);
-  if (capturing) recs.push({ name: name, frame: f, x: x, y: y, w: sz[0], h: sz[1] });
+  if (!(B3 && B3.draw(octx, name, x, y, sz[0], sz[1], f, flip === true))) { if (vis) art.draw(octx, name, x, y, f, flip === true); }
+  if (capturing && vis) recs.push({ name: name, frame: f, x: x, y: y, w: sz[0], h: sz[1] });
 }
 
 // The capture record D() would make, with no draw.
@@ -6895,14 +7274,15 @@ function boxText(str, x, y, colorKey) {
 
 // A piece's timer (spec C): a bar w rp wide and 1 rp tall on a dark 3 rp tray at world rp (x, y),
 // filled left to right by frac.
+// v3.4 playtest: the bar is 2 rp tall in a 4 rp outline (was 1 in 3), easier to read at a glance.
 function drawRing(x, y, w, frac, color) {
   const n = Math.max(0, Math.min(w, Math.round(frac * w)));
   onWorld(function () {
     octx.fillStyle = COLOR.outline;
-    octx.fillRect(x - 1, y - 1, w + 2, 3);
+    octx.fillRect(x - 1, y - 2, w + 2, 4);
     if (n === 0) return;
     octx.fillStyle = color;
-    octx.fillRect(x, y, n, 1);
+    octx.fillRect(x, y - 1, n, 2);
   });
 }
 
@@ -6932,10 +7312,10 @@ function drawGround(s) {
     const sign = MAP.props.find(function (p) { return p.id === 'sign'; });
     let sg = null;
     if (sign) { const ts = tilesOf(sign).concat(sign.tiles ? sign.tiles.map(ptOf) : []), b = spanOf(ts); sg = [b.x0, b.x1 > b.x0 ? b.x1 : b.x0 + 1]; }
-    B3.stage(octx, MAP, { walk: walkTiles(), door: door ? ptOf(door.tile).x : null, sign: sg, name: pitName(s) });
+    B3.stage(octx, MAP, { walk: [], door: door ? ptOf(door.tile).x : null, sign: sg, name: pitName(s) });
     if (sign && MAP.signText) { const info = signInfo(); if (info) recordGlyphs(info.font, info.text, info.x, info.font === 'font_s' ? MAP.signText.y + 1 : MAP.signText.y); }
   }
-  const sale = forSale();
+  const sale = saleShown() ? forSale() : [];
   const people = [s.player, s.buddy, s.tender, s.prep].concat(s.customers.filter(function (c) { return c.mode !== 'eating'; }));
   const onTile = function (tiles) {
     return people.some(function (m) { return m && hasTile(tiles, Math.round(m.px / TILE), Math.round(m.py / TILE)); });
@@ -6947,6 +7327,7 @@ function drawGround(s) {
     if (B3) B3.plus(octx, c[0], c[1]);
     if (capturing) { const t = e.tiles[0]; recs.push({ name: 'plus', id: e.id, frame: 0, x: t.x * TILE, y: t.y * TILE, w: TILE, h: TILE }); }
   }
+  drawActRings(s);
 }
 
 // An art3 sprite on the footprint `tiles`, anchored on their centroid, in the depth pass. A long one
@@ -6964,20 +7345,20 @@ function pushArt(push, name, frame, tiles, o) {
     const xa = i === 0 ? -1e4 : (cs[i - 1].c[0] + e.c[0]) / 2, xb = i === cs.length - 1 ? 1e4 : (e.c[0] + cs[i + 1].c[0]) / 2;
     front = Math.max(front, e.t.x + e.t.y);
     push(e.t.x + e.t.y + adj, 1, e.c[0], function () {
-      if (cs.length === 1) put3(name, frame, X, Y, o.flip);
+      if (cs.length === 1) (o.outline ? put3o : put3)(name, frame, X, Y, o.flip);
       else onWorld(function () {
         octx.save();
         octx.beginPath();
         octx.rect(xa, -1e4, xb - xa, 2e4);
         octx.clip();
-        A3.drawAt(octx, name, Math.round(X), Math.round(Y), frame | 0, o.flip === true);
+        (o.outline && A3.drawAtOutlined ? A3.drawAtOutlined : A3.drawAt)(octx, name, Math.round(X), Math.round(Y), frame | 0, o.flip === true);
         octx.restore();
       });
       if (o.hit) hitPush(name, frame, X, Y, o.flip, cs.length > 1 ? [xa, xb] : null, o.hit);
       rec();
     });
   });
-  if (o.top) push(front + adj, 1.5, X, function () { o.top(X, Y); });
+  if (o.top || o.badge) push(front + adj, 1.5, X, function () { if (o.badge) drawBadge(o.badge, name, frame, X, Y); if (o.top) o.top(X, Y); });
   return { X: X, Y: Y };
 }
 
@@ -7026,8 +7407,8 @@ function drawPieces(st, ck, name, X, Y) {
       });
       recOnly(nm, pos.x, pos.y, f);
       if (!me) continue;
-      const bw = Math.max(4, Math.round((m.x1 >= m.x0 ? m.x1 - m.x0 + 1 : ow) * sc));
-      const bx = Math.round(PX + (m.x0 - m.ax) * sc + ((m.x1 - m.x0 + 1) * sc - bw) / 2), by = Math.round(PY + (top - m.ay) * sc) - 3;
+      const bw = Math.max(10, Math.round((m.x1 >= m.x0 ? m.x1 - m.x0 + 1 : ow) * sc));   // v3.4: at least 10 rp
+      const bx = Math.round(PX + (m.x0 - m.ax) * sc + ((m.x1 - m.x0 + 1) * sc - bw) / 2), by = Math.round(PY + (top - m.ay) * sc) - 4;
       if (p.state === 'cooking') drawRing(bx, by, bw, Math.min(1, p.prog / me.cook), COLOR.O);
       else if (p.state === 'done') drawRing(bx, by, bw, Math.max(0, 1 - (p.prog - me.cook) / me.window), late ? COLOR.red : COLOR.lawnA);
       else drawRing(bx, by, bw, 1, COLOR.K);
@@ -7071,14 +7452,14 @@ function stationItems(st, s, push) {
     const band = PitSim.fireBand(ck ? ck.fire : 0);
     const open = a.name === 'kettle' && ck && ck.pieces.length > 0;
     const frame = open ? 4 : (BAND_FRAME[band] || 0);
-    pushArt(push, a.name, frame, a.tiles, { rec: [st.sprite || a.name, d.x, d.y, BAND_FRAME[band] || 0], hit: hit, top: function (X, Y) {
+    pushArt(push, a.name, frame, a.tiles, { outline: true, badge: 'flame', rec: [st.sprite || a.name, d.x, d.y, BAND_FRAME[band] || 0], hit: hit, top: function (X, Y) {
       if (!ck) return;
       drawGauge(ck, X, Y);
       drawPieces(st, ck, a.name, X, Y);
     } });
   } else if (st.type === 'board') {
     const b = s.stations.board;
-    pushArt(push, 'board', b && b.slicing ? 1 : 0, a.tiles, { rec: ['board', d.x, d.y, b && b.slicing ? 1 : 0], hit: hit, top: function (X, Y) {
+    pushArt(push, 'board', b && b.slicing ? 1 : 0, a.tiles, { outline: true, badge: 'knife', rec: ['board', d.x, d.y, b && b.slicing ? 1 : 0], hit: hit, top: function (X, Y) {
       if (b && b.stacks) {
         for (let j = 0; j < b.stacks.length && j < BOARD_OFFS.length; j++) {
           const stack = b.stacks[j];
@@ -7097,11 +7478,11 @@ function stationItems(st, s, push) {
     } });
   } else if (st.type === 'cooler') {
     const f = s.gear.cooler ? (sim.reach() === 'cooler' ? 2 : 1) : 0;
-    pushArt(push, 'cooler', f, a.tiles, { rec: ['cooler', d.x, d.y, f], hit: hit });
+    pushArt(push, 'cooler', f, a.tiles, { outline: true, badge: 'snow', rec: ['cooler', d.x, d.y, f], hit: hit });
   } else if (st.type === 'table') {
     const big = a.name === 'counter_long';
     const recs2 = function () { if (big && extTile) { const e = extRect(); recOnly('counter_ext', e.x, e.y, 0); } };
-    pushArt(push, a.name, 0, a.tiles, { rec: ['counter', d.x, d.y, big ? 1 : 0], hit: hit, top: recs2 });
+    pushArt(push, a.name, 0, a.tiles, { outline: true, badge: 'plate', rec: ['counter', d.x, d.y, big ? 1 : 0], hit: hit, top: recs2 });
     // Plates on the counter top, one spot per tile (two on the extension), each over its own tile.
     const spots = s.stations.table ? s.stations.table.spots : [];
     const slots = A3.rule.slots(a.name), an = A3.anchor(a.name, 0);
@@ -7114,23 +7495,40 @@ function stationItems(st, s, push) {
       const leg = st.spotPx && st.spotPx[i] ? st.spotPx[i] : { x: t.x * TILE + 4, y: t.y * TILE + 4 };
       const name = 'plate_' + stack.meat, n = Math.min(stack.times.length, C.TABLE_STACK);
       push(t.x + t.y, 1.5, a.X, function () {
-        for (let k = 0; k < n; k++) { put3(name, 0, a.X - an.ax + sl[0], a.Y - an.ay + sl[1] - k); recOnly(name, leg.x, leg.y - k, 0); }
+        for (let k = 0; k < n; k++) { put3o(name, 0, a.X - an.ax + sl[0], a.Y - an.ay + sl[1] - k); recOnly(name, leg.x, leg.y - k, 0); }
       });
     }
   } else if (st.type === 'pile') {
     const n = s.charcoal | 0, f = n >= 5 ? 0 : n >= 3 ? 1 : n >= 1 ? 2 : 3;
-    pushArt(push, 'pile', f, a.tiles, { rec: ['pile', d.x, d.y, f], hit: hit });
+    pushArt(push, 'pile', f, a.tiles, { outline: true, badge: 'bag', rec: ['pile', d.x, d.y, f], hit: hit });
   } else {
-    pushArt(push, a.name, 0, a.tiles, { rec: [st.sprite || a.name, d.x, d.y, 0], hit: hit });
+    pushArt(push, a.name, 0, a.tiles, { outline: true, rec: [st.sprite || a.name, d.x, d.y, 0], hit: hit });
   }
 }
 
 // What each prop draws (rule art names), by its v2 sprite. Wall pieces (door, sign) are in the stage.
 const PROP_FRAME = { pot1: 0, pot2: 1, pot3: 0, pot4: 0, planter: 2, planter2: 1, woodpile: 0, woodpile2: 1, woodpile3: 1, woodpile4: 0 };
+// v3.4 playtest: no decorative props in the work area (on the pavers or next to a station tile).
+let WORK = null;
+function inWork(tiles) {
+  if (!WORK) {
+    WORK = Object.create(null);
+    MAP.stations.forEach(function (st) {
+      st.tiles.forEach(function (t) { for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) WORK[(t.x + dx) + ',' + (t.y + dy)] = true; });
+    });
+  }
+  const PV = MAP.T && MAP.T.PAVER !== undefined ? MAP.T.PAVER : null;
+  return tiles.some(function (t) { return WORK[t.x + ',' + t.y] || (PV !== null && typeof MAP.at === 'function' && MAP.at(t.x, t.y) === PV); });
+}
+const CLUTTER = Object.freeze({ pot: 1, planter: 1, mailbox: 1, woodpile: 1, tree: 1, shelf: 1 });
 function propItems(p, push) {
   if (p.id === 'shed' || p.id === 'sign' || p.sprite === 'shed' || p.sprite === 'sign' || p.sprite === 'picnic_bench') return;
   const tiles = tilesOf(p), d = drawOf(p);
   if (!tiles.length) return;
+  if (p.sprite !== 'picnic' && inWork(tiles)) return;
+  // v3.4 review: the decor that competed with the stations stays off the yard (its record stays for
+  // the harness): pots, planters, the mailbox, the log piles, the tree and the shelf.
+  if (CLUTTER[p.sprite]) { recOnly(p.sprite, d.x, d.y, p.frame | 0); return; }
   if (p.sprite === 'picnic') { picnicItems(tiles, push, ['picnic', d.x, d.y, p.frame | 0]); return; }
   const name = p.sprite === 'planter' ? 'pot' : p.sprite;
   if (!A3.has(name)) return;
@@ -7229,7 +7627,8 @@ function drawSorted(s) {
     }
   }
   const dx = Math.round(dog.px), dy = Math.round(dog.py);
-  push((dx + dy) / TILE, 2, isoX(dx + 8, dy + 8) * RS, function () { withShift(moverShift(dx, dy), function () { D('dog', dx, dy, dog.frame, dog.flip); }); });
+  // v3.4 review: the dog no longer draws in the work area (its record stays for the harness).
+  push((dx + dy) / TILE, 2, isoX(dx + 8, dy + 8) * RS, function () { recOnly('dog', dx, dy, dog.frame); });
 
   items.sort(function (a, b) { return (a.d - b.d) || (a.l - b.l) || (a.x - b.x) || (a.o - b.o); });
   for (let i = 0; i < items.length; i++) items[i].f();
@@ -7447,6 +7846,26 @@ function seatOf(c) { return c.seat ? SEAT_BY_ID[c.seat] || null : null; }
 
 
 
+// v3.4 playtest: food bubbles drawn half again as big, scaled about the bubble's tail (its bottom
+// left, legacy px x, y + 14 for the 14 tall v2 bubble), so each still points at its guest.
+const BUBBLE_K = 1.5;
+// The warn bubble drawn 2x about its foot (legacy px X, Y, after the iso shift).
+function bigWarn(X, Y, fn) {
+  const px = X, py = Y;
+  octx.save();
+  octx.translate(px, py);
+  octx.scale(2, 2);
+  octx.translate(-px, -py);
+  try { fn(); } finally { octx.restore(); }
+}
+function bigBubble(x, y, fn) {
+  const ty = y + 14;
+  octx.save();
+  octx.translate(x, ty);
+  octx.scale(BUBBLE_K, BUBBLE_K);
+  octx.translate(-x, -ty);
+  try { fn(); } finally { octx.restore(); }
+}
 function drawCues(s, custs) {
   // Bubbles: order icon or walk out mark, then food bubbles.
   for (let i = 0; i < custs.length; i++) {
@@ -7460,19 +7879,23 @@ function drawCues(s, custs) {
     const csh = seatC ? seatShift(seatC) : moverShift(Math.round(c.px), Math.round(c.py));
     octx.translate(csh.dx, csh.dy);
     if (inLine || showMark) {
-      D('bubble', px + 14, py - 22);
-      if (showMark) {
-        D('mark_x', px + 18, py - 20);
-      } else {
-        const frac = c.patienceMax > 0 ? Math.max(0, Math.min(1, c.patience / c.patienceMax)) : 1;
-        const blink = frac <= C.PATIENCE_WARN_FRAC && !reduced && Math.floor(tAnim * 4) % 2 === 1;
-        if (!blink) D('icon_' + c.want, px + 18, py - 20);
-      }
+      bigBubble(px + 14, py - 22, function () {
+        D('bubble', px + 14, py - 22);
+        if (showMark) {
+          D('mark_x', px + 18, py - 20);
+        } else {
+          const frac = c.patienceMax > 0 ? Math.max(0, Math.min(1, c.patience / c.patienceMax)) : 1;
+          const blink = frac <= C.PATIENCE_WARN_FRAC && !reduced && Math.floor(tAnim * 4) % 2 === 1;
+          if (!blink) D('icon_' + c.want, px + 18, py - 20);
+        }
+      });
     } else if (c.mode === 'eating' && c.eat > 0) {
       const seat = seatOf(c);
       const sx = seat ? seat.x * TILE : px, sy = seat ? seat.y * TILE : Math.round(c.py);
-      D('bubble', sx, sy - 21);
-      D('plate_' + c.want, sx + 4, sy - 18);
+      bigBubble(sx, sy - 21, function () {
+        D('bubble', sx, sy - 21);
+        D('plate_' + c.want, sx + 4, sy - 18);
+      });
     }
     octx.restore();
   }
@@ -7484,7 +7907,11 @@ function drawCues(s, custs) {
       if (st.type !== 'cooker' || !owned(st) || !cookerWarns(s.stations[st.id])) continue;
       const bp = warnBubblePos(st);
       const a3 = stationArt(st), bx = boxRp(a3.name, 0, a3.X, a3.Y);
-      drawRp('bubble_warn', reduced ? 0 : Math.floor(tAnim / blink) % 2, bx.x0 - 2, bx.y0 - 2, bp.x, bp.y);
+      // v3.4 playtest: the burn "!" at twice the size, so it is easy to spot.
+      const wz = size('bubble_warn'), wf = reduced ? 0 : Math.floor(tAnim / blink) % 2;
+      withShift(rpShift(bx.x0 - 2, bx.y0 - 2, bp.x + wz[0] / 2, bp.y + wz[1]), function () {
+        bigWarn(bp.x + wz[0] / 2, bp.y + wz[1], function () { D('bubble_warn', bp.x, bp.y, wf); });
+      });
     }
   }
   // Patience bars.
@@ -7816,16 +8243,23 @@ function resize() {
     if (cam.mode === 'fit') cam.mode = 'near';
     if (cam.mode === 'far') el.cv.height = Math.max(96, Math.min(el.cv.height, Math.ceil(WORLD.H * farZ(el.cv.width, 1e9) - 1e-6)));
   } else {
-    const colW = Math.min(vw, DESK_MAX_W) - 32 - 320 - 24;
-    const k = Math.min(colW * d / WORLD.W, (vh - 44 - 16 - CONTROLS_H) * d / WORLD.H);
-    cam.nearK = Math.max(1, Math.floor(k + 1e-6));
-    el.cv.width = WORLD.W * cam.nearK;
-    el.cv.height = WORLD.H * cam.nearK;
-    cam.mode = 'fit';
+    // v3.4 playtest: the yard fills the window left of the side column (which shows only while a
+    // panel is open), full height under the header and above the controls. The near view takes the
+    // largest whole k that frames the kitchen, and never so small a k that the world leaves a band.
+    const side = el.panels.hidden ? 0 : SIDE_W + 16;
+    const cssW = Math.max(320, vw - 32 - side);
+    const cssH = Math.max(240, (vh || 820) - 44 - CONTROLS_H - 28);   // 28: #foot under the controls
+    const hb = homeBox();
+    const kHome = hb ? Math.floor(Math.min(cssW * d / (hb.x1 - hb.x0 + 48), cssH * d / (hb.y1 - hb.y0 + 48)) + 1e-6) : 1;
+    const kFill = Math.ceil(Math.max(cssW * d / WORLD.W, cssH * d / WORLD.H) - 1e-6);
+    cam.nearK = Math.max(1, kHome, kFill);
+    el.cv.width = Math.floor(cssW * d);
+    el.cv.height = Math.floor(cssH * d);
+    if (cam.mode === 'fit') cam.mode = 'near';
   }
   el.cv.style.width = (el.cv.width / d) + 'px';
   el.cv.style.height = (el.cv.height / d) + 'px';
-  cam.kOv = Math.max(1, Math.floor(el.cv.width / OV_MIN_RW));
+  cam.kOv = Math.max(1, Math.floor(el.cv.width / (cam.phone ? OV_MIN_RW : OV_MIN_RW_DESK)));   // v3.4: desktop caps the overlay so the clock does not shout
   ov.width = Math.ceil(el.cv.width / cam.kOv);
   ov.height = Math.ceil(el.cv.height / cam.kOv);
   camView();
@@ -7891,12 +8325,18 @@ function updateDom() {
   }
 
   const st = statusText(s);
-  if (st !== lastStatus) { lastStatus = st; el.status.textContent = st; }
+  if (st !== lastStatus) {
+    lastStatus = st; el.status.textContent = st;
+    // v3.4 review: the gate countdown under the desktop canvas repeats the one on the yard (CSS hides it there).
+    el.status.classList.toggle('gate', st.indexOf(STRINGS.gateOpensIn) === 0);
+  }
 
   const v = sim.verbAt();
   if (v.label !== lastAct) { lastAct = v.label; el.act.textContent = v.label; }
   const dis = !v.enabled;
   if (dis !== lastActDis) { lastActDis = dis; el.act.disabled = dis; }
+  // v3.4 review: no grey "Nothing to do here" bar; the bar keeps its room so the yard never jumps.
+  el.act.classList.toggle('idle', dis && v.label === STRINGS.nothing);
   syncPulse(v);
 
   // W17.6: charcoal first, then the meat chips; during a booking only its rail meats show.
