@@ -1136,7 +1136,7 @@ function readSave() {
   try { valid = PitSim.validateSave(parsed); } catch (e) { valid = null; }
   migrated = old && valid !== null;
   // D9: a raw v of 5 (v3.1) shows ui.notice once, whatever the crew holds.
-  noticeKey = migrated && parsed.v !== 5 && valid && Array.isArray(valid.crew) && valid.crew.length > 0 && STRINGS.ui.noticeCrew ? 'noticeCrew' : 'notice';
+  noticeKey = migrated && parsed.v < 5 && valid && Array.isArray(valid.crew) && valid.crew.length > 0 && STRINGS.ui.noticeCrew ? 'noticeCrew' : 'notice';
   return valid;
 }
 
@@ -1184,7 +1184,13 @@ function exposeGame() {
     get panel() { return howtoOpen ? 'howto' : currentPanel; },
     // X13.8: the crew movers in the yard with art.crewKey(role), and the Hiring Day page on screen.
     get crew() { return crewNow(); },
-    get hiringPage() { return hiringPageNow(); }
+    get hiringPage() { return hiringPageNow(); },
+    // v3.3: the competition rail, the shelf and the FIRE feed puffs on screen.
+    get comp() { return compView(sim.state); },
+    get compRail() { const v = compView(sim.state); return v ? compRailStrs(v, sim.state) : null; },
+    get trophies() { return trophiesOf(sim.state).length; },
+    get feedPuffs() { return feedPuffs.length; },
+    refresh: function () { pump(); showLoop(); updateDom(); return currentPanel; }
   };
 }
 
@@ -1326,7 +1332,11 @@ function onEvent(ev) {
       camHome();
       const kind = ev.kind || todayKind(s);
       const secs = Math.max(0, Math.ceil(tGate(s) - s.clock));
-      if (kind === 'booking' && s.today && s.today.booking) {
+      if (kind === 'booking' && s.today && s.today.booking && s.today.booking.comp) {
+        // v3.3 integration: the competition opens with its turn-in times, not a gate.
+        const b = s.today.booking;
+        announce((b.label || bookingLabel(b.type)) + '. Turn-ins at ' + b.comp.times.join(', ') + ' seconds.');
+      } else if (kind === 'booking' && s.today && s.today.booking) {
         const b = s.today.booking;
         announce(SAY('open', { label: b.label || bookingLabel(b.type), n: s.today.booked | 0, list: railList(s.today.rail, 'plateLabel'), s: secs }));
       } else if (kind !== 'tutorial' || !tutRunning()) {
@@ -1371,6 +1381,7 @@ function onEvent(ev) {
     case 'fire_low': announce('Fire low on ' + K + '.'); break;
     case 'fire_out': announce('Fire out on ' + K + '.'); break;
     case 'last_call':
+      if (compView(sim.state)) break;   // v3.3 integration: the competition has no customers
       announce('Last call. No more customers today.');
       lastCallUntil = nowMs + 3000;
       break;
@@ -1410,6 +1421,10 @@ function onEvent(ev) {
     case 'week_start': announce(SAY('week', { w: ev.week | 0, when: weekWhen(ev.week | 0) })); break;
     case 'season_end': announce(SAY('seasonEnd', { y: ev.year | 0 })); break;
     case 'season_start': break;
+    case 'turnin_judged': announce(UX('turnIn', { label: L, n: ev.score | 0 })); break;
+    case 'turnin_missed': announce(SX('comp', 'missed', { meat: L.toLowerCase() }, 'missed')); break;
+    case 'comp_results': announce(SX('comp', 'place', { p: ordinal(ev.place | 0), n: 10 }, 'compPlace')); break;
+    case 'fire_fed': simFeeds = true; if (ev.cooker) feedPuff(ev.cooker); break;
     case 'player_set': applyLook(lookNow()); break;
     case 'tutorial_refill':
       if (ev.kind === 'meat') announce(SAY('refillMeat', { label: ev.meat && MEATS[ev.meat] ? MEATS[ev.meat].label : '' }));
@@ -1735,7 +1750,7 @@ function showLoop() {
   const loop = loopOf(s);
   if (loop === 'creator') { openCreator(false); return; }
   if (loop === 'hiring') { openHiring(true); return; }   // X8, X13.1
-  if (loop === 'seasonEnd') { openSeasonEnd(); return; }
+  if (loop === 'seasonEnd' || loop === 'offseason') { openSeasonEnd(); return; }
   if (loop === 'week') { if (s.broke) openBroke(); else if (s.phase === 'evening' && dayCardNow()) openDayCard(); else openWeek(); return; }
   if (loop === 'report' || (loop === 'tutorial' && s.phase === 'evening')) { openTill(); return; }
   if (s.phase === 'morning') { if (s.broke) openBroke(); else openClipboard(); return; }
@@ -2313,7 +2328,8 @@ function buildTill() {
     return;
   }
   const kind = t.kind || 'tutorial';
-  if (kind === 'booking') buildBookingReport(t, head, body);
+  if (kind === 'comp' || (kind === 'booking' && t.comp)) buildCompReport(t, head, body);   // deviation 72, [S 19.9]
+  else if (kind === 'booking') buildBookingReport(t, head, body);
   else if (kind === 'yard') buildYardReport(t, head, body);
   else buildTutorialTill(t, head, body);
 }
@@ -3082,6 +3098,8 @@ function buildWeekAt(level) {
 
   // The 2 by 2 grid of sheets.
   body.appendChild(hubGrid(s, se));
+  const shelf = trophyShelf(s, 'hub-shelf', false);   // deviation 77
+  if (shelf) body.appendChild(shelf);
 
   // Inventory and Pit news.
   body.appendChild(invCard(s));
@@ -3256,7 +3274,7 @@ function offerCard(o, pickedId, level, idx) {
   const lines = mk('div', { cls: 'olines' });
   // On one row (W22.25 step 2) the Yard day keeps every W15 line, set as wrapping inline items.
   const pad = row1 ? '' : 'pad';
-  lines.appendChild(iconLine(peopleIcon(), isYard ? U('walkIns') : U('guests', { n: o.headcount | 0 })));
+  if (!o.comp) lines.appendChild(iconLine(peopleIcon(), isYard ? U('walkIns') : U('guests', { n: o.headcount | 0 })));   // a competition has no guests
   if (isYard) lines.appendChild(iconLine(null, U('yourPick'), pad));
   else for (let i = 0; i < o.menu.length; i++) lines.appendChild(iconLine(sprEl('icon_' + o.menu[i], 0, 2, null), MEATS[o.menu[i]].plateLabel));
   lines.appendChild(iconLine(pinIcon(), (STRINGS.venue && STRINGS.venue[o.venue]) || 'Backyard'));
@@ -3269,6 +3287,14 @@ function offerCard(o, pickedId, level, idx) {
   if (isYard) {
     lines.appendChild(iconLine(null, U('perPlate'), pad + ' gold'));
     lines.appendChild(iconLine(null, U('noFee'), pad));
+  } else if (o.comp) {
+    // A competition has no host and no pay: the entry fee, the prizes and the judges instead.
+    const sc = STRINGS.comp || {};
+    const pz = o.comp.prizes || [];
+    lines.appendChild(iconLine(null, fill(sc.entry || 'Entry {n}', { n: o.comp.entry | 0 }), 'pad gold ocentry'));
+    lines.appendChild(iconLine(null, fill(sc.prizes || 'Prizes {a}, {b} and {c}.', { a: pz[0] | 0, b: pz[1] | 0, c: pz[2] | 0 }), 'pad ocprize'));
+    const jd = typeof sim.compJudges === 'function' ? sim.compJudges() : [];
+    if (jd.length) lines.appendChild(iconLine(null, fill(sc.judges || 'Judges: {list}.', { list: andList(jd) }), 'pad ocjudge'));
   } else {
     lines.appendChild(payInto(mk('p', { cls: 'oline opay' }), o.pay | 0));
     lines.appendChild(iconLine(null, U('deposit', { d: o.deposit | 0 }), 'dep'));
@@ -3278,7 +3304,7 @@ function offerCard(o, pickedId, level, idx) {
   needs.hidden = !o.needs;
   info.appendChild(needs);
   // R-3: the finale sized to the grate says what the drum smoker would make of it.
-  if (o.type === 'finale' && sim.state.gear.drum !== true) {
+  if (o.type === 'finale' && !o.comp && sim.state.gear.drum !== true) {   // v3.3: a competition has no guests
     const big = drumFinale(sim.state);
     if (big && big.headcount > (o.headcount | 0)) info.appendChild(mk('p', { id: 'offer-finale-drum', cls: 'ohint', text: U('finaleDrum', { n: big.headcount, fee: big.pay }) }));
   }
@@ -3426,6 +3452,7 @@ function nextCard(s, se, goEls) {
   if (o) {
     const right = mk('span', { cls: 'next-pay' });
     if (o.type === 'yard') right.textContent = U('perPlate');
+    else if (o.comp) right.textContent = fill((STRINGS.comp && STRINGS.comp.entry) || 'Entry {n}', { n: o.comp.entry | 0 });   // no pay at a competition
     else payInto(right, o.pay | 0);
     head.appendChild(right);
   }
@@ -3442,7 +3469,7 @@ function nextCard(s, se, goEls) {
       txt.appendChild(iconLine(peopleIcon(), U('walkIns')));
       txt.appendChild(iconLine(null, U('yourPick'), 'pad'));
     } else {
-      txt.appendChild(iconLine(peopleIcon(), U('guests', { n: o.headcount | 0 })));
+      if (!o.comp) txt.appendChild(iconLine(peopleIcon(), U('guests', { n: o.headcount | 0 })));
       const rail = typeof sim.railFor === 'function' ? sim.railFor(o, se.addon || null) : o.rail;
       for (let i = 0; i < MEAT_IDS.length; i++) {
         const m = MEAT_IDS[i];
@@ -3454,7 +3481,8 @@ function nextCard(s, se, goEls) {
   sec.appendChild(inner);
   const hint = o && o.type !== 'yard' ? mixHint(typeof sim.railFor === 'function' ? sim.railFor(o, se.addon || null) : o.rail) : '';
   if (hint) sec.appendChild(mk('p', { id: 'next-hint', text: hint }));
-  const dep = o && o.type !== 'yard' ? U('depositLine', { d: o.deposit | 0 }) : U('yardLine');
+  const dep = o && o.comp ? fill((STRINGS.comp && STRINGS.comp.goEntry) || '', { n: o.comp.entry | 0 })
+    : o && o.type !== 'yard' ? U('depositLine', { d: o.deposit | 0 }) : U('yardLine');   // a competition has no host deposit
   sec.appendChild(mk('p', { id: 'go-deposit', text: dep }));
   // Review 1: who comes along and what they cost, next to the pay (wages come off the take).
   const lineup = crewList().filter(function (c) { return c.bring; }).sort(byId);
@@ -3665,12 +3693,12 @@ function newsCard(s) {
   const se = s.season;
   if (se && se.week >= 5 && se.week < (C.SEASON_WEEKS || 9) && s.gear.drum !== true) {
     const big = drumFinale(s);
-    if (big) { nb.appendChild(mk('p', { id: 'news-finale', text: U('finaleNews', { n: big.headcount }) })); shown++; }
+    if (big && !big.comp && big.headcount > 0) { nb.appendChild(mk('p', { id: 'news-finale', text: U('finaleNews', { n: big.headcount }) })); shown++; }
   }
   // Q-4: from week 5, the finale's line and the bigger table while it is not owned.
   if (se && se.week >= 5 && se.week < (C.SEASON_WEEKS || 9) && s.gear.bigtable !== true) {
     const fin = finaleWith(s, null);
-    if (fin) { nb.appendChild(mk('p', { id: 'news-table', text: U('finaleTable', { n: fin.headcount }) })); shown++; }
+    if (fin && !fin.comp && fin.headcount > 0) { nb.appendChild(mk('p', { id: 'news-table', text: U('finaleTable', { n: fin.headcount }) })); shown++; }
   }
   // Q-4: the weather only touches a Yard day, so it shows only while the Yard day is picked.
   const yardPick = !!(se && se.booking && se.booking.type === 'yard');
@@ -5097,6 +5125,401 @@ function creatorBack() {
   updateDom();
 }
 
+// ---------------------------------------------------------------- v3.3 competition and offseason ([S 3.5], [S 3.6])
+// Design [S 3.5], [S 3.6], [S 6.7], [S 6.8], [S 19.8]. Spec 19.9 (the sim's names) did not exist when
+// this was written; the reads now follow [S 19.9], with fallbacks for an older sim. Deviations 70 to 66.
+// 70. [S 19.9] names: the competition cook is the booking day with today.comp set; compView() reads
+//     sim.compView() (cats, at, boxes, next, pulled) and maps each box to judged (score shown),
+//     handed in (IN until the judges score it at its turn-in time) or missed.
+// 71. The Hold clock is compView().pulled for the next open category: the clock that piece came off
+//     the grate, in hand, on the board or with PREP. HOLD n turns red past the 15 s full window.
+// 72. The judges' results card is till.kind 'comp' (a booking till with till.comp also opens it):
+//     placing, total, trophy or shelf full, ribbons, fans, the four boxes with Doneness, Hold and Look,
+//     the 10 row standings, the judges, the entry and the prize. Names come from the sim.
+// 73. Trophies are state.trophies [{ year, contest, place }], six at most; ribbons are state.ribbons.
+// 74. The Offseason screen is #season-end. seasonEndPreview()'s v3.3 fields (record, contracts with
+//     asks and decided, leaving with reason and refers, next) fill the boxes under the record; Re-sign
+//     1 season, Re-sign 2 seasons and Let go call sim.resign(id, 1 or 2) and sim.release(id). Without
+//     contracts in the preview the v3.1 renew lines stay.
+// 75. The FIRE badge sits over the FIRE card's head through service; the feed puff fires on the sim's
+//     fire_fed { cooker } at that cooker's vent and logs 'fed'. An older sim with no fire_fed (no
+//     C.COMP_SECONDS) gets the puff from the FIRE card's bag count instead.
+// 76. Copy the sim does not carry yet falls back to the lines in CX below (same keys under
+//     STRINGS.ui win). Contest names say competition BBQ and never a sanctioning body.
+// 77. The trophy shelf shows on the hub only once a trophy or ribbon is won, so the hub fit levels
+//     of a first season are unchanged; the Offseason screen always shows it.
+// 78. The comp rail: the clock, then the four turn-in tickets (meat icon and time, gold for the next
+//     one with its seconds to go, green with the score once boxed, red when missed), then HOLD n
+//     under it while the next category's piece is off the grate.
+
+const CX = {
+  contest: { backyard: 'Backyard Open', regional: 'Regional Cook-off', invitational: 'Invitational' },
+  compH: '{contest} results',
+  compPlace: '{p} of {n}',
+  compTotal: 'Total {n} of 400',
+  judgesT: 'Judges',
+  boxesT: 'Your boxes',
+  fieldT: 'Standings',
+  boxLine: 'Doneness {d}, Hold {h}, Look {l}',
+  boxMissed: 'Missed the window',
+  boxScore: '{n}',
+  ribbonOne: 'Ribbon for {list}.',
+  ribbonNone: 'No ribbons this time.',
+  trophyWon: 'First place. A trophy goes on the shelf.',
+  compFans: 'A top 3 finish. Fan rating +{n}.',
+  compEntry: 'Entry fee',
+  compPrize: 'Prize',
+  you: 'You',
+  shelfT: 'Trophy shelf',
+  shelfEmpty: 'Win a competition to put a trophy here.',
+  shelfAria: '{n} of 6 trophies',
+  trophyAria: 'Season {y}, {contest}, first place',
+  ribbonsLine: 'Ribbons: {n}',
+  offT: 'Offseason',
+  contractsT: 'Contracts ending',
+  contractAsk: '{name}, {role}, asks {w} a cook',
+  resign: 'Re-sign 1 season',
+  resign2: 'Re-sign 2 seasons',
+  release: 'Let go',
+  contractsNone: 'No contracts end this season.',
+  leavingT: 'Moving on',
+  leaving: '{name} is moving on: {reason}',
+  refers: '{name} refers a friend: one more Hiring Day pick of {n} stars or better.',
+  refersNone: '{name} refers nobody.',
+  leavingNone: 'Nobody is moving on.',
+  nextT: 'Coming next',
+  nextLine: '{label}, {price}',
+  placeAria: 'Week {w}, {contest}, placed {place}',
+  holdRail: 'HOLD {n}',
+  turnIn: '{label} box scored {n}.',
+  missed: 'Missed the {meat} turn-in.',
+  fireBadge: 'FIRE'
+};
+function UX(key, map) {
+  if (STRINGS.ui && STRINGS.ui[key] !== undefined) return U(key, map);
+  return fill(CX[key] !== undefined ? CX[key] : '', map);
+}
+// Deviation 70: the four turn-ins of today's competition, normalized, or null. sim.compView() [S 19.9]:
+// { cats, at, boxes [null or { score, done, hold, look, missed, judged, held }], next, pulled }; a
+// sim without it falls back to the same names on today.comp.
+function compView(s) {
+  if (!isCompDay(s)) return null;
+  let v = null;
+  if (typeof sim.compView === 'function') { try { v = sim.compView(); } catch (e) { v = null; } }
+  const c = v || s.today.comp || {};
+  if (!Array.isArray(c.cats)) return null;
+  const at = Array.isArray(c.at) ? c.at : (C.COMP_TURNINS || [45, 85, 125, 165]);
+  const bx = Array.isArray(c.boxes) ? c.boxes : [];
+  const rows = c.cats.map(function (m, i) {
+    const b = bx[i] || null;
+    const missed = !!(b && b.missed);
+    const judged = !!(b && !missed && (b.judged === true || (b.judged === undefined && typeof b.score === 'number')));
+    return { meat: m, at: at[i], missed: missed, inBox: !!(b && !missed && !judged), box: judged ? b : null };
+  });
+  let next = typeof c.next === 'number' ? c.next : -1;
+  if (!v) for (let i = 0; i < rows.length && next < 0; i++) if (!rows[i].box && !rows[i].missed && !rows[i].inBox) next = i;
+  return { contest: c.contest || '', rows: rows, next: next, pulled: c.pulled || null };
+}
+// Sim copy first (STRINGS[group][key], then STRINGS.ui[key]), else the CX fallback line.
+function SX(group, key, map, cxKey) {
+  const g = STRINGS[group];
+  if (g && typeof g[key] === 'string') return fill(g[key], map);
+  return UX(cxKey || key, map);
+}
+function contestName(id) {
+  const t = STRINGS.contest && STRINGS.contest[id];
+  return t ? String(t) : (CX.contest[id] || String(id || ''));
+}
+function ordinal(n) {
+  const v = n % 100;
+  const suf = v >= 11 && v <= 13 ? 'th' : (['th', 'st', 'nd', 'rd'][n % 10] || 'th');
+  return n + suf;
+}
+function isCompDay(s) { return !!(s && s.phase === 'service' && s.today && s.today.comp); }
+// Deviation 71: the Hold clock, seconds since the next category's piece came off the grate (compView's
+// pulled: the piece in hand, on the board or with PREP), or null when none is off the grate.
+function holdOf(s, v) {
+  const r = v.next >= 0 ? v.rows[v.next] : null;
+  if (!r || !v.pulled || typeof v.pulled[r.meat] !== 'number') return null;
+  return Math.max(0, s.clock - v.pulled[r.meat]);
+}
+
+// Deviation 78: the competition rail. Playtest 2026-10-19: every pending turn-in counts down like the
+// clock (it showed the next one as seconds left and the rest as start times, so 85 read as 85 s left).
+function compRailStrs(v, s) {
+  return {
+    clock: String(Math.max(0, Math.ceil(tEnd(s) - s.clock))),
+    rows: v.rows.map(function (r) {
+      if (r.box) return String(Math.round(r.box.score) | 0);
+      if (r.missed) return 'X';
+      if (r.inBox) return 'IN';
+      return String(Math.max(0, Math.ceil(r.at - s.clock)));
+    })
+  };
+}
+function drawCompRail(v, s) {
+  const rs = compRailStrs(v, s);
+  const clock = rs.clock, strs = rs.rows;
+  let w = 6 + art.textWidth(clock);
+  for (let i = 0; i < strs.length; i++) w += 2 + 8 + 1 + art.textWidth(strs[i]) + 2;
+  const bw = Math.min(174, w + 4);
+  octx.fillStyle = COLOR.U;
+  octx.fillRect(1, 1, bw, 11);
+  octx.fillStyle = COLOR.C;
+  for (let gy = 0; gy < CLOCK_GLYPH.length; gy++) {
+    for (let gx = 0; gx < CLOCK_GLYPH[gy].length; gx++) if (CLOCK_GLYPH[gy][gx] === 'c') octx.fillRect(3 + gx, 3 + gy, 1, 1);
+  }
+  T(clock, 9, 3, null);
+  let x = 9 + art.textWidth(clock);
+  for (let i = 0; i < v.rows.length; i++) {
+    const r = v.rows[i], tw = art.textWidth(strs[i]);
+    if (x + 2 + 8 + 1 + tw + 2 > 1 + bw) break;
+    x += 2;
+    D('icon_' + r.meat, x, 2);
+    x += 9;
+    octx.fillStyle = r.box || r.inBox ? COLOR.lawnA : r.missed ? '#c0392b' : i === v.next ? '#F3CF6D' : COLOR.C;
+    octx.fillRect(x, 2, tw + 2, 9);
+    T(strs[i], x + 1, 3, r.missed ? 'white' : 'K');
+    x += tw + 2;
+  }
+  const h = holdOf(s, v);
+  if (h !== null) {
+    const hs = fill(UX('holdRail'), { n: Math.floor(h) });
+    octx.fillStyle = h > 15 ? '#8a2a1c' : COLOR.U;
+    octx.fillRect(1, 13, art.textWidth(hs) + 4, 11);
+    T(hs, 3, 15, h > 15 ? 'yellow' : null);
+  }
+}
+
+// Deviation 72: the judges' results card on the till (till.comp, the sim's finishComp() view).
+function compBoxRow(b, i) {
+  const m = b.meat;
+  const label = MEATS[m] ? MEATS[m].label : String(m);
+  const missed = !!b.missed;
+  const score = typeof b.score === 'number' ? b.score : b.total;
+  const detail = missed ? UX('boxMissed') : UX('boxLine', { d: (typeof b.done === 'number' ? b.done : b.don) | 0, h: b.hold | 0, l: b.look | 0 });
+  const r = tillRow(label, detail, String(missed ? 0 : Math.round(score) | 0), 'cbox' + (missed ? ' missed' : ''));
+  r.id = 'comp-box-' + (i + 1);
+  const ic = sprEl('icon_' + m, 0, 2, null);
+  if (ic) r.insertBefore(ic, r.firstChild);
+  return r;
+}
+function buildCompReport(t, head, body) {
+  const c = t.comp || {};
+  const name = c.label || contestName(c.contest);
+  el.till.classList.add('booking');
+  el.till.insertBefore(repTop(t), head);
+  const title = UX('compH', { contest: name });
+  uiPut(head, title.toUpperCase(), title.length > 14 ? 2 : 3, UI.gold, { bold: true, shadow: UI.K }, title);   // 2x keeps a long contest name on a phone
+  const table = Array.isArray(c.standings) ? c.standings : (Array.isArray(c.table) ? c.table : []);
+  const n = typeof c.field === 'number' ? c.field : (table.length || 10);
+  const place = c.place | 0;
+  const placeText = SX('comp', 'place', { p: ordinal(place), n: n }, 'compPlace');
+  const top = repBox('comp-place', null, 'cplace');
+  top.appendChild(uiPut(mk('p', { id: 'comp-placed', cls: 'big' }), placeText.toUpperCase(), 3, place > 0 && place <= 3 ? UI.gold : UI.cream, { bold: true, shadow: UI.K }, placeText));
+  top.appendChild(mk('p', { id: 'comp-total', text: UX('compTotal', { n: Math.round(c.total) | 0 }) }));
+  if (c.trophy) top.appendChild(mk('p', { id: 'comp-trophy', cls: 'up' }, [trophyEl(3), SX('comp', 'trophy', null, 'trophyWon')]));
+  else if (c.shelfFull) top.appendChild(mk('p', { id: 'comp-trophy', text: SX('comp', 'shelfFull', null, 'trophyWon') }));
+  const rib = Array.isArray(c.ribbons) ? c.ribbons : [];
+  const ribWords = rib.map(function (m) { return MEATS[m] ? MEATS[m].label.toLowerCase() : String(m); });
+  top.appendChild(mk('p', { id: 'comp-ribbons', text: rib.length ? SX('comp', 'ribbon', { meat: andList(ribWords) }, 'ribbonOne') : UX('ribbonNone') }));
+  if ((c.fans | 0) > 0) top.appendChild(mk('p', { id: 'comp-fans', text: SX('comp', 'fans', { n: c.fans | 0 }, 'compFans') }));
+  body.appendChild(top);
+
+  const boxes = repBox('comp-boxes', UX('boxesT'));
+  const bl = Array.isArray(c.boxes) ? c.boxes : [];
+  for (let i = 0; i < bl.length; i++) boxes.appendChild(compBoxRow(bl[i] || {}, i));
+  body.appendChild(boxes);
+
+  const fb = repBox('comp-field', UX('fieldT'));
+  const ol = mk('ol', { id: 'comp-standings', cls: 'standings' });
+  for (let i = 0; i < table.length; i++) {
+    const f = table[i] || {};
+    const you = !!f.you;
+    ol.appendChild(mk('li', { id: you ? 'comp-you' : null, cls: you ? 'you' : null }, [
+      mk('span', { cls: 'sp', text: ordinal(i + 1) }),
+      mk('span', { cls: 'sn', text: (you ? (f.name || pitName(sim.state)) + ' (' + UX('you') + ')' : String(f.name || '')) }),
+      mk('span', { cls: 'st', text: String(Math.round(f.total) | 0) })
+    ]));
+  }
+  fb.appendChild(ol);
+  body.appendChild(fb);
+
+  const jd = Array.isArray(c.judges) ? c.judges : [];
+  if (jd.length) {
+    const jb = repBox('comp-judges', UX('judgesT'));
+    jb.appendChild(mk('p', { id: 'comp-judge-names', text: andList(jd.map(String)) }));
+    body.appendChild(jb);
+  }
+
+  const money = repBox('comp-money', U('money'), 'money', coinEl(2));
+  money.appendChild(repRow(UX('compEntry'), null, minus((typeof c.entry === 'number' ? c.entry : t.entry) | 0)));
+  money.appendChild(repRow(UX('compPrize'), null, plus(c.prize | 0)));
+  body.appendChild(money);
+  body.appendChild(nextButton());
+  body.appendChild(tillNewButton());
+}
+
+// Deviation 73: the trophy shelf, six slots on a plank.
+const TROPHY_MAP = ['.gggg.', 'gggggg', '.gggg.', '..gg..', '..gg..', '.wwww.'];
+function trophyEl(scale) {
+  if (art.has('trophy')) return sprEl('trophy', 0, scale, null);
+  return pixCanvas(TROPHY_MAP, { g: '#F3CF6D', w: '#5a3412' }, scale);
+}
+function trophiesOf(s) {
+  const t = Array.isArray(s.trophies) ? s.trophies : [];
+  return t.slice(0, 6);
+}
+function ribbonsOf(s) {
+  const r = s.ribbons;
+  if (typeof r === 'number') return r | 0;
+  let n = 0;
+  if (r && typeof r === 'object') for (const k in r) n += r[k] | 0;
+  return n;
+}
+function trophyShelf(s, id, always) {
+  const tr = trophiesOf(s), rb = ribbonsOf(s);
+  if (!always && tr.length === 0 && rb === 0) return null;
+  const sec = mk('section', { id: id, cls: 'card3 shelf', attrs: { 'aria-labelledby': id + '-h' } });
+  sec.appendChild(uiPut(mk('h3', { id: id + '-h' }), UX('shelfT').toUpperCase(), 2, UI.gold, { bold: true, shadow: UI.K }, UX('shelfT')));
+  const row = mk('ol', { cls: 'plank', attrs: { 'aria-label': UX('shelfAria', { n: tr.length }) } });
+  for (let i = 0; i < 6; i++) {
+    const t = tr[i];
+    const li = mk('li', { id: t ? id + '-t' + (i + 1) : null, cls: t ? 'won' : 'empty' });
+    if (t) { li.setAttribute('aria-label', UX('trophyAria', { y: t.year | 0, contest: contestName(t.contest) })); li.appendChild(trophyEl(3)); }
+    else li.setAttribute('aria-hidden', 'true');
+    row.appendChild(li);
+  }
+  sec.appendChild(row);
+  sec.appendChild(mk('p', { id: id + '-ribbons', cls: 'muted', text: tr.length || rb ? UX('ribbonsLine', { n: rb }) : UX('shelfEmpty') }));
+  return sec;
+}
+
+// Deviation 74: a contract pick: sim.resign(id, 1 or 2) or sim.release(id) [S 19.9].
+function contractAct(id, keep) {
+  try {
+    if (keep > 0 && typeof sim.resign === 'function') sim.resign(id, keep);
+    else if (keep === 0 && typeof sim.release === 'function') sim.release(id);
+  } catch (e) { fail(e); }
+  pump();
+  rebuildKeepFocus(buildSeasonEnd, 'season-end');
+}
+function offseasonBoxes(body, ov) {
+  const s = sim.state;
+  const shelf = trophyShelf(s, 'se-shelf', true);
+  if (shelf) body.appendChild(shelf);
+  if (!ov || !Array.isArray(ov.contracts)) return;
+  const H = function (id, key, cx) {
+    const t = SX('offseason', key, null, cx);
+    return uiPut(mk('h3', { id: id }), t.toUpperCase(), 2, '#2a2015', null, t);
+  };
+  const exp = ov.contracts;
+  const box = mk('section', { id: 'se-contracts', cls: 'se-box', attrs: { 'aria-labelledby': 'se-contracts-h' } });
+  box.appendChild(H('se-contracts-h', 'contracts', 'contractsT'));
+  if (!exp.length) box.appendChild(mk('p', { text: SX('offseason', 'noContracts', null, 'contractsNone') }));
+  for (let i = 0; i < exp.length; i++) {
+    const k = exp[i];
+    if (!k) continue;
+    const ask = SX('offseason', 'asks', { name: k.name || '', w: k.asks | 0 }, 'contractAsk');
+    const line = mk('p', { id: 'se-ask-' + k.id, text: roleWord(k.role || 'run') + ', ' + starsText(k.stars) + '. ' + ask });
+    const pick = function (bid, key, cx, dec, keep) {
+      const b = btn(bid + k.id, SX('offseason', key, null, cx), 'alt', function () { contractAct(k.id, keep); });
+      b.setAttribute('aria-pressed', String(k.decided === dec));
+      return b;
+    };
+    box.appendChild(mk('div', { cls: 'se-contract' }, [line, mk('div', { cls: 'foot-row' }, [
+      pick('se-sign1-', 'sign1', 'resign', 'sign1', 1), pick('se-sign2-', 'sign2', 'resign2', 'sign2', 2), pick('se-release-', 'letGo', 'release', 'go', 0)])]));
+  }
+  body.appendChild(box);
+  const lv = Array.isArray(ov.leaving) ? ov.leaving : [];
+  const lb = mk('section', { id: 'se-leaving', cls: 'se-box', attrs: { 'aria-labelledby': 'se-leaving-h' } });
+  lb.appendChild(H('se-leaving-h', 'movingOn', 'leavingT'));
+  if (!lv.length) lb.appendChild(mk('p', { text: SX('offseason', 'nobody', null, 'leavingNone') }));
+  for (let i = 0; i < lv.length; i++) {
+    const g = lv[i];
+    if (!g) continue;
+    lb.appendChild(mk('p', { id: 'se-leave-' + g.id, text: SX('offseason', 'leaves', { name: g.name || '', reason: g.reason || '' }, 'leaving') }));
+    const ref = (g.refers | 0) > 0 || g.refers === true ? SX('offseason', 'refers', { name: g.name || '', n: half(typeof g.refers === 'number' ? g.refers : Math.max(1, (g.stars || 1) - 1)) }, 'refers') : SX('offseason', 'refersNone', { name: g.name || '' }, 'refersNone');
+    lb.appendChild(mk('p', { id: 'se-refer-' + g.id, cls: 'se-note', text: ref }));
+  }
+  body.appendChild(lb);
+  const nx = ov.next && typeof ov.next === 'object' ? ov.next : null;
+  if (nx && nx.label) {
+    const nb = mk('section', { id: 'se-next', cls: 'se-box', attrs: { 'aria-labelledby': 'se-next-h' } });
+    nb.appendChild(H('se-next-h', 'comingNext', 'nextT'));
+    nb.appendChild(mk('p', { id: 'se-next-line', text: UX('nextLine', { label: nx.label, price: fmt(nx.price | 0) }) }));
+    body.appendChild(nb);
+  }
+}
+
+// Deviation 75: the FIRE card's badge and the feed puffs.
+const feedPuffs = [];   // { cooker, at }
+let fedSeen = { card: null, bags: 0, day: -1 };
+let simFeeds = false;   // true once the sim sends fire_fed [S 19.9]; the bag watcher then stands down
+function watchFeeds(s) {
+  if (simFeeds || typeof C.COMP_SECONDS === 'number') return;
+  const t = s.tender;
+  const rec = t && s.today && s.today.crew ? s.today.crew[String(t.cardId)] : null;
+  if (!t || !rec || s.phase !== 'service') { fedSeen = { card: null, bags: 0, day: s.day }; return; }
+  const bags = rec.bags | 0;
+  if (fedSeen.card !== t.cardId || fedSeen.day !== s.day) { fedSeen = { card: t.cardId, bags: bags, day: s.day, cooker: t.cooker || null }; return; }
+  // The sim clears t.cooker on the tick it adds the bag, so the cooker it walked to is remembered.
+  const ck = t.cooker || fedSeen.cooker, fed = bags > fedSeen.bags;
+  if (fed && ck) feedPuff(ck);
+  fedSeen.bags = bags;
+  fedSeen.cooker = t.cooker || (fed ? null : fedSeen.cooker);
+}
+function feedPuff(cooker) {
+  const st = MAP.station(cooker);
+  if (!st || !owned(st)) return;
+  if (feedPuffs.length >= 8) feedPuffs.shift();
+  feedPuffs.push({ cooker: cooker, at: tAnim });
+  const vs = ventSim(st);
+  log('fed', vs.x, vs.y);
+}
+const FEED_PUFF_S = 0.9;
+function drawFireCues(s) {
+  if (s.phase !== 'service') { feedPuffs.length = 0; return; }
+  const t = s.tender;
+  if (t) {
+    // [S 19.8] playtest 2026-10-19: the text plate read as a big orange sign over the prep table on a
+    // phone. The badge is now a 5 by 6 pixel flame just over the head, under a third of the sprite.
+    const px = Math.round(t.px), py = Math.round(t.py);
+    withShift(moverShift(px, py), function () {
+      const bx = px + 6, by = py - 14;   // the old plate's bottom edge, py - 10
+      octx.fillStyle = COLOR.outline;
+      octx.fillRect(bx + 1, by - 1, 3, 1);
+      octx.fillRect(bx, by, 5, 5);
+      octx.fillStyle = '#d4581c';
+      octx.fillRect(bx + 2, by, 1, 1);
+      octx.fillRect(bx + 1, by + 1, 3, 3);
+      octx.fillStyle = '#ffd23c';
+      octx.fillRect(bx + 2, by + 2, 1, 2);
+    });
+  }
+  for (let i = feedPuffs.length - 1; i >= 0; i--) {
+    const p = feedPuffs[i], age = tAnim - p.at;
+    if (age < 0 || age >= FEED_PUFF_S) { feedPuffs.splice(i, 1); continue; }
+    const st = MAP.station(p.cooker);
+    if (!st || !owned(st)) continue;
+    const v = ventRp(stationArt(st));
+    const u = age / FEED_PUFF_S, rise = reduced ? 0 : Math.round(18 * u), r = 2 + Math.round(4 * u);
+    onWorld(function () {
+      octx.save();
+      octx.globalAlpha = 0.85 * (1 - u);
+      octx.fillStyle = '#f4ead2';
+      const cx = Math.round(v[0]), cy = Math.round(v[1]) - 6 - rise;
+      octx.fillRect(cx - r, cy - r + 1, r * 2, r * 2 - 2);
+      octx.fillRect(cx - r + 1, cy - r, r * 2 - 2, r * 2);
+      octx.fillRect(cx - r - 3, cy + 2, r, r);
+      octx.fillRect(cx + r, cy + 1, r, r);
+      octx.fillStyle = '#ff9a3c';
+      if (u < 0.5) octx.fillRect(cx - 1, cy + r + 2, 3, 3);
+      octx.restore();
+    });
+  }
+}
+
 // ---------------------------------------------------------------- the season end card (W17.5)
 
 function openSeasonEnd() {
@@ -5108,6 +5531,7 @@ function buildSeasonEnd() {
   const s = sim.state;
   const pv = typeof sim.seasonEndPreview === 'function' ? sim.seasonEndPreview() : null;
   const year = pv ? pv.year : (s.season ? s.season.year : 1);
+  const ov = pv && Array.isArray(pv.contracts) ? pv : null;   // [S 19.9]: the Offseason fields
   const h = el['season-end-h'];
   clear(h);
   uiPut(h, U('seasonH', { y: year }).toUpperCase(), 3, UI.white, { bold: true, shadow: UI.ink }, U('seasonH', { y: year }));
@@ -5123,31 +5547,39 @@ function buildSeasonEnd() {
   const n = C.SEASON_WEEKS || 9;
   for (let i = 0; i < n; i++) {
     const r = res[i] || { type: 'yard', stars: 0 };
-    const st = r.type === 'yard' ? 0 : r.stars | 0;
-    const li = mk('li', { id: 'se-wk-' + (i + 1), cls: 'se-wk', attrs: { 'aria-label': U('wkDone', { w: i + 1, label: bookingLabel(r.type), stars: starsWord(st) }) } });
+    const rec = ov && Array.isArray(ov.record) ? ov.record[i] : null;
+    const place = (rec && rec.place) || r.place || 0;
+    const comp = place > 0;
+    const st = r.type === 'yard' || comp ? 0 : r.stars | 0;
+    const aria = comp ? UX('placeAria', { w: i + 1, contest: (rec && rec.contest) || r.contest ? contestName((rec && rec.contest) || r.contest) : bookingLabel(r.type), place: ordinal(place) }) : U('wkDone', { w: i + 1, label: bookingLabel(r.type), stars: starsWord(st) });
+    const li = mk('li', { id: 'se-wk-' + (i + 1), cls: 'se-wk', attrs: { 'aria-label': aria } });
     const inner = mk('div', { cls: 'tin', attrs: { 'aria-hidden': 'true' } });
     inner.appendChild(uiPut(mk('span', { cls: 'tn' }), String(i + 1), 2, UI.K));
-    const ic = sprEl('ev_' + r.type, 0, 2, null);
+    const ic = sprEl('ev_' + r.type, 0, 2, null) || (comp ? trophyEl(2) : null);
     if (ic) inner.appendChild(ic);
     const row = mk('span', { cls: 'tstars' });
-    if (r.type !== 'yard') for (let k = 0; k < 5; k++) { const e = starEl(k < st, 1); if (e) row.appendChild(e); }
+    if (comp) row.appendChild(uiPut(mk('span', { cls: 'tplace' }), ordinal(place).toUpperCase(), 2, UI.K));
+    else if (r.type !== 'yard') for (let k = 0; k < 5; k++) { const e = starEl(k < st, 1); if (e) row.appendChild(e); }
     inner.appendChild(row);
     li.appendChild(inner);
     ol.appendChild(li);
   }
   box.appendChild(ol);
+  body.appendChild(box);
+  offseasonBoxes(body, ov);
+  const cbox = mk('div', { cls: 'se-box' });
   const P = pv || { cash: s.cash, repFrom: s.rep, repTo: s.rep, spoiled: {}, charcoal: s.charcoal };
   const meat = railList(P.spoiled, 'label');
-  box.appendChild(mk('p', { id: 'se-cash', text: U('seCash', { c: fmt(P.cash) }) }));
-  box.appendChild(mk('p', { id: 'se-rep', text: U('seRep', { b: P.repTo, a: P.repFrom }) }));
-  box.appendChild(mk('p', { id: 'se-meat', text: meat ? U('seMeat', { list: meat }) : U('seMeatNone') }));
-  box.appendChild(mk('p', { id: 'se-charcoal', text: U('seCharcoal', { n: P.charcoal }) }));
+  cbox.appendChild(mk('p', { id: 'se-cash', text: U('seCash', { c: fmt(P.cash) }) }));
+  cbox.appendChild(mk('p', { id: 'se-rep', text: U('seRep', { b: P.repTo, a: P.repFrom }) }));
+  cbox.appendChild(mk('p', { id: 'se-meat', text: meat ? U('seMeat', { list: meat }) : U('seMeatNone') }));
+  cbox.appendChild(mk('p', { id: 'se-charcoal', text: U('seCharcoal', { n: P.charcoal }) }));
   // X5.9, X13.6: each card whose contract renews, at its new wage.
-  const pc = pv && Array.isArray(pv.crew) ? pv.crew : [];
+  const pc = pv && Array.isArray(pv.crew) && !ov ? pv.crew : [];
   for (let i = 0; i < pc.length; i++) {
-    if (pc[i] && pc[i].renews) box.appendChild(mk('p', { id: 'se-crew-' + pc[i].id, cls: 'se-crew', text: U('seCrew', { name: pc[i].name, w: pc[i].wageTo }) }));
+    if (pc[i] && pc[i].renews) cbox.appendChild(mk('p', { id: 'se-crew-' + pc[i].id, cls: 'se-crew', text: U('seCrew', { name: pc[i].name, w: pc[i].wageTo }) }));
   }
-  body.appendChild(box);
+  body.appendChild(cbox);
   const go = mk('button', { id: 'season-next', cls: 'primary big', type: 'button' });
   const label = U('seNext', { n: year + 1 });
   uiPut(go, label.toUpperCase(), 3, UI.creamL, { bold: true, shadow: UI.orangeLo }, label);
@@ -5465,6 +5897,7 @@ function spawnPuff(x, y, vx, rise, life, dark, sway, src) {
 function observe() {
   const s = sim.state;
   const service = s.phase === 'service';
+  watchFeeds(s);
   // A cooker's warning bubble starting logs one 'warn' at the bubble (K10).
   for (let i = 0; i < MAP.stations.length; i++) {
     const st = MAP.stations[i];
@@ -7293,6 +7726,7 @@ function render() {
   drawOverhead(s);                    // 3. string lights, smoke columns
   drawSmokeAndFire(s);                // 4. dark puffs
   drawCues(s, custs);                 // 5. bubbles, bars, sweat, zzz, hearts
+  drawFireCues(s);                    // 5b. the FIRE badge and feed puffs (deviation 75)
   drawTop(s);                         // 6. slice bar, numbers, coins, sparkles, tap rings, arrow
 
   // The overlay over the view, at least 352 rp across (its v3.5 size).
@@ -7311,10 +7745,14 @@ function render() {
       drawBanner(banner);
     } else {
       // W7.4: the rail on a booking or a Yard day, else the v2 clock box; W7.1 times throughout.
-      const rail = railNow();
-      if (rail) drawRail(rail, s);
+      const cv = compView(s);
+      const rail = cv ? null : railNow();
+      if (cv) drawCompRail(cv, s);
+      else if (rail) drawRail(rail, s);
       else boxText(String(Math.max(0, Math.ceil(tEnd(s) - s.clock))), 2, 2, null);
-      if (s.clock < tGate(s)) boxText('GATE OPENS IN ' + Math.ceil(tGate(s) - s.clock), 2, SH - 9, 'yellow');
+      // v3.3 integration: no gate and no last call at the competition, which has no guests.
+      if (cv) { /* the turn-in rail says it */ }
+      else if (s.clock < tGate(s)) boxText('GATE OPENS IN ' + Math.ceil(tGate(s) - s.clock), 2, SH - 9, 'yellow');
       else if (lastCallUntil > nowMs) boxText('LAST CALL', 2, SH - 9, 'yellow');
     }
   } else {
@@ -7408,12 +7846,13 @@ function statusText(s) {
   if (saveOffUntil > nowMs) return 'Saving is off in this browser.';
   if (noticeUntil > nowMs) return U(noticeKey);
   if (blockedUntil > nowMs) return STRINGS.cantGetThere;
-  if (s.phase === 'service' && s.clock < tGate(s) && !tutRunning()) {
+  const atComp = s.phase === 'service' && !!compView(s);   // v3.3 integration: no gate or last call at the competition
+  if (s.phase === 'service' && !atComp && s.clock < tGate(s) && !tutRunning()) {
     // Q-4: before the gate on a booking that mixes a two slot and a one slot meat, the cook order tip.
     const big = todayKind(s) === 'booking' && s.today ? mixBig(s.today.rail) : '';
     return STRINGS.gateOpensIn + Math.ceil(tGate(s) - s.clock) + (big ? '. ' + U('mixShort', { big: big }) : '');
   }
-  if (lastCallUntil > nowMs) return STRINGS.lastCall;
+  if (lastCallUntil > nowMs && !atComp) return STRINGS.lastCall;
   return sim.holding();
 }
 

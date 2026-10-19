@@ -410,6 +410,23 @@
     #panels #se-record-h { text-align: center; }
     #se-record { list-style: none; display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 8px 0 10px; }
     .se-wk { display: flex; min-height: 64px; background: #f4ead2; border: 2px solid var(--k); }
+    /* v3.3: the trophy shelf (hub and Offseason), the Offseason boxes, the judges' results card */
+    .shelf { margin-bottom: 18px; padding: 8px 10px; }
+    #panels .shelf h3 { margin: 0 0 6px; }
+    .shelf .plank { list-style: none; display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; margin: 0 0 6px; padding: 0 0 4px; border-bottom: 6px solid #8a5a2b; box-shadow: 0 2px 0 var(--k); }
+    .shelf .plank li { min-height: 28px; display: flex; align-items: flex-end; justify-content: center; }
+    .shelf .plank li.empty { opacity: 0.25; border: 1px dashed var(--c); }
+    .se-contract { margin: 8px 0; }
+    .se-note { font-size: 13px; opacity: 0.8; }
+    .se-contract .foot-row { display: flex; gap: 8px; }
+    .se-contract .foot-row button { flex: 1; min-height: 44px; }
+    .se-wk .tplace { display: block; }
+    .till .row.cbox { align-items: center; gap: 6px; }
+    .till .row.cbox.missed .price { color: #ff7262; }
+    .standings { list-style: none; margin: 0; padding: 0; font-variant-numeric: tabular-nums; }
+    .standings li { display: grid; grid-template-columns: 3em 1fr auto; gap: 6px; padding: 3px 0; border-bottom: 1px dotted #6b5a44; overflow-wrap: anywhere; }
+    .standings li.you { color: var(--gold); font-weight: bold; }
+    #comp-placed { margin: 4px 0 8px; text-align: center; }
 
     /* the report screen on #till (screen-4-report) */
     #panels > section#till { padding: 12px; border: 2px solid #0d0a08; border-radius: 0; background-color: var(--k); background-image: radial-gradient(#2a221c 1px, transparent 1.5px); background-size: 8px 8px; container-type: inline-size; }

@@ -540,7 +540,21 @@ function choosePick(sim, policy) {
   const s = sim.state;
   const offers = s.season.offers;
   const yard = offers.find((o) => o.type === 'yard') || null;
-  if (s.season.week === W()) return offers.find((o) => o.type === 'finale') || offers[0];
+  if (s.season.week === W()) {
+    // v3.3 (sim.js V33-8): the invited contest when cash covers its cart, entry and day, else the
+    // next lower one (the Backyard Open last).
+    // A bot enters where its box (C.COMP_SETTLE at its stars) beats the field's mean, as a player who
+    // knows their cooking would; the Backyard Open when none.
+    const comps = offers.filter((o) => o.type === 'finale');
+    const wages = s.crew.filter((c) => c.bring).reduce((a, c) => a + c.wage, 0);
+    const box = C.COMP_SETTLE[policy.stars - 1];
+    const fits = comps.filter((o) => o.comp.mean < box || o === comps[comps.length - 1]);
+    for (const o of fits) {
+      sim.bookOffer(o.id);
+      if (sim.cartTotal() + o.comp.entry + wages + C.DAILY_COSTS <= s.cash) return o;
+    }
+    return comps[comps.length - 1] || offers[0];
+  }
   const safe = offers.filter((o) => o.type !== 'yard' && o.safe).sort((a, b) => b.pay - a.pay);
   if (policy.id === 'rough') {
     if (s.rep < C.DRIVEWAY_REP) return yard || safe[0];
@@ -654,7 +668,11 @@ function seasonRun(policy, seed, seasons, length) {
       if (lineWages + w <= budget) { fitRoles.push(role); lineWages += w; }
     }
     // The reserve of W22.19 adds the lineup's wages; nobody is brought when week start cash is under it.
-    const baseReserve = Math.max(0, sim.cartTotal() - (pick.deposit | 0)) + C.DAILY_COSTS;
+    // v3.3 integration: the competition pays only by placing, so before gear the bot holds the entry
+    // and next week's Birthday cart too, as a player who may come home with nothing would.
+    // The same in the first week after an offseason, when the cooler spoiled and gear would take the stake.
+    const compHold = pick.type === 'finale' && pick.comp ? pick.comp.entry + bdayCost : (s.season.week === 1 && s.season.year > 1 ? bdayCost : 0);
+    const baseReserve = Math.max(0, sim.cartTotal() - (pick.deposit | 0)) + C.DAILY_COSTS + compHold;
     const bringRoles = weekStart >= baseReserve + lineWages ? fitRoles : [];
     const reserve = baseReserve + (bringRoles.length ? lineWages : 0);
     // 2. empty every cart line; 3. spend.
@@ -749,6 +767,13 @@ function seasonRun(policy, seed, seasons, length) {
     // The weekend: the booked day, the other day off. A Yard week cooks Saturday's Yard day (Sunday's
     // when Saturday cannot). A booking that cannot load rests everyone and tries again; when it still
     // cannot, the week falls back to a later weekend Yard day, if one is left.
+    // v3.3 integration: the competition pays only by placing. When coming home with nothing would leave
+    // the bot under next week's Birthday cart, it takes the spare of each category off the prefill.
+    if (s.season.week === W() && s.season.booking && s.season.booking.comp) {
+      const cb = s.season.booking.comp;
+      const line = s.crew.filter((c) => c.bring).reduce((a, c) => a + c.wage, 0);
+      if (s.cash - sim.cartTotal() - cb.entry - line - C.DAILY_COSTS < bdayCost) for (const m of cb.cats) if (s.cart.meat[m] > 1) sim.buy(m, -1);
+    }
     let lu = { ok: false, message: '' };
     let wantYard = !isBookingWeek;
     while (inThisWeek() && s.phase === 'morning') {
@@ -757,6 +782,16 @@ function seasonRun(policy, seed, seasons, length) {
         if (!dayOk(sim, 'event')) for (const c of s.crew) if (c.bring) sim.setBring(c.id, false);
         lu = sim.chooseDay('event');
         if (lu.ok) break;
+        // v3.3 (sim.js V33-8): at the competition, the next lower contest when the entry is out of reach.
+        if (s.season.week === W()) {
+          const cur = s.season.booking ? s.season.booking.id : null;
+          for (const o of s.season.offers.filter((x) => x.type === 'finale' && x.id !== cur)) {
+            sim.bookOffer(o.id);
+            lu = sim.chooseDay('event');
+            if (lu.ok) break;
+          }
+          if (lu.ok) { res.lowerContest = (res.lowerContest | 0) + 1; break; }
+        }
         res.fallbacks += 1;
         wantYard = true;
         quick('off');
