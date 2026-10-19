@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pit Look Proof</title>
+<meta name="description" content="Dev page: the backyard on mock B's iso angle drawn with the v3 art library (art3), the dish dock, a pitmaster look toggle, z-order and look evidence strips, and three crew cards.">
+<style>
+  :root {
+    --k: #1b1714; --u: #2a2015; --c: #E6D8B8; --o: #D06129; --ol: #2a1a14;
+    --blue: #2F68EE; --blue-d: #1E4CC4; --ink: #0B1640; --card: #E6EAF2; --card-edge: #9AA6C4;
+    --panel: #585C6C; --panel-top: #6E7284;
+    --pit: #F0603C; --pit-hi: #F7835F; --prep: #5CC653; --prep-hi: #7DD875; --serve: #4EC2F5; --serve-hi: #79D3FA;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--k); color: var(--c); }
+  body { font: 13px/1.35 ui-monospace, Menlo, Consolas, monospace; overflow-x: hidden; }
+  #proof { display: flex; flex-direction: column; align-items: center; padding: 8px 4px 16px; }
+  canvas { image-rendering: pixelated; image-rendering: crisp-edges; display: block; }
+  canvas.yard { box-shadow: 0 0 0 2px var(--ol); }
+  canvas.strip { margin-top: 10px; }
+  .crew { margin-top: 10px; }
+  .toggles { display: flex; gap: 6px; margin: 10px 0 4px; }
+  .tog {
+    font: inherit; color: var(--c); background: var(--u); border: 2px solid var(--ol);
+    box-shadow: inset 0 2px 0 #3a2c1d, inset 0 -3px 0 #120d09; padding: 8px 10px 9px; min-height: 36px; cursor: pointer;
+    line-height: 0; border-radius: 0; display: flex; align-items: center; justify-content: center;
+  }
+  .tog[aria-pressed="true"] { background: var(--o); color: #fff; box-shadow: inset 0 2px 0 #f08a4c, inset 0 -3px 0 #a84a1c, 0 0 0 2px #F3CF6D; }
+  .tog:focus-visible { outline: 2px solid #F3CF6D; box-shadow: 0 0 0 4px var(--k), 0 0 0 6px #F3CF6D; }
+  .stats { margin: 2px 0 8px; font-size: 11px; color: #b9a98a; text-align: center; max-width: 352px; }
+  .crew {
+    display: flex; gap: 6px; padding: 8px 6px; background: var(--blue);
+    border: 2px solid var(--ink); width: 100%; max-width: 360px; justify-content: center;
+  }
+  .card { flex: 1 1 0; min-width: 0; background: var(--card); border: 2px solid var(--ink); box-shadow: 3px 3px 0 var(--blue-d); padding: 3px 3px 5px; position: relative; }
+  .win { position: relative; height: 84px; overflow: hidden; display: flex; justify-content: center; align-items: flex-end; }
+  .role-pit .win { background: linear-gradient(var(--pit-hi) 0 3px, var(--pit) 3px); }
+  .role-prep .win { background: linear-gradient(var(--prep-hi) 0 3px, var(--prep) 3px); }
+  .role-serve .win { background: linear-gradient(var(--serve-hi) 0 3px, var(--serve) 3px); }
+  .bust { margin-bottom: 0; }
+  .badge { position: absolute; left: 3px; top: 3px; background: var(--ink); padding: 3px 4px 2px; line-height: 0; }
+  .rookie { position: absolute; left: 3px; top: 26px; background: var(--ink); border: 2px solid #FFD23F; padding: 2px 3px 1px; line-height: 0; }
+  .info { background: var(--panel); border-top: 2px solid var(--panel-top); padding: 4px 4px 3px; }
+  .name { display: flex; justify-content: center; line-height: 0; }
+  .stars { display: flex; justify-content: center; margin-top: 5px; line-height: 0; }
+  .wage { display: flex; justify-content: center; align-items: center; gap: 3px; margin-top: 5px; line-height: 0; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+</style>
+<script defer src="../art3/palette.js"></script>
+<script defer src="../art3/proj.js"></script>
+<script defer src="../art3/people.js"></script>
+<script defer src="../art3/kit.js"></script>
+<script defer src="../art3/yard.js"></script>
+<script defer src="../art3/fx.js"></script>
+<script defer src="../art3/index.js"></script>
+<script defer src="../art3/proof.js"></script>
+</head>
+<body>
+<main id="proof"></main>
+</body>
+</html>
