@@ -1124,7 +1124,7 @@ function boot() {
 }
 
 // Background music (music.js): the mute button in the header, the saved flag, and what to play.
-let musicOn = true;
+let musicOn = false;   // Joel 2026-10-19: music starts off until the real tracks are in
 function musicApi() { return PitSim.music && typeof PitSim.music.update === 'function' ? PitSim.music : null; }
 function syncMuteBtn() {
   const b = document.getElementById('mute');
@@ -1150,7 +1150,7 @@ function syncMusic(s) {
   if (!M) return;
   const se = inSeason(s) ? s.season : null;
   const week = se ? se.week | 0 : 1;
-  const comp = !!se && week >= (C.SEASON_WEEKS || 9);
+  const comp = !!se && week >= (C.SEASON_WEEKS || 7);
   const cook = s.phase === 'service';
   let waiting = 0;
   if (cook && Array.isArray(s.customers)) for (const c of s.customers) if (c.mode === 'waiting' || c.mode === 'arriving') waiting++;
@@ -1169,7 +1169,7 @@ function readSave() {
   let parsed = null;
   try { parsed = JSON.parse(raw); } catch (e) { return null; }
   // Music: one boolean in the save, on unless it is exactly false.
-  musicOn = !(parsed && typeof parsed === 'object' && parsed.music === false);
+  musicOn = !!(parsed && typeof parsed === 'object' && parsed.music === true);
   // W13.3, X11.3: any valid save with a raw v from 1 to one under C.SAVE_VERSION shows the notice once
   // (ui.noticeCrew when the migrated crew is not empty, else ui.notice); a current save loads silently.
   const cur = typeof C.SAVE_VERSION === 'number' ? C.SAVE_VERSION : 5;
@@ -1523,6 +1523,8 @@ function onEvent(ev) {
     case 'crew_let_go': announce(SAY('letGo', { name: ev.name || '' })); break;
     case 'trained': announce(SAY('trained', { name: ev.name || '', xp: ev.xp | 0 })); break;
     case 'level_ready': announce(SAY('levelReady', { name: ev.name || '' })); break;
+    case 'pit_level': announce(STRINGS.pit && STRINGS.pit.levelUp && (ev.pending | 0) > 0 ? fill(STRINGS.pit.levelUp, { n: ev.level | 0 }) : 'Pitmaster level ' + (ev.level | 0) + '.'); break;
+    case 'pit_skill': break;
     case 'level_up': {
       if ((ev.skill | 0) === -1) { announce(SAY('levelMood', { name: ev.name || '' })); break; }
       const c = crewCard(ev.id);
@@ -2256,9 +2258,12 @@ function ownRow(item) {
     const reserve = typeof C.GEAR_RESERVE === 'number' ? C.GEAR_RESERVE : 0;
     const bk = s.loop === 'week' && s.season ? s.season.booking : null;
     const booked = !!(bk && bk.type !== 'yard');
+    // v3.5: the String lights row names the time it adds to every cook ("serve after dark").
+    const pitRow = item.id === 'lights' && STRINGS.pit && typeof STRINGS.pit.lightsRow === 'string' ? fill(STRINGS.pit.lightsRow, { n: C.LIGHTS_SECONDS | 0 }) : '';
+    const baseEff = pitRow && String(item.effect || '').indexOf(pitRow) < 0 ? (item.effect ? item.effect + ' ' : '') + pitRow : item.effect;
     const effText = (!isOwned && !locked && canPay && !booked && after < reserve)
-      ? item.effect + ' Leaves ' + after + '. A day of meat and charcoal is about ' + reserve + '.'
-      : item.effect;
+      ? baseEff + ' Leaves ' + after + '. A day of meat and charcoal is about ' + reserve + '.'
+      : baseEff;
     if (eff && eff.textContent !== effText) eff.textContent = effText;
     price.textContent = (locked && !isOwned) ? item.needsText : String(item.price);
     price.classList.toggle('muted', isOwned || locked || !canPay);
@@ -2377,7 +2382,7 @@ function nextLabel() {
   const se = s.season;
   if (se && Array.isArray(se.dayLog) && typeof se.day === 'number' && se.day < (C.WEEK_DAYS || 7) - 1) return U('nextDay');
   const done = s.season && s.season.results ? s.season.results.length : 0;
-  return done >= (C.SEASON_WEEKS || 9) ? U('seeSeason') : U('nextWeek');
+  return done >= (C.SEASON_WEEKS || 7) ? U('seeSeason') : U('nextWeek');
 }
 function nextButton() {
   const label = nextLabel();
@@ -2410,6 +2415,12 @@ function buildTill() {
   else if (kind === 'booking') buildBookingReport(t, head, body);
   else if (kind === 'yard') buildYardReport(t, head, body);
   else buildTutorialTill(t, head, body);
+  // v3.5: the pitmaster XP this cook earned, and a level up (its Long Day pick waits on the week hub).
+  if ((t.pitXp | 0) > 0 && STRINGS.pit) {
+    let line = fill(STRINGS.pit.gain || '+{n} pitmaster XP', { n: t.pitXp | 0 });
+    if (t.pitLevel && t.pitLevel.to) line += '. ' + fill(STRINGS.pit.levelUp || 'Level {n}!', { n: t.pitLevel.to | 0 });
+    body.insertBefore(mk('p', { id: 'rep-pit', cls: 'muted rep-pit', text: line }), body.firstChild);
+  }
 }
 
 // W22.24: the header row above the title: week, pit name and cash.
@@ -3054,7 +3065,7 @@ function weekSig(s) {
     rail ? !!mixHint(rail) : '', se.week | 0, !!s.gear.bigtable,   // R-7, R-3, Q-4: the hint line and the finale news lines
     typeof sim.fanThird === 'function' ? sim.fanThird() : 0,     // X13.6: #third-line and the notice lines
     crewList().filter(function (c) { return c.notice; }).map(function (c) { return c.id; }).join('.'),
-    daySig(s), hubTab, planOpen, restartArm, hubSig()].join('|');
+    daySig(s), hubTab, planOpen, restartArm, hubSig(), planSig()].join('|');
 }
 function fitWeek() {
   const w = el.week;
@@ -3149,7 +3160,7 @@ function buildWeekAt(level) {
 
   // The season strip (v3.4: on the Season tab).
   const strip = mk('ol', { id: 'season-strip', attrs: { 'aria-label': U('stripAria', { y: se.year || 1 }) } });
-  const n = C.SEASON_WEEKS || 9;
+  const n = C.SEASON_WEEKS || 7;
   for (let i = 1; i <= n; i++) strip.appendChild(stripTile(se, i, n));
 
   // v3.4 playtest ("too many options", "not clear how to start a day"): the day strip, the broke
@@ -3158,17 +3169,25 @@ function buildWeekAt(level) {
   const dv = dayView(s);
   const goEls = goControls(s, se, dv);
   const rv = dv && typeof sim.recommendDay === 'function' ? sim.recommendDay() : null;
+  const pv = planViewOf(s);
   if (dv) body.appendChild(dayStrip(se));
-  if (rv) {
+  if (pv) {
+    // v3.5: Monday's week planner takes the Start button's place (Start week, Skip to the weekend).
+    body.appendChild(plannerCard(pv));
+    body.appendChild(pitCard());
+    goEls[0].hidden = true;
+  } else if (rv) {
     body.appendChild(startCard(se, rv));
+    body.appendChild(pitCard());
     const rq = rescueCard(s);   // v3.4 review: under the one Start button, plain buttons only
     if (rq) body.appendChild(rq);
     goEls[0].hidden = true;   // the Start button loads up on the booked day
   } else if (dv) {
     body.appendChild(dayChoice(se, dv, goEls));
   }
-  const tabs = hubTabs(!!rv);
-  if (rv) body.appendChild(tabs.bar);
+  const hubOn = !!(rv || pv);
+  const tabs = hubTabs(hubOn);
+  if (hubOn) body.appendChild(tabs.bar);
 
   // The phone rings: this week's offers.
   const offers = mk('section', { id: 'offers', attrs: { 'aria-labelledby': 'offers-h' } });
@@ -3215,7 +3234,7 @@ function buildWeekAt(level) {
   tPit.appendChild(invCard(s));
   tSeason.appendChild(strip);
   tSeason.appendChild(newsCard(s));
-  if (rv) { body.appendChild(tWeek); body.appendChild(tPit); body.appendChild(tSeason); }
+  if (hubOn) { body.appendChild(tWeek); body.appendChild(tPit); body.appendChild(tSeason); }
   else { body.insertBefore(strip, body.firstChild); body.appendChild(tWeek); body.appendChild(tPit); body.appendChild(tSeason); }
 
   // Controls, New game.
@@ -3476,7 +3495,7 @@ function offerScene(band, o, idx, wide, short) {
 function offerTag(o) {
   if (!o || o.type === 'yard' || o.type === 'finale') return null;
   const se = sim.state.season || {};
-  if ((se.week | 0) > (C.SEASON_WEEKS || 9) - 1) return null;
+  if ((se.week | 0) > (C.SEASON_WEEKS || 7) - 1) return null;
   const kind = o.invite === true ? 'invite' : (o.tier === 'stretch' || (o.tier === undefined && o.needs) ? 'stretch' : 'safe');
   const key = kind === 'invite' ? 'tagInvite' : kind === 'stretch' ? 'tagStretch' : 'tagSafe';
   const words = U(key);
@@ -3495,7 +3514,7 @@ function finaleWith(s, extra) {
   const gear = Object.assign({}, s.gear, extra || {});
   let list = null;
   try {
-    list = PitSim.genOffers({ seed: se.seed, year: se.year, week: C.SEASON_WEEKS || 9, rep: s.rep, cash: se.weekCash, gear: gear });
+    list = PitSim.genOffers({ seed: se.seed, year: se.year, week: C.SEASON_WEEKS || 7, rep: s.rep, cash: se.weekCash, gear: gear });
   } catch (e) { list = null; }
   return list && list[0] && list[0].type === 'finale' ? list[0] : null;
 }
@@ -3802,12 +3821,12 @@ function newsCard(s) {
   }
   // R-3: from week 5, what the drum smoker makes of the finale while it is not owned.
   const se = s.season;
-  if (se && se.week >= 5 && se.week < (C.SEASON_WEEKS || 9) && s.gear.drum !== true) {
+  if (se && se.week >= 5 && se.week < (C.SEASON_WEEKS || 7) && s.gear.drum !== true) {
     const big = drumFinale(s);
     if (big && !big.comp && big.headcount > 0) { nb.appendChild(mk('p', { id: 'news-finale', text: U('finaleNews', { n: big.headcount }) })); shown++; }
   }
   // Q-4: from week 5, the finale's line and the bigger table while it is not owned.
-  if (se && se.week >= 5 && se.week < (C.SEASON_WEEKS || 9) && s.gear.bigtable !== true) {
+  if (se && se.week >= 5 && se.week < (C.SEASON_WEEKS || 7) && s.gear.bigtable !== true) {
     const fin = finaleWith(s, null);
     if (fin && !fin.comp && fin.headcount > 0) { nb.appendChild(mk('p', { id: 'news-table', text: U('finaleTable', { n: fin.headcount }) })); shown++; }
   }
@@ -4021,10 +4040,137 @@ function startCard(se, rv) {
   return sec;
 }
 
+// v3.5 Week planner (Monday): one screen sets Monday to Friday, each a Yard day or Rest, the sim's
+// draft prefilled. Start week plays the Rest days at once; Skip to the weekend rests all five.
+function planViewOf(s) {
+  if (loopOf(s) !== 'week' || typeof sim.planView !== 'function') return null;
+  let v = null;
+  try { v = sim.planView(); } catch (e) { v = null; }
+  return v && Array.isArray(v.days) && v.days.length ? v : null;
+}
+function planText(key, fb, map) { const P = STRINGS.plan || {}; return fill(typeof P[key] === 'string' ? P[key] : fb, map || {}); }
+function pitViewOf() {
+  if (typeof sim.pitView !== 'function') return null;
+  try { return sim.pitView(); } catch (e) { return null; }
+}
+function cookTimeOf() {
+  if (typeof sim.cookTime !== 'function') return null;
+  try { return sim.cookTime(); } catch (e) { return null; }
+}
+// The hub's rebuild key for the planner, the pit level and the cook time (weekSig).
+function planSig() {
+  const pv = planViewOf(sim.state);
+  const pt = pitViewOf();
+  const pd = pv ? pv.days.map(function (d) { return d.reason || ''; }).join('') : '';
+  const ct = cookTimeOf();
+  return [pv ? pv.days.map(function (d) { return d.kind + (d.ok === false ? '!' : ''); }).join('') : '',
+    pt ? pt.level + '.' + pt.pending + '.' + pt.longDay + '.' + pt.xp : '', ct ? ct.total : '', pd].join(':');
+}
+function plannerCard(pv) {
+  const sec = mk('section', { id: 'planner', cls: 'planner', attrs: { 'aria-labelledby': 'planner-h' } });
+  const title = String(pv.title || planText('title', 'Plan the week'));
+  sec.appendChild(uiPut(mk('h3', { id: 'planner-h' }), title.toUpperCase(), 2, UI.white, { bold: true, shadow: UI.ink }, title));
+  const hint = planText('hint', '');
+  if (hint) sec.appendChild(mk('p', { id: 'planner-hint', cls: 'muted', text: hint }));
+  const row = mk('div', { id: 'plan-days', cls: 'plan-days', attrs: { role: 'group', 'aria-label': title } });
+  for (let i = 0; i < pv.days.length; i++) {
+    const d = pv.days[i];
+    const day = d.day | 0;
+    const kind = d.kind === 'yard' ? 'yard' : 'off';
+    const kw = kind === 'yard' ? planText('yard', 'Yard day') : planText('rest', 'Rest');
+    const dn = String(d.dayName || dayNameOf(day));
+    const b = mk('button', { id: 'plan-day-' + day, cls: 'plan-day ' + kind, type: 'button', attrs: { 'data-kind': kind, 'aria-pressed': kind === 'yard' ? 'true' : 'false' } });
+    b.appendChild(mk('span', { cls: 'pd-name', text: dn.slice(0, 3) }));
+    b.appendChild(mk('span', { cls: 'pd-kind', text: kw }));
+    b.setAttribute('aria-label', dn + ': ' + kw + (d.ok === false && d.reason ? '. ' + d.reason : ''));
+    b.addEventListener('click', function () {
+      if (typeof sim.togglePlanDay === 'function') sim.togglePlanDay(day);
+      else if (typeof sim.setPlanDay === 'function') sim.setPlanDay(day, kind === 'yard' ? 'off' : 'yard');
+      rebuildKeepFocus(buildWeek, 'week');
+      updateDom();
+    });
+    row.appendChild(b);
+  }
+  sec.appendChild(row);
+  sec.appendChild(mk('p', { id: 'plan-why', cls: 'muted' }));
+  const go = mk('button', { id: 'plan-start', cls: 'primary big go hub-start', type: 'button' });
+  const fl = flameEl(true, 2);
+  if (fl) go.appendChild(fl);
+  const st = String(pv.start || planText('start', 'Start week'));
+  go.appendChild(uiPut(mk('span', { cls: 'hs-l1', attrs: { 'aria-hidden': 'true' } }), st.toUpperCase(), 3, UI.white, { bold: true, shadow: '#8a3a14' }, st));
+  go.appendChild(mk('span', { cls: 'sr', text: st }));
+  go.addEventListener('click', function () { runPlan(false); });
+  sec.appendChild(go);
+  const sk = btn('plan-skip', String(pv.skip || planText('skip', 'Skip to the weekend')), 'alt', function () { runPlan(true); });
+  sk.classList.add('plan-skip');
+  sec.appendChild(sk);
+  return sec;
+}
+function runPlan(skip) {
+  const fn = skip ? sim.skipToWeekend : sim.startPlan;
+  if (typeof fn !== 'function') return;
+  const r = fn.call(sim);
+  pump();
+  const n = r && r.note ? r.note : (typeof sim.restNote === 'function' ? sim.restNote() : null);
+  if (r && r.ok !== false && n && Array.isArray(n.days) && n.days.length) {
+    let line = n.days.length === 1 ? planText('restedOne', 'Rested 1 day.') : planText('rested', 'Rested {n} days.', { n: n.days.length });
+    if (n.trained && n.trained.name) line += ' ' + SAY('trained', { name: n.trained.name, xp: n.trained.xp | 0 });
+    announce(line);
+  }
+  if (currentPanel === 'week') rebuildKeepFocus(buildWeek, 'week');
+  if (r && r.ok === false && r.message) { const h = document.getElementById('plan-why'); if (h) h.textContent = String(r.message); }
+  updateDom();
+}
+// v3.5 Buy more time: the cook time line, the pit level chip and, while a level is banked, the
+// Long Day pick (3 levels, +15 s to every cook).
+function fmtClock(sec) { const t = Math.max(0, Math.round(sec)); return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0'); }
+function pitCard() {
+  const sec = mk('section', { id: 'hub-pit', cls: 'hub-pit', attrs: { 'aria-label': 'Pitmaster' } });
+  const ct = cookTimeOf();
+  const pt = pitViewOf();
+  const row = mk('div', { cls: 'hp-row' });
+  if (ct) {
+    const text = ct.text ? String(ct.text) : 'Cook time ' + fmtClock(ct.total);
+    const extra = [];
+    if ((ct.longDay | 0) > 0) extra.push('Long Day +' + (ct.longDay | 0) + ' s');
+    if ((ct.lights | 0) > 0) extra.push('lights +' + (ct.lights | 0) + ' s');
+    row.appendChild(mk('p', { id: 'hub-cooktime', cls: 'hp-time', text: text + (extra.length ? ' (' + extra.join(', ') + ')' : '') }));
+  }
+  if (pt) {
+    const nx = typeof pt.toNext === 'number' && pt.toNext > 0 ? ', ' + pt.toNext + ' XP to go' : '';
+    const pl = (STRINGS.pit && STRINGS.pit.title ? STRINGS.pit.title + ' ' : '') + String(pt.label || 'Level ' + (pt.level | 0)) + (pt.xpText ? ', ' + pt.xpText : nx);
+    row.appendChild(mk('p', { id: 'pit-level', cls: 'hp-lvl' + ((pt.pending | 0) > 0 ? ' ready' : ''), text: pl }));
+  }
+  sec.appendChild(row);
+  if (pt && (pt.pending | 0) > 0 && Array.isArray(pt.skills)) {
+    const box = mk('div', { id: 'pit-levelup', cls: 'pit-levelup', attrs: { role: 'group', 'aria-labelledby': 'pit-levelup-h' } });
+    const lh = STRINGS.pit && STRINGS.pit.levelUp ? fill(STRINGS.pit.levelUp, { n: pt.level | 0 }) : 'Level up! Pick a skill.';
+    box.appendChild(mk('p', { id: 'pit-levelup-h', cls: 'hp-h', text: lh }));
+    for (let i = 0; i < pt.skills.length; i++) {
+      const k = pt.skills[i];
+      const lab = String(k.label || k.id) + ' +' + ((k.seconds | 0) || 15) + ' s';
+      const b = btn('pit-pick-' + k.id, lab, 'primary', function () {
+        const r = typeof sim.pickPitSkill === 'function' ? sim.pickPitSkill(k.id) : null;
+        pump();
+        announce(r && r.ok === false && r.message ? String(r.message) : String(k.label || k.id) + ': every cook runs ' + ((k.seconds | 0) || 15) + ' s longer.');
+        rebuildKeepFocus(buildWeek, 'week');
+        updateDom();
+      });
+      b.disabled = k.ok === false;
+      box.appendChild(b);
+      if (k.info) box.appendChild(mk('p', { cls: 'muted hp-info', text: String(k.info) }));
+    }
+    sec.appendChild(box);
+  }
+  return sec;
+}
+
 // Start (or a Change plan choice): through the morning shop when the day needs stock or the cart
 // would spend; nothing is bought until the shop's Confirm.
 function startDay(kind) {
-  if (kind !== 'off' && typeof sim.shopNeeded === 'function' && sim.shopNeeded(kind)) { openMorning(kind); return; }
+  // Joel 2026-10-19: "There's no more ordering before the day starts?" The morning order opens
+  // before every cook day, prefilled; Rest days skip it.
+  if (kind !== 'off') { openMorning(kind); return; }
   const r = sim.chooseDay(kind);
   pump();
   if (!r || !r.ok) {
@@ -5844,7 +5990,7 @@ function buildSeasonEnd() {
   box.appendChild(uiPut(mk('h3', { id: 'se-record-h' }), U('record').toUpperCase(), 2, '#2a2015', null, U('record')));
   const ol = mk('ol', { id: 'se-record', attrs: { 'aria-labelledby': 'se-record-h' } });
   const res = s.season && s.season.results ? s.season.results : [];
-  const n = C.SEASON_WEEKS || 9;
+  const n = C.SEASON_WEEKS || 7;
   for (let i = 0; i < n; i++) {
     const r = res[i] || { type: 'yard', stars: 0 };
     const rec = ov && Array.isArray(ov.record) ? ov.record[i] : null;

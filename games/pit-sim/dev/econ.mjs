@@ -13,7 +13,7 @@
 //    section 20.1 policy: quickest meat first, fire kept above 50, pull on done, carry the plate
 //    someone waits for, buy about 1.1 times the expected crowd, hold a day's reserve before gear,
 //    buy in the order second kettle, cooler, buddy at word of mouth 45, bigger table, drum, tray,
-//    canopy). Week 9 is the Season finale (offers[0]), played by the same bot on the prefilled
+//    canopy). Week 7 (v3.5; was 9) is the Season finale (offers[0]), played by the same bot on the prefilled
 //    rail meats and tagged `finale`; at the season end the bot calls startSeason() and goes on.
 //      node games/pit-sim/dev/econ.mjs                  seed 1, 10 events, then seeds 1 to 8 summary
 //      node games/pit-sim/dev/econ.mjs --days 20 --seed 3
@@ -24,7 +24,7 @@
 //      node games/pit-sim/dev/econ.mjs --season [--seeds 50] [--seasons 5] [--verbose] [--trace]
 //    Policies by forced stars: sharp 5, steady 3, rough 2. Each week, in the W22.19 order: pick
 //    (sharp and steady the highest pay safe offer; rough the Yard day while word of mouth is under
-//    C.DRIVEWAY_REP, else the highest pay safe offer it can load up; week 9 always the finale),
+//    C.DRIVEWAY_REP, else the highest pay safe offer it can load up; week 7 always the finale),
 //    read the prefilled cart, empty it, spend down the order kettle2, drum, tray, cooler, canopy,
 //    bigtable, then decor (chair1, lights, chair2, picnic2, flowers, birdbath) while
 //    cash - price >= reserve, hire (the buddy once the drum is owned and cash is 200 or more, the
@@ -33,8 +33,8 @@
 //    Milestones per seed in absolute weeks, printed S{season}W{week}: drum (first week owned),
 //    drivewayAffordable (first week start with the drum, word of mouth >= C.DRIVEWAY_REP and cash
 //    >= C.DRIVEWAY_PRICE), cash at each season end. Medians over seeds per policy are checked
-//    against the [S 10.3] bands: drum by S1W4 (sharp), S1W8 (steady), S2W9 (rough) are enforced;
-//    drivewayAffordable against S1W9, S2W4, S3W9 is information until v3.3. Global rules, enforced
+//    against the [S 10.3] bands: drum by S1W4 (sharp), S1W7 (steady), S2W7 (rough) are enforced (v3.5, seven week seasons);
+//    drivewayAffordable against S1W7, S2W4, S3W7 is information until v3.3. Global rules, enforced
 //    per seed: never stuck (cash at week start under the Birthday's prefill meat cost on an empty
 //    cooler two weeks in a row, a refused loadUp on both the pick and the Yard day, or rough ending
 //    an event under 0 before the CASH_FLOOR clamp), never idle (at each season boundary, right after
@@ -90,8 +90,8 @@
 //   Checks (Normal, 50 seeds, 5 seasons): the [S 10.3] drum bands, never stuck and rough never under 0
 //   with wages in the pre-clamp sum, never idle, payroll in budget (every event's wages at most
 //   C.PAYROLL[0]) and payroll a real sink (sharp and steady: median wages a season over seasons 2 to 5
-//   between 8 and 40 percent of median pay and tips) are enforced; the Driveway against S1W9, S2W4,
-//   S3W9, the season end cash beside v3.0's, the eager policy, the season 1 crew counts and the
+//   between 8 and 40 percent of median pay and tips) are enforced; the Driveway against S1W7, S2W4,
+//   S3W7, the season end cash beside v3.0's, the eager policy, the season 1 crew counts and the
 //   Birthday's longest empty line (X16 check 7) are information.
 // Deviations from X16 (v3.1, Harness builder, who owns this file this round):
 //   4. "Pay plus tips" per season is deposit + pay rest + menu bonus + tips + seat tips + plate sales
@@ -483,7 +483,7 @@ function table(rows) {
 function dayMode() {
   const one = dayRun(SEED, DAYS);
   console.log('Competent bot' + (WITH_DECOR ? ' with decor' : '') + ', seed ' + SEED + ', ' + DAYS + ' events through the week hub, Normal length'
-    + ' (Yard days, week 9 the finale; wages includes the ' + C.DAILY_COSTS + ' daily costs; pay = deposit + rest + menu bonus; seat = seat tips)\n');
+    + ' (Yard days, week 7 the finale; wages includes the ' + C.DAILY_COSTS + ' daily costs; pay = deposit + rest + menu bonus; seat = seat tips)\n');
   console.log(table(one.rows));
   console.log('\nFirst bought: ' + (Object.entries(one.firsts).map(([k, v]) => k + ' day ' + v).join(', ') || 'nothing'));
   const summary = [];
@@ -498,9 +498,10 @@ function dayMode() {
 // ---- mode 2: the season bot (W20, X16) -------------------------------------------------------
 
 const POLICIES = [
-  { id: 'sharp', stars: 5, drumBand: 4, drivewayBand: 9 },     // S1W4 / S1W9
-  { id: 'steady', stars: 3, drumBand: 8, drivewayBand: 13 },   // S1W8 / S2W4
-  { id: 'rough', stars: 2, drumBand: 18, drivewayBand: 27 },   // S2W9 / S3W9
+  // v3.5: seven week seasons (six and the finale); the bands keep their place in the season.
+  { id: 'sharp', stars: 5, drumBand: 4, drivewayBand: 7 },     // S1W4 / S1W7
+  { id: 'steady', stars: 3, drumBand: 7, drivewayBand: 11 },   // S1W7 / S2W4
+  { id: 'rough', stars: 2, drumBand: 14, drivewayBand: 21 },   // S2W7 / S3W7
   { id: 'eager', stars: 3, drumBand: Infinity, drivewayBand: Infinity, eager: true, info: true },   // X18.1 item 47, information only
   { id: 'grinder', stars: 3, drumBand: Infinity, drivewayBand: Infinity, grinder: true, info: true }   // v3.2 (D10.2): steady stars, a Yard day every weekday, no Load-in; information only
 ];

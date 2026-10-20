@@ -172,7 +172,7 @@
     #week-thirds { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; height: 6px; }
     #week-thirds .seg { background: #0f2266; }
     #week-thirds .seg.on { background: var(--gold); }
-    #season-strip { list-style: none; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px 6px; margin: 0 0 14px; padding-top: 6px; }
+    #season-strip { list-style: none; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px 6px; margin: 0 0 14px; padding-top: 6px; }
     #season-strip .wk { position: relative; display: flex; min-height: 46px; background: var(--blue-d); border: 2px solid #fff; box-shadow: 0 3px 0 var(--blue-dd); }
     .wk .tin, .se-wk .tin { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; padding: 4px 2px; }
     #season-strip .wk.later { background: #2c56d4; border-color: #6f92f5; }
@@ -196,6 +196,24 @@
     #day-choice { margin-bottom: 12px; }
     /* v3.4 playtest: one big Start button, Change plan, the hub tabs, the rescue and the morning shop */
     #hub-startsec { margin: 0 0 12px; }
+    #planner { margin: 0 0 12px; display: flex; flex-direction: column; gap: 8px; }
+    #planner-h { margin: 0; line-height: 0; }
+    #planner-hint, #plan-why { margin: 0; }
+    #plan-why:empty { display: none; }
+    .plan-days { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+    .plan-day { min-height: 56px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 4px 2px; border: 2px solid #fff; background: #2c56d4; color: #fff; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; box-shadow: 0 3px 0 var(--blue-dd); }
+    .plan-day.yard { background: var(--o); border-color: var(--gold); }
+    .plan-day .pd-kind { font-size: 11px; font-weight: 400; }
+    .plan-day:disabled { opacity: .6; cursor: default; }
+    #panels .hub #planner .hub-start { width: 100%; min-height: 64px; margin: 0; display: flex; align-items: center; justify-content: center; gap: 10px; }
+    #planner .plan-skip { width: 100%; min-height: 44px; }
+    #hub-pit { margin: 0 0 12px; }
+    .hp-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 10px; }
+    .hp-row p { margin: 0; font-weight: 700; }
+    .hp-lvl.ready { color: var(--gold); }
+    .pit-levelup { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+    .pit-levelup p { margin: 0; }
+    .pit-levelup button { min-height: 44px; }
     #panels .hub .hub-start { width: 100%; min-height: 72px; margin: 0; display: flex; align-items: center; justify-content: center; gap: 10px; padding: 8px 12px; }
     .hub-start .hs-words { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; line-height: 0; }
     #panels #hub-why { margin: 4px 0 0; color: #ffd0b0; font-size: 13px; }
@@ -247,7 +265,7 @@
     /* past the day hints (D8.2, game.js fitWeek): step 6 drops the hub tiles' windows and the mix hint, step 7 sets the season strip on one row with numbers, checks and the cup only */
     .fit6 #hub-grid .tile .win { display: none; }
     #panels .fit6 #next-hint { display: none; }
-    .fit7 #season-strip { grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 6px 4px; }
+    .fit7 #season-strip { grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 6px 4px; }
     .fit7 #season-strip .wk { min-height: 34px; }
     .fit7 #next-event .next-txt .oline { display: none; }
     .fit7 #season-strip .tnow, .fit7 #season-strip .tq, .fit7 #season-strip .tstars, .fit7 #season-strip .tfin, .fit7 #season-strip .tyard { display: none; }
@@ -445,7 +463,7 @@
     #panels .hub #se-pit { display: flex; width: max-content; max-width: 100%; margin: 4px auto 0; }
     .se-box { margin: 16px 0; padding: 14px 12px; background: var(--c); color: var(--u); border: 2px solid var(--k); box-shadow: inset 0 0 0 3px var(--c), inset 0 0 0 5px #b8862e, 2px 6px 0 var(--blue-dd); }
     #panels #se-record-h { text-align: center; }
-    #se-record { list-style: none; display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 8px 0 10px; }
+    #se-record { list-style: none; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 8px 0 10px; }
     .se-wk { display: flex; min-height: 64px; background: #f4ead2; border: 2px solid var(--k); }
     /* v3.3: the trophy shelf (hub and Offseason), the Offseason boxes, the judges' results card */
     .shelf { margin-bottom: 18px; padding: 8px 10px; }

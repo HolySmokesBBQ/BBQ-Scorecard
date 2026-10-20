@@ -41,6 +41,43 @@
 //   Game builder, a loose end: game.js onTrain() calls chooseDay('train'), which is refused now (drop
 //     the crew sheet Train button, or call sim.train(id), which still works once a week).
 //
+// v3.5 Shorter season, longer cooks (2026-10-19, Joel: "There's not enough time either.", "this game
+// seems to drone on and on."). NOTE FOR THE GAME BUILDER, the names this step adds:
+//   Season. C.SEASON_WEEKS is 7: six weeks of bookings, then the competition finale in week 7 (was 9).
+//     STRINGS.ui.weekOf / weekOfYear / wkFinale read 'of 7' and 'Week 7'. Save v9 clamps an older save's
+//     week to 7 and keeps at most six regular results (a finished v8 season keeps its finale).
+//   Cook length. C.LENGTHS.normal is 190 s (was 125) with a 135 window; C.EVENT_GATE (20, was 30) is the
+//     gate for every cook but the tutorial (which keeps GATE_OPENS 30). A weekday Yard day is half (95 s).
+//     The competition is C.COMP_SECONDS 270 with turn-ins C.COMP_TURNINS [68, 128, 188, 248]; extra time
+//     stretches them in proportion (compTimes(total) inside, offer.comp.times already stretched).
+//   Week planner (Monday). planView() -> null or { days: [{ day, dayName, kind, ok, reason, price }],
+//     plan: ['yard' | 'off' x 5], yardDays, title, start, skip }. Up while inWeek(), day 0, no plan set
+//     and no rescue. The draft is prefilled (Yard Monday and Wednesday when a Yard day makes sense, else
+//     all Rest). setPlanDay(day, kind) edits the draft (day 0 to 4, 'yard' or 'off'); togglePlanDay(day)
+//     flips it. startPlan() commits it and plays every Rest day at once (no day card, no evening):
+//     the morning that opens is the first planned Yard day, or Saturday. skipToWeekend() is startPlan
+//     with all five days Rest. Both return { ok, message, rested, note } where note is restNote().
+//     restNote() -> null or { days: [dayIdx], mood: n, trained: { id, name, xp } | null, spoiled: n }
+//     (the last batch of Rest days, for a one line toast; cleared by the next startPlan or cook).
+//     planOf() -> the committed plan or null. recommendDay() follows the plan on a planned Yard day.
+//     The morning shop (shopNeeded / shopOpen / shopConfirm / shopBack) is unchanged before a cook.
+//     STRINGS.plan holds the text: title, start ('Start week'), skip ('Skip to the weekend'), yard,
+//     rest, hint, rested ('Rested {n} days.').
+//   Buy more time. The pitmaster has XP and a level: pitView() -> { xp, level, next, toNext, pending,
+//     skills: [{ id: 'longDay', label, level, max, seconds, info, ok }], longDay, lights, extra }.
+//     XP comes from every cook (C.PIT_XP_*): Yard day 20, booked event 30 + 10 a star, competition 80.
+//     Levels at C.PIT_LEVEL_XP. Each level gives a pick (pending) while a skill has room;
+//     pickPitSkill('longDay') spends one (3 levels, +15 s each to every cook). The report's
+//     till.pitXp and till.pitLevel ({ from, to } or null); event 'pit_level' { level, pending }.
+//     String lights (decor 'lights') add C.LIGHTS_SECONDS 20 to every cook ("serve after dark"); its
+//     shop row text says so (CATALOG and STRINGS.pit.lightsRow).
+//   cookTime() -> { base, longDay, lights, extra, total, yard, comp, text } for the hub: total is a
+//     booked event's seconds with the extras, yard a weekday Yard day's, comp the competition's;
+//     text is STRINGS.pit.cookTime filled ('Cook time 3:10').
+//   DOM ids smoke.mjs expects from game.js: #planner, #plan-day-<0..4> (tap flips Yard and Rest,
+//     data-kind holds the kind), #plan-start, #plan-skip, #hub-cooktime, #pit-level (the hub chip),
+//     #pit-pick-longDay (the level up pick).
+//
 // v3.3 Competition (2026-10-19): week 9 is a competition BBQ weekend [S 3.5], the Offseason screen
 //           [S 3.6, 6.7, 6.8], season scaling [S 3.3] and the FIRE feed event [S 19.8]. The names this
 //           step exposes are listed in the season design, section 19.9. Sim builder calls:
@@ -436,7 +473,8 @@ const PitSim = globalThis.PitSim || (globalThis.PitSim = {});
 
 const C = Object.freeze({
   // day and world
-  DAY_SECONDS: 125, GATE_OPENS: 30, LAST_CALL: 110,
+  DAY_SECONDS: 125, GATE_OPENS: 30, LAST_CALL: 110,   // the tutorial day's clock
+  EVENT_GATE: 20,                     // v3.5: the gate of every other cook (was GATE_OPENS 30)
   START_CASH: 80, START_REP: 20,
   WALK_TILES_PER_S: 6, NPC_TILES_PER_S: 4,
   TICK_SECONDS: 0.05, MAX_FRAME_DT: 0.05,
@@ -469,13 +507,13 @@ const C = Object.freeze({
   // weather
   RAIN_FROM_DAY: 4, RAIN_CHANCE: 0.15, RAIN_ARRIVALS: 0.6,
   // save clamps
-  SAVE_VERSION: 8, MAX_DAY: 999, MAX_CASH: 999999, MAX_STAT: 9999999,   // v3.4: 8 (season.advance)
+  SAVE_VERSION: 9, MAX_DAY: 999, MAX_CASH: 999999, MAX_STAT: 9999999,   // v3.4: 8 (season.advance); v3.5: 9 (season.plan, pit)
   // v3.0 season and week [S 3], contract W2
-  SEASON_WEEKS: 9,
+  SEASON_WEEKS: 7,                    // v3.5: six weeks and the competition finale as week 7 (was 9)
   YEAR_MAX: 99,
   // Every cook runs the Normal length (Joel 2026-10-19: one set time, no length setting).
   LENGTHS: Object.freeze({
-    normal: Object.freeze({ seconds: 125, window: 80, factor: 1.0 })
+    normal: Object.freeze({ seconds: 190, window: 135, factor: 1.25 })   // v3.5 (was 125, 80, 1.0)
   }),
   BASE_WINDOW: 80,                    // the Normal window every booking window is written in
   LAST_CALL_GUARD: 5,                 // last call is never later than the hard end minus this
@@ -486,7 +524,7 @@ const C = Object.freeze({
   ADDON_SHARE: 0.25,                  // share of the guests who order the add-on meat
   MENU_BONUS: 0.1,                    // Math.round(fee * 0.1) when the add-on was served with none burnt
   SPARE_FRAC: 0.1,                    // the cart prefill covers booked plates plus 10 percent
-  BAGS_PER_COOKER: 6,                 // prefill bags per owned cooker, less the bags in the pile (R-5; was 5)
+  BAGS_PER_COOKER: 9,                 // prefill bags per owned cooker, less the bags in the pile (R-5; was 5; v3.5 9 for the 190 s cook)
   LOW_CASH_BIRTHDAY: 60,              // cash under this at week start: a Birthday is always offered
   SAFE_LOAD: 0.8,                     // P-1: a booking is safe when its slot seconds fit this share of the grate time
   FINALE_SECONDS: 160,                // Q-2: the Season finale's hard end, whatever the length setting
@@ -514,8 +552,8 @@ const C = Object.freeze({
   // season end [S 3.6]
   SEASON_CARRY_REP: 0.75, SEASON_REP_FLOOR: 20,
   // v3.3 the competition [S 3.5]: turn-in times in the contest's category order, the box score parts
-  COMP_SECONDS: 180,
-  COMP_TURNINS: Object.freeze([45, 85, 125, 165]),
+  COMP_SECONDS: 270,                  // v3.5: was 180; the turn-ins keep their share of the cook
+  COMP_TURNINS: Object.freeze([68, 128, 188, 248]),
   COMP_DONE: 50, COMP_HOLD: 30, COMP_HOLD_FULL_S: 15, COMP_HOLD_DROP: 2,
   COMP_LOOK_SLICED: 20, COMP_LOOK_WHOLE: 10,
   COMP_FIELD: 10, COMP_SPREAD: 10, COMP_JUDGES: 3, COMP_BOARD_BOXES: 4,
@@ -533,6 +571,12 @@ const C = Object.freeze({
   // v3.3 season scaling [S 3.3] and the Offseason [S 6.7, 6.8]
   SEASON_SCALE_STEP: 0.1, SEASON_SCALE_MAX: 0.3,
   MOVE_ON_AFTER: 3, MOVE_ON_CHANCE: 0.25, RESIGN_HAPPY: 0.9, REF_MAX: 6,
+  // v3.5 buy more time: the pitmaster's level and Long Day, and the string lights
+  LONG_DAY_SECONDS: 15, LONG_DAY_MAX: 3, LIGHTS_SECONDS: 20,
+  PIT_LEVEL_XP: Object.freeze([0, 150, 400, 750, 1200, 1800, 2600, 3600]),   // the xp level 1, 2, ... starts at
+  PIT_XP_YARD: 20, PIT_XP_EVENT: 30, PIT_XP_STAR: 10, PIT_XP_COMP: 80, PIT_XP_MAX: 999999,
+  PLAN_DAYS: 5,                       // the week planner sets Monday to Friday
+  PLAN_YARD: Object.freeze([0, 2]),   // the prefilled Yard days (Monday, Wednesday) when a Yard day makes sense
   // the driveway goal [S 7.1]
   DRIVEWAY_REP: 34,
   DRIVEWAY_BUYABLE: false,            // Q-8: v3.3 builds the Driveway; until then no Coming next card and no driveway goal
@@ -917,7 +961,7 @@ const CATALOG = Object.freeze([
   row('ribs', 'meat', 'Pork ribs', 12, '3 plates, 32 seconds, sells for 11.', null, '', 'cart.meat.ribs'),
   row('butt', 'meat', 'Pork butt', 20, '5 plates of pulled pork, 40 seconds, both grate slots, sells for 14.', null, '', 'cart.meat.butt'),
   row('brisket', 'meat', 'Brisket', 38, '7 plates, 50 seconds on the drum, sells for 18.', { gear: 'drum' }, 'Needs the drum smoker.', 'cart.meat.brisket'),
-  row('charcoal', 'fuel', 'Charcoal', 2, 'One bag lights a cold cooker to 60 or adds 30 to a lit one. A kettle burns about six bags a cook. Bags left over keep.', null, '', 'cart.charcoal, then charcoal on open'),
+  row('charcoal', 'fuel', 'Charcoal', 2, 'One bag lights a cold cooker to 60 or adds 30 to a lit one. A kettle burns about nine bags a cook. Bags left over keep.', null, '', 'cart.charcoal, then charcoal on open'),
   row('kettle2', 'gear', 'Second kettle', 90, 'Two more grate slots. Twice the meat on the fire.', null, '', 'gear.kettle2, stations.kettle2 becomes active'),
   row('cooler', 'gear', 'Cooler', 60, 'Keeps ' + C.COOLER_CAP[1] + ' units of raw meat overnight. Without it, meat left after a cook spoils.', null, '', 'gear.cooler'),
   row('bigtable', 'gear', 'Bigger table', 70, 'Five people can wait instead of three, and five plate spots instead of three.', null, '', 'gear.bigtable, table.spots grows to 5, queue spots 4 and 5 activate'),
@@ -928,7 +972,7 @@ const CATALOG = Object.freeze([
   decorRow('chair2', 'Second lawn chair', 25, 1, 3, 'One more seat by the line. Charm 3.', { decor: 'chair1' }, 'Needs the first lawn chair.', 'decor.chair2, seat chair2'),
   decorRow('flowers', 'Flower bed', 30, 0, 4, 'Flowers along the fence by the gate. Charm 4.', null, '', 'decor.flowers'),
   decorRow('birdbath', 'Bird bath', 40, 0, 4, 'Birds stop by between the tables. Charm 4.', null, '', 'decor.birdbath'),
-  decorRow('lights', 'String lights', 60, 0, 10, 'Lights strung over the serving table. Charm 10.', null, '', 'decor.lights'),
+  decorRow('lights', 'String lights', 60, 0, 10, 'Lights strung over the serving table. Charm 10. Serve after dark: +20 s to every cook.', null, '', 'decor.lights'),
   decorRow('picnic2', 'Second picnic table', 80, 2, 6, 'Two more seats on the lawn. Charm 6.', null, '', 'decor.picnic2, seats pt2b and pt2a'),
   row('buddy', 'hire', 'Buddy', 20, 'Runs plates from the board to the table so you can stay on the fire. Paid each evening.', { day: 2 }, 'From day 2.', 'hires.buddy'),
   row('tender', 'hire', 'Fire tender', 30, "Keeps every cooker above 55 as long as there are bags in the pile. Buy about seven bags a cooker when he's on.", { gear: 'drum' }, 'Needs the drum smoker.', 'hires.tender'),
@@ -1002,7 +1046,7 @@ const STRINGS = Object.freeze({
     entry: 'Entry {n}',
     goEntry: 'The entry fee is {n}. Cash has to cover it, the cart and the day.',
     noDrum: 'Brisket needs the drum smoker. Without it the brisket box scores 0.',
-    card: 'Competition weekend. Entry {n}. Turn-ins at 45, 85, 125 and 165 seconds.',
+    card: 'Competition weekend. Entry {n}. Turn-ins at 68, 128, 188 and 248 seconds.',
     prizes: 'Prizes {a}, {b} and {c}.',
     judges: 'Judges: {list}.',
     place: '{p} of {n}',
@@ -1149,6 +1193,19 @@ const STRINGS = Object.freeze({
     overnight: '{meat} on overnight.'
   }),
   // v3.4 the broke rescue
+  // v3.5 the week planner and the pitmaster
+  plan: Object.freeze({
+    title: 'Plan the week', start: 'Start week', skip: 'Skip to the weekend', yard: 'Yard day', rest: 'Rest',
+    hint: 'Set Monday to Friday. Rest days pass at once; you play the Yard days.',
+    rested: 'Rested {n} days.', restedOne: 'Rested 1 day.'
+  }),
+  pit: Object.freeze({
+    title: 'Pitmaster', level: 'Level {n}', xp: '{xp} of {next} XP', maxed: '{xp} XP',
+    gain: '+{n} pitmaster XP', levelUp: 'Level {n}! Pick a skill.',
+    longDay: 'Long Day', longDayInfo: '+15 s to every cook. Level {n} of {max}.',
+    lightsRow: 'Serve after dark: +20 s to every cook.',
+    cookTime: 'Cook time {t}', noPick: 'No skill has room left.'
+  }),
   rescue: Object.freeze({
     title: 'Short on cash',
     body: 'You have {cash}. Today needs about {need} to cook.',
@@ -1166,8 +1223,8 @@ const STRINGS = Object.freeze({
   ui: Object.freeze({
     // header and HUD
     hudWeek: 'Week {w}',
-    weekOf: 'Week {w} of 9',
-    weekOfYear: 'Season {y}, week {w} of 9',     // R-6: the hub heading from season 2
+    weekOf: 'Week {w} of 7',
+    weekOfYear: 'Season {y}, week {w} of 7',     // R-6: the hub heading from season 2
     seasonWhen: 'Season {y}, {when}',            // R-6: #week-when from season 2
     cash: 'Cash',
     fans: 'Word of mouth',
@@ -1180,7 +1237,7 @@ const STRINGS = Object.freeze({
     noStars: 'no stars on a Yard day',
     wkNow: 'Week {w}, this week',
     wkLater: 'Week {w}, {when}',
-    wkFinale: 'Week 9, Competition weekend',
+    wkFinale: 'Week 7, Competition weekend',
     nowTag: 'NOW',
     // offers
     thisWeek: 'This week',
@@ -1277,7 +1334,7 @@ const STRINGS = Object.freeze({
     invOver: '{n} more than the cooler holds. Cook it or it spoils tonight.',
     // news, settings, foot
     news: 'Pit news',
-    finaleNews: 'The finale is week 9. With the drum smoker it is a {n} guest cook.',   // R-3
+    finaleNews: 'The finale is week 7. With the drum smoker it is a {n} guest cook.',   // R-3
     finaleTable: 'The finale is {n} guests. A bigger table lets five wait in line.',   // Q-6
     controls: 'Controls',
     newGame: 'New game',
@@ -1882,7 +1939,7 @@ function slotSeconds(rail) {
 
 // P-1: the grate seconds the cookers give before last call, at SAFE_LOAD.
 function grateSeconds(k2, drum, win) {
-  return (C.KETTLE_SLOTS * (k2 ? 2 : 1) + (drum ? C.DRUM_SLOTS : 0)) * (C.GATE_OPENS + win) * C.SAFE_LOAD;
+  return (C.KETTLE_SLOTS * (k2 ? 2 : 1) + (drum ? C.DRUM_SLOTS : 0)) * (C.EVENT_GATE + win) * C.SAFE_LOAD;
 }
 
 // P-1: the Needs line when the rail needs more grate time than the owned cookers give before last
@@ -1948,8 +2005,15 @@ function contestFor(rep) {
   return C.CONTESTS[third];
 }
 
-// V33-8: the invited contest is 'finale'; a lower contest is 'finale_' + its id.
-function compOffer(ct, gear, id) {
+// v3.5: the turn-in times for a competition of `total` seconds, each keeping its share of C.COMP_SECONDS.
+function compTimes(total) {
+  const T = Number.isFinite(total) && total > 0 ? total : C.COMP_SECONDS;
+  return Object.freeze(C.COMP_TURNINS.map((x) => Math.round(x * T / C.COMP_SECONDS)));
+}
+
+// V33-8: the invited contest is 'finale'; a lower contest is 'finale_' + its id. v3.5: extra is the
+// pitmaster's added seconds (Long Day and the string lights).
+function compOffer(ct, gear, id, extra) {
   const rail = zeroByMeat();
   for (const m of ct.cats) rail[m] = 1;
   const label = STRINGS.contest[ct.id];
@@ -1959,7 +2023,7 @@ function compOffer(ct, gear, id) {
     headcount: 0, menu: ct.cats.slice(), rail, pay: 0, deposit: 0,
     difficulty: BOOKINGS.finale.flames, window: 0, patience: 0, safe: true, needs: '', icon: BOOKINGS.finale.icon,
     tier: 'safe', invite: false, base: 0, menuIdx: 0,
-    comp: Object.freeze({ contest: ct.id, label, cats: ct.cats, times: C.COMP_TURNINS, entry: ct.entry, prizes: ct.prizes, show: ct.show,
+    comp: Object.freeze({ contest: ct.id, label, cats: ct.cats, times: compTimes(C.COMP_SECONDS + (extra > 0 ? extra : 0)), entry: ct.entry, prizes: ct.prizes, show: ct.show,
       field: C.COMP_FIELD, mean: ct.mean, noDrum })
   }, null);
 }
@@ -2047,7 +2111,8 @@ function genOffers(input) {
   if (week === C.SEASON_WEEKS) {
     const top = C.CONTESTS.indexOf(contestFor(rep));
     const out = [];
-    for (let k = top; k >= 0; k--) out.push(compOffer(C.CONTESTS[k], gear, k === top ? 'finale' : 'finale_' + C.CONTESTS[k].id));
+    const extraIn = finiteOr0(readKey(inp, 'extra'));
+    for (let k = top; k >= 0; k--) out.push(compOffer(C.CONTESTS[k], gear, k === top ? 'finale' : 'finale_' + C.CONTESTS[k].id, extraIn));
     return out;
   }
 
@@ -2156,7 +2221,7 @@ function genOffers(input) {
     const fitN = new Map();
     const cands = [];
     for (const x of picked) {
-      const cap = slotsN * (C.GATE_OPENS + x.o.window) * C.STRETCH_LOAD + 1e-9;
+      const cap = slotsN * (C.EVENT_GATE + x.o.window) * C.STRETCH_LOAD + 1e-9;
       let fit = -1;
       for (let h = Math.round(x.o.base * C.STRETCH_SIZE); h >= Math.ceil(x.o.base * C.STRETCH_MIN); h--) {
         if (slotSeconds(railSplit(h, x.o.menu, null)) <= cap) { fit = h; break; }
@@ -2303,6 +2368,32 @@ function readDayLog(arr, day) {
     let e;
     try { e = Array.isArray(arr) ? arr[i] : undefined; } catch (x) { e = undefined; }
     out.push(typeof e === 'string' && DAY_KINDS.includes(e) ? e : 'off');
+  }
+  return out;
+}
+
+// v3.5: a v8 or older season ran nine weeks. Keep the first six regular results; a finished
+// season (nine entries) keeps its ninth (the finale) as the seventh, so it still ends.
+function legacyResults(arr) {
+  if (!Array.isArray(arr)) return arr;
+  const n = Math.min(arr.length >>> 0, 10000);
+  const list = [];
+  for (let i = 0; i < n; i++) { let e; try { e = arr[i]; } catch (x) { e = undefined; } list.push(e); }
+  const last = list.length >= 9 ? list[8] : null;
+  const out = list.slice(0, Math.min(list.length, 8)).filter((e) => !(isPlainObject(e) && readKey(e, 'type') === 'finale')).slice(0, C.SEASON_WEEKS - 1);
+  if (isPlainObject(last) && out.length === C.SEASON_WEEKS - 1) out.push(last);
+  return out;
+}
+
+// v3.5: the week plan, five 'yard' or 'off' entries, else null.
+function readPlan(arr) {
+  if (!Array.isArray(arr) || arr.length !== C.PLAN_DAYS) return null;
+  const out = [];
+  for (let i = 0; i < C.PLAN_DAYS; i++) {
+    let e;
+    try { e = arr[i]; } catch (x) { return null; }
+    if (e !== 'yard' && e !== 'off') return null;
+    out.push(e);
   }
   return out;
 }
@@ -2555,7 +2646,7 @@ function validateSave(obj) {
   try {
     if (!isPlainObject(obj)) return null;
     const v = readKey(obj, 'v');
-    if (v !== 1 && v !== 2 && v !== 3 && v !== 4 && v !== 5 && v !== 6 && v !== 7 && v !== 8) return null;
+    if (v !== 1 && v !== 2 && v !== 3 && v !== 4 && v !== 5 && v !== 6 && v !== 7 && v !== 8 && v !== 9) return null;
     const day = toInt(readKey(obj, 'day'), 1, 1, C.MAX_DAY);
     const cash = toInt(readKey(obj, 'cash'), C.START_CASH, 0, C.MAX_CASH);
     const rep = toInt(readKey(obj, 'rep'), C.START_REP, 0, 100);
@@ -2598,14 +2689,16 @@ function validateSave(obj) {
       try { seedN = Number(readKey(seasonIn, 'seed')); } catch (e) { seedN = NaN; }
       season.seed = Number.isFinite(seedN) ? (seedN >>> 0) : fallbackSeed;
       season.weekCash = toInt(readKey(seasonIn, 'weekCash'), cash, 0, C.MAX_CASH);
-      season.results = readResults(readKey(seasonIn, 'results'));
-      let week = toInt(readKey(seasonIn, 'week'), 1, 1, C.SEASON_WEEKS);
-      savedWeek = week;
+      season.results = readResults(v >= 9 ? readKey(seasonIn, 'results') : legacyResults(readKey(seasonIn, 'results')));
+      // v3.5: a v8 or older save ran nine weeks; its week clamps to the seven (a later week opens Monday).
+      const weekRaw = toInt(readKey(seasonIn, 'week'), 1, 1, v >= 9 ? C.SEASON_WEEKS : 9);
+      let week = Math.min(weekRaw, C.SEASON_WEEKS);
+      savedWeek = weekRaw;
       // D9: a v6 save may already hold this week's result (the booking played, a later day open).
       if (v >= 6) {
         v6Day = toInt(readKey(seasonIn, 'day'), 0, 0, C.WEEK_DAYS - 1);
         v6Log = readDayLog(readKey(seasonIn, 'dayLog'), v6Day);
-        holdsWeek = v6Log.includes('event') && season.results.length === week;
+        holdsWeek = v6Log.includes('event') && season.results.length === week && weekRaw === week;
       }
       if (holdsWeek) { /* week kept with its result */ }
       else if (season.results.length >= C.SEASON_WEEKS) week = C.SEASON_WEEKS;
@@ -2634,7 +2727,7 @@ function validateSave(obj) {
       season.week = 1;
     }
     // D9: the five v3.2 day keys. A v5 or older save, or a week that did not hold, opens on Monday.
-    const sameWeek = v >= 6 && !owed && isPlainObject(seasonIn) && season.week === savedWeek
+    const sameWeek = v >= 6 && !owed && isPlainObject(seasonIn) && season.week === savedWeek && (v >= 9 || savedWeek < C.SEASON_WEEKS)
       && (season.results.length === season.week - 1 || holdsWeek);
     season.day = sameWeek ? v6Day : 0;
     season.dayLog = sameWeek ? v6Log : readDayLog(undefined, 0);
@@ -2645,6 +2738,9 @@ function validateSave(obj) {
     // v3.4: a deposit taken early, only while this week's booking has not played.
     season.advance = v >= 8 && sameWeek && season.pick !== null && season.pick !== 'yard' && !season.dayLog.includes('event')
       ? toInt(readKey(seasonIn, 'advance'), 0, 0, C.MAX_CASH) : 0;
+    // v3.5: the week plan, only on the same week (five 'yard' or 'off' entries).
+    const planIn = v >= 9 && sameWeek ? readKey(seasonIn, 'plan') : undefined;
+    season.plan = readPlan(planIn);
     season.overnight = (typeof onMeat === 'string' && C.OVERNIGHT_MEATS.includes(onMeat) && (!MEATS[onMeat].drumOnly || gear.drum)
       && typeof onN === 'number' && Number.isInteger(onN) && onN >= 1 && onN <= C.OVERNIGHT_PIECES) ? { meat: onMeat, n: onN } : null;
     // X11.2 and X11.3: the crew, the next card id, Hiring Day and the three season keys.
@@ -2669,10 +2765,16 @@ function validateSave(obj) {
     const offIn = v >= 7 && season.results.length >= C.SEASON_WEEKS ? readKey(obj, 'offseason') : undefined;
     const offseason = isPlainObject(offIn) && readKey(offIn, 'year') === season.year
       ? { year: season.year, decide: readDecide(readKey(offIn, 'decide'), crew) } : null;
+    // v3.5: the pitmaster (a v8 or older save starts at 0 XP).
+    const pitIn = v >= 9 ? readKey(obj, 'pit') : undefined;
+    const pitXp = toInt(readKey(pitIn, 'xp'), 0, 0, C.PIT_XP_MAX);
+    let lvl = 1;
+    for (let i = 1; i < C.PIT_LEVEL_XP.length; i++) if (pitXp >= C.PIT_LEVEL_XP[i]) lvl = i + 1;
+    const pit = { xp: pitXp, longDay: Math.min(toInt(readKey(pitIn, 'longDay'), 0, 0, C.LONG_DAY_MAX), lvl - 1) };
     return {
       v: C.SAVE_VERSION, day, cash, rep, stock, charcoal, wood, gear, decor, stats, drivewayShown,
       tutorial: { done: !owed },
-      season, crew, crewSeq, hiring, player, pitName, trophies, ribbons, offseason
+      season, crew, crewSeq, hiring, player, pitName, trophies, ribbons, offseason, pit
     };
   } catch (e) {
     return null;
@@ -2726,6 +2828,8 @@ function createSim(saved, seed) {
   let acc = 0;              // step accumulator in seconds
   let tickCount = 0;        // ticks since openGate, drives state.clock
   let pieceSeq = 0;         // piece ids within the day
+  let planDraft = null;     // v3.5: the Monday planner's unsaved draft
+  let restNoteV = null;     // v3.5: the last batch of planned Rest days
   let custSeq = 0;          // customer ids within the day
   let buddyPick = null;     // meat reserved by the buddy during his pickup
   let gateOpenFired = false;
@@ -2887,8 +2991,11 @@ function createSim(saved, seed) {
       prepped: false,
       loadin: false,
       overnight: null,
-      advance: 0   // v3.4: a deposit taken early (rescueAdvance)
+      advance: 0,   // v3.4: a deposit taken early (rescueAdvance)
+      plan: null    // v3.5: the week planner's Monday to Friday, null until set
     };
+    // v3.5: the pitmaster's XP and Long Day picks
+    state.pit = { xp: s && s.pit ? s.pit.xp : 0, longDay: s && s.pit ? s.pit.longDay : 0 };
     state.dayCard = null;
     // v3.3: the trophy shelf, the lifetime ribbons, the Offseason screen (built when it opens).
     state.trophies = s ? s.trophies.map((x) => ({ year: x.year, contest: x.contest, place: 1 })) : [];
@@ -2905,6 +3012,8 @@ function createSim(saved, seed) {
     tutEndAt = null;
     tutLastId = null;
     tutLastTarget = null;
+    planDraft = null;
+    restNoteV = null;
     schedule = [];
     schedIdx = 0;
     tickets = zeroByMeat();
@@ -5052,6 +5161,18 @@ function createSim(saved, seed) {
     state.stats.days += 1;
     state.yesterday = { served: t.served, walkouts: t.walkouts, past: t.past };
     if (isBooking) s.results.push(compOut !== null ? { type: 'finale', stars, place: compOut.place, contest: t.comp.contest } : { type: t.booking.type, stars });   // D4.3: a Yard day never writes a result
+    // v3.5: the pitmaster's XP from this cook (never the tutorial).
+    t.pitXp = 0;
+    t.pitLevel = null;
+    if (t.kind !== 'tutorial') {
+      const gain = compOut !== null ? C.PIT_XP_COMP : (isBooking ? C.PIT_XP_EVENT + C.PIT_XP_STAR * stars : C.PIT_XP_YARD);
+      const from = pitLevel();
+      state.pit.xp = Math.min(C.PIT_XP_MAX, state.pit.xp + gain);
+      t.pitXp = gain;
+      const to = pitLevel();
+      if (to > from) t.pitLevel = { from, to };
+    }
+    restNoteV = null;
     const till = {};
     for (const k of Object.keys(t)) {
       const v = t[k];
@@ -5117,6 +5238,7 @@ function createSim(saved, seed) {
     for (const e of crewOut.levels) emit('level_ready', e);
     for (const e of crewOut.notices) emit('crew_notice', e);
     for (const c of crewOut.left) emit('crew_left', { id: c.id, name: c.name });
+    if (t.pitLevel !== null && t.pitLevel !== undefined) emit('pit_level', { level: t.pitLevel.to, pending: pitPending() });
     emit('day_over');
     emit('save_wanted', { reason: 'till' });
   }
@@ -5196,7 +5318,7 @@ function createSim(saved, seed) {
   // About how many people today's rep and weather bring between the gate and last call: the
   // event length setting's window (W5.2), the v2.1 window on the tutorial day.
   function expectedCrowd() {
-    const win = state.loop === 'tutorial' ? (C.LAST_CALL - C.GATE_OPENS) : lengthRow().window;
+    const win = state.loop === 'tutorial' ? (C.LAST_CALL - C.GATE_OPENS) : lengthRow().window + extraSeconds();
     return Math.round(win / spawnInterval());
   }
 
@@ -5502,7 +5624,7 @@ function createSim(saved, seed) {
   function offerInput() {
     const s = state.season;
     return { seed: s.seed, year: s.year, week: s.week, rep: state.rep, cash: s.weekCash,
-      gear: Object.assign({}, state.gear), avoid: avoidNames() };
+      gear: Object.assign({}, state.gear), avoid: avoidNames(), extra: extraSeconds() };
   }
 
   function addonLegal(offer, meat) {
@@ -5538,6 +5660,8 @@ function createSim(saved, seed) {
     s.loadin = false;
     s.overnight = null;
     s.advance = 0;
+    s.plan = null;   // v3.5: Monday opens the planner
+    planDraft = null;
     state.dayCard = null;
     state.cart = morningCart();   // V32-8
     crewSpend = [];
@@ -5659,7 +5783,9 @@ function createSim(saved, seed) {
     const isBooking = !yardDay;
     const L = lengthRow();
     const weekday = yardDay && s.day <= 4;
-    const endAt = b.type === 'finale' ? C.COMP_SECONDS : (weekday ? Math.round(L.seconds * C.YARD_DAY_FRAC) : L.seconds);   // Q-2, D4.3
+    const extra = extraSeconds();   // v3.5: Long Day and the string lights, on every cook
+    const endBase = b.type === 'finale' ? C.COMP_SECONDS : (weekday ? Math.round(L.seconds * C.YARD_DAY_FRAC) : L.seconds);   // Q-2, D4.3
+    const endAt = endBase + extra;
     let overnight = null;
     if (isBooking && s.overnight !== null) {
       state.stock[s.overnight.meat] = Math.min(C.STEPPER_MAX, state.stock[s.overnight.meat] + s.overnight.n);
@@ -5680,8 +5806,9 @@ function createSim(saved, seed) {
     t.deposit = b.deposit;
     t.charcoalStart = charcoalStart;
     t.stockStart = stockStart;
-    t.gateAt = weekday ? Math.round(C.GATE_OPENS * C.YARD_DAY_FRAC) : C.GATE_OPENS;   // V32-10
-    t.lastCallAt = Math.min(t.gateAt + (isBooking ? b.window : (weekday ? Math.round(L.window * C.YARD_DAY_FRAC) : L.window)), endAt - C.LAST_CALL_GUARD);
+    t.gateAt = weekday ? Math.round(C.EVENT_GATE * C.YARD_DAY_FRAC) : C.EVENT_GATE;   // V32-10, v3.5
+    t.lastCallAt = Math.min(t.gateAt + (isBooking ? b.window : (weekday ? Math.round(L.window * C.YARD_DAY_FRAC) : L.window)), endBase - C.LAST_CALL_GUARD) + extra;
+    t.extra = extra;
     t.endAt = endAt;
     t.weekday = weekday;
     t.dayIdx = s.day;
@@ -5697,6 +5824,8 @@ function createSim(saved, seed) {
       tickets = Object.assign({}, t.rail);
       if (b.comp) {
         t.comp = newComp(b);
+        const times = compTimes(endAt);   // v3.5: the turn-ins stretch with the extra seconds
+        t.comp.slots.forEach((sl, i) => { sl.at = times[i]; });
         t.booked = 0;
         t.pending = 0;
         t.prepBonus = 0;
@@ -5979,7 +6108,10 @@ function createSim(saved, seed) {
     const U = STRINGS.ui;
     const pr = payroll();
     let kind;
+    const planned = s.plan !== null && s.day < C.PLAN_DAYS ? s.plan[s.day] : null;   // v3.5
+    const plannedOk = planned !== null && view.options.some((o) => o.kind === planned && o.ok);
     if (view.booked) kind = s.booking.safe && pr.now <= pr.budget ? 'event' : 'off';
+    else if (plannedOk) kind = planned;
     else {
       const room = state.cash - weekendReserve(true).need;
       const meat = totalStock() + sumValues(state.cart.meat), bags = state.charcoal + state.cart.charcoal;
@@ -6075,6 +6207,172 @@ function createSim(saved, seed) {
 
   // D4.7: the day tick, the only place a day ends. `cooked`: spoilage already ran in endDay().
   // Returns the units that spoiled tonight.
+  // ---- v3.5 buy more time: the pitmaster, Long Day, the string lights ---------------------------
+
+  function pitLevel() {
+    let lv = 1;
+    for (let i = 1; i < C.PIT_LEVEL_XP.length; i++) if (state.pit.xp >= C.PIT_LEVEL_XP[i]) lv = i + 1;
+    return lv;
+  }
+
+  // Picks earned (one a level past 1) less picks spent, while a skill has room.
+  function pitPending() {
+    const room = C.LONG_DAY_MAX - state.pit.longDay;
+    return Math.max(0, Math.min(room, pitLevel() - 1 - state.pit.longDay));
+  }
+
+  function extraSeconds() {
+    return C.LONG_DAY_SECONDS * state.pit.longDay + (state.decor.lights === true ? C.LIGHTS_SECONDS : 0);
+  }
+
+  function pitView() {
+    const lv = pitLevel();
+    const next = lv < C.PIT_LEVEL_XP.length ? C.PIT_LEVEL_XP[lv] : null;
+    const pending = pitPending();
+    const P = STRINGS.pit;
+    return {
+      xp: state.pit.xp, level: lv, next, toNext: next === null ? 0 : next - state.pit.xp, pending,
+      label: fillText(P.level, { n: lv }),
+      xpText: next === null ? fillText(P.maxed, { xp: state.pit.xp }) : fillText(P.xp, { xp: state.pit.xp, next }),
+      skills: [{ id: 'longDay', label: P.longDay, level: state.pit.longDay, max: C.LONG_DAY_MAX, seconds: C.LONG_DAY_SECONDS,
+        info: fillText(P.longDayInfo, { n: state.pit.longDay, max: C.LONG_DAY_MAX }), ok: pending > 0 && state.pit.longDay < C.LONG_DAY_MAX }],
+      longDay: state.pit.longDay, lights: state.decor.lights === true, extra: extraSeconds()
+    };
+  }
+
+  function pickPitSkill(id) {
+    if (id !== 'longDay') return { ok: false, message: '' };
+    if (state.phase === 'service') return { ok: false, message: '' };
+    if (pitPending() <= 0) return { ok: false, message: STRINGS.pit.noPick };
+    state.pit.longDay += 1;
+    emit('pit_skill', { id, level: state.pit.longDay, extra: extraSeconds() });
+    emit('save_wanted', { reason: 'pit' });
+    return { ok: true, message: '' };
+  }
+
+  function clockText(secs) {
+    const m = Math.floor(secs / 60), r = Math.round(secs - m * 60);
+    return m + ':' + (r < 10 ? '0' : '') + r;
+  }
+
+  function cookTime() {
+    const L = lengthRow();
+    const extra = extraSeconds();
+    const total = L.seconds + extra;
+    return {
+      base: L.seconds, longDay: C.LONG_DAY_SECONDS * state.pit.longDay, lights: state.decor.lights === true ? C.LIGHTS_SECONDS : 0,
+      extra, total, yard: Math.round(L.seconds * C.YARD_DAY_FRAC) + extra, comp: C.COMP_SECONDS + extra,
+      text: fillText(STRINGS.pit.cookTime, { t: clockText(total) })
+    };
+  }
+
+  // ---- v3.5 the week planner ----------------------------------------------------------------
+
+  function planDefault() {
+    const s = state.season;
+    const keep = s.plan;
+    s.plan = null;
+    let yard = false;
+    try {
+      const r = recommendDay();
+      yard = r !== null && r.kind === 'yard';
+    } finally { s.plan = keep; }
+    const out = new Array(C.PLAN_DAYS).fill('off');
+    if (yard) for (const d of C.PLAN_YARD) out[d] = 'yard';
+    return out;
+  }
+
+  function planOpen() {
+    const s = state.season;
+    return inWeek() && s.day === 0 && s.plan === null && bookedDay() !== 0 && rescueView() === null;
+  }
+
+  function planView() {
+    if (!planOpen()) { planDraft = null; return null; }
+    if (planDraft === null) planDraft = planDefault();
+    const s = state.season;
+    const P = STRINGS.plan;
+    // Every day can be planned either way: a Yard day's stock comes from that morning's shop.
+    return {
+      days: planDraft.map((kind, d) => ({ day: d, dayName: STRINGS.dayName[d], kind, label: kind === 'yard' ? P.yard : P.rest,
+        ok: true, reason: '', price: C.DAY_PRICE[d] })),
+      plan: planDraft.slice(), yardDays: planDraft.filter((k) => k === 'yard').length,
+      title: P.title, start: P.start, skip: P.skip, hint: P.hint, week: s.week
+    };
+  }
+
+  function setPlanDay(day, kind) {
+    if (!planOpen()) return { ok: false, message: '' };
+    if (!(Number.isInteger(day) && day >= 0 && day < C.PLAN_DAYS) || (kind !== 'yard' && kind !== 'off')) return { ok: false, message: '' };
+    if (planDraft === null) planDraft = planDefault();
+    planDraft[day] = kind;
+    return { ok: true, message: '' };
+  }
+
+  function togglePlanDay(day) {
+    if (!planOpen()) return { ok: false, message: '' };
+    if (planDraft === null) planDraft = planDefault();
+    if (!(Number.isInteger(day) && day >= 0 && day < C.PLAN_DAYS)) return { ok: false, message: '' };
+    return setPlanDay(day, planDraft[day] === 'yard' ? 'off' : 'yard');
+  }
+
+  function planOf() {
+    const p = state.season.plan;
+    return p === null || p === undefined ? null : p.slice();
+  }
+
+  // Every planned Rest day from this morning on passes at once: chooseDay('off') with no day card.
+  function runRestDays() {
+    const s = state.season;
+    if (s.plan === null || s.plan === undefined) return 0;
+    let n = 0;
+    while (inWeek() && s.day < C.PLAN_DAYS && s.plan[s.day] === 'off' && bookedDay() !== s.day && n < C.PLAN_DAYS) {
+      const day = s.day;
+      const r = chooseDay('off');
+      if (!r.ok) break;
+      const card = state.dayCard;
+      if (restNoteV === null) restNoteV = { days: [], mood: 0, trained: null, spoiled: 0 };
+      restNoteV.days.push(day);
+      if (card) {
+        restNoteV.mood += card.mood.length;
+        if (card.trained) restNoteV.trained = { id: card.trained.id, name: card.trained.name, xp: card.trained.xp };
+        restNoteV.spoiled += card.spoiled | 0;
+      }
+      state.dayCard = null;
+      if (state.loop === 'week') state.phase = 'morning';
+      n += 1;
+    }
+    return n;
+  }
+
+  function restNote() {
+    if (restNoteV === null) return null;
+    const r = restNoteV;
+    return { days: r.days.slice(), mood: r.mood, trained: r.trained ? Object.assign({}, r.trained) : null, spoiled: r.spoiled,
+      text: r.days.length === 1 ? STRINGS.plan.restedOne : fillText(STRINGS.plan.rested, { n: r.days.length }) };
+  }
+
+  function commitPlan(plan) {
+    const s = state.season;
+    s.plan = plan.slice();
+    planDraft = null;
+    restNoteV = null;
+    emit('week_planned', { week: s.week, plan: s.plan.slice() });
+    const rested = runRestDays();
+    emit('save_wanted', { reason: 'plan' });
+    return { ok: true, message: '', rested, note: restNote() };
+  }
+
+  function startPlan() {
+    if (!planOpen()) return { ok: false, message: '' };
+    return commitPlan(planDraft === null ? planDefault() : planDraft);
+  }
+
+  function skipToWeekend() {
+    if (!planOpen()) return { ok: false, message: '' };
+    return commitPlan(new Array(C.PLAN_DAYS).fill('off'));
+  }
+
   function nextDay(kind, cooked, moodChanges) {
     const s = state.season;
     if (s.overnight !== null && s.day >= 5) {   // the booked Saturday went by without the event
@@ -6153,6 +6451,7 @@ function createSim(saved, seed) {
     if (state.loop !== 'week' || state.phase !== 'evening') return { ok: false, message: '' };
     state.dayCard = null;
     state.phase = 'morning';
+    runRestDays();   // v3.5
     return { ok: true, message: '' };
   }
 
@@ -6198,7 +6497,9 @@ function createSim(saved, seed) {
     const kind = state.today.kind === 'booking' ? 'event' : 'yard';
     state.loop = 'week';
     state.dayCard = null;
+    restNoteV = null;
     nextDay(kind, true);
+    runRestDays();   // v3.5: planned Rest days after a Yard day pass at once
   }
 
   function toSeasonEnd() {
@@ -6495,7 +6796,7 @@ function createSim(saved, seed) {
       return tot;
     }
     // R-5: BAGS_PER_COOKER is a Normal cook's worth; a Short or Long cook scales it by its seconds.
-    const secs = b !== null && b.type === 'finale' ? C.COMP_SECONDS : lengthRow().seconds;   // Q-2, v3.3
+    const secs = (b !== null && b.type === 'finale' ? C.COMP_SECONDS : lengthRow().seconds) + extraSeconds();   // Q-2, v3.3, v3.5
     let perCooker = Math.ceil(C.BAGS_PER_COOKER * secs / C.LENGTHS.normal.seconds - 1e-9);
     // Review 1 (contract X20.2): a FIRE card whose fireSense sits above FIRE_MAX - FIRE_ADD adds a bag
     // every (FIRE_MAX - fireSense) / KETTLE_DECAY seconds, so the cart buys that many a cooker when
@@ -7400,8 +7701,10 @@ function createSim(saved, seed) {
       prepped: live && s.prepped === true,
       loadin: live && s.loadin === true,
       overnight: live && s.overnight !== null ? { meat: s.overnight.meat, n: s.overnight.n } : null,
-      advance: live && !eventPlayed() ? s.advance | 0 : 0   // v3.4
+      advance: live && !eventPlayed() ? s.advance | 0 : 0,   // v3.4
+      plan: live && s.plan !== null && s.plan !== undefined ? s.plan.slice(0, C.PLAN_DAYS) : null   // v3.5
     };
+    out.pit = { xp: clamp(Math.trunc(state.pit.xp) || 0, 0, C.PIT_XP_MAX), longDay: clamp(Math.trunc(state.pit.longDay) || 0, 0, C.LONG_DAY_MAX) };   // v3.5
     out.crew = state.crew.slice().sort(byId).map(copyCard);
     out.crewSeq = clamp(Math.trunc(state.crewSeq), 1, 9999);
     const h = state.loop === 'hiring' ? state.hiring : null;
@@ -7487,6 +7790,7 @@ function createSim(saved, seed) {
     // v3.4: the advance stays with the booking it came from (never more than its deposit).
     const bk = s.booking;
     s.advance = bk !== null && bk.type !== 'yard' && !bk.comp && !eventPlayed() ? Math.min(save.season.advance | 0, bk.deposit) : 0;
+    s.plan = save.season.plan !== null && save.season.plan !== undefined ? save.season.plan.slice() : null;   // v3.5
     state.cart = morningCart();
   }
 
@@ -7512,7 +7816,10 @@ function createSim(saved, seed) {
     // v3.4 (the note at the top)
     recommendDay, bookingNeeds, shopNeeded, shopOpen, shopView, shopConfirm, shopBack, rescueView, rescueSell, rescueAdvance, rescueRestart,
     // v3.3 (design 19.9)
-    compView, compJudges, resign, release, hireReferral
+    compView, compJudges, resign, release, hireReferral,
+    // v3.5 (the note at the top)
+    planView, setPlanDay, togglePlanDay, startPlan, skipToWeekend, planOf, restNote,
+    pitView, pickPitSkill, cookTime, extraSeconds
   };
   return sim;
 }
@@ -7555,5 +7862,7 @@ PitSim.DAY_IDS = DAY_IDS;
 // v3.3 (design 19.9)
 PitSim.contestFor = contestFor;
 PitSim.seasonScale = seasonScale;
+// v3.5
+PitSim.compTimes = compTimes;
 
 })();

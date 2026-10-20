@@ -287,7 +287,7 @@ const DEVICE_SIZES = [
 ];
 
 // Contract D2 and D3.
-const C_EXPECT = { WALK_TILES_PER_S: 6, SAVE_VERSION: 8, PATIENCE_MID_FRAC: 0.5, GEAR_RESERVE: 30, QUEUE_SPOTS: 3, QUEUE_SPOTS_BIG: 5, TABLE_SPOTS: 3, TABLE_SPOTS_BIG: 5 };
+const C_EXPECT = { WALK_TILES_PER_S: 6, SAVE_VERSION: 9, PATIENCE_MID_FRAC: 0.5, GEAR_RESERVE: 30, QUEUE_SPOTS: 3, QUEUE_SPOTS_BIG: 5, TABLE_SPOTS: 3, TABLE_SPOTS_BIG: 5 };
 const C_NEW_KEYS = ['EAT_MIN', 'EAT_MAX', 'HEART_SECONDS', 'SEAT_BONUS_BASE', 'SEAT_BONUS_MAX', 'CHARM_STEP', 'CHARM_MAX', 'REP_TOGO_QUICK', 'SWEAT_FRAC', 'ZZZ_AFTER', 'FX', 'PATIENCE_MID_FRAC', 'GEAR_RESERVE'];
 const FX_KEYS = ['NUMBER_S', 'NUMBER_RISE_PX', 'NUMBER_FADE_AT', 'TIP_GAP_PX', 'SPARKLE_S', 'SPARKLE_FRAME_S', 'SPARKLE_STAGGER_S',
   'HEART_S', 'HEART_FRAME_S', 'HEART_RISE_PX', 'HEART_FADE_S', 'EAT_FRAME_S', 'PUFF_EVERY_LOW', 'PUFF_EVERY_GOOD', 'PUFF_EVERY_HOT',
@@ -393,8 +393,8 @@ const COLOR_KEYS = 'K U C O outline woodD woodM woodL paver paverD lawnA lawnB l
 
 // W2: the new C keys. FIXED keys must equal; the rest are tunable starting values (same kind).
 const C_W2 = {
-  SEASON_WEEKS: 9, YEAR_MAX: 99,
-  LENGTHS: { normal: { seconds: 125, window: 80, factor: 1.0 } },
+  SEASON_WEEKS: 7, YEAR_MAX: 99,
+  LENGTHS: { normal: { seconds: 190, window: 135, factor: 1.25 } },   // v3.5
   BASE_WINDOW: 80, LAST_CALL_GUARD: 5,
   FEE_MULT: 1.25, FEE_ROUND: 5, DEPOSIT_FRAC: 0.3, PAY_BASE: 0.3, PAY_PER_STAR: 0.14,
   ADDON_SHARE: 0.25, MENU_BONUS: 0.1, SPARE_FRAC: 0.1, BAGS_PER_COOKER: 6, LOW_CASH_BIRTHDAY: 60, SAFE_LOAD: 0.8,
@@ -411,7 +411,7 @@ const C_W2 = {
 };
 const C_W2_FIXED = ['SAVE_VERSION', 'SEASON_WEEKS', 'NAME_MAX', 'NAME_PUNCT', 'LENGTHS'];
 // W2 changed values and the v2.1 keys that stay (W2 last paragraph).
-const C_W2_EXACT = { SAVE_VERSION: 8, DRIVEWAY_PRICE: 400, GATE_OPENS: 30, LAST_CALL: 110, DAY_SECONDS: 125, STEPPER_MAX: 99, START_CASH: 80, START_REP: 20 };
+const C_W2_EXACT = { SAVE_VERSION: 9, DRIVEWAY_PRICE: 400, GATE_OPENS: 30, LAST_CALL: 110, DAY_SECONDS: 125, STEPPER_MAX: 99, START_CASH: 80, START_REP: 20 };
 // W22.18: the keys whose starting values the W19 literals assume.
 const LITERAL_KEYS = ['FEE_MULT', 'FEE_ROUND', 'DEPOSIT_FRAC', 'PAY_BASE', 'PAY_PER_STAR', 'STAR_FANS', 'REP_DAY_MIN', 'SPARE_FRAC', 'BAGS_PER_COOKER',
   'SCORE_FED', 'SCORE_WAIT', 'SCORE_QUALITY', 'STAR_EDGES', 'WAIT_FULL_S', 'WAIT_ZERO_S', 'BURNT_PENALTY', 'OFFMENU_PENALTY', 'COOLER_CAP', 'SEASON_CARRY_REP', 'SEASON_REP_FLOOR',
@@ -557,7 +557,8 @@ const ID3 = {
   seasonEnd: 'season-end', seasonEndH: 'season-end-h', sePit: 'se-pit', seWk: (w) => 'se-wk-' + w, seCash: 'se-cash', seRep: 'se-rep',
   seMeat: 'se-meat', seCharcoal: 'se-charcoal', seasonNext: 'season-next', pauseLook: 'pause-look', chipCharcoal: 'chip-charcoal'
 };
-const SEASON_WEEKS = 9;
+const SEASON_WEEKS = 7;   // v3.5: six weeks and the competition finale (was 9)
+const SAVE_V = 9;         // v3.5: save v9 (season.plan, pit)
 // W19 step 51: the v2.1 (v3) save sample.
 const SAVE_V3_SAMPLE = {
   v: 3, day: 5, cash: 150, rep: 20,
@@ -581,10 +582,9 @@ const SAVE_V4_SAMPLE = {
   stats: { days: 8, served: 120, walkouts: 4, past: 2, burnt: 1, seated: 60 },
   drivewayShown: false,
   tutorial: { done: true },
-  season: { year: 1, week: 8, seed: 123456789, pick: 'picnic', addon: null, weekCash: 340,
+  season: { year: 1, week: 6, seed: 123456789, pick: 'picnic', addon: null, weekCash: 340,   // v3.5: week 6 of 7 (was 8 of 9)
     results: [{ type: 'birthday', stars: 3 }, { type: 'picnic', stars: 4 }, { type: 'yard', stars: 0 },
-      { type: 'picnic', stars: 3 }, { type: 'picnic', stars: 5 }, { type: 'birthday', stars: 2 },
-      { type: 'picnic', stars: 4 }] },
+      { type: 'picnic', stars: 3 }, { type: 'picnic', stars: 5 }] },
   player: { name: 'Marty', look: { skin: 3, hair: 1, hairColor: 1, face: 1, hat: 2, apron: 0 } },
   pitName: "Marty's Pit",
   settings: { length: 'normal' }
@@ -598,10 +598,9 @@ const SAVE_V5_SAMPLE = { "v": 5, "day": 9, "cash": 340, "rep": 38,
   "stats": { "days": 8, "served": 120, "walkouts": 4, "past": 2, "burnt": 1, "seated": 60 },
   "drivewayShown": false,
   "tutorial": { "done": true },
-  "season": { "year": 1, "week": 8, "seed": 123456789, "pick": "picnic", "addon": null, "weekCash": 340,
+  "season": { "year": 1, "week": 6, "seed": 123456789, "pick": "picnic", "addon": null, "weekCash": 340,
               "results": [ { "type": "birthday", "stars": 3 }, { "type": "picnic", "stars": 4 }, { "type": "yard", "stars": 0 },
-                           { "type": "picnic", "stars": 3 }, { "type": "picnic", "stars": 5 }, { "type": "birthday", "stars": 2 },
-                           { "type": "picnic", "stars": 4 } ],
+                           { "type": "picnic", "stars": 3 }, { "type": "picnic", "stars": 5 } ],
               "drafted": true, "trained": 2,
               "walkins": [ { "name": "Opal", "role": "prep", "skills": [3, 2.5], "potential": 3.5, "mood": 1,
                              "look": { "skin": 4, "hair": 2, "hairColor": 0, "face": 0, "hat": 0, "apron": 2 }, "hired": false },
@@ -733,8 +732,8 @@ const W15 = ({
   ui: Object.freeze({
     // header and HUD
     hudWeek: 'Week {w}',
-    weekOf: 'Week {w} of 9',
-    weekOfYear: 'Season {y}, week {w} of 9',
+    weekOf: 'Week {w} of 7',
+    weekOfYear: 'Season {y}, week {w} of 7',
     seasonWhen: 'Season {y}, {when}',
     cash: 'Cash',
     fans: 'Word of mouth',
@@ -747,7 +746,7 @@ const W15 = ({
     noStars: 'no stars on a Yard day',
     wkNow: 'Week {w}, this week',
     wkLater: 'Week {w}, {when}',
-    wkFinale: 'Week 9, Competition weekend',
+    wkFinale: 'Week 7, Competition weekend',
     nowTag: 'NOW',
     // offers
     thisWeek: 'This week',
@@ -803,7 +802,7 @@ const W15 = ({
     invOver: '{n} more than the cooler holds. Cook it or it spoils tonight.',
     // news, settings, foot
     news: 'Pit news',
-    finaleNews: 'The finale is week 9. With the drum smoker it is a {n} guest cook.',
+    finaleNews: 'The finale is week 7. With the drum smoker it is a {n} guest cook.',
     finaleTable: 'The finale is {n} guests. A bigger table lets five wait in line.',
     controls: 'Controls',
     newGame: 'New game',
@@ -1195,7 +1194,7 @@ const SAVE_V1_SAMPLE = {
   drivewayShown: false
 };
 const SAVE_DIRTY = { v: 1, day: 'abc', cash: -50, rep: 400, stock: { sausage: 200, bogus: 1 }, gear: { drum: true, kettle2: false }, hires: { tender: true }, extra: 1 };
-const INVALID_SAVES = [null, 'x', [], {}, undefined, 42, { v: '5' }, { v: 0 }, { v: '3' }, { v: '4' }, { v: 9 }];   // v3.4: v 1 to 8 accepted
+const INVALID_SAVES = [null, 'x', [], {}, undefined, 42, { v: '5' }, { v: 0 }, { v: '3' }, { v: '4' }, { v: 10 }];   // v3.5: v 1 to 9 accepted
 
 // The shopping list for day 1 and later days. Two sausage units give four plates, so later
 // customers walk out and the walk out step has something to assert.
@@ -1420,7 +1419,7 @@ async function nodeChecks() {
     }
     const allFalse = (o) => o && DECOR_IDS.every((d) => o[d] === false) && Object.keys(o).length === DECOR_IDS.length;
     const v = P.validateSave(JSON.parse(JSON.stringify(SAVE_DIRTY)));
-    assert(v && v.v === 8, 'dirty v1 sample returned v ' + describe(v && v.v));
+    assert(v && v.v === SAVE_V, 'dirty v1 sample returned v ' + describe(v && v.v));
     assert(v.day === 1, 'day ' + describe(v.day));
     assert(v.cash === 0, 'cash ' + v.cash);
     assert(v.rep === 100, 'rep ' + v.rep);
@@ -1434,7 +1433,7 @@ async function nodeChecks() {
     assert(allFalse(v.decor), 'dirty sample decor ' + describe(v.decor));
     assert(v.stats && v.stats.seated === 0, 'dirty sample stats.seated ' + describe(v.stats && v.stats.seated));
     const s = P.validateSave(JSON.parse(JSON.stringify(SAVE_V1_SAMPLE)));
-    assert(s && s.v === 8, 'v1 sample returned v ' + describe(s && s.v));
+    assert(s && s.v === SAVE_V, 'v1 sample returned v ' + describe(s && s.v));
     migratedDefaults(s, 'v1 sample');
     assert(s.tutorial && s.tutorial.done === true, 'v1 sample tutorial ' + describe(s.tutorial));
     for (const k of ['day', 'cash', 'rep', 'stock', 'charcoal', 'gear', 'drivewayShown']) {
@@ -1444,7 +1443,7 @@ async function nodeChecks() {
     assert(s.stats.seated === 0, 'v1 sample stats.seated ' + s.stats.seated);
     assert(allFalse(s.decor), 'v1 sample decor ' + describe(s.decor));
     const d = P.validateSave({ v: 2, decor: { chair2: true, bogus: true } });
-    assert(d && d.v === 8, 'v2 decor sample returned ' + describe(d));
+    assert(d && d.v === SAVE_V, 'v2 decor sample returned ' + describe(d));
     migratedDefaults(d, 'v2 decor sample');
     assert(d.decor.chair2 === false, 'decor.chair2 not forced false without chair1');
     assert(!('bogus' in d.decor), 'decor.bogus kept');
@@ -1454,19 +1453,19 @@ async function nodeChecks() {
     assert(!threw, 'cyclic threw: ' + (threw && threw.message));
     // v2.1 (K6, K11 step 6).
     const v2 = P.validateSave(saveV2({}, P.C.START_REP));
-    assert(v2 && v2.v === 8 && v2.tutorial && v2.tutorial.done === true, 'v2 day 1 sample returned ' + describe(v2 && { v: v2.v, tutorial: v2.tutorial }));
+    assert(v2 && v2.v === SAVE_V && v2.tutorial && v2.tutorial.done === true, 'v2 day 1 sample returned ' + describe(v2 && { v: v2.v, tutorial: v2.tutorial }));
     migratedDefaults(v2, 'v2 day 1 sample');
     const t1 = P.validateSave({ v: 3, day: 1, tutorial: { done: false, bogus: 1 } });
-    assert(t1 && t1.v === 8 && t1.tutorial && t1.tutorial.done === false, 'v3 day 1 done false returned ' + describe(t1 && t1.tutorial));
+    assert(t1 && t1.v === SAVE_V && t1.tutorial && t1.tutorial.done === false, 'v3 day 1 done false returned ' + describe(t1 && t1.tutorial));
     assert(!('bogus' in t1.tutorial), 'tutorial.bogus kept');
     const t3 = P.validateSave({ v: 3, day: 3, tutorial: { done: false, bogus: 1 } });
     assert(t3 && t3.tutorial && t3.tutorial.done === true, 'v3 day 3 done false returned ' + describe(t3 && t3.tutorial));
     const t0 = P.validateSave({ v: 3 });
-    assert(t0 && t0.v === 8 && t0.tutorial && t0.tutorial.done === true, '{ v: 3 } returned ' + describe(t0 && t0.tutorial));
+    assert(t0 && t0.v === SAVE_V && t0.tutorial && t0.tutorial.done === true, '{ v: 3 } returned ' + describe(t0 && t0.tutorial));
     migratedDefaults(t0, '{ v: 3 }');
     migratedDefaults(P.validateSave(JSON.parse(JSON.stringify(SAVE_V3_SAMPLE))), 'v3 sample');
     const ser = P.createSim(null, 1)[SIM_METHODS.serialize]();
-    assert(ser && ser.v === 8, 'serialize() v ' + describe(ser && ser.v));
+    assert(ser && ser.v === SAVE_V, 'serialize() v ' + describe(ser && ser.v));
     assert(ser.tutorial && ser.tutorial.done === false, 'serialize() tutorial ' + describe(ser.tutorial));
     const back = P.validateSave(JSON.parse(JSON.stringify(ser)));
     assert(deepEq(back, ser), 'serialize() does not round trip: ' + describe(ser) + ' became ' + describe(back));
@@ -1567,6 +1566,139 @@ async function nodeChecks() {
   await step('v3.3 the trophy shelf and ribbons, save v7, headless', () => shelfHeadless(globalThis[GLOBAL_NAME]));
   await step('v3.3 the Offseason: contracts, moving on, referrals, headless', () => offseasonHeadless(globalThis[GLOBAL_NAME]));
   await step('v3.3 season 2: carry overs, scaled offers, the next competition, headless', () => season2Headless(globalThis[GLOBAL_NAME]));
+  // v3.5 (sim.js note v3.5): seven weeks, 190 s cooks, the week planner, Skip to the weekend, Long Day, the string lights.
+  await step('v3.5 seven weeks, longer cooks, the planner, Skip to the weekend, Long Day and string lights time, headless', () => v35Headless(globalThis[GLOBAL_NAME]));
+}
+
+// ---- v3.5 shorter season, longer cooks, the week planner, buy more time (sim.js note v3.5) ---------
+
+// A Monday sim (week 1, no plan yet) with the given cash, stock and pit progress, from a real save.
+function v35Monday(P, over = {}) {
+  const h0 = toWeek(P, over.seed || 35);
+  const s = h0.sim.serialize();
+  s.season.day = 0;   // toWeek's legacy days wrapper moves to Wednesday; the planner is Monday's
+  s.season.dayLog = [null, null, null, null, null, null, null];
+  s.season.plan = null;
+  s.cash = over.cash === undefined ? 300 : over.cash;
+  s.season.weekCash = s.cash;
+  s.charcoal = over.charcoal === undefined ? 20 : over.charcoal;
+  if (over.stock) s.stock = Object.assign({}, s.stock, over.stock);
+  if (over.pit) s.pit = Object.assign({ xp: 0, longDay: 0 }, over.pit);
+  if (over.decor) Object.assign(s.decor, over.decor);
+  if (over.gear) Object.assign(s.gear, over.gear);
+  const v = P.validateSave(JSON.parse(JSON.stringify(s)));
+  assert(v && v.v === SAVE_V, 'validateSave refused the v3.5 Monday fixture');
+  return headless(P, v, over.seed || 35, { days: true });
+}
+function v35Headless(P) {
+  const C = P.C;
+  const notes = [];
+  // 1. The season: six weeks and the competition as week 7.
+  assert(C.SEASON_WEEKS === 7 && SEASON_WEEKS === 7, 'C.SEASON_WEEKS ' + C.SEASON_WEEKS + ', wanted 7');
+  const base = { seed: 5, year: 1, rep: 20, cash: 100, gear: {} };
+  for (let w = 1; w <= C.SEASON_WEEKS; w++) {
+    const ids = P.genOffers(Object.assign({}, base, { week: w })).map((o) => o.id);
+    if (w < C.SEASON_WEEKS) assert(!ids.some((id) => /^finale/.test(id)), 'week ' + w + ' offers a contest ' + describe(ids));
+    else assert(ids[0] === 'finale' && ids.every((id) => /^finale/.test(id)), 'week 7 offers ' + describe(ids));
+  }
+  assert(P.STRINGS.ui.weekOf === 'Week {w} of 7' && P.STRINGS.ui.wkFinale === 'Week 7, Competition weekend', 'season strip strings ' + describe([P.STRINGS.ui.weekOf, P.STRINGS.ui.wkFinale]));
+  notes.push('weeks 1 to 6 book, week 7 the competition');
+  // 2. Longer cooks: 190 s with the gate at EVENT_GATE; a weekday Yard day half; the competition 270
+  //    with its turn-ins at their old shares.
+  const L = C.LENGTHS.normal;
+  assert(L.seconds === 190 && C.EVENT_GATE < C.GATE_OPENS && C.EVENT_GATE === 20 && C.GATE_OPENS === 30, 'cook length ' + describe({ L, gate: C.EVENT_GATE }));
+  assert(C.COMP_SECONDS === 270 && sameJSON(C.COMP_TURNINS, [68, 128, 188, 248]), 'competition ' + describe([C.COMP_SECONDS, C.COMP_TURNINS]));
+  const old = [45, 85, 125, 165].map((x) => x / 180), now = C.COMP_TURNINS.map((x) => x / C.COMP_SECONDS);
+  assert(now.every((f, i) => Math.abs(f - old[i]) < 0.005), 'turn-in shares moved ' + describe(now));
+  assert(sameJSON(P.compTimes(C.COMP_SECONDS + 35), [77, 145, 212, 280]), 'compTimes(305) ' + describe(P.compTimes(C.COMP_SECONDS + 35)));
+  // 3. The planner on Monday.
+  const h = v35Monday(P);
+  const sim = h.sim, st = h.st;
+  const pv = sim.planView();
+  assert(pv && pv.days.length === 5 && pv.days.every((d, i) => d.day === i && (d.kind === 'yard' || d.kind === 'off')) && pv.start === 'Start week' && pv.skip === 'Skip to the weekend', 'planView ' + describe(pv));
+  assert(sameJSON(pv.plan, ['yard', 'off', 'yard', 'off', 'off']), 'the prefilled plan ' + describe(pv.plan) + ', wanted Yard Monday and Wednesday');
+  assert(sim.togglePlanDay(0).ok && sim.planView().plan[0] === 'off' && sim.setPlanDay(1, 'yard').ok && sim.planView().plan[1] === 'yard', 'toggle and set ' + describe(sim.planView().plan));
+  assert(!sim.setPlanDay(5, 'yard').ok && !sim.setPlanDay(2, 'event').ok, 'setPlanDay took Saturday or an event');
+  const r = sim.startPlan();
+  h.drain();
+  // Monday rests at once; Tuesday is the first Yard day.
+  assert(r.ok && r.rested === 1 && st().season.day === 1 && st().phase === 'morning' && st().dayCard === null && st().season.dayLog[0] === 'off', 'startPlan ' + describe({ r, day: st().season.day, phase: st().phase, log: st().season.dayLog }));
+  assert(r.note && sameJSON(r.note.days, [0]) && r.note.text === 'Rested 1 day.', 'restNote ' + describe(r.note));
+  assert(sim.planView() === null && sameJSON(sim.planOf(), ['off', 'yard', 'yard', 'off', 'off']), 'the plan after Start week ' + describe(sim.planOf()));
+  const rec = sim.recommendDay();
+  assert(rec.kind === 'yard' && rec.start === 'Start Tuesday: Yard day', 'Tuesday pick ' + describe(rec));
+  // The morning shop still stands before the cook: Back spends nothing, Confirm starts it.
+  const cash0 = st().cash;
+  sim.shopOpen('yard');
+  assert(sim.shopBack().ok && st().cash === cash0 && st().phase === 'morning', 'Back moved the day');
+  sim.shopOpen('yard');
+  const cf = sim.shopConfirm('yard');
+  h.drain();
+  assert(cf.ok && st().phase === 'service', 'Confirm ' + describe(cf));
+  const td = st().today;
+  assert(td.weekday && td.gateAt === Math.round(C.EVENT_GATE * C.YARD_DAY_FRAC) && td.endAt === Math.round(L.seconds * C.YARD_DAY_FRAC), 'weekday Yard day timings ' + describe([td.gateAt, td.lastCallAt, td.endAt]));
+  let g = 0;
+  while (st().phase === 'service' && g++ < 20000) h.tick();
+  assert(st().loop === 'report' && st().till.pitXp === C.PIT_XP_YARD, 'the Yard day report ' + describe({ loop: st().loop, xp: st().till.pitXp }));
+  sim.finishReport();
+  h.drain();
+  // Wednesday is planned a Yard day: the morning waits for it.
+  assert(st().season.day === 2 && st().phase === 'morning' && sim.restNote() === null, 'after the Yard day ' + describe({ day: st().season.day, note: sim.restNote() }));
+  // Wednesday's cook by settle is not possible (a Yard day); choose Rest by hand: the day card shows,
+  // and the planned Rest days after it pass at once on Next.
+  assert(sim.chooseDay('off').ok && st().phase === 'evening' && st().dayCard !== null, 'a Rest by hand left no day card');
+  sim.advanceDay();
+  h.drain();
+  assert(st().season.day === 5 && st().phase === 'morning' && sameJSON(st().season.dayLog.slice(0, 5), ['off', 'yard', 'off', 'off', 'off']) && sameJSON(sim.restNote().days, [3, 4]), 'Thursday and Friday ' + describe({ day: st().season.day, log: st().season.dayLog, note: sim.restNote() }));
+  assert(sim.pitView().xp === C.PIT_XP_YARD, 'pit xp ' + sim.pitView().xp);
+  notes.push('planner: Monday rested, Tuesday played, Wednesday rested by hand, Thursday and Friday passed');
+  // 4. Skip to the weekend.
+  const k = v35Monday(P);
+  const sk = k.sim.skipToWeekend();
+  k.drain();
+  assert(sk.ok && sk.rested === 5 && k.st().season.day === 5 && k.st().phase === 'morning' && k.st().dayCard === null && sameJSON(k.st().season.dayLog.slice(0, 5), ['off', 'off', 'off', 'off', 'off']), 'skipToWeekend ' + describe({ sk, day: k.st().season.day }));
+  assert(k.sim.recommendDay().start.startsWith('Start Saturday') && k.sim.planView() === null && !k.sim.skipToWeekend().ok, 'Saturday after the skip ' + describe(k.sim.recommendDay()));
+  // The plan saves and comes back (v9).
+  const sv = k.sim.serialize();
+  assert(sv.v === SAVE_V && sameJSON(sv.season.plan, ['off', 'off', 'off', 'off', 'off']) && sv.season.day === 5, 'save ' + describe({ v: sv.v, plan: sv.season.plan, day: sv.season.day }));
+  const back = P.createSim(JSON.parse(JSON.stringify(sv)), 35);
+  assert(sameJSON(back.planOf(), sv.season.plan) && back.state.season.day === 5 && back.planView() === null, 'reload ' + describe(back.planOf()));
+  notes.push('Skip to the weekend: five Rest days, Saturday morning, plan saved');
+  // 5. Buy more time: XP, levels, Long Day, the string lights.
+  const lv = v35Monday(P, { pit: { xp: C.PIT_LEVEL_XP[3] } });
+  const pz = lv.sim.pitView();
+  assert(pz.level === 4 && pz.pending === 3 && pz.skills[0].id === 'longDay' && pz.skills[0].ok, 'pitView at level 4 ' + describe(pz));
+  for (let i = 1; i <= C.LONG_DAY_MAX; i++) assert(lv.sim.pickPitSkill('longDay').ok && lv.sim.pitView().longDay === i, 'Long Day pick ' + i);
+  assert(!lv.sim.pickPitSkill('longDay').ok && lv.sim.pitView().pending === 0, 'a fourth Long Day');
+  const ct = lv.sim.cookTime();
+  assert(ct.total === L.seconds + 3 * C.LONG_DAY_SECONDS && ct.longDay === 45 && ct.text === 'Cook time 3:55', 'cookTime with Long Day 3 ' + describe(ct));
+  const li = v35Monday(P, { decor: { lights: true } });
+  const ctl = li.sim.cookTime();
+  assert(C.LIGHTS_SECONDS === 20 && ctl.total === L.seconds + 20 && ctl.lights === 20 && ctl.yard === Math.round(L.seconds * C.YARD_DAY_FRAC) + 20, 'cookTime with the string lights ' + describe(ctl));
+  assert(P.CATALOG.find((x) => x.id === 'lights').effect.includes('+20 s to every cook'), 'the string lights row does not say +20 s');
+  // The lights stretch a booked cook: the hard end and last call move 20 s, the gate stays.
+  const hv = v35Monday(P, { decor: { lights: true }, gear: { kettle2: true } });
+  hv.sim.bookOffer('birthday');
+  assert(hv.sim.skipToWeekend().ok, 'skip for the booked cook');
+  hv.drain();
+  const bk = hv.st().season.booking;
+  const go = hv.sim.chooseDay('event');
+  hv.drain();
+  if (go.ok) {
+    const t = hv.st().today;
+    assert(t.gateAt === C.EVENT_GATE && t.endAt === L.seconds + 20 && t.lastCallAt === Math.min(C.EVENT_GATE + bk.window, L.seconds - C.LAST_CALL_GUARD) + 20, 'booked timings with the lights ' + describe([t.gateAt, t.lastCallAt, t.endAt]));
+    assert(hv.sim.settle(4) === true && hv.st().till.pitXp === C.PIT_XP_EVENT + 4 * C.PIT_XP_STAR, 'booked xp ' + describe(hv.st().till.pitXp));
+    notes.push('lights: ' + bk.label + ' ends at ' + t.endAt + ' s');
+  } else notes.push('booked cook refused (' + go.message + '), lights checked on cookTime only');
+  // 6. A v8 save from week 8 of the old nine clamps to week 7 on Monday, six results kept.
+  const v8 = k.sim.serialize();
+  v8.v = 8; delete v8.pit; delete v8.season.plan;
+  v8.season.week = 8; v8.season.results = new Array(7).fill(0).map(() => ({ type: 'picnic', stars: 3 }));
+  v8.season.day = 2; v8.season.dayLog = ['off', 'off', null, null, null, null, null];
+  const m8 = P.validateSave(JSON.parse(JSON.stringify(v8)));
+  assert(m8 && m8.v === SAVE_V && m8.season.week === 7 && m8.season.results.length === 6 && m8.season.day === 0 && m8.season.plan === null && m8.pit.xp === 0, 'the v8 week 8 save ' + describe(m8 && { w: m8.season.week, n: m8.season.results.length, d: m8.season.day }));
+  notes.push('v8 week 8 save opens week 7 Monday');
+  return notes.join('; ');
 }
 
 // The angle redo world (C) and the check 1, 2 and 8 limits.
@@ -2099,15 +2231,16 @@ function skipHeadless(P) {
   const lu = a.sim.loadUp();
   a.drain();
   assert(by && by.ok && lu && lu.ok, '(a) bookOffer yard ' + describe(by) + ', loadUp ' + describe(lu));
-  assert(a.st().today.gateAt === C.GATE_OPENS, '(a) today.gateAt ' + a.st().today.gateAt);
+  assert(a.st().today.gateAt === C.EVENT_GATE, '(a) today.gateAt ' + a.st().today.gateAt);   // v3.5: a Yard day opens at EVENT_GATE
   assert(a.st().spawnAt === a.st().today.gateAt, '(a) spawnAt ' + a.st().spawnAt);
   const n2 = a.log.length;
-  a.until(() => a.has(EVENT.customerArrived, n2), C.GATE_OPENS + 2);
+  const gA = a.st().today.gateAt;   // v3.5: EVENT_GATE
+  a.until(() => a.has(EVENT.customerArrived, n2), gA + 2);
   const soon = a.of(EVENT.gateSoon, n2)[0], open = a.of(EVENT.gateOpen, n2)[0], arr = a.of(EVENT.customerArrived, n2)[0];
   const tick = C.TICK_SECONDS + 1e-6;
-  assert(soon && nearly(soon._at, C.GATE_OPENS - 10, tick), '(a) gate_soon at ' + (soon && soon._at));
-  assert(open && nearly(open._at, C.GATE_OPENS, tick), '(a) gate_open at ' + (open && open._at));
-  assert(arr && nearly(arr._at, C.GATE_OPENS, tick), '(a) first customer_arrived at ' + (arr && arr._at));
+  assert(soon && nearly(soon._at, gA - 10, tick), '(a) gate_soon at ' + (soon && soon._at));
+  assert(open && nearly(open._at, gA, tick), '(a) gate_open at ' + (open && open._at));
+  assert(arr && nearly(arr._at, gA, tick), '(a) first customer_arrived at ' + (arr && arr._at));
   notes.push('(a) gate_soon ' + soon._at + ', gate_open ' + open._at);
   // (b) skip in service before the plate
   const b = headless(P, null, 3);
@@ -2287,7 +2420,7 @@ function refModel(P) {
   };
   // W24 P-1 and W25 R-3: slot seconds of a rail, and the grate seconds the cookers give at SAFE_LOAD.
   R.slotSec = (rail) => MEAT_IDS.reduce((a, m) => a + (rail[m] > 0 ? Math.ceil(rail[m] / M[m].plates) * M[m].slots * M[m].cook : 0), 0);
-  R.grateSec = (gear, win) => (C.KETTLE_SLOTS * (gear && gear.kettle2 === true ? 2 : 1) + (gear && gear.drum === true ? C.DRUM_SLOTS : 0)) * (C.GATE_OPENS + win) * C.SAFE_LOAD;
+  R.grateSec = (gear, win) => (C.KETTLE_SLOTS * (gear && gear.kettle2 === true ? 2 : 1) + (gear && gear.drum === true ? C.DRUM_SLOTS : 0)) * (C.EVENT_GATE + win) * C.SAFE_LOAD;
   // W25 R-3: the finale books the most guests up to its row's headcount whose rail fits the grate.
   R.finaleCount = (row, L, gear) => {
     const menu = R.menuOf(row, gear);
@@ -2319,7 +2452,7 @@ function refModel(P) {
     const rail = R.rail(R.headcount(row, L), R.menuOf(row, input.gear), null);
     let need = 0;
     for (const m of MEAT_IDS) if (rail[m] > 0) need += Math.ceil(rail[m] / M[m].plates) * M[m].slots * M[m].cook;
-    const span = C.GATE_OPENS + R.windowAt(row, L);
+    const span = C.EVENT_GATE + R.windowAt(row, L);
     const g = input.gear || {};
     const fits = (k2, dr) => need <= (C.KETTLE_SLOTS * (k2 ? 2 : 1) + (dr ? C.DRUM_SLOTS : 0)) * span * C.SAFE_LOAD + 1e-9;
     const k2 = g.kettle2 === true, dr = g.drum === true;
@@ -2395,7 +2528,7 @@ function refModel(P) {
   R.capNeedsAt = (row, menu, n, input) => {
     const L = 'normal';   // every cook runs the Normal length
     const need = R.slotSec(R.rail(n, menu, null));
-    const span = C.GATE_OPENS + R.windowAt(row, L);
+    const span = C.EVENT_GATE + R.windowAt(row, L);
     const g = input.gear || {};
     const fits = (k2, dr) => need <= (C.KETTLE_SLOTS * (k2 ? 2 : 1) + (dr ? C.DRUM_SLOTS : 0)) * span * C.SAFE_LOAD + 1e-9;
     const k2 = g.kettle2 === true, dr = g.drum === true;
@@ -2413,7 +2546,7 @@ function refModel(P) {
       safe: o.safe, tier: 'safe', invite: o.invite === true, base: o.base, menuIdx: o.menuIdx };
   };
   R.resize = (o, n, k) => { o.headcount = n; o.rail = R.rail(n, o.menu, null); o.pay = R.feeK(n, o.menu, k); o.deposit = R.deposit(o.pay); };
-  R.grateAt = (gear, win, load) => (C.KETTLE_SLOTS * (gear && gear.kettle2 === true ? 2 : 1) + (gear && gear.drum === true ? C.DRUM_SLOTS : 0)) * (C.GATE_OPENS + win) * load;
+  R.grateAt = (gear, win, load) => (C.KETTLE_SLOTS * (gear && gear.kettle2 === true ? 2 : 1) + (gear && gear.drum === true ? C.DRUM_SLOTS : 0)) * (C.EVENT_GATE + win) * load;
   // variant: { extraDraw, extraStats } for a Needs card that is not the week's stretch (deviation 22).
   R.gen31 = (input, variant = { extraDraw: true, extraStats: false }) => {
     const B = P.BOOKINGS;
@@ -2661,7 +2794,7 @@ function surfaceV3(P, sim) {
 }
 
 function migratedDefaults(s, label) {
-  assert(s && s.v === 8, label + ': v ' + describe(s && s.v));
+  assert(s && s.v === SAVE_V, label + ': v ' + describe(s && s.v));
   assert(s.player === null, label + ': player ' + describe(s.player));
   assert(s.pitName === W15.defaultPit, label + ': pitName ' + describe(s.pitName));
   assert(s.season && s.season.year === 1 && s.season.week === 1 && sameJSON(s.season.results, []), label + ': season ' + describe(s.season));
@@ -2682,20 +2815,21 @@ function validateV4(P) {
   // true (it has results), and nothing else moves.
   const rt = V(SAVE_V4_SAMPLE);
   const want4 = base();
-  want4.v = 8;
+  want4.v = SAVE_V;
+  want4.pit = { xp: 0, longDay: 0 };   // v3.5
   delete want4.hires;
   delete want4.settings;   // 2026-10-19: an old save's length setting is ignored
   Object.assign(want4, { crew: [], crewSeq: 1, hiring: null });
   // v3.3: the shelf, the ribbons and no open Offseason.
   Object.assign(want4, { trophies: [], ribbons: { sausage: 0, chicken: 0, ribs: 0, butt: 0, brisket: 0 }, offseason: null });
   // D9: and the five day keys, on that week's Monday.
-  Object.assign(want4.season, { drafted: true, trained: null, walkins: [], day: 0, dayLog: [null, null, null, null, null, null, null], prepped: false, loadin: false, overnight: null, advance: 0 });
+  Object.assign(want4.season, { drafted: true, trained: null, walkins: [], day: 0, dayLog: [null, null, null, null, null, null, null], prepped: false, loadin: false, overnight: null, advance: 0, plan: null });
   assert(deepEq(rt, want4), 'the W13.1 sample migrates to ' + describe(rt) + ', wanted ' + describe(want4));
   const cases = [
     ['charcoal 500', (s) => { s.charcoal = 500; }, (r) => r.charcoal === 200],
     ['wood -3', (s) => { s.wood = -3; }, (r) => r.wood === 0],
     ['week 7 with 3 results', (s) => { s.season.week = 7; s.season.results = s.season.results.slice(0, 3); s.season.pick = null; }, (r) => r.season.week === 4 && r.season.results.length === 3],
-    ['9 results with week 2', (s) => { s.season.week = 2; s.season.results = s.season.results.concat([{ type: 'birthday', stars: 3 }, { type: 'finale', stars: 4 }]); s.season.pick = null; }, (r) => r.season.week === 9 && r.season.results.length === 9 && r.season.pick === null],
+    ['9 results with week 2 (v3.5: six and the finale, week 7)', (s) => { s.season.week = 2; s.season.results = s.season.results.concat([{ type: 'birthday', stars: 3 }, { type: 'birthday', stars: 3 }, { type: 'birthday', stars: 3 }, { type: 'finale', stars: 4 }]); s.season.pick = null; }, (r) => r.season.week === SEASON_WEEKS && r.season.results.length === SEASON_WEEKS && r.season.results[SEASON_WEEKS - 1].type === 'finale' && r.season.pick === null],
     ['a bad result type', (s) => { s.season.week = 3; s.season.results = [{ type: 'bogus', stars: 3 }, { type: 'birthday', stars: 3 }]; s.season.pick = null; }, (r) => deepEq(r.season.results, [{ type: 'birthday', stars: 3 }]) && r.season.week === 2],
     ['stars 9', (s) => { s.season.week = 2; s.season.results = [{ type: 'picnic', stars: 9 }]; s.season.pick = null; }, (r) => r.season.results[0] && r.season.results[0].stars === 5],
     ['yard stars 4', (s) => { s.season.week = 2; s.season.results = [{ type: 'yard', stars: 4 }]; s.season.pick = null; }, (r) => r.season.results[0] && r.season.results[0].stars === 0],
@@ -2713,7 +2847,7 @@ function validateV4(P) {
     mut(s);
     let r;
     try { r = V(s); } catch (e) { throw new Error('v4 ' + label + ' threw: ' + e.message); }
-    assert(r && r.v === 8, 'v4 ' + label + ' returned ' + describe(r && r.v));
+    assert(r && r.v === SAVE_V, 'v4 ' + label + ' returned ' + describe(r && r.v));
     assert(!('hires' in r), 'v4 ' + label + ' kept a hires key');
     assert(ok(r), 'v4 ' + label + ' gave ' + describe({ charcoal: r.charcoal, wood: r.wood, season: r.season, player: r.player, pitName: r.pitName, crew: r.crew }));
   }
@@ -2731,9 +2865,10 @@ function validateV5(P) {
   const rt = V(SAVE_V5_SAMPLE);
   // D9: a v5 save migrates to v 6 on that week's Monday, nothing else moves.
   const want5 = base();
-  want5.v = 8;
+  want5.v = SAVE_V;
+  want5.pit = { xp: 0, longDay: 0 };   // v3.5
   delete want5.settings;   // 2026-10-19: an old save's length setting is ignored
-  Object.assign(want5.season, { day: 0, dayLog: [null, null, null, null, null, null, null], prepped: false, loadin: false, overnight: null, advance: 0 });
+  Object.assign(want5.season, { day: 0, dayLog: [null, null, null, null, null, null, null], prepped: false, loadin: false, overnight: null, advance: 0, plan: null });
   // v3.3: the shelf, the ribbons and no open Offseason.
   Object.assign(want5, { trophies: [], ribbons: { sausage: 0, chicken: 0, ribs: 0, butt: 0, brisket: 0 }, offseason: null });
   assert(deepEq(rt, want5), 'the X11.1 sample does not migrate to v 6 on Monday: ' + describe(rt));
@@ -2774,7 +2909,7 @@ function validateV5(P) {
     mut(s);
     let r;
     try { r = V(s); } catch (e) { throw new Error('v5 ' + label + ' threw: ' + e.message); }
-    assert(r && r.v === 8, 'v5 ' + label + ' returned ' + describe(r && r.v));
+    assert(r && r.v === SAVE_V, 'v5 ' + label + ' returned ' + describe(r && r.v));
     assert(ok(r), 'v5 ' + label + ' gave crew ' + describe(r.crew) + ', crewSeq ' + describe(r.crewSeq) + ', hiring ' + describe(r.hiring && { round: r.hiring.round, n: r.hiring.pool && r.hiring.pool.length }) + ', season ' + describe(r.season));
   }
   const cyc = base(); cyc.crew[0].look.loop = cyc; cyc.season.walkins[0].self = cyc;
@@ -3006,17 +3141,18 @@ function generatorHeadless(P) {
   };
   const by = (list, id) => list.find((o) => o.id === id);
   const sizesOf = (b, len) => C.SAFE_SIZES.map((f) => Math.max(len, Math.round(b * f)));
+  const HC = (n) => Math.round(n * C.LENGTHS.normal.factor);   // v3.5: a row's guests at the length
   const menuIn = (id, menu) => BOOKING_MENUS[id].some((pr) => sameJSON(MEAT_IDS.filter((m) => pr.includes(m)), menu));
   const kS0 = R.kOf(0, true);
   // Weeks 1 to 8 on one kettle: the Birthday is the safe bet, the Church picnic the gear stretch.
-  for (let w = 1; w <= 8; w++) {
+  for (let w = 1; w <= SEASON_WEEKS - 1; w++) {
     const { got } = cmp(Object.assign({}, base, { week: w }), 'week ' + w);
     assert(sameJSON(got.map((o) => o.id), ['birthday', 'picnic', 'yard']), 'week ' + w + ' ids ' + describe(got.map((o) => o.id)));
     const b0 = by(got, 'birthday'), p0 = by(got, 'picnic');
-    assert(b0.tier === 'safe' && b0.safe === true && b0.base === 12 && sizesOf(12, b0.menu.length).includes(b0.headcount) && menuIn('birthday', b0.menu),
+    assert(b0.tier === 'safe' && b0.safe === true && b0.base === HC(12) && sizesOf(HC(12), b0.menu.length).includes(b0.headcount) && menuIn('birthday', b0.menu),
       'week ' + w + ' Birthday ' + describe(offerBrief(b0)) + ', wanted the safe bet, base 12, a SAFE_SIZES headcount');
-    assert(p0.tier === 'stretch' && p0.safe === false && p0.needs === P.STRINGS.ui.needsKettle2 && p0.headcount === 20 && p0.base === 20 && menuIn('picnic', p0.menu)
-      && p0.pay === R.feeK(20, p0.menu, kS0) && p0.patience === P.BOOKINGS.picnic.patience + C.STRETCH_PATIENCE && p0.difficulty === Math.min(3, P.BOOKINGS.picnic.flames + 1),
+    assert(p0.tier === 'stretch' && p0.safe === false && p0.needs === P.STRINGS.ui.needsKettle2 && p0.headcount === HC(20) && p0.base === HC(20) && menuIn('picnic', p0.menu)
+      && p0.pay === R.feeK(HC(20), p0.menu, kS0) && p0.patience === P.BOOKINGS.picnic.patience + C.STRETCH_PATIENCE && p0.difficulty === Math.min(3, P.BOOKINGS.picnic.flames + 1),
       'week ' + w + ' Church picnic ' + describe(offerBrief(p0)) + ', wanted the stretch: 20 guests, the Needs line, the stretch pay, patience and flames');
   }
   const w1 = P.genOffers(Object.assign({}, base, { week: 1 }));
@@ -3026,8 +3162,8 @@ function generatorHeadless(P) {
   const expectOffer = (o, want, label) => {
     for (const [k, v] of Object.entries(want)) assert(deepEq(o[k], v), label + '.' + k + ' is ' + describe(o[k]) + ', wanted ' + describe(v));
   };
-  expectOffer(bd, { difficulty: 1, window: 60, patience: 45, rail: R.rail(bd.headcount, bd.menu, null), pay: R.feeK(bd.headcount, bd.menu, 1), deposit: R.deposit(R.feeK(bd.headcount, bd.menu, 1)) }, 'birthday');   // W26 Q-5: window 60
-  expectOffer(pc, { window: 80, rail: R.rail(20, pc.menu, null), deposit: R.deposit(pc.pay) }, 'picnic');
+  expectOffer(bd, { difficulty: 1, window: 60 * C.LENGTHS.normal.window / C.BASE_WINDOW, patience: 45, rail: R.rail(bd.headcount, bd.menu, null), pay: R.feeK(bd.headcount, bd.menu, 1), deposit: R.deposit(R.feeK(bd.headcount, bd.menu, 1)) }, 'birthday');   // W26 Q-5: window 60
+  expectOffer(pc, { window: C.LENGTHS.normal.window, rail: R.rail(HC(20), pc.menu, null), deposit: R.deposit(pc.pay) }, 'picnic');
   expectOffer(yd, { headcount: 0, menu: [], pay: 0, deposit: 0, rail: zeroMeat() }, 'yard');
   // Deviation 25: the v3.0 literals on the draw that keeps the v3.0 shape.
   if (lit && bd.headcount === 12 && sameJSON(bd.menu, ['sausage', 'chicken'])) {
@@ -3052,7 +3188,7 @@ function generatorHeadless(P) {
   // each type's menu pair moves on from the week before.
   let prev = null;
   const stretchSeen = {};
-  for (let w = 1; w <= 8; w++) {
+  for (let w = 1; w <= SEASON_WEEKS - 1; w++) {
     const list = cmp(Object.assign({}, base, { week: w, gear: k2Gear }), 'two kettles week ' + w).got;
     const bk = books(list);
     const idxNow = Object.fromEntries(bk.map((o) => [o.type, o.menuIdx]));
@@ -3073,7 +3209,7 @@ function generatorHeadless(P) {
   notes.push('two kettles weeks 2 to 8: one sized stretch a week (' + Object.entries(stretchSeen).map(([k, v]) => k + ' ' + v).join(', ') + '), menus rotate');
   // The middle third pays a tenth more (X3.3), on one kettle and two.
   for (const gear of [noGear, k2Gear]) {
-    for (let w = 1; w <= 8; w++) {
+    for (let w = 1; w <= SEASON_WEEKS - 1; w++) {
       const list = cmp(Object.assign({}, base, { week: w, rep: 50, gear }), 'rep 50 week ' + w).got;
       for (const o of books(list)) {
         const k = R.kOf(1, o.tier === 'stretch');
@@ -3084,7 +3220,7 @@ function generatorHeadless(P) {
   // The top third's repeat invite (X3.4 step 7).
   let invites = 0;
   for (const gear of [noGear, k2Gear]) {
-    for (let w = 1; w <= 8; w++) {
+    for (let w = 1; w <= SEASON_WEEKS - 1; w++) {
       const list = cmp(Object.assign({}, base, { week: w, rep: 80, gear }), 'rep 80 week ' + w).got;
       const bk = books(list);
       const last = bk[bk.length - 1];
@@ -3100,17 +3236,17 @@ function generatorHeadless(P) {
     const o = P.genOffers(Object.assign({}, base, { week: 9, gear }))[0];
     assert(o.id === 'finale' && o.comp && o.headcount === 0 && o.pay === 0 && o.deposit === 0 && o.host === null && o.day === 5, 'competition ' + describe(offerView(o)));
   }
-  const f9 = cmp(Object.assign({}, base, { week: 9 }), 'week 9').got;
+  const f9 = cmp(Object.assign({}, base, { week: SEASON_WEEKS }), 'week 9').got;
   assert(f9.length === 1 && f9[0].id === 'finale' && f9[0].comp.contest === 'backyard' && sameJSON(f9[0].menu, ['chicken', 'sausage', 'ribs', 'butt']) && f9[0].comp.entry === 20
-    && sameJSON(f9[0].comp.prizes, [200, 120, 80]) && sameJSON(f9[0].comp.times, [45, 85, 125, 165]) && f9[0].comp.field === 10 && f9[0].comp.mean === 60, 'week 9 ' + describe(f9[0]));
-  const g9r = cmp(Object.assign({}, base, { week: 9, rep: 50 }), 'week 9 at rep 50').got;
-  const g9i = cmp(Object.assign({}, base, { week: 9, rep: 80, gear: drumGear }), 'week 9 at rep 80').got;
+    && sameJSON(f9[0].comp.prizes, [200, 120, 80]) && sameJSON(f9[0].comp.times, [68, 128, 188, 248]) && f9[0].comp.field === 10 && f9[0].comp.mean === 60, 'week 9 ' + describe(f9[0]));
+  const g9r = cmp(Object.assign({}, base, { week: SEASON_WEEKS, rep: 50 }), 'week 9 at rep 50').got;
+  const g9i = cmp(Object.assign({}, base, { week: SEASON_WEEKS, rep: 80, gear: drumGear }), 'week 9 at rep 80').got;
   assert(sameJSON(g9r.map((o) => o.id), ['finale', 'finale_backyard']) && sameJSON(g9i.map((o) => o.id), ['finale', 'finale_regional', 'finale_backyard']), 'week 9 lower contests (V33-8) ' + describe([g9r.map((o) => o.id), g9i.map((o) => o.id)]));
   const f9r = g9r[0], f9i = g9i[0];
   assert(f9r.comp.contest === 'regional' && f9r.comp.entry === 50 && f9r.comp.noDrum === true && f9r.comp.mean === 70 && sameJSON(f9r.comp.prizes, [500, 300, 150])
     && f9i.comp.contest === 'invitational' && f9i.comp.entry === 100 && f9i.comp.noDrum === false && f9i.comp.mean === 80 && sameJSON(f9i.comp.prizes, [1200, 600, 300]), 'contests ' + describe([f9r.comp, f9i.comp]));
   // v3.3 [S 3.3]: seasons 2 to 5 against the reference with the season factor.
-  for (const year of [2, 3, 4, 5]) for (const week of [2, 5, 8]) cmp(Object.assign({}, base, { year, week, rep: 50, gear: k2Gear, cash: 300 }), 'season ' + year + ' week ' + week);
+  for (const year of [2, 3, 4, 5]) for (const week of [2, 5, SEASON_WEEKS - 1]) cmp(Object.assign({}, base, { year, week, rep: 50, gear: k2Gear, cash: 300 }), 'season ' + year + ' week ' + week);
   assert(P.seasonScale(1) === 1 && Math.abs(P.seasonScale(2) - 1.1) < 1e-9 && Math.abs(P.seasonScale(4) - 1.3) < 1e-9 && Math.abs(P.seasonScale(9) - 1.3) < 1e-9, 'seasonScale');
   notes.push('week 9 the competition (Backyard Open, Regional Cook-off at rep 50, Invitational at 80); seasons 2 to 5 scaled');
   const low = cmp(Object.assign({}, base, { week: 2, cash: 50 }), 'cash 50').got;
@@ -3129,7 +3265,7 @@ function generatorHeadless(P) {
   const orderKey = (o) => [o.safe ? 0 : 1, o.tier === 'safe' ? 0 : 1, o.difficulty, o.pay];
   const before = (a, b) => { const ka = orderKey(a), kb = orderKey(b); for (let i = 0; i < ka.length; i++) if (ka[i] !== kb[i]) return ka[i] < kb[i]; return true; };
   for (const [rep, n] of [[20, 2], [50, 3], [80, 4]]) {
-    for (let w = 1; w <= 8; w++) {
+    for (let w = 1; w <= SEASON_WEEKS - 1; w++) {
       const got = cmp(Object.assign({}, base, { week: w, rep, types: five }), 'stub rep ' + rep + ' week ' + w).got;
       const bk = books(got);
       assert(bk.length === n, 'stub rep ' + rep + ' week ' + w + ': ' + bk.length + ' bookings, wanted ' + n);
@@ -3147,7 +3283,7 @@ function generatorHeadless(P) {
   }
   // A stub list of stretch rows (brisket without the drum) and one safe row.
   const stretch = [stub('b1', 10, ['brisket'], 1), stub('b2', 12, ['brisket'], 2), stub('b3', 14, ['brisket'], 3), stub('b4', 8, ['brisket', 'sausage'], 1), stub('ok', 10, ['sausage'], 2)];
-  for (let w = 1; w <= 8; w++) {
+  for (let w = 1; w <= SEASON_WEEKS - 1; w++) {
     const input = Object.assign({}, base, { week: w, types: stretch });
     const { got } = cmp(input, 'stretch week ' + w);
     const bk = books(got);
@@ -3321,8 +3457,8 @@ function weekLoopHeadless(P) {
   const td = st().today;
   const L = C.LENGTHS.normal;
   const lastCall = Math.min(td.gateAt + bk.window, L.seconds - C.LAST_CALL_GUARD);
-  assert(td.gateAt === C.GATE_OPENS && td.lastCallAt === lastCall && td.endAt === L.seconds, 'timings ' + describe([td.gateAt, td.lastCallAt, td.endAt]) + ', wanted ' + describe([C.GATE_OPENS, lastCall, L.seconds]));
-  assert(td.gateAt === 30 && td.lastCallAt === 90 && td.endAt === 125, 'timings ' + describe([td.gateAt, td.lastCallAt, td.endAt]) + ', W26 literal 30, 90, 125 (the Birthday window is 60)');
+  assert(td.gateAt === C.EVENT_GATE && td.lastCallAt === lastCall && td.endAt === L.seconds, 'timings ' + describe([td.gateAt, td.lastCallAt, td.endAt]) + ', wanted ' + describe([C.EVENT_GATE, lastCall, L.seconds]));
+  assert(td.gateAt === 20 && td.lastCallAt === 121.25 && td.endAt === 190, 'timings ' + describe([td.gateAt, td.lastCallAt, td.endAt]) + ', v3.5 literal 20, 121.25, 190 (the Birthday window 60 at the 135 length)');
   assert(td.kind === 'booking' && td.booked === bk.headcount && td.pending === bk.headcount, 'today booked ' + td.booked + ', pending ' + td.pending + ', kind ' + td.kind);
   // Idle to the gate, then to the end, watching every customer.
   let maxLine = 0, unbooked = 0, loopAtGate = null;
@@ -3530,7 +3666,7 @@ function seasonEndHeadless(P) {
       // v3.3 [S 3.4, 3.5]: the competition runs C.COMP_SECONDS whatever the length, with no guests.
       const ft = st().today;
       assert(ft.endAt === C.COMP_SECONDS && ft.comp && ft.booked === 0 && ft.pending === 0, 'competition timings ' + describe([ft.gateAt, ft.lastCallAt, ft.endAt, ft.booked]));
-      if (atStart(C, ['COMP_SECONDS'])) assert(ft.endAt === 180, 'competition end ' + ft.endAt + ', [S 3.4] literal 180');
+      if (atStart(C, ['COMP_SECONDS'])) assert(ft.endAt === 270, 'competition end ' + ft.endAt + ', v3.5 literal 270');
     }
     assert(h.sim.settle(3) === true, 'week ' + w + ': settle(3) refused (kind ' + st().today.kind + ')');
     h.drain();
@@ -3544,7 +3680,7 @@ function seasonEndHeadless(P) {
   h.drain();
   assert(st().loop === LOOP.seasonEnd && st().phase === PHASE.morning, 'after week 9 loop ' + st().loop + ', phase ' + st().phase);
   const se = h.of(EV3.seasonEnd, n0);
-  assert(se.length === 1 && se[0].year === 1 && sameJSON(se[0].stars, new Array(9).fill(3)), 'season_end ' + describe(se.map(strip)));
+  assert(se.length === 1 && se[0].year === 1 && sameJSON(se[0].stars.slice(0, SEASON_WEEKS - 1), new Array(SEASON_WEEKS - 1).fill(3)) && se[0].stars.length === SEASON_WEEKS && [3, 4].includes(se[0].stars[SEASON_WEEKS - 1]), 'season_end ' + describe(se.map(strip)));
   // v3.1 (X5.9, X15.1 step 16): a fixture card whose contract runs out at this season end, off the
   // table wage, resting, raised and a rookie, renews at wageFor(cardStars(skills), role).
   const fx = mkCard(P, 1, 'Dale', 'fire', [3, 3.5], { wage: 12, contract: 1, mood: -1, rookie: true, raised: true, bring: false, bench: 1, worked: 3 });
@@ -3554,7 +3690,7 @@ function seasonEndHeadless(P) {
   const repBefore = st().rep, cashBefore = st().cash, chBefore = st().charcoal, stockBefore = Object.assign({}, st().stock);
   const repTo = Math.max(C.SEASON_REP_FLOOR, Math.floor(repBefore * C.SEASON_CARRY_REP));
   const pv = h.sim.seasonEndPreview();
-  assert(pv && pv.year === 1 && sameJSON(pv.stars, new Array(9).fill(3)) && pv.cash === cashBefore && pv.repFrom === repBefore && pv.repTo === repTo && pv.charcoal === chBefore && deepEq(pv.spoiled, stockBefore), 'seasonEndPreview() ' + describe(pv) + ', wanted rep ' + repBefore + ' to ' + repTo);
+  assert(pv && pv.year === 1 && sameJSON(pv.stars.slice(0, SEASON_WEEKS - 1), new Array(SEASON_WEEKS - 1).fill(3)) && pv.stars.length === SEASON_WEEKS && pv.cash === cashBefore && pv.repFrom === repBefore && pv.repTo === repTo && pv.charcoal === chBefore && deepEq(pv.spoiled, stockBefore), 'seasonEndPreview() ' + describe(pv) + ', wanted rep ' + repBefore + ' to ' + repTo);
   assert(Array.isArray(pv.crew) && deepEq(pv.crew, [{ id: 1, name: 'Dale', wageFrom: 12, wageTo, renews: true }]), 'seasonEndPreview().crew ' + describe(pv.crew) + ', wanted Dale renewing 12 to ' + wageTo);
   assert(st().rep === repBefore && st().cash === cashBefore, 'seasonEndPreview() changed state');
   const n1 = h.log.length;
@@ -3593,8 +3729,8 @@ function seasonEndHeadless(P) {
 function compSave(P, over = {}) {
   const h0 = toWeek(P, over.seed || 33);
   const s = h0.sim.serialize();
-  s.season.week = 9;
-  s.season.results = new Array(8).fill(0).map(() => ({ type: 'birthday', stars: 3 }));
+  s.season.week = SEASON_WEEKS;
+  s.season.results = new Array(SEASON_WEEKS - 1).fill(0).map(() => ({ type: 'birthday', stars: 3 }));
   s.season.day = 5;
   s.season.dayLog = ['off', 'off', 'off', 'off', 'off', null, null];
   s.season.pick = null;
@@ -3609,7 +3745,7 @@ function compSave(P, over = {}) {
 }
 function compFrom(P, over = {}) {
   const v = P.validateSave(JSON.parse(JSON.stringify(compSave(P, over))));
-  assert(v && v.v === 8, 'validateSave refused the week 9 fixture');
+  assert(v && v.v === SAVE_V, 'validateSave refused the week 9 fixture');
   return headless(P, v, over.seed || 33, { days: true });
 }
 // Book the competition and load up on the Saturday.
@@ -3712,7 +3848,7 @@ function compHeadless(P) {
   const rivalNames = c.standings.filter((r) => !r.you).map((r) => r.name);
   assert(rivalNames.every((nm) => P.STRINGS.rivals.includes(nm)) && new Set(rivalNames).size === 9, 'rivals ' + describe(rivalNames));
   assert(t.repDelta === (c.place <= 3 ? 10 : 0), 'fan rating ' + t.repDelta + ' at place ' + c.place);
-  const res = st().season.results[8];
+  const res = st().season.results[SEASON_WEEKS - 1];
   assert(res && res.type === 'finale' && res.place === c.place && res.contest === 'backyard' && res.stars === (c.place <= 3 ? 4 : 3), 'week 9 result ' + describe(res));
   assert(st().trophies.length === (c.place === 1 ? 1 : 0) && c.trophy === (c.place === 1), 'trophy ' + describe(st().trophies));
   // The same seed gives the same field (seeded rivals).
@@ -3765,7 +3901,7 @@ function shelfHeadless(P) {
   assert(ev.length === 1 && ev[0].place === 1 && ev[0].trophy === true, 'comp_results ' + describe(ev.map(strip)));
   // Saved and reloaded: v7 keeps the shelf and the ribbons, and drops a bad entry.
   const sv = h.sim.serialize();
-  assert(sv.v === 8 && deepEq(sv.trophies, [{ year: 1, contest: 'backyard', place: 1 }]) && deepEq(sv.ribbons, rib), 'saved shelf ' + describe({ t: sv.trophies, r: sv.ribbons }));
+  assert(sv.v === SAVE_V && deepEq(sv.trophies, [{ year: 1, contest: 'backyard', place: 1 }]) && deepEq(sv.ribbons, rib), 'saved shelf ' + describe({ t: sv.trophies, r: sv.ribbons }));
   const dirty = JSON.parse(JSON.stringify(sv));
   dirty.trophies = dirty.trophies.concat([{ year: 2, contest: 'nope' }, 'x', { year: 'q', contest: 'regional' }]);
   dirty.ribbons.ribs = -4;
@@ -3773,7 +3909,7 @@ function shelfHeadless(P) {
   assert(v && v.trophies.length === 2 && v.trophies[1].contest === 'regional' && v.trophies[1].year === 1 && v.ribbons.ribs === 0, 'dirty shelf ' + describe(v && { t: v.trophies, r: v.ribbons }));
   const v6 = Object.assign(JSON.parse(JSON.stringify(sv)), { v: 6 });
   const m6 = P.validateSave(v6);
-  assert(m6 && m6.v === 8 && m6.trophies.length === 0, 'a v6 save reads no shelf ' + describe(m6 && m6.trophies));
+  assert(m6 && m6.v === SAVE_V && m6.trophies.length === 0, 'a v6 save reads no shelf ' + describe(m6 && m6.trophies));
   // A full shelf: the win still counts, no seventh trophy.
   const six = new Array(C.TROPHY_MAX).fill(0).map((x, i) => ({ year: 1, contest: 'backyard', place: 1 }));
   const hf = compFrom(P, { seed: 35, trophies: six });
@@ -3789,7 +3925,7 @@ function shelfHeadless(P) {
   hl.sim.settle(1);
   hl.drain();
   const cl = hl.st().till.comp;
-  assert(cl.place > 3 && cl.prize === P.C.CONTESTS[0].show && P.C.CONTESTS[0].show > 0 && hl.st().till.repDelta === 0 && hl.st().trophies.length === 0 && hl.st().season.results[8].stars === 3, 'a low finish ' + describe({ place: cl.place, prize: cl.prize }));
+  assert(cl.place > 3 && cl.prize === P.C.CONTESTS[0].show && P.C.CONTESTS[0].show > 0 && hl.st().till.repDelta === 0 && hl.st().trophies.length === 0 && hl.st().season.results[SEASON_WEEKS - 1].stars === 3, 'a low finish ' + describe({ place: cl.place, prize: cl.prize }));
   return 'win: trophy and ribbons ' + c.ribbons.join(', ') + '; saved v7 and cleaned; a v6 save has an empty shelf; a full shelf keeps 6; place ' + cl.place + ' pays the show money ' + cl.prize;
 }
 
@@ -3824,7 +3960,7 @@ function offseasonHeadless(P) {
   const opened = h.of('offseason_open');
   assert(opened.length === 1, 'offseason_open ' + describe(opened.map(strip)));
   // The screen, top to bottom: the record with the placing, the shelf, contracts, moving on, coming next.
-  assert(pv.record.length === 9 && pv.record[8].type === 'finale' && pv.record[8].place >= 1 && pv.record[8].contest === 'backyard' && pv.place === pv.record[8].place, 'record ' + describe(pv.record[8]));
+  assert(pv.record.length === SEASON_WEEKS && pv.record[SEASON_WEEKS - 1].type === 'finale' && pv.record[SEASON_WEEKS - 1].place >= 1 && pv.record[SEASON_WEEKS - 1].contest === 'backyard' && pv.place === pv.record[SEASON_WEEKS - 1].place, 'record ' + describe(pv.record[SEASON_WEEKS - 1]));
   assert(Array.isArray(pv.trophies) && pv.nextYear === 2 && 'next' in pv && Math.abs(pv.scale - 1.1) < 1e-9, 'preview fields ' + describe({ nextYear: pv.nextYear, next: pv.next, scale: pv.scale }));
   const atEnd = h.st().crew.map((c) => JSON.parse(JSON.stringify(c)));
   for (const l of pv.leaving) {
@@ -4064,7 +4200,7 @@ function v6Save(over = {}) {
 }
 function daysFrom(P, save, seed) {
   const v = P.validateSave(JSON.parse(JSON.stringify(save)));
-  assert(v && v.v === 8, 'validateSave refused the v6 fixture ' + describe(save).slice(0, 200));   // v3.3: a v6 save loads as 7
+  assert(v && v.v === SAVE_V, 'validateSave refused the v6 fixture ' + describe(save).slice(0, 200));   // v3.3: a v6 save loads as 7
   return headless(P, v, seed, { days: true });
 }
 const ZERO_STOCK = { sausage: 0, chicken: 0, ribs: 0, butt: 0, brisket: 0 };
@@ -4087,7 +4223,7 @@ function daysLoopHeadless(P) {
   const C = P.C;
   const notes = [];
   assert(sameJSON(P.DAY_IDS, ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']), 'DAY_IDS ' + describe(P.DAY_IDS));
-  assert(C.SAVE_VERSION === 8 && C.WEEK_DAYS === 7 && sameJSON(C.BOOK_DAY, { birthday: 5, picnic: 6, finale: 5, yard: null }), 'D2 keys');
+  assert(C.SAVE_VERSION === SAVE_V && C.WEEK_DAYS === 7 && sameJSON(C.BOOK_DAY, { birthday: 5, picnic: 6, finale: 5, yard: null }), 'D2 keys');
   // The week by the sim: the options each day, the tick, the save on every day change.
   const h = daysFrom(P, v6Save({ season: { pick: 'birthday' } }), 7201);
   const s = () => h.st().season;
@@ -4112,7 +4248,7 @@ function daysLoopHeadless(P) {
     quickNode(h, 'off');
     seen.push(want);
     const sv = h.sim.serialize();
-    assert(sv.v === 8 && sv.season.day === d + 1 && sv.season.dayLog[d] === 'off' && sv.season.dayLog[d + 1] === null, 'save after day ' + d + ' ' + describe(sv.season.dayLog));
+    assert(sv.v === SAVE_V && sv.season.day === d + 1 && sv.season.dayLog[d] === 'off' && sv.season.dayLog[d + 1] === null, 'save after day ' + d + ' ' + describe(sv.season.dayLog));
     assert(h.of(EVENT.saveWanted).some((e) => e.reason === 'day'), 'no save_wanted day');
   }
   assert(sameJSON(kinds(), ['yard', 'off']), 'Friday options ' + describe(kinds()));
@@ -4171,7 +4307,7 @@ function daysLoopHeadless(P) {
   assert(d3.season.day === 5 && d3.season.loadin === false && sameJSON(d3.season.dayLog, ['off', 'off', 'off', 'off', 'off', null, null]), 'no pick keeps the day, never the Load-in ' + describe(d3.season));
   const d4 = V(v6Save({ season: { week: 5, pick: 'birthday', day: 3 } }));
   assert(d4.season.week === 3 && d4.season.day === 0, 'a week that does not hold opens Monday ' + describe(d4.season));
-  assert(V({ v: 9 }) === null, '{ v: 9 } accepted');
+  assert(V({ v: 10 }) === null, '{ v: 10 } accepted');
   notes.push('morning shops cost ' + seen.join(', ') + ' Monday to Thursday');
   return notes.join('; ') + '; the report save reloads on Sunday, a Yard week writes { yard, 0 }, dirty v6 keys clamp';
 }
@@ -4191,7 +4327,7 @@ function daysPlaytestHeadless(P) {
   const y = h.sim.chooseDay('yard');
   h.drain();
   const t = h.st().today, L = C.LENGTHS.normal;
-  const gate = Math.round(C.GATE_OPENS * C.YARD_DAY_FRAC);
+  const gate = Math.round(C.EVENT_GATE * C.YARD_DAY_FRAC);
   assert(y.ok && t.gateAt === gate && t.endAt === Math.round(L.seconds * C.YARD_DAY_FRAC)
     && t.lastCallAt === Math.min(gate + Math.round(L.window * C.YARD_DAY_FRAC), t.endAt - C.LAST_CALL_GUARD) && h.st().spawnAt === gate, 'the half day ' + describe({ gateAt: t.gateAt, lastCallAt: t.lastCallAt, endAt: t.endAt, spawnAt: h.st().spawnAt }));
   // V32-11, v3.4: the first Rest trains the card and names it; at the mood cap it says nothing changed.
@@ -4293,10 +4429,10 @@ function daysStockHeadless(P) {
   assert(adv.ok && b.st().cash === 3 + dep && bs().advance === dep && b.of('advance').length === 1 && b.sim.rescueAdvance().ok === false, 'rescueAdvance ' + describe({ adv, cash: b.st().cash, advance: bs().advance }));
   if (other) assert(b.sim.bookOffer(other.id).message === D34.advanceLocked && bs().booking.type === 'birthday', 'the advance did not lock the booking');
   const sv = b.sim.serialize();
-  assert(sv.v === 8 && sv.season.advance === dep, 'the save keeps the advance ' + describe(sv.season.advance));
+  assert(sv.v === SAVE_V && sv.season.advance === dep, 'the save keeps the advance ' + describe(sv.season.advance));
   assert(daysFrom(P, sv, 7308).st().season.advance === dep, 'the reload keeps the advance');
   const v7 = P.validateSave(JSON.parse(JSON.stringify(Object.assign({}, sv, { v: 7 }))));
-  assert(v7 && v7.v === 8 && v7.season.advance === 0, 'a v7 save reads advance 0 ' + describe(v7 && v7.season.advance));
+  assert(v7 && v7.v === SAVE_V && v7.season.advance === 0, 'a v7 save reads advance 0 ' + describe(v7 && v7.season.advance));
   for (let d = 0; d < 5; d++) quickNode(b, 'off');
   b.st().charcoal = 6;   // fixture: Saturday's cook
   const before = b.st().cash;
@@ -4598,7 +4734,7 @@ function hiringHeadless(P) {
   assert(h.of(EVENT.saveWanted, n1).some((e) => e.reason === 'hiring'), 'no save_wanted hiring after the round');
   // A reload mid Hiring Day restores the pool, the statuses and the round.
   const ser = h.sim.serialize();
-  assert(ser && ser.v === 8 && ser.hiring && ser.hiring.round === 2 && ser.season.week === 1 && ser.season.pick === null, 'serialize() on Hiring Day ' + describe(ser && { v: ser.v, hiring: ser.hiring && ser.hiring.round, week: ser.season && ser.season.week, pick: ser.season && ser.season.pick }));
+  assert(ser && ser.v === SAVE_V && ser.hiring && ser.hiring.round === 2 && ser.season.week === 1 && ser.season.pick === null, 'serialize() on Hiring Day ' + describe(ser && { v: ser.v, hiring: ser.hiring && ser.hiring.round, week: ser.season && ser.season.week, pick: ser.season && ser.season.pick }));
   const back = P.validateSave(JSON.parse(JSON.stringify(ser)));
   assert(back && back.hiring && back.hiring.pool.length === C.POOL_SIZE, 'validateSave dropped the Hiring Day ' + describe(back && back.hiring));
   const again = P.createSim(back, 641);
@@ -4646,7 +4782,7 @@ function walkinsHeadless(P) {
   assert(sameJSON(counts, [20, 50, 80].map((rep) => C.WALKINS[rep >= C.THIRD_EDGES[1] ? 2 : rep >= C.THIRD_EDGES[0] ? 1 : 0])), 'genWalkins counts ' + describe(counts));
   if (atStartX(C, ['WALKINS'])) assert(sameJSON(counts, [2, 2, 3]), 'genWalkins counts ' + describe(counts) + ', X15.2 literal 2, 2, 3');
   assert(deepEq(P.genWalkins({ seed: 7, year: 1, week: 2, rep: 80 }), P.genWalkins({ seed: 7, year: 1, week: 2, rep: 80 })), 'genWalkins twice differs');
-  for (let w = 1; w <= 8; w++) {
+  for (let w = 1; w <= SEASON_WEEKS - 1; w++) {
     for (const input of [{ seed: 7, year: 1, week: w, rep: 80 }, { seed: 4242, year: 2, week: w, rep: 20, avoid: ['Rosa', 'Dale'] }]) {
       const got = P.genWalkins(input);
       for (const a of got) assert(a.stars >= 2 && a.stars <= 4 && a.potential === Math.max(...a.skills) && a.wage === P.wageFor(a.stars, a.role), 'walk-in ' + describe(a) + ' (review 1: at its ceiling)');
@@ -5108,7 +5244,7 @@ function migrateHeadless(P) {
   const { v3, v4 } = migratedSamples();
   for (const [label, raw] of [['v3 (v2.1)', v3], ['v4 (v3.0)', v4]]) {
     const r = P.validateSave(JSON.parse(JSON.stringify(raw)));
-    assert(r && r.v === 8 && !('hires' in r), label + ': ' + describe(r && { v: r.v, hires: r.hires }));
+    assert(r && r.v === SAVE_V && !('hires' in r), label + ': ' + describe(r && { v: r.v, hires: r.hires }));
     assert(Array.isArray(r.crew) && r.crew.length === 2, label + ': crew ' + describe(r.crew));
     const [run, fire] = r.crew;
     const common = (c, id) => c.id === id && c.mood === 0 && c.xp === 0 && c.banked === 0 && c.seasons === 0 && c.rookie === false && c.trait === null && c.bring === true && c.raised === false && c.notice === false && c.worked === 1 && c.bench === 0 && c.contract === 1 && c.potential === 4;
@@ -5631,7 +5767,17 @@ async function nextDayTap() {
 }
 // v3.4 playtest: the game's pick is the one big #hub-start; the other choice is #day-<kind> behind
 // #hub-change (Change plan). A pick that needs stock goes through the morning shop, confirmed here.
+// v3.5: Monday's week planner. The day by day flows plan every weekday a Yard day (so nothing passes
+// on its own) and start the week; each day is then picked on the hub as before.
+async function passPlanner() {
+  if (!(await present('planner'))) return false;
+  for (let d = 0; d < 5; d++) if ((await attrOf('plan-day-' + d, 'data-kind')) !== 'yard') { await click('plan-day-' + d); await advance(0); }
+  await click('plan-start');
+  await advance(0);
+  return true;
+}
 async function quickTap(kind) {
+  await passPlanner();
   if (!(await present('day-' + kind))) {
     const rk = await ev('(sim.recommendDay() || {}).kind');
     if (rk === kind) {
@@ -5701,6 +5847,18 @@ async function cartByTaps(lines) {
 // A v6 browser fixture (D10.1): the saveV5 one with the five day keys, Monday unless `over` says.
 const DAY_CARD = { id: 1, name: 'Rosa', role: 'run', skills: [2, 2], potential: 3, xp: 0, banked: 0, mood: 0, wage: 16, contract: 1, seasons: 0, rookie: false, trait: null,
   look: { skin: 2, hair: 1, hairColor: 2, face: 0, hat: 0, apron: 1 }, bring: true, raised: false, notice: false, worked: 1, bench: 0 };
+// v3.5: a v9 save from the v6 fixture, with the pitmaster and the plan keys.
+function saveV9(over = {}) {
+  const pit = over.pit, decor = over.decor;
+  const o = Object.assign({}, over);
+  delete o.pit; delete o.decor;
+  const s = saveV6(o);
+  s.v = 9;
+  s.pit = Object.assign({ xp: 0, longDay: 0 }, pit || {});
+  if (decor) s.decor = Object.assign({}, s.decor, decor);
+  s.season = Object.assign({ advance: 0, plan: null }, s.season);
+  return s;
+}
 function saveV6(over = {}) {
   const s = saveV5(over);
   s.v = 6;
@@ -6215,7 +6373,7 @@ async function v3BrowserSteps(captures) {
     key = await lookKeyNow();
     assert(key === lookKeyOf(MARTY.look), 'art.lookKey() after Fire it up ' + describe(key));
     const raw = await storedSave();
-    assert(raw && raw.v === 8 && raw.player && raw.player.name === MARTY.name && deepEq(raw.player.look, MARTY.look) && raw.pitName === MARTY.pit && !('hires' in raw), 'stored save ' + describe(raw && { v: raw.v, player: raw.player, pitName: raw.pitName, hires: raw.hires }));
+    assert(raw && raw.v === SAVE_V && raw.player && raw.player.name === MARTY.name && deepEq(raw.player.look, MARTY.look) && raw.pitName === MARTY.pit && !('hires' in raw), 'stored save ' + describe(raw && { v: raw.v, player: raw.player, pitName: raw.pitName, hires: raw.hires }));
     return CREATOR_TAPS.length + ' taps to ' + key + ', Marty of ' + MARTY.pit + ', saved v 5, on Hiring Day';
   }, { fatal: true });
 
@@ -6353,7 +6511,7 @@ async function v3BrowserSteps(captures) {
     await advance(0);
     assert((await loop()) === LOOP.week && (await visible(ID3.week)), 'after Start week 1: loop ' + describe(await loop()));
     const raw = await storedSave();
-    assert(raw && raw.v === 8 && raw.hiring === null && raw.season.drafted === true && raw.crew.length === 1 && raw.crew[0].name === target.name, 'stored save after Hiring Day ' + describe(raw && { v: raw.v, hiring: raw.hiring, drafted: raw.season && raw.season.drafted, crew: raw.crew }));
+    assert(raw && raw.v === SAVE_V && raw.hiring === null && raw.season.drafted === true && raw.crew.length === 1 && raw.crew[0].name === target.name, 'stored save after Hiring Day ' + describe(raw && { v: raw.v, hiring: raw.hiring, drafted: raw.season && raw.season.drafted, crew: raw.crew }));
     return 'two pages, a tryout showed ' + pot + ' stars, Pass kept focus, hired ' + target.name + ' (RUN, wage ' + target.wage + (onPage2 ? ', page 2' : '') + '), three taken, then the week 1 hub';
   }, { fatal: true });
 
@@ -6398,8 +6556,9 @@ async function v3BrowserSteps(captures) {
     const offers = await ev('S().season.offers.map((o) => ({ id: o.id, type: o.type, label: o.label, host: o.host, headcount: o.headcount, menu: o.menu, pay: o.pay, deposit: o.deposit, difficulty: o.difficulty }))');
     // v3.4 review: under the Start button the picked booking is one line and the offers sit behind
     // See offers; the Yard day card is gone (a weekday choice now).
-    const startHub = await present('hub-start');
-    if (startHub && (await present('offers-more'))) {
+    const startBtn = await present('hub-start');
+    const startHub = startBtn || (await present('planner'));   // v3.5: Monday's planner takes the Start button's place
+    if (startBtn && (await present('offers-more'))) {
       const ln = await text('offer-line');
       const bk = await ev('S().season.booking');
       assert(ln.startsWith(bk.label + ' ') && ln.endsWith(', pay ' + bk.pay) && !(await visible('offer-grid')), '#offer-line reads ' + describe(ln) + ' with the grid ' + ((await visible('offer-grid')) ? 'open' : 'closed'));
@@ -6702,8 +6861,8 @@ async function v3BrowserSteps(captures) {
     return describe(sp) + ' ' + describe(cl) + '; next week ' + describe(icWant);
   });
 
-  await step('season end after week 9', async () => {
-    await reload(saveV4({ season: { week: 9, results: resultsOf(8) }, cash: 300, rep: 40, charcoal: 10 }));
+  await step('season end after week 7', async () => {
+    await reload(saveV4({ season: { week: 9, results: resultsOf(8) }, cash: 300, rep: 40, charcoal: 10 }));   // v3.5: a nine week save opens week 7, the finale
     const cards = await ev('[...$(' + JSON.stringify(ID3.offers) + ').querySelectorAll("article")].map((a) => a.id)');
     assert(cards[0] === 'offer-finale' && cards.every((c) => /^offer-finale/.test(c)), 'week 9 cards ' + describe(cards));   // V33-8: lower contests follow
     await toBookedDay();   // D10.1
@@ -6753,7 +6912,7 @@ async function v3BrowserSteps(captures) {
     const wl = await accText(ID3.weekLabel);
     assert(wl.includes(fill(UI.weekOf, { w: 1 })), '#week-label reads ' + describe(wl));
     const raw = await storedSave();
-    assert(raw && raw.v === 8 && raw.season && raw.season.year === 2 && sameJSON(raw.season.results, []) && raw.season.drafted === true && raw.hiring === null, 'stored save season ' + describe(raw && raw.season));
+    assert(raw && raw.v === SAVE_V && raw.season && raw.season.year === 2 && sameJSON(raw.season.results, []) && raw.season.drafted === true && raw.hiring === null, 'stored save season ' + describe(raw && raw.season));
     return 'competition report (' + th + '), season end ' + describe(lines[ID3.seRep]) + ', Hiring Day for year 2, season 2 week 1';
   });
 
@@ -6775,7 +6934,7 @@ async function v3BrowserSteps(captures) {
     await hireGo(4);
     assert((await loop()) === LOOP.week && (await visible(ID3.week)), 'after hire-go four times: loop ' + describe(await loop()));
     const raw = await storedSave();
-    assert(raw && raw.v === 8 && raw.player && deepEq(raw.player.look, DEFAULT_LOOK) && raw.cash === SAVE_V3_SAMPLE.cash && raw.charcoal === SAVE_V3_SAMPLE.charcoal && raw.gear.kettle2 === true && sameJSON(raw.crew, []) && !('hires' in raw),
+    assert(raw && raw.v === SAVE_V && raw.player && deepEq(raw.player.look, DEFAULT_LOOK) && raw.cash === SAVE_V3_SAMPLE.cash && raw.charcoal === SAVE_V3_SAMPLE.charcoal && raw.gear.kettle2 === true && sameJSON(raw.crew, []) && !('hires' in raw),
       'stored save ' + describe(raw && { v: raw.v, player: raw.player, cash: raw.cash, charcoal: raw.charcoal, gear: raw.gear, crew: raw.crew }));
     return 'creator with ' + describe(sub) + ', notice shown, Hiring Day, week 1 hub, stored v 5 cash ' + raw.cash + ' charcoal ' + raw.charcoal;
   });
@@ -6825,18 +6984,20 @@ async function browserChecks() {
     await mouseTap(Math.round(b.x), Math.round(b.y));
     await sleep(100);
     const m1 = await ev('globalThis.' + GLOBAL_NAME + '.music.state()');
-    assert(m1.started === true && m1.context === m1.supported && m1.created === (m1.supported ? 1 : 0), 'after a tap ' + describe(m1));
+    // Joel 2026-10-19: music starts off, so a tap alone creates no AudioContext.
+    assert(m1.started === true && m1.muted === true && m1.created === 0, 'after a tap (music off by default) ' + describe(m1));
     const btn = await ev('(() => { const e = document.getElementById("mute"); const r = e.getBoundingClientRect(); return { w: r.width, h: r.height, p: e.getAttribute("aria-pressed") }; })()');
-    assert(btn.w >= 44 && btn.h >= 44 && btn.p === 'false', 'mute button ' + describe(btn));
+    assert(btn.w >= 44 && btn.h >= 44, 'mute button ' + describe(btn));
     await ev('document.getElementById("mute").click()');
+    await sleep(100);
     const s1 = await storedSave();
-    const muted = await ev('globalThis.' + GLOBAL_NAME + '.music.state().muted');
-    assert(s1 && s1.music === false && muted === true, 'after mute: save music ' + describe(s1 && s1.music) + ', muted ' + muted);
+    const m2 = await ev('globalThis.' + GLOBAL_NAME + '.music.state()');
+    assert(s1 && s1.music === true && m2.muted === false && m2.created === (m2.supported ? 1 : 0), 'after turning music on: save music ' + describe(s1 && s1.music) + ', ' + describe(m2));
     await ev('document.getElementById("mute").click()');
     const s2 = await storedSave();
-    const m2 = await ev('globalThis.' + GLOBAL_NAME + '.music.state()');
-    assert(s2 && s2.music === true && m2.muted === false, 'after unmute: save music ' + describe(s2 && s2.music) + ', ' + describe(m2));
-    return 'supported ' + m1.supported + ', theme ' + m2.theme + ' ' + m2.mode + ' at ' + m2.bpm + ' bpm; save flag false then true';
+    const muted = await ev('globalThis.' + GLOBAL_NAME + '.music.state().muted');
+    assert(s2 && s2.music === false && muted === true, 'after turning it off: save music ' + describe(s2 && s2.music) + ', muted ' + muted);
+    return 'supported ' + m2.supported + ', off by default, theme ' + m2.theme + ' ' + m2.mode + ' when on; save flag true then false';
   });
 
   await step('sprite list and palette', async () => {
@@ -7476,7 +7637,7 @@ async function browserChecks() {
     assert(r.v, 'validateSave returned null');
     assert(r.v.day === 2 && r.day === 2, 'save day ' + r.v.day + ', state day ' + r.day);
     assert(r.v.cash === r.cash, 'save cash ' + r.v.cash + ', state cash ' + r.cash);
-    assert(r.parsed.v === 8 && !('hires' in r.parsed) && Array.isArray(r.parsed.crew) && r.parsed.crew.length === 0, 'raw save v is ' + describe(r.parsed.v) + ', crew ' + describe(r.parsed.crew));   // X11.1
+    assert(r.parsed.v === SAVE_V && !('hires' in r.parsed) && Array.isArray(r.parsed.crew) && r.parsed.crew.length === 0, 'raw save v is ' + describe(r.parsed.v) + ', crew ' + describe(r.parsed.crew));   // X11.1
     assert(r.parsed.tutorial && r.parsed.tutorial.done === true, 'raw save tutorial is ' + describe(r.parsed.tutorial));
     assert(r.parsed.decor && typeof r.parsed.decor === 'object', 'raw save has no decor');
     assert(r.parsed.stats && r.parsed.stats.seated >= 1, 'raw save stats.seated is ' + describe(r.parsed.stats && r.parsed.stats.seated));
@@ -7549,7 +7710,7 @@ async function browserChecks() {
     await plusChecks(frame, 'after the ' + DECOR_BUY.id + ' purchase');
     const stored = await run('try { const raw = JSON.parse(localStorage.getItem(' + JSON.stringify(SAVE_KEY) + ')); return { raw: raw && raw.v, v: ' + GLOBAL_NAME + '.validateSave(raw) }; } catch (e) { return { error: String(e) }; }');
     assert(stored && stored.v && stored.v.decor && stored.v.decor[DECOR_BUY.id] === true, 'stored save decor ' + describe(stored && ((stored.v && stored.v.decor) || stored.error)));
-    assert(stored.v.v === 8 && stored.raw === 8, 'stored save v ' + describe(stored.raw));
+    assert(stored.v.v === SAVE_V && stored.raw === SAVE_V, 'stored save v ' + describe(stored.raw));
     await screenshotYard(SCREENSHOTS.decor);
     return seats + ' cash ' + (await ev(F.cash)) + ', stored v 5';
   });
@@ -7569,7 +7730,7 @@ async function browserChecks() {
     const status = await text(ID.status);
     assert(status === TEXT.notice, '#status is ' + describe(status) + ', wanted ' + describe(TEXT.notice));
     const raw = await storedSave();
-    assert(raw && raw.v === 8 && !('hires' in raw), 'stored save v is ' + describe(raw && raw.v) + ', hires ' + describe(raw && raw.hires));
+    assert(raw && raw.v === SAVE_V && !('hires' in raw), 'stored save v is ' + describe(raw && raw.v) + ', hires ' + describe(raw && raw.hires));
     assert(raw.tutorial && raw.tutorial.done === true, 'stored save tutorial ' + describe(raw.tutorial));
     await click(ID3.crGo);
     await advance(0);
@@ -7614,7 +7775,7 @@ async function browserChecks() {
     const ar = arrows(await captureFrame());
     assert(ar.length === 0, 'arrow drawn with the tutorial done: ' + describe(ar));
     const ser = await ev('sim.' + SIM_METHODS.serialize + '()');
-    assert(ser.v === 8 && ser.tutorial && ser.tutorial.done === true, 'serialize() ' + describe({ v: ser.v, tutorial: ser.tutorial }));
+    assert(ser.v === SAVE_V && ser.tutorial && ser.tutorial.done === true, 'serialize() ' + describe({ v: ser.v, tutorial: ser.tutorial }));
     return 'v2 day 1 save: creator, no tutorial, notice, Hiring Day, then a cook with ' + describe(st2);
   });
 
@@ -8172,9 +8333,9 @@ async function browserChecks() {
     const pay = await ev('sim.payroll()');
     assert(pay.now === runC.wage + fireC.wage && pay.now === 50, 'payroll ' + describe(pay) + ', wanted 50');
     // v3.4 review: the third line under the Cash tiles is cut under the Start button; the Word of
-    // mouth pill's thirds bar carries it.
+    // mouth pill's thirds bar carries it. v3.5: Monday's planner stands in for the Start button.
     let third = 'on the Word of mouth pill';
-    if (await present('hub-start')) {
+    if ((await present('hub-start')) || (await present('planner'))) {
       const th = await ev('({ on: [...$("week-thirds").querySelectorAll(".seg")].findIndex((x) => x.classList.contains("on")), aria: $("week-thirds").getAttribute("aria-label"), name: PitSim.STRINGS.thirdName[1] })');
       assert(th.on === 1 && th.aria.includes(th.name) && !(await present(ID31.thirdLine)), 'the thirds bar ' + describe(th));
     } else {
@@ -8247,7 +8408,7 @@ async function browserChecks() {
     const ct2 = await crewTile();
     assert(tileWant.every((t) => ct2.includes(t)), '#card-crew reads ' + describe(ct2));
     const raw = await storedSave();
-    assert(raw && raw.v === 8 && !('hires' in raw) && Array.isArray(raw.crew) && raw.crew.length === 2, 'stored save ' + describe(raw && { v: raw.v, hires: raw.hires, crew: raw.crew && raw.crew.length }));
+    assert(raw && raw.v === SAVE_V && !('hires' in raw) && Array.isArray(raw.crew) && raw.crew.length === 2, 'stored save ' + describe(raw && { v: raw.v, hires: raw.hires, crew: raw.crew && raw.crew.length }));
     return 'v3 sample: creator, ' + describe(st1) + ', the week hub with two cards; v4 sample: the week hub directly; ' + describe(tileWant);
   });
 
@@ -8292,6 +8453,7 @@ async function browserChecks() {
     assert(await ev('S().season.booking.type') === 'birthday', 'the fixture booking ' + describe(await ev('S().season.booking.type')));
     const notes = [];
     // The start button: one big button with the game's pick, Change plan hides the other choice.
+    await passPlanner();   // v3.5: every weekday planned a Yard day, so the week runs day by day
     const rv = await ev('sim.recommendDay()');
     assert(rv && (await present('hub-start')) && (await accText('hub-start')).includes(rv.start), '#hub-start reads ' + describe(await present('hub-start') ? await accText('hub-start') : null) + ', wanted ' + describe(rv && rv.start));
     const first = await ev('(() => { const b = $("hub-start").getBoundingClientRect(), o = $(' + JSON.stringify(ID3.offers) + ').getBoundingClientRect(); return { b: b.top, o: o.top }; })()');
@@ -8363,6 +8525,7 @@ async function browserChecks() {
   await step('v3.4 days 73: the morning shop, Back spends nothing, the weekend warning, Confirm starts the day', async () => {
     // The Sunday picnic's meat costs more than its deposit, so the weekend holds money back.
     await reload(saveV6({ cash: 60, charcoal: 0, stock: Object.assign({}, ZERO_STOCK), gear: { cooler: true, kettle2: true }, season: { pick: 'picnic' } }));
+    await passPlanner();   // v3.5
     assert((await ev('S().season.booking.type')) === 'picnic' && (await ev('sim.shopView("yard").reserve')) > 0, 'the picnic fixture holds no reserve ' + describe(await ev('sim.shopView("yard")')));
     const rk = await ev('sim.recommendDay().kind');
     if (rk !== 'yard') { await click('hub-change'); await advance(0); }
@@ -8413,6 +8576,7 @@ async function browserChecks() {
     const price = await ev('({ c: PitSim.CATALOG.find((r) => r.id === "chicken").price, b: PitSim.CATALOG.find((r) => r.id === "charcoal").price })');
     const got = [];
     const cls = [];
+    await passPlanner();   // v3.5
     for (let d = 0; d < 4; d++) {
       const m = C.DAY_PRICE[d];
       const want = Math.round(5 * price.c * m) + Math.round(5 * price.b * m);
@@ -8504,10 +8668,12 @@ async function browserChecks() {
     await reload(v5);
     assert((await ev('S().season.week')) === 4 && sameJSON(await litDays(), [0]), 'after the v5 load ' + describe({ week: await ev('S().season.week'), lit: await litDays() }));
     for (const id of OLD_DAY_IDS) assert(!(await present(id)), '#' + id + ' on the migrated hub');   // v3.4: training is automatic
+    assert(await present('planner'), 'no #planner after the v5 load');   // v3.5: Monday opens the planner
+    await passPlanner();
     assert(await present('hub-start'), 'no #hub-start after the v5 load');
     const raw = await storedSave();
-    assert(raw && raw.v === 8, 'the stored save v ' + describe(raw && raw.v));
-    return 'week 4 Monday, #hub-start and no Train button, stored v 8';
+    assert(raw && raw.v === SAVE_V, 'the stored save v ' + describe(raw && raw.v));
+    return 'week 4 Monday, #planner then #hub-start and no Train button, stored v ' + SAVE_V;
   });
 
   await step('v3.2 days 78: booking day rules', async () => {
@@ -8611,7 +8777,7 @@ async function browserChecks() {
     assert(await visible(ID3.seasonEnd), '#season-end hidden for a nine result save');
     const real = await ev('Array.isArray((sim.seasonEndPreview() || {}).contracts) && typeof sim.resign === "function"');
     await ev(`(() => {
-      S().season.results[8] = { type: 'finale', stars: 4, place: 2, contest: 'backyard' };
+      S().season.results[C.SEASON_WEEKS - 1] = { type: 'finale', stars: 4, place: 2, contest: 'backyard' };
       S().trophies = [{ year: 1, contest: 'backyard', place: 1 }];
       if (!${real}) {
         const o = sim.seasonEndPreview;
@@ -8628,8 +8794,8 @@ async function browserChecks() {
     for (const id of ['se-shelf', 'se-contracts', 'se-leaving', 'se-cash', 'season-next']) assert(await present(id), '#' + id + ' missing on the Offseason screen');
     const order = await ev('["se-record", "se-shelf", "se-contracts", "se-leaving", "season-next"].map((id) => $(id)).every((e, i, a) => i === 0 || (a[i - 1].compareDocumentPosition(e) & 4))');
     assert(order, 'Offseason order: record, shelf, contracts, moving on, start');
-    const wk9 = await ev('attr("se-wk-9", "aria-label")');
-    assert(/2nd/.test(wk9), '#se-wk-9 ' + describe(wk9));
+    const wk9 = await ev('attr("se-wk-" + C.SEASON_WEEKS, "aria-label")');
+    assert(/2nd/.test(wk9), '#se-wk-7 ' + describe(wk9));
     const ids = await ev('S().crew.map((c) => c.id)');
     const exp = await ev('(sim.seasonEndPreview().contracts || []).map((e) => e.id)');
     if (exp.length) {
@@ -8698,9 +8864,10 @@ async function browserChecks() {
       return () => { const p = st.player; if (st.phase === 'service' && !(p.busy || p.next || p.path.length || p.target)) { const t = decide(); if (t) sim.walkTo(t.x, t.y); } return st.clock; };
     })(), true)`);
     let clock = 0;
-    for (let i = 0; i < 400 && clock < 98; i++) { clock = await ev('__compBot()'); await advance(0.25); }
+    const midAt = (await ev('C.COMP_TURNINS[1]')) + 13;   // v3.5: 13 s past the second turn-in (was 98 at 85)
+    for (let i = 0; i < 800 && clock < midAt; i++) { clock = await ev('__compBot()'); await advance(0.25); }
     const mid = await ev('g.comp');
-    assert(mid && mid.rows.length === 4 && mid.rows[0].box && mid.rows[1].box && mid.next >= 2, 'the rail at 98 s ' + describe(mid));
+    assert(mid && mid.rows.length === 4 && mid.rows[0].box && mid.rows[1].box && mid.next >= 2, 'the rail at ' + midAt + ' s ' + describe(mid));
     await screenshotYard('comp-real-turnin.png');
     for (let i = 0; i < 800 && (await ev('S().loop')) !== 'report'; i++) { await ev('__compBot()'); await advance(0.25); }
     assert((await ev('S().loop')) === 'report' && (await ev('S().till.kind')) === 'comp', 'the competition did not end on the judges\' card');
@@ -8800,6 +8967,141 @@ async function browserChecks() {
     }
   });
 
+  // v3.5 (sim.js note v3.5): Monday's planner by taps, Start week and Skip to the weekend.
+  await step('v3.5 planner 86: Monday planner by taps, Start week, Skip to the weekend', async () => {
+    await reload(saveV9({ cash: 300, season: { pick: 'birthday' } }));
+    assert(await visible('planner'), '#planner hidden on Monday');
+    assert(!(await present('hub-start')), '#hub-start beside the planner');
+    const kinds = async () => { const out = []; for (let d = 0; d < 5; d++) out.push(await attrOf('plan-day-' + d, 'data-kind')); return out; };
+    const k0 = await kinds();
+    assert(sameJSON(k0, await ev('sim.planView().plan')), 'plan buttons ' + describe(k0) + ' against planView');
+    assert((await accText('plan-start')).toLowerCase().includes('start week') && (await accText('plan-skip')).toLowerCase().includes('skip to the weekend'), 'planner buttons ' + describe([await accText('plan-start'), await accText('plan-skip')]));
+    // Monday to Rest, Tuesday to a Yard day by taps.
+    if (k0[0] === 'yard') { await click('plan-day-0'); await advance(0); }
+    if ((await attrOf('plan-day-1', 'data-kind')) !== 'yard') { await click('plan-day-1'); await advance(0); }
+    const k1 = await kinds();
+    assert(k1[0] === 'off' && k1[1] === 'yard', 'taps left the plan ' + describe(k1));
+    await click('plan-start');
+    await advance(0);
+    assert((await ev('S().season.day')) === 1 && (await ev('S().phase')) === 'morning' && !(await visible('daycard')), 'Start week: day ' + (await ev('S().season.day')));
+    assert(!(await present('planner')) && (await present('hub-start')) && (await accText('hub-start')).includes('Tuesday'), '#hub-start after Start week ' + describe(await present('hub-start') ? await accText('hub-start') : null));
+    const raw = await storedSave();
+    assert(raw && raw.v === SAVE_V && raw.season && Array.isArray(raw.season.plan) && raw.season.plan[1] === 'yard', 'stored plan ' + describe(raw && raw.season && raw.season.plan));
+    // Skip to the weekend from a fresh Monday.
+    await reload(saveV9({ cash: 300, season: { pick: 'birthday' } }));
+    assert(await visible('planner'), '#planner hidden on the second Monday');
+    await click('plan-skip');
+    await advance(0);
+    assert((await ev('S().season.day')) === 5 && sameJSON(await ev('S().season.dayLog.slice(0, 5)'), ['off', 'off', 'off', 'off', 'off']) && !(await visible('daycard')), 'Skip to the weekend: day ' + (await ev('S().season.day')));
+    assert((await present('hub-start')) && (await accText('hub-start')).includes('Saturday'), '#hub-start after the skip ' + describe(await present('hub-start') ? await accText('hub-start') : null));
+    return 'plan ' + k1.join(', ') + '; Start week opened Tuesday; Skip opened Saturday';
+  });
+
+  // v3.5: buy more time. The hub shows the cook time; Long Day picks at a level up; the string lights add 20 s.
+  await step('v3.5 buy more time 87: the hub cook time, a Long Day pick, the string lights time', async () => {
+    const C = await pageC();
+    await reload(saveV9({ cash: 300, season: { pick: 'birthday' }, pit: { xp: C.PIT_LEVEL_XP[1], longDay: 0 } }));
+    await passPlanner();
+    assert(await visible('hub-cooktime'), '#hub-cooktime hidden');
+    const t0 = await accText('hub-cooktime');
+    const ct0 = await ev('sim.cookTime()');
+    assert(ct0.total === C.LENGTHS.normal.seconds && t0.includes(ct0.text), '#hub-cooktime reads ' + describe(t0) + ', wanted ' + describe(ct0.text));
+    assert((await present('pit-level')) && (await accText('pit-level')).includes('Level 2'), '#pit-level reads ' + describe(await present('pit-level') ? await accText('pit-level') : null));
+    assert(await visible('pit-pick-longDay'), '#pit-pick-longDay hidden at level 2');
+    await click('pit-pick-longDay');
+    await advance(0);
+    const ct1 = await ev('sim.cookTime()');
+    assert(ct1.total === C.LENGTHS.normal.seconds + C.LONG_DAY_SECONDS && (await ev('sim.pitView().longDay')) === 1 && !(await present('pit-pick-longDay')), 'after the pick ' + describe(ct1));
+    assert((await accText('hub-cooktime')).includes(ct1.text), '#hub-cooktime after the pick ' + describe(await accText('hub-cooktime')));
+    // The string lights: the shop row says +20 s; owning them adds 20 s to the hub time.
+    await reload(saveV9({ cash: 300, season: { pick: 'birthday' }, decor: { lights: true } }));
+    await passPlanner();
+    const ct2 = await ev('sim.cookTime()');
+    assert(ct2.lights === C.LIGHTS_SECONDS && ct2.total === C.LENGTHS.normal.seconds + C.LIGHTS_SECONDS && (await accText('hub-cooktime')).includes(ct2.text), 'lights cook time ' + describe([ct2, await accText('hub-cooktime')]));
+    const row = await ev('PitSim.CATALOG.find((x) => x.id === "lights").effect');
+    assert(row.includes('+20 s to every cook'), 'the string lights row reads ' + describe(row));
+    return ct0.text + ' to ' + ct1.text + ' with Long Day 1; lights ' + ct2.text;
+  });
+
+  // ---- v3.5 Shorter season, longer cooks: the planner, Skip to the weekend, Long Day, string lights ----
+
+  const planKinds = async () => { const out = []; for (let d = 0; d < 5; d++) out.push(await attrOf('plan-day-' + d, 'data-kind')); return out; };
+
+  await step('v3.5 planner: Monday sets the week at once, Rest days pass with no screens', async () => {
+    await reload(saveV9({ cash: 300, season: { pick: 'birthday' }, crew: [Object.assign({}, DAY_CARD)] }));
+    assert((await present('planner')) && !(await present('hub-start')), 'Monday shows no #planner (or still #hub-start)');
+    const pv = await ev('sim.planView()');
+    assert(pv && pv.days.length === 5 && sameJSON(await planKinds(), pv.plan), 'the plan buttons ' + describe(await planKinds()) + ' against the draft ' + describe(pv && pv.plan));
+    assert((await present('plan-start')) && (await present('plan-skip')), '#plan-start or #plan-skip missing');
+    // A tap flips the day; the draft follows.
+    const k1 = await attrOf('plan-day-1', 'data-kind');
+    await click('plan-day-1');
+    await advance(0);
+    const k1b = await attrOf('plan-day-1', 'data-kind');
+    assert(k1b !== k1 && (await ev('sim.planView().plan[1]')) === k1b, 'plan-day-1 ' + k1 + ' to ' + k1b + ', draft ' + describe(await ev('sim.planView().plan')));
+    // Only Wednesday a Yard day: Monday and Tuesday pass at once and Wednesday's morning opens.
+    for (let d = 0; d < 5; d++) {
+      const want = d === 2 ? 'yard' : 'off';
+      if ((await attrOf('plan-day-' + d, 'data-kind')) !== want) { await click('plan-day-' + d); await advance(0); }
+    }
+    assert(sameJSON(await planKinds(), ['off', 'off', 'yard', 'off', 'off']), 'the set plan ' + describe(await planKinds()));
+    await click('plan-start');
+    await advance(0);
+    const st = await ev('({ day: S().season.day, phase: S().phase, card: !!$("daycard") && !$("daycard").hidden, plan: sim.planOf(), rk: (sim.recommendDay() || {}).kind })');
+    assert(st.day === 2 && st.phase === 'morning' && !st.card && st.rk === 'yard', 'after Start week ' + describe(st));
+    assert(!(await present('planner')) && (await present('hub-start')), 'Wednesday shows #planner or no #hub-start');
+    return 'draft ' + pv.plan.join(',') + ', set off,off,yard,off,off, Start week opened Wednesday on #hub-start';
+  });
+
+  await step('v3.5 Skip to the weekend: five Rest days at once, then the weekend booking', async () => {
+    await reload(saveV9({ cash: 300, season: { pick: 'birthday' }, crew: [Object.assign({}, DAY_CARD)] }));
+    assert(await present('plan-skip'), '#plan-skip missing on Monday');
+    const xp0 = await ev('S().crew[0].xp');
+    await click('plan-skip');
+    await advance(0);
+    const st = await ev('({ day: S().season.day, phase: S().phase, card: !!$("daycard") && !$("daycard").hidden, rk: (sim.recommendDay() || {}).kind, note: sim.restNote() })');
+    assert(st.day >= 5 && st.phase === 'morning' && !st.card && st.rk === 'event', 'after Skip ' + describe(st));
+    assert(await present('hub-start'), 'no #hub-start on the weekend');
+    assert((await ev('S().crew[0].xp')) > xp0, 'the skipped week trained nobody');
+    return 'day ' + st.day + ', the booked event on #hub-start, rested ' + describe(st.note && st.note.days);
+  });
+
+  await step('v3.5 Long Day at level up: +15 s to every cook, cook time on the hub', async () => {
+    const C = await pageC();
+    await reload(saveV9({ cash: 300, season: { pick: 'birthday' }, pit: { xp: C.PIT_LEVEL_XP[1], longDay: 0 } }));
+    assert((await present('hub-cooktime')) && (await present('pit-level')), '#hub-cooktime or #pit-level missing');
+    const ct0 = await ev('sim.cookTime()');
+    assert((await text('hub-cooktime')).includes(ct0.text), '#hub-cooktime ' + describe(await text('hub-cooktime')) + ', wanted ' + describe(ct0.text));
+    assert(await present('pit-pick-longDay'), '#pit-pick-longDay missing with a level banked ' + describe(await ev('sim.pitView()')));
+    await click('pit-pick-longDay');
+    await advance(0);
+    const ct1 = await ev('sim.cookTime()');
+    assert((await ev('S().pit.longDay')) === 1 && ct1.total === ct0.total + C.LONG_DAY_SECONDS, 'Long Day ' + describe([await ev('S().pit.longDay'), ct0.total, ct1.total]));
+    assert((await text('hub-cooktime')).includes(ct1.text) && !(await present('pit-pick-longDay')), '#hub-cooktime ' + describe(await text('hub-cooktime')) + ' or the pick stayed');
+    const raw = await storedSave();
+    assert(raw && raw.pit && raw.pit.longDay === 1, 'the stored pit ' + describe(raw && raw.pit));
+    return 'cook ' + ct0.text + ' to ' + ct1.text + ', saved longDay 1';
+  });
+
+  await step('v3.5 string lights: the shop row names the time, the hub cook time grows', async () => {
+    const C = await pageC();
+    await reload(saveV9({ cash: 900, season: { week: 2, results: resultsOf(1) } }));
+    await passPlanner();
+    const t0 = await ev('sim.cookTime().total');
+    await click(ID3.cardGear);
+    await advance(0);
+    const row = await ev('(() => { const r = document.querySelector("[data-item=\\"lights\\"] .effect"); return r ? r.textContent : null; })()');
+    const want = await ev('PitSim.STRINGS.pit.lightsRow');
+    assert(row && row.includes(want), 'the lights row ' + describe(row) + ', wanted ' + describe(want));
+    await click(ID.buy('lights'));
+    await advance(0);
+    await click(ID.buyOk('lights'));
+    await advance(0);
+    const t1 = await ev('sim.cookTime()');
+    assert((await ev('S().decor.lights')) === true && t1.total === t0 + C.LIGHTS_SECONDS && t1.lights === C.LIGHTS_SECONDS, 'lights ' + describe([t0, t1]));
+    return 'row "' + want + '", cook ' + t0 + ' s to ' + t1.total + ' s';
+  });
+
   await step('zero console errors across the run', () => {
     const e = errorCount();
     assert(e.total === 0, describe(e) + ' first: ' + describe(report.console.find((c) => c.type === 'error') || report.exceptions[0] || report.logEntries.find((l) => l.level === 'error')));
@@ -8834,7 +9136,64 @@ async function browserChecks() {
 // Main
 // ---------------------------------------------------------------------------------------------
 
+// --week [--week-skip] [--week-save-v N]: play one week from Monday by real taps (CDP input at each
+// button's center) and log taps and simulated seconds. Menus are tapped; each cook's clock runs out.
+async function realTap(id) {
+  const p = await ev('(() => { const e = $(' + JSON.stringify(id) + '); if (!e || e.disabled) return null; e.scrollIntoView({ block: "center" }); const r = e.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()');
+  assert(p, '#' + id + ' missing or disabled');
+  if (DESKTOP_MODE) await mouseTap(p.x, p.y);
+  else {
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: p.x, y: p.y, radiusX: 4, radiusY: 4, force: 1 }] });
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  }
+  await sleep(60);
+  await advance(0);
+}
+async function weekPlay() {
+  const url = pathToFileURL(FILES.index).href + '?seed=' + SEED;
+  const loaded = cdp.once('Page.loadEventFired');
+  await cdp.send('Page.navigate', { url });
+  await loaded;
+  assert(await waitForGame(), 'game did not load');
+  const s = saveV9({ cash: 300, season: { pick: 'birthday' } });
+  s.v = Number.parseInt(argValue('--week-save-v', '9'), 10);
+  await reload(s);
+  const skip = argv.includes('--week-skip');
+  const log = [];
+  let taps = 0, cookSec = 0, cooks = 0, menuSim = 0;
+  const tap = async (id) => { await realTap(id); taps += 1; log.push(id); };
+  const w0 = await ev('S().season.week');
+  for (let i = 0; i < 80; i++) {
+    const st = await ev('({ wk: S().season.week, day: S().season.day, phase: S().phase, loop: S().loop })');
+    if (st.wk !== w0) { log.push('end ' + describe(st)); break; }
+    if (st.phase === 'service') {
+      const c0 = await ev('S().clock');
+      const r = await until('S().phase !== "service"', 600);
+      cookSec += r.t; cooks += 1; log.push('cook ' + r.t + ' s (clock from ' + c0 + ')');
+      continue;
+    }
+    if (await present('planner')) {
+      if (skip) await tap('plan-skip'); else await tap('plan-start');
+      continue;
+    }
+    const pick = ['shop-confirm', 'go', 'next', 'daycard-next', 'season-next', 'hub-start'];
+    let done = false;
+    for (const id of pick) if ((await present(id)) && (await visible(id)) && !(await ev('$(' + JSON.stringify(id) + ').disabled'))) { await tap(id); done = true; break; }
+    if (!done) {
+      // a morning with prep time on the clock: let it run into service
+      const r = await until('S().phase === "service" || S().phase === "evening"', 120);
+      menuSim += r.t;
+      if (!r.ok) { log.push('stuck ' + describe(st) + ' ids ' + describe(await ev('[...document.querySelectorAll("button")].filter((b) => b.offsetParent && !b.disabled).map((b) => b.id).filter(Boolean)'))); break; }
+      log.push('waited ' + r.t + ' s');
+    }
+  }
+  return { taps, cooks, cookSec: Math.round(cookSec), prepSec: Math.round(menuSim), log, errors: errorCount().total };
+}
 async function main() {
+  if (argv.includes('--week')) {
+    try { await launch(); console.log(JSON.stringify(await weekPlay(), null, 1)); } finally { try { if (cdp && cdp.ws) cdp.ws.close(); } catch (_e) { /* ignore */ } killChrome(); await removeProfile(); }
+    return;
+  }
   await nodeChecks();
   if (!fatal && !argv.includes('--node-only')) {
     try {
