@@ -507,7 +507,7 @@ const C = Object.freeze({
   // weather
   RAIN_FROM_DAY: 4, RAIN_CHANCE: 0.15, RAIN_ARRIVALS: 0.6,
   // save clamps
-  SAVE_VERSION: 11, MAX_DAY: 999, MAX_CASH: 999999, MAX_STAT: 9999999,   // v3.4: 8 (season.advance); v3.5: 9 (season.plan, pit); v3.6: 10 (the register, the TILL card)
+  SAVE_VERSION: 12, MAX_DAY: 999, MAX_CASH: 999999, MAX_STAT: 9999999,   // v3.4: 8 (season.advance); v3.5: 9 (season.plan, pit); v3.6: 10 (the register, the TILL card)
   // v3.0 season and week [S 3], contract W2
   SEASON_WEEKS: 7,                    // v3.5: six weeks and the competition finale as week 7 (was 9)
   YEAR_MAX: 99,
@@ -765,7 +765,7 @@ const DRUM_SLOT_PX = list([px(-2, -4), px(8, -4), px(-2, 7), px(8, 7)]);
 // `draw` (top left sim px of the footprint) and `sortRow` (its front row) are kept for the v2 readers;
 // the iso renderer places by footprint. Table `spotPx`: one plate spot centred on each counter tile,
 // two on the extension (4,4).
-const STATIONS = list([
+const STATIONS0 = list([
   Object.freeze({ id: 'kettle1', type: 'cooker', label: 'Kettle 1', spoken: 'kettle 1', gear: null,
     tiles: list([xy(4, 5)]),
     use: list([use(3, 5, 'right')]),
@@ -817,7 +817,7 @@ function prop(id, sprite, frame, tx, ty, dx, dy, blocks, sortRow) {
 
 // Fixed props, the same 19 ids in the same order, on the angle redo plan A tiles. Tall props (over
 // 20 rp) stand only on row 0 or column 0; nothing stands on (0,0) to (2,0) or (0,0) to (0,6) (the hat rule).
-const PROPS = list([
+const PROPS0 = list([
   prop('shed', 'shed', 0, 5, 0, 80, 0, [[5, 0]], 0),              // the barn door
   prop('sign', 'sign', 0, 3, 0, 48, 0, [], 0),                    // board on the barn wall over (3,0) (4,0)
   prop('tree', 'tree', 0, 0, 9, 0, 144, [[0, 9]], 9),
@@ -852,7 +852,7 @@ function decorSpot(id, tiles, blocks, seats, draws) {
 }
 
 // Decor spots, in DecorId order, on the angle redo plan A tiles.
-const DECOR = list([
+const DECOR0 = list([
   decorSpot('chair1', [[9, 3]], [], ['chair1'], [decorDraw('chair', 0, 144, 48, 3)]),
   decorSpot('chair2', [[9, 4]], [], ['chair2'], [decorDraw('chair', 0, 144, 64, 4)]),
   decorSpot('flowers', [[6, 10], [7, 10]], [[6, 10], [7, 10]], [], [decorDraw('flower_box', 0, 96, 160, 10)]),
@@ -868,7 +868,7 @@ function seat(id, x, y, decor) {
 }
 
 // Seats, in SeatId order. Every seat faces down.
-const SEATS = list([
+const SEATS0 = list([
   seat('pt1b', 7, 4, null),
   seat('pt1a', 6, 4, null),
   seat('chair1', 9, 3, 'chair1'),
@@ -877,16 +877,387 @@ const SEATS = list([
   seat('pt2a', 6, 7, 'picnic2')
 ]);
 
-const STATION_BY_ID = Object.freeze(STATIONS.reduce((acc, s) => { acc[s.id] = s; return acc; }, {}));
-const SEAT_BY_ID = Object.freeze(SEATS.reduce((acc, s) => { acc[s.id] = s; return acc; }, {}));
 const TILES = buildTiles();
 
-// Tiles a fixed prop blocks, for everyone. Static.
-const PROP_BLOCKED = (function () {
-  const a = new Uint8Array(MAP_W * MAP_H);
-  for (const p of PROPS) for (const b of p.blocks) a[b.y * MAP_W + b.x] = 1;
+// ---------------------------------------------------------------------------------------------
+// v3.9 Arrange mode: the yard layout. Movable units (the player's gear) translate as one piece by
+// an offset [dx, dy] from their default spot; the barn, fence, gate, sign, patio and fixed decor
+// never move. The layout is { unitId: [dx, dy] } (missing = [0, 0]). Everything that reads a station,
+// seat, picnic prop, queue or to-go tile reads the live, shifted copies below.
+// ---------------------------------------------------------------------------------------------
+
+function unitDef(id, kind, label, noun, o) {
+  return Object.freeze({ id, kind, label, noun, stations: list(o.stations || []), props: list(o.props || []),
+    decor: o.decor || null, seats: list(o.seats || []), gear: list(o.gear || []), decorOwn: list(o.decorOwn || []) });
+}
+// kind: 'pit' (patio gear), 'line' (counter and register with the line and to-go spots), 'lawn'.
+const UNITS = list([
+  unitDef('kettle1', 'pit', 'Kettle', 'kettle', { stations: ['kettle1'] }),
+  unitDef('kettle2', 'pit', 'Second kettle', 'second kettle', { stations: ['kettle2'], gear: ['kettle2'] }),
+  unitDef('drum', 'pit', 'Drum smoker', 'drum smoker', { stations: ['drum'], gear: ['drum'] }),
+  unitDef('board', 'pit', 'Cutting board', 'cutting board', { stations: ['board'] }),
+  unitDef('cooler', 'pit', 'Cooler', 'cooler', { stations: ['cooler'] }),
+  unitDef('pile', 'pit', 'Charcoal pile', 'charcoal pile', { stations: ['pile'] }),
+  unitDef('trash', 'pit', 'Trash', 'trash', { stations: ['trash'] }),
+  unitDef('counter', 'line', 'Counter and register', 'counter', { stations: ['table', 'register'], gear: ['bigtable'] }),
+  unitDef('picnic1', 'lawn', 'Picnic table', 'picnic table', { props: ['picnic1', 'bench1'], seats: ['pt1a', 'pt1b'] }),
+  unitDef('picnic2', 'lawn', 'Second picnic table', 'second picnic table', { decor: 'picnic2', seats: ['pt2a', 'pt2b'], decorOwn: ['picnic2'] }),
+  unitDef('chair1', 'lawn', 'Lawn chair', 'lawn chair', { decor: 'chair1', seats: ['chair1'], decorOwn: ['chair1'] }),
+  unitDef('chair2', 'lawn', 'Second lawn chair', 'second lawn chair', { decor: 'chair2', seats: ['chair2'], decorOwn: ['chair2'] })
+]);
+const UNIT_BY_ID = Object.freeze(UNITS.reduce((acc, u) => { acc[u.id] = u; return acc; }, {}));
+const UNIT_OF = (function () {
+  const st = {}, pr = {}, de = {}, se = {};
+  for (const u of UNITS) {
+    for (const id of u.stations) st[id] = u.id;
+    for (const id of u.props) pr[id] = u.id;
+    if (u.decor) de[u.decor] = u.id;
+    for (const id of u.seats) se[id] = u.id;
+  }
+  return Object.freeze({ station: Object.freeze(st), prop: Object.freeze(pr), decor: Object.freeze(de), seat: Object.freeze(se) });
+})();
+const STATION_NOUN = Object.freeze({ kettle1: 'kettle', kettle2: 'second kettle', drum: 'drum smoker', board: 'cutting board',
+  cooler: 'cooler', table: 'counter', pile: 'charcoal pile', trash: 'trash', register: 'register' });
+const LAYOUT_MAX = 11;
+
+const QUEUE0 = list([
+  Object.freeze({ x: 5, y: 1, face: 'left', gear: null }),
+  Object.freeze({ x: 6, y: 1, face: 'left', gear: null }),
+  Object.freeze({ x: 7, y: 1, face: 'left', gear: null }),
+  Object.freeze({ x: 8, y: 1, face: 'left', gear: 'bigtable' }),
+  Object.freeze({ x: 8, y: 2, face: 'up', gear: 'bigtable' })
+]);
+// v3.7: where a paid guest with no free seat stands by the counter until the plate is set down.
+const TOGO0 = list([Object.freeze({ x: 5, y: 3, face: 'left' }), Object.freeze({ x: 5, y: 2, face: 'left' }),
+  Object.freeze({ x: 6, y: 3, face: 'left' }), Object.freeze({ x: 6, y: 2, face: 'left' })]);
+const CANOPY0 = Object.freeze({ x: 80, y: 16, tiles: list([px(5, 1), px(6, 1), px(7, 1), px(8, 1), px(5, 2), px(6, 2), px(7, 2), px(8, 2)]) });
+const FORSALE0 = Object.freeze({
+  kettle2: list([px(4, 7)]),
+  drum: list([px(2, 5), px(2, 6)]),
+  bigtable: list([px(4, 4)]),
+  canopy: list([px(7, 2)]),
+  chair1: list([px(9, 3)]),
+  chair2: list([px(9, 4)]),
+  flowers: list([px(6, 10), px(7, 10)]),
+  birdbath: list([px(3, 10)]),
+  lights: list([px(0, 7)]),
+  picnic2: list([px(6, 8), px(7, 8)])
+});
+const FORSALE_UNIT = Object.freeze({ kettle2: 'kettle2', drum: 'drum', bigtable: 'counter', canopy: 'counter', chair1: 'chair1', chair2: 'chair2', picnic2: 'picnic2' });
+const GATE_TILE = px(8, 11);
+const CUST_SPAWN = px(8, 12);
+const PASS_STOP = px(8, 10);
+const TENDER_IDLE0 = Object.freeze({ x: 1, y: 7, face: 'right' });
+const PREP_IDLE0 = Object.freeze({ x: 1, y: 3, face: 'right' });
+const DOG_HOME0 = px(2, 9);
+const DOG_ROAM0 = list([px(1, 9), px(2, 9), px(4, 9), px(5, 9), px(5, 8), px(5, 6), px(4, 10)]);
+
+// Fixed claims: tiles no unit may cover (fixed props' blocks, fixed decor spots, the gate path).
+const FIXED_CLAIM = (function () {
+  const a = new Array(MAP_W * GRID_H).fill(null);
+  for (const p of PROPS0) if (!UNIT_OF.prop[p.id]) for (const b of p.blocks) a[b.y * MAP_W + b.x] = 'thing';
+  const names = { flowers: 'flower bed', birdbath: 'bird bath', lights: 'light post' };
+  for (const d of DECOR0) if (!UNIT_OF.decor[d.id]) for (const t of d.tiles) a[t.y * MAP_W + t.x] = names[d.id] || 'thing';
+  a[GATE_TILE.y * MAP_W + GATE_TILE.x] = 'gate';
+  a[PASS_STOP.y * MAP_W + PASS_STOP.x] = 'gate';
   return a;
 })();
+
+function cleanLayout(lay) {
+  const out = {};
+  if (!lay || typeof lay !== 'object' || Array.isArray(lay)) return out;
+  for (const u of UNITS) {
+    if (!Object.prototype.hasOwnProperty.call(lay, u.id)) continue;
+    const o = lay[u.id];
+    if (!Array.isArray(o) || o.length !== 2) continue;
+    const dx = Number(o[0]), dy = Number(o[1]);
+    if (!Number.isInteger(dx) || !Number.isInteger(dy) || Math.abs(dx) > LAYOUT_MAX || Math.abs(dy) > LAYOUT_MAX) continue;
+    if (dx !== 0 || dy !== 0) out[u.id] = [dx, dy];
+  }
+  return out;
+}
+function offOf(lay, uid) { const o = lay[uid]; return o ? o : [0, 0]; }
+function shXY(o, d) { return (d[0] || d[1]) ? Object.freeze(Object.assign({}, o, { x: o.x + d[0], y: o.y + d[1] })) : o; }
+function shPx(o, d) { return (d[0] || d[1]) ? Object.freeze(Object.assign({}, o, { x: o.x + d[0] * TILE, y: o.y + d[1] * TILE })) : o; }
+
+// The shifted copies of every positioned record for a clean layout.
+function buildGeom(lay) {
+  const stations = list(STATIONS0.map((st) => {
+    const d = offOf(lay, UNIT_OF.station[st.id]);
+    if (!d[0] && !d[1]) return st;
+    const o = Object.assign({}, st);
+    o.tiles = list(st.tiles.map((t) => shXY(t, d)));
+    o.use = list(st.use.map((u) => shXY(u, d)));
+    o.draw = shPx(st.draw, d);
+    o.sortRow = st.sortRow + d[1];
+    if (st.spotPx) o.spotPx = list(st.spotPx.map((q) => shPx(q, d)));
+    return Object.freeze(o);
+  }));
+  const props = list(PROPS0.map((p) => {
+    const u = UNIT_OF.prop[p.id];
+    const d = u ? offOf(lay, u) : [0, 0];
+    if (!d[0] && !d[1]) return p;
+    return Object.freeze(Object.assign({}, p, { tile: shXY(p.tile, d), draw: shPx(p.draw, d),
+      blocks: list(p.blocks.map((b) => shXY(b, d))), sortRow: p.sortRow + d[1] }));
+  }));
+  const decor = list(DECOR0.map((q) => {
+    const u = UNIT_OF.decor[q.id];
+    const d = u ? offOf(lay, u) : [0, 0];
+    if (!d[0] && !d[1]) return q;
+    return Object.freeze(Object.assign({}, q, { tiles: list(q.tiles.map((t) => shXY(t, d))), blocks: list(q.blocks.map((t) => shXY(t, d))),
+      draws: list(q.draws.map((w) => Object.freeze(Object.assign({}, w, { x: w.x + d[0] * TILE, y: w.y + d[1] * TILE, sortRow: w.sortRow + d[1] })))) }));
+  }));
+  const seats = list(SEATS0.map((q) => shXY(q, offOf(lay, UNIT_OF.seat[q.id]))));
+  const dc = offOf(lay, 'counter');
+  const byId = {};
+  for (const st of stations) byId[st.id] = st;
+  const forSale = {};
+  for (const k of Object.keys(FORSALE0)) {
+    const u = FORSALE_UNIT[k];
+    const d = u ? offOf(lay, u) : [0, 0];
+    forSale[k] = list(FORSALE0[k].map((t) => shXY(t, d)));
+  }
+  const reg = byId.register, table = byId.table, board = byId.board;
+  return {
+    stations, byId, props, decor, seats,
+    queue: list(QUEUE0.map((q) => shXY(q, dc))),
+    togo: list(TOGO0.map((q) => shXY(q, dc))),
+    canopy: Object.freeze({ x: CANOPY0.x + dc[0] * TILE, y: CANOPY0.y + dc[1] * TILE, tiles: list(CANOPY0.tiles.map((t) => shXY(t, dc))) }),
+    forSale: Object.freeze(forSale),
+    spawn: Object.freeze({ x: reg.use[1].x, y: reg.use[1].y, face: 'right' }),
+    buddyIdle: Object.freeze({ x: table.use[1].x, y: table.use[1].y, face: 'down' }),
+    tillIdle: Object.freeze({ x: reg.use[0].x, y: reg.use[0].y, face: 'right' }),
+    prepUse: Object.freeze({ x: board.use[1].x, y: board.use[1].y, face: 'down' })
+  };
+}
+
+// Every tile a unit covers (foot, seats, line and to-go spots) under the ownership given.
+function unitParts(geo, u, gear, decor) {
+  const foot = [], use = [], seats = [], reserve = [];
+  for (const sid of u.stations) {
+    const st = geo.byId[sid];
+    if (!tileOwned(st, gear)) continue;
+    for (const t of st.tiles) if (tileOwned(t, gear)) foot.push(t);
+    for (const t of st.use) if (tileOwned(t, gear)) use.push({ x: t.x, y: t.y, st: sid });
+  }
+  for (const pid of u.props) { const p = geo.props.find((q) => q.id === pid); for (const b of p.blocks) foot.push(b); }
+  if (u.decor) { const q = geo.decor.find((w) => w.id === u.decor); if (decor[u.decor] === true) for (const t of q.tiles) foot.push(t); }
+  for (const sid of u.seats) { const se = geo.seats.find((q) => q.id === sid); if (tileOwned(se, gear, decor)) seats.push(se); }
+  if (u.kind === 'line') {
+    for (const q of geo.queue) if (tileOwned(q, gear)) reserve.push(q);
+    for (const q of geo.togo) reserve.push(q);
+  }
+  return { foot, use, seats, reserve };
+}
+function unitOwned(u, gear, decor) {
+  if (u.decorOwn.length) return u.decorOwn.every((d) => decor[d] === true);
+  for (const sid of u.stations) if (!tileOwned(STATIONS0.find((s) => s.id === sid), gear)) return false;
+  return true;
+}
+function groundAt(x, y) { return (x >= 0 && x < MAP_W && y >= 0 && y < MAP_H) ? TILES[y * MAP_W + x] : -1; }
+
+function gridBfs(starts, passable) {
+  const seen = new Uint8Array(MAP_W * GRID_H);
+  const q = [];
+  for (const s of starts) {
+    if (!(s.x >= 0 && s.x < MAP_W && s.y >= 0 && s.y < GRID_H) || !passable(s.x, s.y)) continue;
+    const i = s.y * MAP_W + s.x;
+    if (!seen[i]) { seen[i] = 1; q.push(i); }
+  }
+  for (let h = 0; h < q.length; h++) {
+    const cx = q[h] % MAP_W, cy = (q[h] - cx) / MAP_W;
+    for (const d of DIR_ORDER) {
+      const nx = cx + DIRS[d].dx, ny = cy + DIRS[d].dy;
+      if (!(nx >= 0 && nx < MAP_W && ny >= 0 && ny < GRID_H)) continue;
+      const ni = ny * MAP_W + nx;
+      if (seen[ni] || !passable(nx, ny)) continue;
+      seen[ni] = 1;
+      q.push(ni);
+    }
+  }
+  return seen;
+}
+
+// Is the layout playable under this ownership? { ok, reason, unit }. `focus` (a unit id) is the
+// piece being placed: its overlaps are reported by the other piece's name.
+function checkLayout(layIn, gear, decor, focus) {
+  const lay = cleanLayout(layIn);
+  const geo = buildGeom(lay);
+  const fail = (reason, unit) => ({ ok: false, reason, unit: unit || focus || null });
+  const order = UNITS.filter((u) => u.id !== focus && unitOwned(u, gear, decor));
+  if (focus && UNIT_BY_ID[focus] && unitOwned(UNIT_BY_ID[focus], gear, decor)) order.push(UNIT_BY_ID[focus]);
+  const claim = FIXED_CLAIM.slice();
+  const footAt = new Uint8Array(MAP_W * GRID_H);
+  const seatAt = new Uint8Array(MAP_W * GRID_H);
+  const parts = {};
+  for (const u of order) {
+    const pt = unitParts(geo, u, gear, decor);
+    parts[u.id] = pt;
+    const all = pt.foot.concat(pt.seats, pt.reserve);
+    for (const t of all) if (groundAt(t.x, t.y) === -1) return fail('Off the yard', u.id);
+    for (const t of pt.foot) {
+      const g = groundAt(t.x, t.y);
+      if (u.kind !== 'lawn' && g !== T.PAVER) return fail(u.stations.some((s) => STATION_BY_ID0[s].type === 'cooker') ? 'Cookers stay on the patio' : 'Off the patio', u.id);
+      if (u.kind === 'lawn' && g !== T.LAWN) return fail('Off the lawn', u.id);
+    }
+    for (const t of pt.seats) if (groundAt(t.x, t.y) !== T.LAWN) return fail('Off the lawn', u.id);
+    for (const t of pt.reserve) if (groundAt(t.x, t.y) !== T.LAWN) return fail('The line needs the lawn', u.id);
+    for (const t of all) {
+      const i = t.y * MAP_W + t.x, c = claim[i];
+      if (c !== null && c !== u.id) {
+        if (c === 'gate') return fail('Blocks the gate path', u.id);
+        if (c === 'thing') return fail('Something is already there', u.id);
+        return fail('Overlaps the ' + (UNIT_BY_ID[c] ? UNIT_BY_ID[c].noun : c), u.id);
+      }
+      claim[i] = u.id;
+    }
+    for (const t of pt.foot) footAt[t.y * MAP_W + t.x] = 1;
+    for (const t of pt.seats) seatAt[t.y * MAP_W + t.x] = 1;
+  }
+  const fixedBlock = (i) => { const c = FIXED_CLAIM[i]; return c !== null && c !== 'gate'; };
+  const pitPass = (x, y) => { const i = y * MAP_W + x; return groundAt(x, y) === T.PAVER && !footAt[i] && !fixedBlock(i); };
+  const sp = geo.spawn;
+  const pit = gridBfs([sp], pitPass);
+  const unitOfStation = (sid) => UNIT_OF.station[sid];
+  // The pitmaster and the crew: every use tile of every owned station, from each other.
+  for (const u of order) {
+    for (const t of parts[u.id].use) {
+      if (pit[t.y * MAP_W + t.x]) continue;
+      const own = unitOfStation(t.st) === focus;
+      return fail(own ? 'No room to work the ' + STATION_NOUN[t.st] : 'Blocks the path to the ' + STATION_NOUN[t.st]);
+    }
+  }
+  // Guests from the gate.
+  const custPass = (x, y) => {
+    if (x === CUST_SPAWN.x && y === CUST_SPAWN.y) return true;
+    const g = groundAt(x, y), i = y * MAP_W + x;
+    return (g === T.LAWN || g === T.GATE) && !footAt[i] && !fixedBlock(i) && !seatAt[i];
+  };
+  const cust = gridBfs([CUST_SPAWN], custPass);
+  const at = (G, t) => G[t.y * MAP_W + t.x] === 1;
+  const nextTo = (G, t) => DIR_ORDER.some((d) => { const x = t.x + DIRS[d].dx, y = t.y + DIRS[d].dy; return x >= 0 && x < MAP_W && y >= 0 && y < GRID_H && G[y * MAP_W + x] === 1; });
+  if (!at(cust, PASS_STOP)) return fail('Blocks the gate path');
+  const line = parts.counter;
+  if (line) {
+    for (const q of line.reserve) {
+      if (at(cust, q)) continue;
+      return fail(geo.togo.some((t) => t.x === q.x && t.y === q.y) ? 'Guests can\'t reach the to-go spot' : 'Guests can\'t reach the register');
+    }
+  }
+  const allSeats = [];
+  for (const u of order) for (const se of parts[u.id].seats) allSeats.push(se);
+  for (const se of allSeats) if (!nextTo(cust, se)) return fail('Guests can\'t reach a seat');
+  // The plate carriers (pitmaster and runner) walk the patio and the open lawn to every seat.
+  const carry = gridBfs([sp], (x, y) => pitPass(x, y) || (groundAt(x, y) === T.LAWN && !footAt[y * MAP_W + x] && !fixedBlock(y * MAP_W + x) && !seatAt[y * MAP_W + x]));
+  for (const se of allSeats) if (!nextTo(carry, se)) return fail('The runner can\'t reach a seat');
+  return { ok: true, reason: '', unit: null };
+}
+
+// Offsets near `from` by distance, for a unit that must find a free spot.
+function nearOffsets(from) {
+  const out = [];
+  for (let dy = -LAYOUT_MAX; dy <= LAYOUT_MAX; dy++) for (let dx = -LAYOUT_MAX; dx <= LAYOUT_MAX; dx++) out.push([dx, dy]);
+  out.sort((a, b) => (Math.abs(a[0] - from[0]) + Math.abs(a[1] - from[1])) - (Math.abs(b[0] - from[0]) + Math.abs(b[1] - from[1])));
+  return out;
+}
+function withOwn(u, gear, decor) {
+  const g = Object.assign({}, gear), d = Object.assign({}, decor);
+  for (const k of u.gear) g[k] = true;
+  for (const k of u.decorOwn) d[k] = true;
+  if (u.id === 'drum') g.kettle2 = true;
+  return { g, d };
+}
+// Moves unit `uid` to the nearest offset that keeps the layout valid as if it were owned. Returns
+// the new layout, or null when no spot works.
+function placeUnit(layIn, uid, gear, decor) {
+  const lay = cleanLayout(layIn);
+  const u = UNIT_BY_ID[uid];
+  const o = withOwn(u, gear, decor);
+  if (checkLayout(lay, o.g, o.d, uid).ok) return lay;
+  for (const off of nearOffsets(offOf(lay, uid))) {
+    const t = Object.assign({}, lay, { [uid]: off });
+    if (checkLayout(t, o.g, o.d, uid).ok) return cleanLayout(t);
+  }
+  return null;
+}
+// The "+" spots of unbought pieces stay clear of what was moved (each found as if bought).
+function settleUnowned(layIn, gear, decor) {
+  let lay = cleanLayout(layIn);
+  for (const u of UNITS) {
+    if (unitOwned(u, gear, decor)) continue;   // owned pieces never move by themselves
+    const next = placeUnit(lay, u.id, gear, decor);
+    if (next) lay = next;
+  }
+  return lay;
+}
+// A loaded or bought-into layout: valid as owned, or the default.
+function fitLayout(layIn, gear, decor) {
+  const lay = cleanLayout(layIn);
+  if (!checkLayout(lay, gear, decor).ok) return {};
+  return settleUnowned(lay, gear, decor);
+}
+
+const STATION_BY_ID0 = Object.freeze(STATIONS0.reduce((acc, s) => { acc[s.id] = s; return acc; }, {}));
+let LAYOUT_KEY = null;
+let GEO = null;
+let STATIONS = STATIONS0, PROPS = PROPS0, DECOR = DECOR0, SEATS = SEATS0;
+let STATION_BY_ID = STATION_BY_ID0;
+let SEAT_BY_ID = Object.freeze(SEATS0.reduce((acc, s) => { acc[s.id] = s; return acc; }, {}));
+let PROP_BLOCKED = new Uint8Array(MAP_W * MAP_H);
+let IDLE = { tender: TENDER_IDLE0, prep: PREP_IDLE0, dogHome: DOG_HOME0, dogRoam: DOG_ROAM0 };
+
+// Points the live records at a layout. Cheap when nothing changed.
+function applyLayout(layIn) {
+  const lay = cleanLayout(layIn);
+  const key = JSON.stringify(lay);
+  if (key === LAYOUT_KEY) return false;
+  LAYOUT_KEY = key;
+  GEO = buildGeom(lay);
+  STATIONS = GEO.stations; PROPS = GEO.props; DECOR = GEO.decor; SEATS = GEO.seats;
+  STATION_BY_ID = Object.freeze(GEO.byId);
+  SEAT_BY_ID = Object.freeze(SEATS.reduce((acc, s) => { acc[s.id] = s; return acc; }, {}));
+  const pb = new Uint8Array(MAP_W * MAP_H);
+  for (const p of PROPS) for (const b of p.blocks) if (b.x >= 0 && b.x < MAP_W && b.y >= 0 && b.y < MAP_H) pb[b.y * MAP_W + b.x] = 1;
+  PROP_BLOCKED = pb;
+  // Idle posts: the default tile, else the nearest free patio tile the pitmaster can reach.
+  const foot = new Uint8Array(MAP_W * GRID_H), use = new Uint8Array(MAP_W * GRID_H);
+  for (const st of STATIONS) { for (const t of st.tiles) foot[t.y * MAP_W + t.x] = 1; for (const t of st.use) use[t.y * MAP_W + t.x] = 1; }
+  const free = (x, y) => groundAt(x, y) === T.PAVER && !foot[y * MAP_W + x] && pb[y * MAP_W + x] !== 1;
+  const reach = gridBfs([GEO.spawn], free);
+  const post = (d) => {
+    if (reach[d.y * MAP_W + d.x]) return d;
+    let best = null, bd = Infinity;
+    for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) {
+      if (!reach[y * MAP_W + x]) continue;
+      const k = Math.abs(x - d.x) + Math.abs(y - d.y) + (use[y * MAP_W + x] ? 0.5 : 0);
+      if (k < bd) { bd = k; best = Object.freeze({ x, y, face: d.face }); }
+    }
+    return best || d;
+  };
+  const lawnFree = (t) => groundAt(t.x, t.y) === T.LAWN && pb[t.y * MAP_W + t.x] !== 1
+    && !DECOR.some((q) => q.tiles.some((w) => w.x === t.x && w.y === t.y)) && !SEATS.some((q) => q.x === t.x && q.y === t.y);
+  const roam = DOG_ROAM0.filter(lawnFree);
+  IDLE = { tender: post(TENDER_IDLE0), prep: post(PREP_IDLE0),
+    dogHome: lawnFree(DOG_HOME0) ? DOG_HOME0 : (roam[0] || DOG_HOME0), dogRoam: list(roam.length ? roam : DOG_ROAM0) };
+  return true;
+}
+applyLayout({});
+
+// The unit whose foot or seat holds (x, y) under this ownership, or null.
+function unitAt(layIn, x, y, gear, decor) {
+  const geo = buildGeom(cleanLayout(layIn));
+  for (const u of UNITS) {
+    if (!unitOwned(u, gear, decor)) continue;
+    const pt = unitParts(geo, u, gear, decor);
+    if (pt.foot.concat(pt.seats).some((t) => t.x === x && t.y === y)) return u.id;
+  }
+  return null;
+}
+function unitTiles(layIn, uid, gear, decor) {
+  const geo = buildGeom(cleanLayout(layIn));
+  const pt = unitParts(geo, UNIT_BY_ID[uid], gear, decor);
+  return pt.foot.concat(pt.seats).map((t) => ({ x: t.x, y: t.y }));
+}
 
 const MAP = Object.freeze({
   W: MAP_W, H: MAP_H, TILE,
@@ -897,39 +1268,32 @@ const MAP = Object.freeze({
     return TILES[y * MAP_W + x];
   },
   stripe(x) { return (x & 1) === 0 ? 'a' : 'b'; },
-  stations: STATIONS,
+  get stations() { return STATIONS; },
   station(id) { return STATION_BY_ID[id]; },
-  props: PROPS,
-  decor: DECOR,
-  seats: SEATS,
+  get props() { return PROPS; },
+  get decor() { return DECOR; },
+  get seats() { return SEATS; },
   SEAT_ORDER: SEAT_IDS,
-  spawn: Object.freeze({ x: 3, y: 2, face: 'right' }),
+  get spawn() { return GEO.spawn; },
   gate: px(8, 11),
   custSpawn: px(8, 12),
   passStop: px(8, 10),
-  queue: list([
-    Object.freeze({ x: 5, y: 1, face: 'left', gear: null }),
-    Object.freeze({ x: 6, y: 1, face: 'left', gear: null }),
-    Object.freeze({ x: 7, y: 1, face: 'left', gear: null }),
-    Object.freeze({ x: 8, y: 1, face: 'left', gear: 'bigtable' }),
-    Object.freeze({ x: 8, y: 2, face: 'up', gear: 'bigtable' })
-  ]),
+  get queue() { return GEO.queue; },
   // v3.7: where a paid guest with no free seat stands by the counter until the plate is set down.
-  togo: list([Object.freeze({ x: 5, y: 3, face: 'left' }), Object.freeze({ x: 5, y: 2, face: 'left' }),
-    Object.freeze({ x: 6, y: 3, face: 'left' }), Object.freeze({ x: 6, y: 2, face: 'left' })]),
-  buddyIdle: Object.freeze({ x: 3, y: 3, face: 'down' }),    // v3.6: the RUN card waits on the counter's use tile next to the board (was (2,8))
-  tillIdle: Object.freeze({ x: 2, y: 1, face: 'right' }),    // v3.6: the TILL card's post, behind the register
-  tenderIdle: Object.freeze({ x: 1, y: 7, face: 'right' }),
-  prepIdle: Object.freeze({ x: 1, y: 3, face: 'right' }),   // X5.3: the PREP card's home
-  prepUse: Object.freeze({ x: 2, y: 3, face: 'down' }),     // X5.3: where the PREP card slices (the board's back use)
-  dogHome: px(2, 9),
-  dogRoam: list([px(1, 9), px(2, 9), px(4, 9), px(5, 9), px(5, 8), px(5, 6), px(4, 10)]),
+  get togo() { return GEO.togo; },
+  get buddyIdle() { return GEO.buddyIdle; },
+  get tillIdle() { return GEO.tillIdle; },
+  get tenderIdle() { return IDLE.tender; },
+  get prepIdle() { return IDLE.prep; },
+  get prepUse() { return GEO.prepUse; },
+  get dogHome() { return IDLE.dogHome; },
+  get dogRoam() { return IDLE.dogRoam; },
   // The string runs from the post on the fence apron along the fence top to the back corner, then
   // along the barn eave to a hook over (8,0). The canopy covers the line, (5,1) to (8,2), on 4 posts.
   // x and y are the post's and the canopy's top left in sim px, for the v2 readers.
   overhead: Object.freeze({
     lights: Object.freeze({ x: 0, y: 112, post: px(0, 7), via: 'eave', hook: px(8, 0) }),
-    canopy: Object.freeze({ x: 80, y: 16, tiles: list([px(5, 1), px(6, 1), px(7, 1), px(8, 1), px(5, 2), px(6, 2), px(7, 2), px(8, 2)]) })
+    get canopy() { return GEO.canopy; }
   }),
   // W16.5: the pit name is drawn into this box: the board hung on the barn over (3,0) and (4,0).
   // x, y, w: the record box (sim px, centred over the two tiles), w the art board text box (54 rp).
@@ -938,18 +1302,7 @@ const MAP = Object.freeze({
   // unbought station, gear and decor spot (D), and what the phone home view frames (C).
   walk: list([px(5, 1), px(6, 1), px(7, 1), px(8, 1), px(8, 2), px(8, 3), px(8, 4), px(8, 5), px(8, 6), px(8, 7), px(8, 8), px(8, 9), px(8, 10)]),
   apron: Object.freeze({ barn: 'y0', fence: 'x0' }),
-  forSale: Object.freeze({
-    kettle2: list([px(4, 7)]),
-    drum: list([px(2, 5), px(2, 6)]),
-    bigtable: list([px(4, 4)]),
-    canopy: list([px(7, 2)]),
-    chair1: list([px(9, 3)]),
-    chair2: list([px(9, 4)]),
-    flowers: list([px(6, 10), px(7, 10)]),
-    birdbath: list([px(3, 10)]),
-    lights: list([px(0, 7)]),
-    picnic2: list([px(6, 8), px(7, 8)])
-  }),
+  get forSale() { return GEO.forSale; },
   home: Object.freeze({ stations: list(STATIONS.map((s) => s.id)), queue: list([0, 1]) })
 });
 
@@ -2673,7 +3026,7 @@ function validateSave(obj) {
   try {
     if (!isPlainObject(obj)) return null;
     const v = readKey(obj, 'v');
-    if (v !== 1 && v !== 2 && v !== 3 && v !== 4 && v !== 5 && v !== 6 && v !== 7 && v !== 8 && v !== 9 && v !== 10 && v !== 11) return null;
+    if (v !== 1 && v !== 2 && v !== 3 && v !== 4 && v !== 5 && v !== 6 && v !== 7 && v !== 8 && v !== 9 && v !== 10 && v !== 11 && v !== 12) return null;
     const day = toInt(readKey(obj, 'day'), 1, 1, C.MAX_DAY);
     const cash = toInt(readKey(obj, 'cash'), C.START_CASH, 0, C.MAX_CASH);
     const rep = toInt(readKey(obj, 'rep'), C.START_REP, 0, 100);
@@ -2798,10 +3151,12 @@ function validateSave(obj) {
     let lvl = 1;
     for (let i = 1; i < C.PIT_LEVEL_XP.length; i++) if (pitXp >= C.PIT_LEVEL_XP[i]) lvl = i + 1;
     const pit = { xp: pitXp, longDay: Math.min(toInt(readKey(pitIn, 'longDay'), 0, 0, C.LONG_DAY_MAX), lvl - 1) };
+    // v3.9: the yard layout (v11 and older: the default). An invalid layout falls back to the default.
+    const layout = v >= 12 ? fitLayout(readKey(obj, 'layout'), gear, decor) : {};
     return {
       v: C.SAVE_VERSION, day, cash, rep, stock, charcoal, wood, gear, decor, stats, drivewayShown,
       tutorial: { done: !owed },
-      season, crew, crewSeq, hiring, player, pitName, trophies, ribbons, offseason, pit
+      season, crew, crewSeq, hiring, player, pitName, trophies, ribbons, offseason, pit, layout
     };
   } catch (e) {
     return null;
@@ -2960,6 +3315,9 @@ function createSim(saved, seed) {
     state.decor = {};
     for (const d of DECOR_IDS) state.decor[d] = s && s.decor ? s.decor[d] === true : false;
     if (!state.decor.chair1) state.decor.chair2 = false;
+    // v3.9: the yard layout, live before any mover is placed.
+    state.layout = s && s.layout ? cleanLayout(s.layout) : {};
+    applyLayout(state.layout);
     state.seats = emptySeats();
     // v3.1 (X4.1): crew cards replace state.hires.
     state.crew = s ? s.crew.map(copyCard) : [];
@@ -3741,7 +4099,8 @@ function createSim(saved, seed) {
 
   // ---- v3.6 the register (v3.7: the guest pays first) -------------------------------------------
 
-  const REG_X = STATION_BY_ID.register.tiles[0].x * TILE + 8, REG_Y = STATION_BY_ID.register.tiles[0].y * TILE;
+  function regX() { return STATION_BY_ID.register.tiles[0].x * TILE + 8; }
+  function regY() { return STATION_BY_ID.register.tiles[0].y * TILE; }
 
   function frontGuest() {
     return state.customers.find((o) => o.queueIndex === 0 && o.mode === 'waiting') || null;
@@ -3765,7 +4124,7 @@ function createSim(saved, seed) {
       const rec = state.cashier ? t.crew[String(state.cashier.cardId)] || null : null;
       if (rec) rec.plates += 1;
     }
-    emit('rung', { id: c.id, meat: c.want, price, tip: 0, booked, by, x: REG_X, y: REG_Y });
+    emit('rung', { id: c.id, meat: c.want, price, tip: 0, booked, by, x: regX(), y: regY() });
     const pick = pickSeat(c);
     leaveLine(c);
     c.reason = null;
@@ -4780,7 +5139,7 @@ function createSim(saved, seed) {
     const speed = b.vals ? b.vals.runSpeed : C.NPC_TILES_PER_S;   // a mover without vals plays v2's 3 star numbers
     const handle = b.vals ? b.vals.runHandle : C.BUDDY_HANDLE;
     const boardUse = STATION_BY_ID.board.use[0];    // the angle redo: (3,4) on the lane, facing left ((2,3) is the PREP card's)
-    const tableUse = STATION_BY_ID.table.use.find((u) => u.x === 3 && u.y === 3);    // (3,3), facing right, one step from the board as in v2
+    const tableUse = STATION_BY_ID.table.use[1];    // (3,3) by default, facing right; v3.9: follows the counter
     const comp = compOn();
     if (b.task === 'idle' && comp) {
       // v3.3: the RUN card carries a finished box left on the board to the window.
@@ -5371,6 +5730,7 @@ function createSim(saved, seed) {
 
   function tick() {
     if (state.phase !== 'service' || state.paused) return;
+    applyLayout(state.layout);
     tickStages();
     checkTutorial();
   }
@@ -5440,6 +5800,7 @@ function createSim(saved, seed) {
 
   function step(dt) {
     if (state.phase !== 'service' || state.paused) return;
+    applyLayout(state.layout);
     let d = Number(dt);
     if (!Number.isFinite(d) || d < 0) d = 0;
     if (d > C.MAX_FRAME_DT) d = C.MAX_FRAME_DT;
@@ -5789,6 +6150,7 @@ function createSim(saved, seed) {
       morningBuys.push({ id, label: rowDef.label, price: rowDef.price });
       if (rowDef.kind === 'gear') {
         state.gear[id] = true;
+        placeBought(id);
         reconfigureYard();
         emit('purchase', { id, label: rowDef.label, price: rowDef.price, kind: 'gear' });
         emit('save_wanted', { reason: 'gear' });
@@ -5796,6 +6158,7 @@ function createSim(saved, seed) {
         if (state.loop === 'week') regenOffers(false, true);   // W22.11; review 1: the shown cards keep their sizes
       } else {
         state.decor[id] = true;
+        placeBought(id);
         emit('purchase', { id, label: rowDef.label, price: rowDef.price, kind: 'decor' });
         emit('save_wanted', { reason: 'decor' });
       }
@@ -5822,6 +6185,52 @@ function createSim(saved, seed) {
     if (need && (isGear ? state.gear : state.decor)[need] !== true) return no(rowDef.needsText);
     if (rowDef.price > state.cash || left < 0) return no('Not enough cash');
     return { ok: true, message: '', left };
+  }
+
+  // ---- v3.9 arrange mode ----------------------------------------------------------------------
+
+  // A purchase lands on a free spot: the unit moves to the nearest valid one, or the yard resets.
+  function placeBought(id) {
+    const uid = FORSALE_UNIT[id] || (UNIT_BY_ID[id] ? id : null);
+    let lay = cleanLayout(state.layout);
+    if (!checkLayout(lay, state.gear, state.decor).ok) {
+      const next = uid ? placeUnit(lay, uid, state.gear, state.decor) : null;
+      lay = next && checkLayout(next, state.gear, state.decor).ok ? next : {};
+    }
+    state.layout = settleUnowned(lay, state.gear, state.decor);
+    applyLayout(state.layout);
+  }
+  // Only between days, on the week hub (never in service or the tutorial).
+  function canArrange() {
+    return state.loop === 'week' && state.phase !== 'service' && state.tutorial.done === true && !state.broke;
+  }
+  function arrangeView() {
+    const units = UNITS.filter((u) => unitOwned(u, state.gear, state.decor)).map((u) => ({ id: u.id, label: u.label, kind: u.kind,
+      tiles: unitTiles(state.layout, u.id, state.gear, state.decor) }));
+    return { ok: canArrange(), layout: cleanLayout(state.layout), units };
+  }
+  // Would unit `uid` fit at offset `off` on top of the draft layout? { ok, reason, layout }.
+  function checkMove(draft, uid, off) {
+    const lay = cleanLayout(draft);
+    if (!UNIT_BY_ID[uid] || !Array.isArray(off)) return { ok: false, reason: '', layout: lay };
+    const next = cleanLayout(Object.assign({}, lay, { [uid]: [Math.trunc(off[0]), Math.trunc(off[1])] }));
+    const r = checkLayout(next, state.gear, state.decor, uid);
+    return { ok: r.ok, reason: r.reason, layout: next };
+  }
+  function previewLayout(draft) { applyLayout(draft === null || draft === undefined ? state.layout : draft); }
+  // Done: the draft becomes the layout (refused when invalid or outside the hub).
+  function setLayout(draft) {
+    if (!canArrange()) { applyLayout(state.layout); return { ok: false, reason: '' }; }
+    const lay = cleanLayout(draft);
+    const r = checkLayout(lay, state.gear, state.decor);
+    if (!r.ok) { applyLayout(state.layout); return { ok: false, reason: r.reason }; }
+    state.layout = settleUnowned(lay, state.gear, state.decor);
+    applyLayout(state.layout);
+    const p = state.player;
+    if (p) Object.assign(p, newMover(MAP.spawn.x, MAP.spawn.y, MAP.spawn.face), { carrying: p.carrying, busy: null, target: null, queued: null });
+    emit('layout', { layout: cleanLayout(state.layout) });
+    emit('save_wanted', { reason: 'layout' });
+    return { ok: true, reason: '' };
   }
 
   function reconfigureYard() {
@@ -8119,6 +8528,7 @@ function createSim(saved, seed) {
       advance: live && !eventPlayed() ? s.advance | 0 : 0,   // v3.4
       plan: live && s.plan !== null && s.plan !== undefined ? s.plan.slice(0, C.PLAN_DAYS) : null   // v3.5
     };
+    out.layout = cleanLayout(state.layout);   // v3.9
     out.pit = { xp: clamp(Math.trunc(state.pit.xp) || 0, 0, C.PIT_XP_MAX), longDay: clamp(Math.trunc(state.pit.longDay) || 0, 0, C.LONG_DAY_MAX) };   // v3.5
     out.crew = state.crew.slice().sort(byId).map(copyCard);
     out.crewSeq = clamp(Math.trunc(state.crewSeq), 1, 9999);
@@ -8234,7 +8644,9 @@ function createSim(saved, seed) {
     compView, compJudges, resign, release, hireReferral,
     // v3.5 (the note at the top)
     planView, setPlanDay, togglePlanDay, startPlan, skipToWeekend, planOf, restNote,
-    pitView, pickPitSkill, cookTime, extraSeconds
+    pitView, pickPitSkill, cookTime, extraSeconds,
+    // v3.9 arrange mode
+    canArrange, arrangeView, checkMove, previewLayout, setLayout
   };
   return sim;
 }
@@ -8279,5 +8691,13 @@ PitSim.contestFor = contestFor;
 PitSim.seasonScale = seasonScale;
 // v3.5
 PitSim.compTimes = compTimes;
+// v3.9 arrange mode
+PitSim.UNITS = UNITS;
+PitSim.checkLayout = checkLayout;
+PitSim.cleanLayout = cleanLayout;
+PitSim.unitAt = unitAt;
+PitSim.unitTiles = unitTiles;
+PitSim.applyLayout = applyLayout;
+PitSim.layoutKey = function () { return LAYOUT_KEY; };
 
 })();

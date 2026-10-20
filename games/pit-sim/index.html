@@ -54,6 +54,13 @@
     #hud .stars.fans { color: #f27aa8; letter-spacing: 0; }
 
     #stage { display: flex; flex-direction: column; gap: 0; }
+    /* v3.9 arrange mode: the bar under the yard stands in for the action button and the meat chips */
+    #arrange { margin-top: 4px; padding: 8px; background: var(--u); border: 2px solid var(--y); border-radius: 4px; color: var(--c); }
+    #arrange[hidden] { display: none; }
+    #arr-msg { margin: 0 0 8px; font-size: 14px; line-height: 20px; min-height: 20px; }
+    #arrange .arr-row { display: flex; gap: 8px; flex-wrap: wrap; }
+    #arrange .arr-row button { flex: 1 1 auto; min-height: 44px; }
+    .arranging #act, .arranging #chips, .arranging #status { display: none !important; }
     #wrap { position: relative; width: 100%; background: var(--k); display: flex; justify-content: center; align-items: flex-start; }
     /* v3.6: on phones the yard is a camera on the world, edge to edge; drag pans, the corner button zooms */
     #root.camnear #wrap { width: auto; margin: 0 -16px; }

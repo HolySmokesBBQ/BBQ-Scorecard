@@ -1115,6 +1115,7 @@ function boot() {
   buildStatic();
   setupCanvas();
   setupInput();
+  buildArrangeBar();
   showLoop();
   pump();
   if (saveOff) noteSaveOff();
@@ -1203,6 +1204,8 @@ function readSeed() {
 
 function exposeGame() {
   PitSim.game = {
+    // v3.9: arrange mode state for the harness (read only).
+    arrange: function () { return arr ? { draft: JSON.parse(JSON.stringify(arr.draft)), lift: arr.lift, aim: arr.aim ? { ok: arr.aim.ok, reason: arr.aim.reason, tiles: arr.aim.tiles } : null, msg: (document.getElementById('arr-msg') || {}).textContent || '' } : null; },
     // v3.6: the client x, y a tap on tile (tx, ty) acts on, after panning it into view (spec F).
     tileToClient: tileToClient,
     camera: {
@@ -3245,9 +3248,13 @@ function buildWeekAt(level) {
 
   // Next event and Load up and go.
   tWeek.appendChild(nextCard(s, se, !rv && dv && dv.goHere ? null : goEls));
+  const arrTip = typeof sim.canArrange === 'function' && sim.canArrange() ? arrangeTip(se) : null;
+  if (arrTip) tWeek.appendChild(arrTip);
 
   // The 2 by 2 grid of sheets.
   tPit.appendChild(hubGrid(s, se));
+  // v3.9: Arrange yard, between days only.
+  if (typeof sim.canArrange === 'function' && sim.canArrange()) tPit.appendChild(mk('div', { cls: 'foot-row' }, [btn('pit-arrange', 'Arrange yard', 'alt', enterArrange)]));
   const shelf = trophyShelf(s, 'hub-shelf', false);   // deviation 77
   if (shelf) tPit.appendChild(shelf);
 
@@ -6063,6 +6070,234 @@ function buildSeasonEnd() {
   body.appendChild(go);
 }
 
+// ---------------------------------------------------------------- v3.9 arrange mode
+
+// Between days the hub's Your pit tab opens Arrange yard: tap a piece to lift it, tap a spot to set
+// it down (desktop also drags). The footprint shows green or red with a short reason; an invalid
+// drop is refused. No steps or distances anywhere: a tighter yard just plays faster.
+// arr: { draft, lift, grab, aim: { layout, tiles, ok, reason } | null }
+let arr = null;
+let seenLK = null;
+let arrDrag = null;
+function arrUnit(id) { return PitSim.UNITS.find(function (u) { return u.id === id; }) || null; }
+function arrOff(lay, id) { const o = lay[id]; return o ? o : [0, 0]; }
+function arrPreview() {
+  if (!arr) return null;
+  if (arr.aim && arr.aim.ok) return arr.aim.layout;
+  return arr.draft;
+}
+// Keeps the sim's live layout on the preview and drops every cache that holds a position.
+function layoutSync() {
+  if (sim && typeof sim.previewLayout === 'function') sim.previewLayout(arrPreview());
+  const k = typeof PitSim.layoutKey === 'function' ? PitSim.layoutKey() : '';
+  if (k === seenLK) return;
+  seenLK = k;
+  SALE = null; TABLES = null; WORK = null;
+  Object.keys(SEAT_TB).forEach(function (id) { delete SEAT_TB[id]; });
+  for (let i = 0; i < MAP.seats.length; i++) SEAT_BY_ID[MAP.seats[i].id] = MAP.seats[i];
+  const table = MAP.station('table');
+  extTile = null;
+  for (let i = 0; i < table.tiles.length; i++) if (table.tiles[i].gear === 'bigtable') extTile = table.tiles[i];
+}
+function arrMsg(text) {
+  const m = document.getElementById('arr-msg');
+  if (m && m.textContent !== text) m.textContent = text;
+}
+function arrIdle() { return 'Tap a piece of gear to pick it up.'; }
+function arrLifted() { const u = arrUnit(arr.lift); return (u ? u.label : 'It') + ' picked up. Tap a spot to set it down.'; }
+function enterArrange() {
+  if (!sim.canArrange()) return;
+  arr = { draft: sim.arrangeView().layout, lift: null, grab: null, aim: null };
+  dropSheet();
+  closePanel();
+  el.root.classList.add('arranging');
+  el.arrange.hidden = false;
+  arrMsg(arrIdle());
+  const d = document.getElementById('arr-done');
+  if (d) d.focus();
+}
+function leaveArrange(save) {
+  if (!arr) return;
+  let r = { ok: true };
+  if (save) r = sim.setLayout(arr.draft);
+  arr = null; arrDrag = null;
+  el.arrange.hidden = true;
+  el.root.classList.remove('arranging');
+  layoutSync();
+  pump();
+  if (save && r.ok) announce('Yard saved.');
+  openWeek();
+}
+function arrReset() {
+  if (!arr) return;
+  arr.draft = {}; arr.lift = null; arr.aim = null;
+  arrMsg('Back to the default yard. ' + arrIdle());
+}
+// The tile under a client point, and the movable piece there (by sprite first, then by tile).
+function arrPick(clientX, clientY) {
+  const w = clientToWorld(clientX, clientY);
+  if (!(w.r.width > 0)) return null;
+  const g = unIso(w.X / RS, w.Y / RS), tx = Math.floor(g.x / TILE), ty = Math.floor(g.y / TILE);
+  const s = sim.state;
+  let uid = PitSim.unitAt(arr.draft, tx, ty, s.gear, s.decor);
+  if (!uid && !arr.lift) {
+    for (let i = hits.length - 1; i >= 0; i--) {
+      const h = hits[i];
+      if (!h.st || !hitOne(h, w.X, w.Y)) continue;
+      const u = PitSim.UNITS.find(function (q) { return q.stations.indexOf(h.st.id) !== -1; });
+      if (u) { uid = u.id; break; }
+    }
+  }
+  return { x: tx, y: ty, unit: uid };
+}
+// Where the lifted piece would go with its grabbed tile on (tx, ty).
+function arrAim(tx, ty) {
+  const off = arrOff(arr.draft, arr.lift);
+  const want = [off[0] + tx - arr.grab.x, off[1] + ty - arr.grab.y];
+  const r = sim.checkMove(arr.draft, arr.lift, want);
+  const s = sim.state;
+  return { layout: r.layout, ok: r.ok, reason: r.reason, x: tx, y: ty, tiles: PitSim.unitTiles(r.layout, arr.lift, s.gear, s.decor) };
+}
+function arrTap(clientX, clientY) {
+  const p = arrPick(clientX, clientY);
+  if (!p) return;
+  if (!arr.lift) {
+    if (!p.unit) { arrMsg(arrIdle()); return; }
+    arr.lift = p.unit; arr.grab = { x: p.x, y: p.y }; arr.aim = null;
+    arrMsg(arrLifted());
+    return;
+  }
+  const own = PitSim.unitTiles(arr.draft, arr.lift, sim.state.gear, sim.state.decor);
+  if (hasTile(own, p.x, p.y)) { arr.lift = null; arr.aim = null; arrMsg(arrIdle()); return; }
+  if (p.unit && p.unit !== arr.lift) {
+    arr.lift = p.unit; arr.grab = { x: p.x, y: p.y }; arr.aim = null;
+    arrMsg(arrLifted());
+    return;
+  }
+  arrDrop(p.x, p.y);
+}
+function arrDrop(tx, ty) {
+  const a = arrAim(tx, ty);
+  if (a.ok) {
+    const u = arrUnit(arr.lift);
+    arr.draft = a.layout; arr.lift = null; arr.aim = null;
+    arrMsg((u ? u.label : 'It') + ' moved. ' + arrIdle());
+    return true;
+  }
+  arr.aim = a;
+  arrMsg(a.reason || 'That spot does not work.');
+  return false;
+}
+function arrHover(e) {
+  if (!arr || !arr.lift || arrDrag || e.pointerType === 'touch') return;
+  const p = arrPick(e.clientX, e.clientY);
+  if (!p) return;
+  if (arr.aim && arr.aim.x === p.x && arr.aim.y === p.y) return;
+  const own = PitSim.unitTiles(arr.draft, arr.lift, sim.state.gear, sim.state.decor);
+  if (hasTile(own, p.x, p.y) && p.x === arr.grab.x && p.y === arr.grab.y) { arr.aim = null; arrMsg(arrLifted()); return; }
+  arr.aim = arrAim(p.x, p.y);
+  arrMsg(arr.aim.ok ? arrLifted() : arr.aim.reason);
+}
+function arrPtrDown(e) {
+  const p = arrPick(e.clientX, e.clientY);
+  if (p && p.unit && (!arr.lift || p.unit === arr.lift)) {
+    arrDrag = { id: e.pointerId, x0: e.clientX, y0: e.clientY, unit: p.unit, grab: { x: p.x, y: p.y }, moved: false };
+    try { el.cv.setPointerCapture(e.pointerId); } catch (err) { /* optional */ }
+    return true;
+  }
+  return false;
+}
+function arrPtrMove(e) {
+  const d = arrDrag;
+  if (!d || d.id !== e.pointerId) return false;
+  if (!d.moved && Math.hypot(e.clientX - d.x0, e.clientY - d.y0) > 8) {
+    d.moved = true;
+    arr.lift = d.unit; arr.grab = d.grab;
+    arrMsg(arrLifted());
+  }
+  if (d.moved) {
+    const p = arrPick(e.clientX, e.clientY);
+    if (p && !(arr.aim && arr.aim.x === p.x && arr.aim.y === p.y)) {
+      arr.aim = arrAim(p.x, p.y);
+      arrMsg(arr.aim.ok ? arrLifted() : arr.aim.reason);
+    }
+  }
+  return true;
+}
+function arrPtrUp(e) {
+  const d = arrDrag;
+  if (!d || d.id !== e.pointerId) return false;
+  arrDrag = null;
+  if (!d.moved) { if (e.type === 'pointerup') arrTap(e.clientX, e.clientY); return true; }
+  const p = arrPick(e.clientX, e.clientY);
+  if (p) {
+    const own = PitSim.unitTiles(arr.draft, arr.lift, sim.state.gear, sim.state.decor);
+    if (p.x === arr.grab.x && p.y === arr.grab.y && hasTile(own, p.x, p.y)) { arr.aim = null; arrMsg(arrLifted()); }
+    else arrDrop(p.x, p.y);
+  }
+  return true;
+}
+function tileDiamond(t, inset) {
+  const k = inset || 0;
+  const P = [vtxRp(t.x, t.y), vtxRp(t.x + 1, t.y), vtxRp(t.x + 1, t.y + 1), vtxRp(t.x, t.y + 1)];
+  octx.beginPath();
+  octx.moveTo(P[0][0], P[0][1] + k);
+  octx.lineTo(P[1][0] - 2 * k, P[1][1]);
+  octx.lineTo(P[2][0], P[2][1] - k);
+  octx.lineTo(P[3][0] + 2 * k, P[3][1]);
+  octx.closePath();
+}
+function drawFoot(tiles, col, fillA, dash) {
+  for (let i = 0; i < tiles.length; i++) {
+    tileDiamond(tiles[i], 1);
+    octx.fillStyle = 'rgba(' + col + ', ' + fillA + ')';
+    if (fillA > 0) octx.fill();
+    octx.lineWidth = 2;
+    octx.setLineDash(dash ? [4, 3] : []);
+    octx.strokeStyle = 'rgba(' + col + ', 0.95)';
+    octx.stroke();
+  }
+  octx.setLineDash([]);
+}
+function drawArrange(s) {
+  if (!arr) return;
+  onWorld(function () {
+    if (!arr.lift) return;
+    const own = PitSim.unitTiles(arr.draft, arr.lift, s.gear, s.decor);
+    const a = arr.aim;
+    if (a && a.ok) {
+      drawFoot(own, '255, 214, 90', 0, true);
+      drawFoot(a.tiles, '70, 220, 90', 0.38, false);
+    } else {
+      drawFoot(own, '255, 214, 90', 0.32, false);
+      if (a) drawFoot(a.tiles.filter(function (t) { return t.x >= -1 && t.x <= MAP.W && t.y >= -1 && t.y <= MAP.H; }), '240, 60, 50', 0.42, false);
+    }
+  });
+}
+function buildArrangeBar() {
+  const bar = mk('div', { id: 'arrange', attrs: { role: 'group', 'aria-label': 'Arrange yard' } });
+  bar.hidden = true;
+  bar.appendChild(mk('p', { id: 'arr-msg', attrs: { 'aria-live': 'polite' }, text: '' }));
+  bar.appendChild(mk('div', { cls: 'arr-row' }, [
+    btn('arr-cancel', 'Cancel', 'alt', function () { leaveArrange(false); }),
+    btn('arr-reset', 'Reset to default', 'alt', arrReset),
+    btn('arr-done', 'Done', 'primary', function () { leaveArrange(true); })
+  ]));
+  el.stage.appendChild(bar);
+  el.arrange = bar;
+  el.cv.addEventListener('pointermove', arrHover);
+}
+// The hint line, once, the first hub after week 1 (a per browser note; the save is unchanged).
+let arrTipWeek = null;
+function arrangeTip(se) {
+  if (!se || (se.week | 0) < 2) return null;
+  let seen = null;
+  try { seen = localStorage.getItem('pit-sim-arrange-tip'); } catch (e) { seen = 'x'; }
+  if (seen && arrTipWeek !== (se.week | 0)) return null;
+  if (!seen) { arrTipWeek = se.week | 0; try { localStorage.setItem('pit-sim-arrange-tip', '1'); } catch (e) { /* no storage */ } }
+  return mk('p', { id: 'arrange-tip', cls: 'muted', text: 'Tip: Arrange yard lets you move your gear.' });
+}
+
 // ---------------------------------------------------------------- input
 
 function setupInput() {
@@ -6094,6 +6329,7 @@ let dragP = null, pinchP = null;
 function onPtrDown(e) {
   if (e.button !== undefined && e.button !== 0) return;
   if (currentPanel && !saleTaps()) return;
+  if (arr && ptrs.size === 0 && arrPtrDown(e)) return;
   ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
   try { el.cv.setPointerCapture(e.pointerId); } catch (err) { /* capture is optional */ }
   if (ptrs.size === 2) {
@@ -6105,6 +6341,7 @@ function onPtrDown(e) {
   }
 }
 function onPtrMove(e) {
+  if (arr && arrPtrMove(e)) return;
   const q = ptrs.get(e.pointerId);
   if (!q) return;
   q.x = e.clientX; q.y = e.clientY;
@@ -6125,6 +6362,7 @@ function onPtrMove(e) {
   dragP.lx = e.clientX; dragP.ly = e.clientY;
 }
 function onPtrUp(e) {
+  if (arr && arrPtrUp(e)) return;
   const had = ptrs.delete(e.pointerId);
   if (pinchP) { if (ptrs.size === 0) pinchP = null; dragP = null; return; }
   const d = dragP;
@@ -6141,6 +6379,7 @@ function tapAt(clientX, clientY) {
     if (h0.plus) openForSale(h0.plus);
     return;
   }
+  if (arr) { arrTap(clientX, clientY); return; }
   const s = sim.state;
   if (s.paused || s.phase !== 'service') return;
   const w = clientToWorld(clientX, clientY);
@@ -6231,6 +6470,10 @@ function onKeyDown(e) {
   const lower = key.length === 1 ? key.toLowerCase() : key;
   if (howtoOpen) {
     if (key === 'Escape') { e.preventDefault(); closeHowto(); }
+    return;
+  }
+  if (arr && !currentPanel) {
+    if (key === 'Escape') { e.preventDefault(); leaveArrange(false); }
     return;
   }
   if (currentPanel) {
@@ -8567,6 +8810,7 @@ function drawRain() {
 function render() {
   const s = sim.state;
   const inService = s.phase === 'service';
+  layoutSync();
   hits.length = 0;
   // The world, 1 px per rp.
   octx = wctx;
@@ -8583,6 +8827,7 @@ function render() {
   drawCues(s, custs);                 // 5. bubbles, bars, sweat, zzz, hearts
   drawFireCues(s);                    // 5b. the FIRE badge and feed puffs (deviation 75)
   drawTop(s);                         // 6. slice bar, numbers, coins, sparkles, tap rings, arrow
+  drawArrange(s);                     // 6b. v3.9: the lifted piece's footprints in arrange mode
 
   // The overlay over the view, at least 352 rp across (its v3.5 size).
   octx = ovctx;

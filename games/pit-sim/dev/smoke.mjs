@@ -287,7 +287,7 @@ const DEVICE_SIZES = [
 ];
 
 // Contract D2 and D3.
-const C_EXPECT = { WALK_TILES_PER_S: 6, SAVE_VERSION: 11, PATIENCE_MID_FRAC: 0.5, GEAR_RESERVE: 30, QUEUE_SPOTS: 3, QUEUE_SPOTS_BIG: 5, TABLE_SPOTS: 3, TABLE_SPOTS_BIG: 5 };
+const C_EXPECT = { WALK_TILES_PER_S: 6, SAVE_VERSION: 12, PATIENCE_MID_FRAC: 0.5, GEAR_RESERVE: 30, QUEUE_SPOTS: 3, QUEUE_SPOTS_BIG: 5, TABLE_SPOTS: 3, TABLE_SPOTS_BIG: 5 };
 const C_NEW_KEYS = ['EAT_MIN', 'EAT_MAX', 'HEART_SECONDS', 'SEAT_BONUS_BASE', 'SEAT_BONUS_MAX', 'CHARM_STEP', 'CHARM_MAX', 'REP_TOGO_QUICK', 'SWEAT_FRAC', 'ZZZ_AFTER', 'FX', 'PATIENCE_MID_FRAC', 'GEAR_RESERVE'];
 const FX_KEYS = ['NUMBER_S', 'NUMBER_RISE_PX', 'NUMBER_FADE_AT', 'TIP_GAP_PX', 'SPARKLE_S', 'SPARKLE_FRAME_S', 'SPARKLE_STAGGER_S',
   'HEART_S', 'HEART_FRAME_S', 'HEART_RISE_PX', 'HEART_FADE_S', 'EAT_FRAME_S', 'PUFF_EVERY_LOW', 'PUFF_EVERY_GOOD', 'PUFF_EVERY_HOT',
@@ -414,7 +414,7 @@ const C_W2 = {
 };
 const C_W2_FIXED = ['SAVE_VERSION', 'SEASON_WEEKS', 'NAME_MAX', 'NAME_PUNCT', 'LENGTHS'];
 // W2 changed values and the v2.1 keys that stay (W2 last paragraph).
-const C_W2_EXACT = { SAVE_VERSION: 11, DRIVEWAY_PRICE: 400, GATE_OPENS: 30, LAST_CALL: 110, DAY_SECONDS: 125, STEPPER_MAX: 99, START_CASH: 80, START_REP: 20 };
+const C_W2_EXACT = { SAVE_VERSION: 12, DRIVEWAY_PRICE: 400, GATE_OPENS: 30, LAST_CALL: 110, DAY_SECONDS: 125, STEPPER_MAX: 99, START_CASH: 80, START_REP: 20 };
 // W22.18: the keys whose starting values the W19 literals assume.
 const LITERAL_KEYS = ['FEE_MULT', 'FEE_ROUND', 'DEPOSIT_FRAC', 'PAY_BASE', 'PAY_PER_STAR', 'STAR_FANS', 'REP_DAY_MIN', 'SPARE_FRAC', 'BAGS_PER_COOKER',
   'SCORE_FED', 'SCORE_WAIT', 'SCORE_QUALITY', 'STAR_EDGES', 'WAIT_FULL_S', 'WAIT_ZERO_S', 'BURNT_PENALTY', 'OFFMENU_PENALTY', 'COOLER_CAP', 'SEASON_CARRY_REP', 'SEASON_REP_FLOOR',
@@ -563,7 +563,7 @@ const ID3 = {
 };
 const SEASON_WEEKS = 7;   // v3.5: six weeks and the competition finale (was 9)
 const P_POOL = 24;        // v3.6: the Hiring Day pool (6 a role, 4 roles)
-const SAVE_V = 11;        // v3.5: save v9 (season.plan, pit); v3.6: v10 (the register, the TILL card); v3.7: v11 (pay, then sit)
+const SAVE_V = 12;        // v3.5: save v9 (season.plan, pit); v3.6: v10 (the register, the TILL card); v3.7: v11 (pay, then sit)
 // W19 step 51: the v2.1 (v3) save sample.
 const SAVE_V3_SAMPLE = {
   v: 3, day: 5, cash: 150, rep: 20,
@@ -1207,7 +1207,7 @@ const SAVE_V1_SAMPLE = {
   drivewayShown: false
 };
 const SAVE_DIRTY = { v: 1, day: 'abc', cash: -50, rep: 400, stock: { sausage: 200, bogus: 1 }, gear: { drum: true, kettle2: false }, hires: { tender: true }, extra: 1 };
-const INVALID_SAVES = [null, 'x', [], {}, undefined, 42, { v: '5' }, { v: 0 }, { v: '3' }, { v: '4' }, { v: 12 }];   // v3.7: v 1 to 11 accepted
+const INVALID_SAVES = [null, 'x', [], {}, undefined, 42, { v: '5' }, { v: 0 }, { v: '3' }, { v: '4' }, { v: 13 }];   // v3.9: v 1 to 12 accepted
 
 // The shopping list for day 1 and later days. Two sausage units give four plates, so later
 // customers walk out and the walk out step has something to assert.
@@ -3117,6 +3117,7 @@ function validateV4(P) {
   const want4 = base();
   want4.v = SAVE_V;
   want4.pit = { xp: 0, longDay: 0 };   // v3.5
+  want4.layout = {};   // v3.9: the default yard
   delete want4.hires;
   delete want4.settings;   // 2026-10-19: an old save's length setting is ignored
   Object.assign(want4, { crew: [], crewSeq: 1, hiring: null });
@@ -3167,6 +3168,7 @@ function validateV5(P) {
   const want5 = base();
   want5.v = SAVE_V;
   want5.pit = { xp: 0, longDay: 0 };   // v3.5
+  want5.layout = {};   // v3.9
   delete want5.settings;   // 2026-10-19: an old save's length setting is ignored
   Object.assign(want5.season, { day: 0, dayLog: [null, null, null, null, null, null, null], prepped: false, loadin: false, overnight: null, advance: 0, plan: null });
   // v3.3: the shelf, the ribbons and no open Offseason.
@@ -4607,7 +4609,7 @@ function daysLoopHeadless(P) {
   assert(d3.season.day === 5 && d3.season.loadin === false && sameJSON(d3.season.dayLog, ['off', 'off', 'off', 'off', 'off', null, null]), 'no pick keeps the day, never the Load-in ' + describe(d3.season));
   const d4 = V(v6Save({ season: { week: 5, pick: 'birthday', day: 3 } }));
   assert(d4.season.week === 3 && d4.season.day === 0, 'a week that does not hold opens Monday ' + describe(d4.season));
-  assert(V({ v: 12 }) === null, '{ v: 12 } accepted');
+  assert(V({ v: 13 }) === null, '{ v: 13 } accepted');
   notes.push('morning shops cost ' + seen.join(', ') + ' Monday to Thursday');
   return notes.join('; ') + '; the report save reloads on Sunday, a Yard week writes { yard, 0 }, dirty v6 keys clamp';
 }
@@ -9606,6 +9608,122 @@ async function browserChecks() {
       await back;
       await reload(undefined, { clear: true });
     }
+  });
+
+  // ---- v3.9 arrange mode ----------------------------------------------------------------------
+  const AR = () => ev('g.arrange()');
+  const two = (o) => ({ cooler: o && o.cooler, picnic1: o && o.picnic1 });   // picnic2's "+" spot may step aside
+  const MOVED = { cooler: [0, -2], picnic1: [0, 4] };
+  const arrFixture = () => {
+    const tillC = pageCard(1, 'Rita', 'till', [3, 3]);
+    const runC = pageCard(2, 'Bo', 'run', [3, 3]);
+    const s = saveV9({ cash: 300, season: { week: 2, results: resultsOf(1), pick: 'birthday' }, crew: [tillC, runC] });
+    s.v = 11;
+    return s;
+  };
+  const toService = async () => {
+    for (let i = 0; i < 40 && (await ev('S().phase')) !== 'service'; i++) {
+      const ids = await ev('[...document.querySelectorAll("#panels button")].filter((b) => b.offsetParent && !b.disabled).map((b) => b.id)');
+      const nx = ['plan-start', 'shop-confirm', 'go', 'hub-start'].find((x) => ids.includes(x));
+      if (nx) { await click(nx); await advance(0); } else await advance(1);
+    }
+    return (await ev('S().phase')) === 'service';
+  };
+  const hover = async (tx, ty) => {
+    const p = await canvasPoint(tx, ty);
+    await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: p.x, y: p.y });
+    await sleep(40);
+    await advance(0);
+  };
+  const enterArrange = async () => {
+    await click('hub-tab-pit'); await advance(0);
+    assert(await ev('vis("pit-arrange")'), '#pit-arrange not shown on the Your pit tab');
+    await click('pit-arrange'); await advance(0);
+    const a = await AR();
+    assert(a && (await ev('vis("arrange") && $("panels").hidden')), 'arrange mode did not open: ' + describe(a));
+    return a;
+  };
+
+  await step('v3.9 arrange 1: a v11 save migrates to the default layout, a bad stored layout falls back, the week 2 tip', async () => {
+    await ev('(localStorage.removeItem("pit-sim-arrange-tip"), true)');
+    await reload(arrFixture());
+    const m = await ev('(() => { const o = sim.serialize(); const bad = Object.assign({}, o, { layout: { cooler: [0, -1] } }); const ok = Object.assign({}, o, { layout: { cooler: [0, -2] } }); return { lay: JSON.stringify(S().layout), v: o.v, sl: JSON.stringify(o.layout), cooler: MAP.station("cooler").tiles[0], bad: JSON.stringify(PitSim.validateSave(bad).layout), good: JSON.stringify(PitSim.validateSave(ok).layout), loop: S().loop, tip: $("arrange-tip") ? $("arrange-tip").textContent : null }; })()');
+    assert(m.lay === '{}' && m.v === 12 && m.sl === '{}' && m.cooler.x === 4 && m.cooler.y === 6, 'v11 migration ' + describe(m));
+    assert(m.bad === '{}' && m.good === '{"cooler":[0,-2]}', 'stored layout check ' + describe(m));
+    assert(m.loop === LOOP.week && m.tip === 'Tip: Arrange yard lets you move your gear.', 'hub tip ' + describe(m.tip));
+    return 'v11 to v12 with layout {}; overlap falls back to {}; tip shown';
+  });
+
+  await step('v3.9 arrange 2: real taps move the cooler beside the kettle, a gate path drop is refused with a reason, Done saves, reload keeps it', async () => {
+    if (DESKTOP_MODE) { await emulate(DESK_J, false); await sleep(TIMEOUT_MS.resize); await advance(0); }
+    try {
+    await enterArrange();
+    await canvasTap(4, 6); await advance(0);
+    let a = await AR();
+    assert(a.lift === 'cooler', 'tap on the cooler did not lift it: ' + describe(a));
+    await canvasTap(4, 4); await advance(0);
+    a = await AR();
+    assert(a.lift === null && sameJSON(a.draft, { cooler: [0, -2] }), 'cooler drop beside the kettle ' + describe(a));
+    const live = await ev('MAP.station("cooler").tiles[0]');
+    assert(live.x === 4 && live.y === 4, 'cooler drawn at ' + describe(live));
+    // The picnic table: a green footprint on a free lawn spot, then a refused drop on the gate path.
+    await canvasTap(6, 5); await advance(0);
+    a = await AR();
+    assert(a.lift === 'picnic1', 'tap on the picnic table did not lift it: ' + describe(a));
+    await hover(6, 9);
+    a = await AR();
+    assert(a.aim && a.aim.ok === true, 'hover over a free lawn spot is not green: ' + describe(a));
+    await screenshot(DESKTOP_MODE ? 'arrange-green-desktop.png' : 'arrange-green.png');
+    await canvasTap(8, 10); await advance(0);
+    a = await AR();
+    assert(a.lift === 'picnic1' && a.aim && a.aim.ok === false && a.aim.reason === 'Blocks the gate path' && a.msg === 'Blocks the gate path' && !('picnic1' in a.draft),
+      'gate path drop was not refused: ' + describe(a));
+    await screenshot(DESKTOP_MODE ? 'arrange-red-desktop.png' : 'arrange-red.png');
+    await canvasTap(6, 9); await advance(0);
+    a = await AR();
+    assert(a.lift === null && sameJSON(a.draft, { cooler: [0, -2], picnic1: [0, 4] }), 'picnic table drop ' + describe(a));
+    await click('arr-done'); await advance(0);
+    const saved = await ev('({ lay: S().layout, ls: JSON.parse(localStorage.getItem(' + JSON.stringify(SAVE_KEY) + ')).layout, hub: !$("panels").hidden && vis("week"), arr: g.arrange() })');
+    assert(sameJSON(two(saved.lay), MOVED) && sameJSON(saved.ls, saved.lay) && saved.hub && saved.arr === null, 'Done did not save: ' + describe(saved));
+    await reload();
+    const back = await ev('({ lay: S().layout, cooler: MAP.station("cooler").tiles[0], seat: MAP.seats.find((s) => s.id === "pt1a") })');
+    assert(sameJSON(back.lay, saved.lay) && back.cooler.x === 4 && back.cooler.y === 4 && back.seat.y === 8, 'reload lost the layout: ' + describe(back));
+    return 'cooler (4,6) to (4,4), picnic table to row 9, "Blocks the gate path" refused, saved and reloaded';
+    } finally {
+      if (DESKTOP_MODE) { await emulate(RUN_METRICS); await sleep(TIMEOUT_MS.resize); await advance(0); }
+    }
+  });
+
+  await step('v3.9 arrange 3: a cook day on the new layout, the pitmaster at the moved cooler, the TILL card rings, a guest sits at the moved table', async () => {
+    assert(await toService(), 'no service day');
+    await canvasTap(4, 4);
+    await settle();
+    const at = await ev('({ x: S().player.x, y: S().player.y, face: S().player.face, reach: sim.reach() })');
+    assert(at.x === 3 && at.y === 4 && at.face === 'right', 'the pitmaster did not walk to the moved cooler: ' + describe(at));
+    const till = await ev('({ x: S().cashier && S().cashier.x, y: S().cashier && S().cashier.y, idle: MAP.tillIdle })');
+    const seated = await until('S().customers.some((c) => c.seat && c.mode === "seated" && (c.seat === "pt1a" || c.seat === "pt1b") && c.y === 8)', 120);
+    const info = await ev('({ c: S().customers.filter((c) => c.seat).map((c) => ({ seat: c.seat, x: c.x, y: c.y, mode: c.mode, rungBy: c.rungBy })), stand: [S().player, S().buddy, S().cashier].filter(Boolean).filter((m) => MAP.stations.some((st) => st.tiles.some((t) => t.x === m.x && t.y === m.y))).length })');
+    assert(seated.ok, 'no guest sat at the moved picnic table: ' + describe(info));
+    assert(info.stand === 0 && info.c.some((c) => c.rungBy === 'till'), 'crew check ' + describe(info) + ' till ' + describe(till));
+    return 'cooler reached from (3,4); ' + info.c.length + ' seated guest(s), rung by the TILL card; no mover on a station tile';
+  });
+
+  await step('v3.9 arrange 4: Cancel keeps the yard, Reset to default restores it on Done', async () => {
+    const f = arrFixture(); f.v = 12; f.layout = { cooler: [0, -2], picnic1: [0, 4] };
+    await reload(f);
+    await enterArrange();
+    await click('arr-reset'); await advance(0);
+    let a = await AR();
+    assert(sameJSON(a.draft, {}) && (await ev('MAP.station("cooler").tiles[0].y')) === 6, 'Reset draft ' + describe(a));
+    await click('arr-cancel'); await advance(0);
+    const kept = await ev('({ lay: S().layout, y: MAP.station("cooler").tiles[0].y, arr: g.arrange() })');
+    assert(sameJSON(two(kept.lay), MOVED) && kept.y === 4 && kept.arr === null, 'Cancel changed the yard: ' + describe(kept));
+    await enterArrange();
+    await click('arr-reset'); await advance(0);
+    await click('arr-done'); await advance(0);
+    const def = await ev('({ lay: S().layout, ls: JSON.parse(localStorage.getItem(' + JSON.stringify(SAVE_KEY) + ')).layout, y: MAP.station("cooler").tiles[0].y })');
+    assert(sameJSON(def.lay, {}) && sameJSON(def.ls, {}) && def.y === 6, 'Reset and Done ' + describe(def));
+    return 'Cancel kept the moved yard; Reset and Done saved the default';
   });
 
   await step('zero console errors across the run', () => {
