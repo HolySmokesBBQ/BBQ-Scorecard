@@ -4050,6 +4050,10 @@ function startCard(se, rv) {
   sec.appendChild(b);
   const why = mk('p', { id: 'hub-why', cls: 'muted' });
   sec.appendChild(why);
+  // Joel: "I can't find how to move the kettle." Arrange yard sits right under Start too.
+  if (typeof sim.canArrange === 'function' && sim.canArrange()) {
+    sec.appendChild(mk('button', { id: 'hub-arrange', cls: 'linkish', type: 'button', text: 'Move your gear', on: enterArrange }));
+  }
   const alt = Array.isArray(rv.alt) ? rv.alt : [];
   if (alt.length) {
     const ch = mk('button', { id: 'hub-change', cls: 'linkish', type: 'button', text: U('changePlan') });
