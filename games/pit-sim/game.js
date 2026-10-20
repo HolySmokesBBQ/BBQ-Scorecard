@@ -7373,6 +7373,9 @@ function camSet(mode, X, Y) {
 // Puts tile (tx, ty)'s centre at least 24 CSS px inside the view, at once; follow waits for a walk.
 function camReveal(tx, ty) {
   if (cam.mode !== 'near') return;
+  // A follow ease under way lands first: dropping it part way left the view a fraction of a tile
+  // short, the next frame eased again, and the point just worked out slid under the tap.
+  if (cam.ease) { cam.x0 = cam.ease.tx; cam.y0 = cam.ease.ty; camClamp(); }
   const c = tileRp(tx, ty), m = 24 / cssPerRp();
   const o = camOrigin();
   let x0 = o[0], y0 = o[1];
@@ -7523,6 +7526,13 @@ function hitWorld(X, Y) {
   const standable = inMap && sim.walkable(tx, ty);
   // v3.7: holding a plate, a tap on the seat, table or head of the guest who ordered it delivers it.
   if (inMap && deliverTile(tx, ty)) return { tile: { x: tx, y: ty } };
+  // v3.9: the counter sprite covers most of the register's floor, so a tap on that floor rings up.
+  if (inMap) {
+    for (let i = 0; i < MAP.stations.length; i++) {
+      const st = MAP.stations[i];
+      if (st.type === 'register' && owned(st) && hasTile(st.tiles, tx, ty)) return { st: st };
+    }
+  }
   for (let i = hits.length - 1; i >= 0; i--) {
     const h = hits[i];
     if (!hitOne(h, X, Y)) continue;
@@ -7570,8 +7580,18 @@ function tileToClient(tx, ty, opts) {
   let X = c[0], Y = c[1];
   const st = MAP.stations.find(function (q) { return owned(q) && q.tiles.some(function (t) { return t.x === tx && t.y === ty && owned(t); }); });
   const inMap = tx >= 0 && tx < MAP.W && ty >= 0 && ty < MAP.H;
-  const want = st ? function (h) { return h.st === st; } : function (h) { return !!(h.tile && h.tile.x === tx && h.tile.y === ty); };
-  if ((st || (inMap && sim.walkable(tx, ty))) && !want(hitWorld(X + 0.5, Y + 0.5))) {
+  const want0 = st ? function (h) { return h.st === st; } : function (h) { return !!(h.tile && h.tile.x === tx && h.tile.y === ty); };
+  // A point a tap acts on, with 2 rp of the same answer around it, so a pixel of camera or finger
+  // drift does not land on the neighbour (the register's nearest pixel sat on the counter's edge).
+  // Falls back to any point that acts on it when nothing has that margin.
+  let wantM = true;
+  const want = function (h, x, y) {
+    if (!want0(h)) return false;
+    if (!wantM || x === undefined) return true;
+    return want0(hitWorld(x - 2, y)) && want0(hitWorld(x + 2, y)) && want0(hitWorld(x, y - 2)) && want0(hitWorld(x, y + 2));
+  };
+  if ((st || (inMap && sim.walkable(tx, ty))) && !want(hitWorld(X + 0.5, Y + 0.5), X + 0.5, Y + 0.5)) for (let pass = 0; pass < 2; pass++) {
+    wantM = pass === 0;
     let best = null, bd = Infinity;
     const vis = function (x, y) { return x >= w.o[0] + 2 && x < w.o[0] + cam.vw - 2 && y >= w.o[1] + 2 && y < w.o[1] + cam.vh - 2; };
     if (st) {
@@ -7580,17 +7600,17 @@ function tileToClient(tx, ty, opts) {
         if (h.st !== st) continue;
         for (let yy = h.Y0; yy < h.Y0 + h.h; yy++) for (let xx = h.X0; xx < h.X0 + h.w; xx++) {
           const d = (xx - X) * (xx - X) + (yy - Y) * (yy - Y);
-          if (d < bd && vis(xx, yy) && hitOne(h, xx + 0.5, yy + 0.5) && want(hitWorld(xx + 0.5, yy + 0.5))) { bd = d; best = [xx, yy]; }
+          if (d < bd && vis(xx, yy) && hitOne(h, xx + 0.5, yy + 0.5) && want(hitWorld(xx + 0.5, yy + 0.5), xx + 0.5, yy + 0.5)) { bd = d; best = [xx, yy]; }
         }
       }
     } else {
       for (let yy = -11; yy <= 11; yy++) for (let xx = -23; xx <= 23; xx++) {
         if (Math.abs(xx) / 24 + Math.abs(yy) / 12 >= 0.92) continue;
         const d = xx * xx + yy * yy;
-        if (d < bd && vis(X + xx, Y + yy) && want(hitWorld(X + xx + 0.5, Y + yy + 0.5))) { bd = d; best = [X + xx, Y + yy]; }
+        if (d < bd && vis(X + xx, Y + yy) && want(hitWorld(X + xx + 0.5, Y + yy + 0.5), X + xx + 0.5, Y + yy + 0.5)) { bd = d; best = [X + xx, Y + yy]; }
       }
     }
-    if (best) { X = best[0]; Y = best[1]; }
+    if (best) { X = best[0]; Y = best[1]; break; }
   }
   const px = w.r.left + (X + 0.5 - w.o[0]) * w.k, py = w.r.top + (Y + 0.5 - w.o[1]) * w.k;
   if (opts && opts.pan === false && (px < w.r.left || px >= w.r.right || py < w.r.top || py >= w.r.bottom)) return null;
