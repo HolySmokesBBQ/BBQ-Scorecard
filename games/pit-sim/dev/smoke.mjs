@@ -267,7 +267,7 @@ const SIM_SURFACE = ['C', 'MEATS', 'MEAT_IDS', 'MAP', 'CATALOG', 'STRINGS', 'cre
   'BOOKINGS', 'BOOKING_IDS', 'LOOK_KEYS', 'LOOK_COUNTS', 'DEFAULT_LOOK', 'genOffers', 'scoreEvent', 'cleanName', 'filterName',
   // v3.1 (X1): the six new top level names.
   'ROLE_IDS', 'genPool', 'genWalkins', 'cardStars', 'wageFor', 'skillValue'];
-const SURFACE_COUNTS = { tiles: 132, stations: 8, seats: 6, decor: 6, props: 19, catalog: 21 };
+const SURFACE_COUNTS = { tiles: 132, stations: 9, seats: 6, decor: 6, props: 19, catalog: 21 };
 const MAP_SIZE = { w: 11, h: 12 };
 const TILE_PX = 16;
 const VIRTUAL = { w: MAP_SIZE.w * TILE_PX, h: MAP_SIZE.h * TILE_PX };   // 176 by 192
@@ -287,7 +287,7 @@ const DEVICE_SIZES = [
 ];
 
 // Contract D2 and D3.
-const C_EXPECT = { WALK_TILES_PER_S: 6, SAVE_VERSION: 9, PATIENCE_MID_FRAC: 0.5, GEAR_RESERVE: 30, QUEUE_SPOTS: 3, QUEUE_SPOTS_BIG: 5, TABLE_SPOTS: 3, TABLE_SPOTS_BIG: 5 };
+const C_EXPECT = { WALK_TILES_PER_S: 6, SAVE_VERSION: 10, PATIENCE_MID_FRAC: 0.5, GEAR_RESERVE: 30, QUEUE_SPOTS: 3, QUEUE_SPOTS_BIG: 5, TABLE_SPOTS: 3, TABLE_SPOTS_BIG: 5 };
 const C_NEW_KEYS = ['EAT_MIN', 'EAT_MAX', 'HEART_SECONDS', 'SEAT_BONUS_BASE', 'SEAT_BONUS_MAX', 'CHARM_STEP', 'CHARM_MAX', 'REP_TOGO_QUICK', 'SWEAT_FRAC', 'ZZZ_AFTER', 'FX', 'PATIENCE_MID_FRAC', 'GEAR_RESERVE'];
 const FX_KEYS = ['NUMBER_S', 'NUMBER_RISE_PX', 'NUMBER_FADE_AT', 'TIP_GAP_PX', 'SPARKLE_S', 'SPARKLE_FRAME_S', 'SPARKLE_STAGGER_S',
   'HEART_S', 'HEART_FRAME_S', 'HEART_RISE_PX', 'HEART_FADE_S', 'EAT_FRAME_S', 'PUFF_EVERY_LOW', 'PUFF_EVERY_GOOD', 'PUFF_EVERY_HOT',
@@ -411,7 +411,7 @@ const C_W2 = {
 };
 const C_W2_FIXED = ['SAVE_VERSION', 'SEASON_WEEKS', 'NAME_MAX', 'NAME_PUNCT', 'LENGTHS'];
 // W2 changed values and the v2.1 keys that stay (W2 last paragraph).
-const C_W2_EXACT = { SAVE_VERSION: 9, DRIVEWAY_PRICE: 400, GATE_OPENS: 30, LAST_CALL: 110, DAY_SECONDS: 125, STEPPER_MAX: 99, START_CASH: 80, START_REP: 20 };
+const C_W2_EXACT = { SAVE_VERSION: 10, DRIVEWAY_PRICE: 400, GATE_OPENS: 30, LAST_CALL: 110, DAY_SECONDS: 125, STEPPER_MAX: 99, START_CASH: 80, START_REP: 20 };
 // W22.18: the keys whose starting values the W19 literals assume.
 const LITERAL_KEYS = ['FEE_MULT', 'FEE_ROUND', 'DEPOSIT_FRAC', 'PAY_BASE', 'PAY_PER_STAR', 'STAR_FANS', 'REP_DAY_MIN', 'SPARE_FRAC', 'BAGS_PER_COOKER',
   'SCORE_FED', 'SCORE_WAIT', 'SCORE_QUALITY', 'STAR_EDGES', 'WAIT_FULL_S', 'WAIT_ZERO_S', 'BURNT_PENALTY', 'OFFMENU_PENALTY', 'COOLER_CAP', 'SEASON_CARRY_REP', 'SEASON_REP_FLOOR',
@@ -420,13 +420,14 @@ const LITERAL_KEYS = ['FEE_MULT', 'FEE_ROUND', 'DEPOSIT_FRAC', 'PAY_BASE', 'PAY_
 // SKILL_CURVE is fixed too; the rest are tunable starting values (same kind), read through C.
 const C_X2 = {
   SKILL_CURVE: { fireSense: [45, 55, 65], firePace: [5.0, 4.0, 2.5], runSpeed: [3.5, 4.0, 5.5], runHandle: [0.6, 0.4, 0.2],
-    runSeatTip: [0, 0.1, 0.4], runTip: [-0.25, 0, 1.0], prepKnife: [1.4, 1.0, 0.6], prepPace: [3.5, 4.0, 5.5] },   // runTip: review 1 (X20.1)
-  ROLE_SKILLS: { run: [['runSpeed'], ['runHandle', 'runSeatTip', 'runTip']], fire: [['fireSense'], ['firePace']], prep: [['prepKnife'], ['prepPace']] },   // review 1: runTip on Friendliness
+    runSeatTip: [0, 0.1, 0.4], runTip: [-0.25, 0, 1.0], prepKnife: [1.4, 1.0, 0.6], prepPace: [3.5, 4.0, 5.5],
+    tillRing: [2.0, 1.2, 0.5], tillTip: [-0.1, 0, 0.3] },   // runTip: review 1 (X20.1); till: v3.6
+  ROLE_SKILLS: { run: [['runSpeed'], ['runHandle', 'runSeatTip', 'runTip']], fire: [['fireSense'], ['firePace']], prep: [['prepKnife'], ['prepPace']], till: [['tillRing'], ['tillTip']] },   // review 1: runTip on Friendliness; v3.6 TILL
   MOOD_STARS: [-1, -0.5, 0, 0, 0.5],
   WAGE_TABLE: [10, 13, 16, 20, 24, 29, 34, 40, 46],
-  ROLE_WAGE: { run: 1.0, fire: 1.25, prep: 1.0 },
+  ROLE_WAGE: { run: 1.0, fire: 1.25, prep: 1.0, till: 1.0 },
   PAYROLL: [60, 90, 140, 220], ROSTER_SLOTS: [2, 3, 4, 6],
-  CREW_MAX: 8, BENCH_STREAK: 2, HIRE_ROUNDS: 3, POOL_SIZE: 18, POOL_PAGE: 9, TAKEN_PER_ROUND: 3, TAKEN_SHORTLIST: 6, TRYOUTS: 2,
+  CREW_MAX: 8, BENCH_STREAK: 2, HIRE_ROUNDS: 3, POOL_SIZE: 24, POOL_PAGE: 9, TAKEN_PER_ROUND: 3, TAKEN_SHORTLIST: 6, TRYOUTS: 2,
   WALKINS: [2, 2, 3], LEVEL_XP: 200, BANK_MAX: 9, XP_RUN_PLATE: 3, XP_PREP_CUT: 3, XP_FIRE_BAG: 1, XP_FIRE_HOLD: 10,
   TRAIN_XP: 40, SETTLE_XP: 30, RAISE_FRAC: 0.2, PREP_WAIT: 2,
   SAFE_SIZES: [0.8, 0.9, 1.0], STRETCH_SIZE: 1.4, STRETCH_MIN: 1.15, STRETCH_LOAD: 1.0, STRETCH_PAY: 1.15, STRETCH_PATIENCE: -5,
@@ -435,10 +436,10 @@ const C_X2 = {
   FIRE_WALK: [3.5, 5.5], HEADLINER: [2.5, 2], HAT_SHARE: 0.25, STRETCH_EDGE: 1.0
 };
 const C_X2_FIXED = ['HIRE_ROUNDS', 'POOL_SIZE', 'POOL_PAGE', 'CREW_MAX', 'ROLE_SKILLS'];
-const CURVE_KEYS = ['fireSense', 'firePace', 'runSpeed', 'runHandle', 'runSeatTip', 'runTip', 'prepKnife', 'prepPace'];
-const CURVE_MID = { fireSense: 55, firePace: 4.0, runSpeed: 4.0, runHandle: 0.4, runSeatTip: 0.1, runTip: 0, prepKnife: 1.0, prepPace: 4.0 };   // fixed (runTip 0: v2's plate tip at 3 stars)
+const CURVE_KEYS = ['fireSense', 'firePace', 'runSpeed', 'runHandle', 'runSeatTip', 'runTip', 'prepKnife', 'prepPace', 'tillRing', 'tillTip'];
+const CURVE_MID = { fireSense: 55, firePace: 4.0, runSpeed: 4.0, runHandle: 0.4, runSeatTip: 0.1, runTip: 0, prepKnife: 1.0, prepPace: 4.0, tillRing: 1.2, tillTip: 0 };   // fixed (runTip 0: v2's plate tip at 3 stars)
 // X12.1 to X12.3, the art additions.
-const ROLE_IDS = ['run', 'fire', 'prep'];
+const ROLE_IDS = ['run', 'fire', 'prep', 'till'];   // v3.6: TILL
 const PREP_DEFAULT_LOOK = { skin: 2, hair: 4, hairColor: 0, face: 0, hat: 0, apron: 2 };
 const BUST = { w: 26, h: 22 };
 // X7: the new sim methods (own properties).
@@ -558,7 +559,8 @@ const ID3 = {
   seMeat: 'se-meat', seCharcoal: 'se-charcoal', seasonNext: 'season-next', pauseLook: 'pause-look', chipCharcoal: 'chip-charcoal'
 };
 const SEASON_WEEKS = 7;   // v3.5: six weeks and the competition finale (was 9)
-const SAVE_V = 9;         // v3.5: save v9 (season.plan, pit)
+const P_POOL = 24;        // v3.6: the Hiring Day pool (6 a role, 4 roles)
+const SAVE_V = 10;        // v3.5: save v9 (season.plan, pit); v3.6: v10 (the register, the TILL card)
 // W19 step 51: the v2.1 (v3) save sample.
 const SAVE_V3_SAMPLE = {
   v: 3, day: 5, cash: 150, rep: 20,
@@ -665,22 +667,25 @@ const W15 = ({
     'Thanks, {name}. We will call you again next year.'
   ]),                                                     // index stars - 1; {name} is state.player.name
   // X10 top level additions, spliced from the contract
-  role: Object.freeze({ run: 'RUN', fire: 'FIRE', prep: 'PREP' }),
-  roleName: Object.freeze({ run: 'Server', fire: 'Pit hand', prep: 'Prep cook' }),
+  role: Object.freeze({ run: 'RUN', fire: 'FIRE', prep: 'PREP', till: 'TILL' }),
+  roleName: Object.freeze({ run: 'Server', fire: 'Pit hand', prep: 'Prep cook', till: 'Cashier' }),
   roleJob: Object.freeze({
     run: 'Carries plates from the board to the table.',
     fire: 'Keeps every lit cooker fed with charcoal.',
-    prep: 'Slices the cuts you leave on the board.'
+    prep: 'Slices the cuts you leave on the board.',
+    till: 'Works the register and rings every guest up.'
   }),
   skill: Object.freeze({
     run: Object.freeze(['Speed', 'Friendliness']),
     fire: Object.freeze(['Fire sense', 'Pace']),
-    prep: Object.freeze(['Knife', 'Pace'])
+    prep: Object.freeze(['Knife', 'Pace']),
+    till: Object.freeze(['Speed', 'Friendliness'])
   }),
   skillHelp: Object.freeze({
     run: Object.freeze(['Walks plates over faster.', 'Hands plates over quicker. Guests tip more on the plates they carry.']),   // review 1
     fire: Object.freeze(['Keeps the fire hotter.', 'Checks the fires more often.']),
-    prep: Object.freeze(['Slices faster than you do.', 'Walks to the board faster.'])
+    prep: Object.freeze(['Slices faster than you do.', 'Walks to the board faster.']),
+    till: Object.freeze(['Rings guests up faster.', 'Guests tip a little more at the register.'])
   }),
   mood: Object.freeze(['Done', 'Grumpy', 'OK', 'Happy', 'Fired up']),      // index mood + 2
   crewSay: Object.freeze({
@@ -692,6 +697,8 @@ const W15 = ({
     fireHotOne: '{name} added 1 bag and kept the fire hot for {s} seconds. Food came off faster.',
     prep: '{name} sliced {n} cuts and saved you {s} seconds.',
     prepOne: '{name} sliced 1 cut and saved you {s} seconds.',
+    till: '{name} rang up {n} guests. Guests tipped {t}.',
+    tillOne: '{name} rang up 1 guest. Guests tipped {t}.',
     idle: '{name} had nothing to do this time.',
     settled: '{name} worked the event.',
     rested: '{name} rested.'
@@ -1026,7 +1033,9 @@ const W15 = ({
       fireSense: 'Keeps the fire over {b} instead of {a}.',
       firePace: 'Checks the fire every {b} seconds instead of {a}.',
       prepKnife: 'Slices in {b} percent of your time instead of {a}.',
-      prepPace: 'Walks {b} tiles a second instead of {a}.'
+      prepPace: 'Walks {b} tiles a second instead of {a}.',
+      tillRing: 'Rings a guest up in {b} seconds instead of {a}.',
+      tillTip: 'Guests tip {b} percent of the usual instead of {a}.'
     }),
     levelStars: 'Now {n} stars. The wage stays {w} this contract.',
     firedUp: '{name} is fired up for this one.',
@@ -1194,7 +1203,7 @@ const SAVE_V1_SAMPLE = {
   drivewayShown: false
 };
 const SAVE_DIRTY = { v: 1, day: 'abc', cash: -50, rep: 400, stock: { sausage: 200, bogus: 1 }, gear: { drum: true, kettle2: false }, hires: { tender: true }, extra: 1 };
-const INVALID_SAVES = [null, 'x', [], {}, undefined, 42, { v: '5' }, { v: 0 }, { v: '3' }, { v: '4' }, { v: 10 }];   // v3.5: v 1 to 9 accepted
+const INVALID_SAVES = [null, 'x', [], {}, undefined, 42, { v: '5' }, { v: 0 }, { v: '3' }, { v: '4' }, { v: 11 }];   // v3.6: v 1 to 10 accepted
 
 // The shopping list for day 1 and later days. Two sausage units give four plates, so later
 // customers walk out and the walk out step has something to assert.
@@ -1556,6 +1565,7 @@ async function nodeChecks() {
   await step('thirds and offers, headless', () => thirdsHeadless(globalThis[GLOBAL_NAME]));
   await step('v2.1 and v3.0 saves migrate to cards, headless', () => migrateHeadless(globalThis[GLOBAL_NAME]));
   await step('four plates set down land in four counter spots, headless', () => countersHeadless(globalThis[GLOBAL_NAME]));
+  await step('v3.6 the register: guests pay there, a TILL card rings them up, the crew idle by their work, save v10, headless', () => registerHeadless(globalThis[GLOBAL_NAME]));
   // v3.2 (D10.1): the Node legs of steps 73 to 75, the day loop and save v6.
   await step('v3.2 days: the day loop, prices and save v6, headless', () => daysLoopHeadless(globalThis[GLOBAL_NAME]));
   await step('v3.4 days: the morning shop (Confirm, Back, the reserve warning), the start pick, automatic prep and training, the broke rescue, headless', () => daysStockHeadless(globalThis[GLOBAL_NAME]));
@@ -1925,7 +1935,8 @@ function floorPlanHeadless(P) {
     const x = t.x - k, y = t.y - k;
     if (x >= 0 && y >= 0 && (x === 0 || y === 0)) behind.add(x + ',' + y);
   }
-  for (const k of ['0,0', '1,0', '2,0', '0,1', '0,2', '0,3', '0,4', '0,5', '0,6']) assert(behind.has(k), 'the hat rule set misses (' + k + '): ' + describe([...behind]));
+  // v3.6: nobody stands on (3,1) since the register took it, so (2,0) left the set.
+  for (const k of ['0,0', '1,0', '0,1', '0,2', '0,3', '0,4', '0,5', '0,6']) assert(behind.has(k), 'the hat rule set misses (' + k + '): ' + describe([...behind]));
   const hats = [];
   for (const [id, sprite, tiles] of pieces) {
     if (WALL_HUNG.includes(id)) continue;
@@ -1973,6 +1984,116 @@ function countersHeadless(P) {
   const pts = landed.map((i) => px[i].x + ',' + px[i].y);
   assert(new Set(pts).size === 4, 'two spots share a draw point: ' + describe(pts));
   return 'spots ' + landed.join(', ') + ' from the line end';
+}
+
+// v3.6: the register at the line end of the counter. A guest pays there after the plate: the
+// pitmaster rings them up (a tap on the register, or walking past it with empty hands), a TILL card on
+// shift rings them up on its own, and nobody in REG_GRACE seconds means they pay on the way out with
+// REG_LATE_KEEP of the tip. Every crew idle tile sits by its job (the RUN card within 2 steps of the
+// counter and the board). A v9 save loads as v10 with its crew and no TILL card.
+function registerHeadless(P) {
+  const C = P.C, M = P.MAP, notes = [];
+  const reg = M.station('register');
+  assert(reg && reg.type === 'register' && reg.gear === null && reg.tiles.length === 1 && reg.tiles[0].x === 3 && reg.tiles[0].y === 1, 'MAP register ' + describe(reg));
+  assert(P.tileOwned(reg, {}), 'the register is not owned from the start');
+  const lineEnd = M.station('table').tiles.find((t) => t.y === 1);
+  assert(lineEnd && Math.abs(lineEnd.x - reg.tiles[0].x) + Math.abs(lineEnd.y - reg.tiles[0].y) === 1 && M.queue[0].y === reg.tiles[0].y, 'the register is not beside the counter end nearest the line');
+  assert(reg.use.some((u) => u.x === 2 && u.y === 1) && M.tillIdle && M.tillIdle.x === 2 && M.tillIdle.y === 1, 'the TILL post is not the register use tile on the kitchen side ' + describe(M.tillIdle));
+  assert(typeof C.REG_GRACE === 'number' && C.REG_GRACE > 0 && C.REG_LATE_KEEP > 0 && C.REG_LATE_KEEP < 1, 'REG_GRACE ' + C.REG_GRACE + ', REG_LATE_KEEP ' + C.REG_LATE_KEEP);
+  // Idle tiles against their jobs (lane steps over the yard with every gear owned).
+  const hi = headless(P, null, 31);
+  for (const g of GEAR_IDS) hi.st().gear[g] = true;   // fixture
+  const near = (from, ids) => Math.min(...ids.flatMap((id) => M.station(id).use.filter((u) => P.tileOwned(u, hi.st().gear)).map((u) => walkSteps(hi.sim, from, u))).filter((n) => n !== null));
+  const idle = {
+    run: [near(M.buddyIdle, ['table']), near(M.buddyIdle, ['board'])],
+    fire: [near(M.tenderIdle, ['kettle1', 'kettle2', 'drum', 'pile'])],
+    prep: [walkSteps(hi.sim, M.prepIdle, M.prepUse)],
+    till: [walkSteps(hi.sim, M.tillIdle, reg.use[0])]
+  };
+  assert(idle.run[0] <= 2 && idle.run[1] <= 2, 'the RUN idle tile ' + describe(M.buddyIdle) + ' is ' + idle.run.join(' and ') + ' steps from the counter and the board, wanted 2 or less');
+  assert(idle.fire[0] <= 2 && idle.prep[0] <= 1 && idle.till[0] === 0, 'idle steps ' + describe(idle));
+  notes.push('idle steps RUN ' + idle.run.join('/') + ', FIRE ' + idle.fire[0] + ', PREP ' + idle.prep[0] + ', TILL ' + idle.till[0]);
+  // One served guest on a booking, the player off the register (fixtures).
+  const serveOne = (h, id) => {
+    const st = h.st();
+    st.customers = []; st.spawnAt = Infinity;
+    if (st.today.pending !== undefined) st.today.pending = 0;
+    const pl = st.player;
+    pl.x = 1; pl.y = 4; pl.px = 16; pl.py = 64; pl.path = []; pl.next = null; pl.walking = false; pl.carrying = null; pl.busy = null; pl.target = null; pl.queued = null;
+    st.stations.table.spots[0] = { meat: 'sausage', times: [st.clock], run: [false] };
+    st.customers.push({ x: 5, y: 1, px: 80, py: 16, face: 'left', next: null, path: [], walking: false, anim: 0, id, body: 0, want: 'sausage',
+      patienceMax: 60, patience: 60, wait: 0, queueIndex: 0, mode: 'waiting', mood: 'neutral', reason: null, pause: 0, hop: 0,
+      seat: null, eat: 0, eatMax: 0, bonusPaid: false, booked: false, runPlate: false });
+    const cash0 = st.cash;
+    h.tick();
+    const sv = h.log.filter((e) => e.type === 'served' && e.id === id);
+    assert(sv.length === 1, 'guest ' + id + ' not served: ' + describe(h.log.slice(-4)));
+    return { cash0, ev: sv[0] };
+  };
+  const rungOf = (h, id) => h.log.filter((e) => e.type === 'rung' && e.id === id);
+  const RX = reg.tiles[0].x * 16 + 8, RY = reg.tiles[0].y * 16;
+  // (a) Served is not paid: the cash waits at the register until the pitmaster taps it.
+  const ha = feltRun(P, 'run', 3, 41);
+  const sa = serveOne(ha, 9001);
+  assert(ha.st().cash === sa.cash0 && ha.st().today.tickets.length === 1 && rungOf(ha, 9001).length === 0, 'paid before the register: cash ' + sa.cash0 + ' to ' + ha.st().cash + ', tickets ' + describe(ha.st().today.tickets));
+  const pa = ha.st().player;
+  pa.x = 3; pa.y = 2; pa.px = 48; pa.py = 32; pa.face = 'up';
+  pa.carrying = { kind: 'plates', meat: 'sausage', times: [ha.st().clock] };   // hands full, so walking past does not ring
+  assert(ha.sim.reach() === 'register', 'reach() from (3,2) facing up is ' + describe(ha.sim.reach()));
+  pa.carrying = null;
+  const ra = ha.sim.interact();
+  ha.drain();
+  const ga = rungOf(ha, 9001);
+  assert(ra && ra.ok === true && ga.length === 1 && ga[0].by === 'you' && ga[0].x === RX && ga[0].y === RY, 'tapping the register: ' + describe(ra) + ', rung ' + describe(ga));
+  assert(ha.st().cash === sa.cash0 + sa.ev.price + sa.ev.tip && ga[0].tip === sa.ev.tip, 'rung up for ' + (ha.st().cash - sa.cash0) + ', wanted ' + (sa.ev.price + sa.ev.tip));
+  notes.push('a tap rang up ' + (sa.ev.price + sa.ev.tip) + ' at the register');
+  // (b) Walking past with empty hands rings up too.
+  const sb = serveOne(ha, 9002);
+  const pb = ha.st().player;
+  pb.x = 2; pb.y = 1; pb.px = 32; pb.py = 16;
+  ha.tick();
+  assert(rungOf(ha, 9002).length === 1 && rungOf(ha, 9002)[0].by === 'you' && ha.st().cash === sb.cash0 + sb.ev.price + sb.ev.tip, 'walking past the register did not ring up ' + describe(rungOf(ha, 9002)));
+  // (c) Nobody rings: the guest still sits, then pays on the way out at the grace.
+  const sc = serveOne(ha, 9003);
+  const cu = ha.st().customers.find((c) => c.id === 9003);
+  assert(cu && (cu.mode === 'toSeat' || cu.mode === 'leaving'), 'an unpaid guest did not go to a seat: ' + describe(cu && cu.mode));
+  ha.until(() => rungOf(ha, 9003).length > 0, C.REG_GRACE + 1);
+  const gc = rungOf(ha, 9003);
+  assert(gc.length === 1 && gc[0].by === 'late' && gc[0].tip === Math.floor(sc.ev.tip * C.REG_LATE_KEEP) && ha.st().clock - sc.ev._at >= C.REG_GRACE - 0.2, 'the grace: ' + describe(gc) + ' after ' + (ha.st().clock - sc.ev._at) + ' s');
+  notes.push('unrung guests pay after ' + C.REG_GRACE + ' s with ' + gc[0].tip + ' of ' + sc.ev.tip + ' tip');
+  // (d) A TILL card on shift rings everyone up on its own, faster with stars.
+  const ringT = {};
+  for (const stars of [1, 5]) {
+    const ht = feltRun(P, 'till', stars, 43);
+    const cr = ht.st().cashier;
+    assert(cr && cr.x === M.tillIdle.x && cr.y === M.tillIdle.y && cr.vals && cr.vals.tillRing === P.skillValue('tillRing', stars), 'TILL mover ' + describe(cr && { x: cr.x, y: cr.y, vals: cr.vals }));
+    const st = serveOne(ht, 9100);
+    const t0 = ht.st().clock;
+    ht.until(() => rungOf(ht, 9100).length > 0, 4);
+    const gt = rungOf(ht, 9100);
+    assert(gt.length === 1 && gt[0].by === 'till', 'the TILL card did not ring up (' + stars + ' stars): ' + describe(gt));
+    assert(gt[0].tip === Math.max(0, Math.round(st.ev.tip * (1 + cr.vals.tillTip))), 'TILL tip ' + gt[0].tip + ' from ' + st.ev.tip);
+    const rec = ht.st().today.crew['1'];
+    assert(rec && rec.plates === 1, 'the TILL crew row ' + describe(rec));
+    ringT[stars] = Math.round((ht.st().clock - t0) * 100) / 100;
+  }
+  assert(ringT[5] < ringT[1], 'a 5 star TILL rang up in ' + ringT[5] + ' s, a 1 star in ' + ringT[1] + ' s');
+  notes.push('TILL rings in ' + ringT[1] + ' s at 1 star, ' + ringT[5] + ' s at 5');
+  // (e) The pool and the walk-ins carry TILL cards.
+  const pool = P.genPool({ seed: 7, year: 1 });
+  assert(pool.filter((e) => e.role === 'till').length === 6, 'genPool TILL cards ' + pool.filter((e) => e.role === 'till').length);
+  let wk = 0;
+  for (let sd = 1; sd <= 30 && !wk; sd++) for (let w = 2; w <= 7 && !wk; w++) wk = P.genWalkins({ seed: sd, year: 1, week: w, rep: 80 }).filter((e) => e.role === 'till').length;
+  assert(wk > 0, 'no TILL walk-in over 30 seeds');
+  // (f) Save v10: a v9 save keeps its crew and gets no TILL card.
+  const ser = ha.sim[SIM_METHODS.serialize]();
+  assert(ser.v === 10, 'serialize v ' + ser.v);
+  const old = JSON.parse(JSON.stringify(ser));
+  old.v = 9;
+  const back = P.validateSave(old);
+  assert(back && back.v === 10 && back.crew.length === ser.crew.length && !back.crew.some((c) => c.role === 'till'), 'v9 save to v10 ' + describe(back && { v: back.v, crew: back.crew.map((c) => c.role) }));
+  notes.push('v9 saves load as v10 with no TILL card');
+  return notes.join('; ');
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -4145,7 +4266,7 @@ function refGenWalkins(P, input) {
   const out = [];
   const count = input.week === 1 ? 0 : C.WALKINS[third];   // review 1 (X20.7): none the week of Hiring Day
   for (let n = 0; n < count; n++) {
-    const role = ROLE_IDS[Math.floor(rw() * 3)];
+    const role = ROLE_IDS[Math.floor(rw() * ROLE_IDS.length)];
     const name = refName(names, rw, avoid, out);
     const s0 = 2 + Math.floor(rw() * 5) / 2;
     const s1 = 2 + Math.floor(rw() * 5) / 2;
@@ -4307,7 +4428,7 @@ function daysLoopHeadless(P) {
   assert(d3.season.day === 5 && d3.season.loadin === false && sameJSON(d3.season.dayLog, ['off', 'off', 'off', 'off', 'off', null, null]), 'no pick keeps the day, never the Load-in ' + describe(d3.season));
   const d4 = V(v6Save({ season: { week: 5, pick: 'birthday', day: 3 } }));
   assert(d4.season.week === 3 && d4.season.day === 0, 'a week that does not hold opens Monday ' + describe(d4.season));
-  assert(V({ v: 10 }) === null, '{ v: 10 } accepted');
+  assert(V({ v: 11 }) === null, '{ v: 11 } accepted');
   notes.push('morning shops cost ' + seen.join(', ') + ' Monday to Thursday');
   return notes.join('; ') + '; the report save reloads on Sunday, a Yard week writes { yard, 0 }, dirty v6 keys clamp';
 }
@@ -4956,7 +5077,7 @@ function feltRun(P, role, s, seed) {
   const lu = h.sim.loadUp();
   h.drain();
   assert(lu && lu.ok, role + ' ' + s + ': loadUp ' + describe(lu) + ', canLoadUp ' + describe(h.sim.canLoadUp()));
-  const mover = role === 'run' ? h.st().buddy : role === 'fire' ? h.st().tender : h.st().prep;
+  const mover = role === 'run' ? h.st().buddy : role === 'fire' ? h.st().tender : role === 'till' ? h.st().cashier : h.st().prep;
   assert(mover && mover.cardId === 1, role + ' ' + s + ': no mover for the card (' + describe(mover && { cardId: mover.cardId }) + ')');
   return h;
 }
@@ -6107,7 +6228,7 @@ async function crewArtChecks() {
     const COUNTS = ${describe(LOOK_COUNTS)};
     const DEF = ${describe(DEFAULT_LOOK)};
     const LEG = ${describe(LEGEND)};
-    const ROLES = ${describe(ROLE_IDS)};
+    const ROLES = ${describe(['run', 'fire', 'prep'])};   // sprites.js roles; the TILL card is art3 only (v3.6)
     const BW = ${BUST.w}, BH = ${BUST.h};
     for (const n of ['setCrewLook', 'crewKey', 'bustRows', 'portrait']) if (typeof A[n] !== 'function') out.bad.push('art.' + n + ' missing');
     if (out.bad.length) return out;
@@ -6407,7 +6528,7 @@ async function v3BrowserSteps(captures) {
     for (let i = 9; i < 18; i++) assert(await present(ID31.app(i)), '#app-' + i + ' missing on page 2');
     assert(!(await present(ID31.app(0))), '#app-0 shown on page 2');
     const pg = await accText(ID31.hirePage);
-    assert(pg.includes(fill(UI.pageOf, { p: 2, n: 2 })), '#hire-page reads ' + describe(pg));
+    assert(pg.includes(fill(UI.pageOf, { p: 2, n: Math.ceil(P_POOL / 9) })), '#hire-page reads ' + describe(pg));   // v3.6: 24 cards, 3 pages
     await screenshot(SCREENSHOTS.hiringPage2);
     await click(ID31.pagePrev);
     await advance(0);
@@ -6448,8 +6569,7 @@ async function v3BrowserSteps(captures) {
       target = pool.find((e) => e.role === 'run' && e.status === 'open' && e.wage <= budget);
       assert(target, 'no open RUN card in the pool ' + describe(pool.map((e) => e.role + ':' + e.status)));
       onPage2 = true;
-      await click(ID31.pageNext);
-      await advance(0);
+      while ((await ev('g.hiringPage')) < Math.floor(target.idx / 9) + 1) { await click(ID31.pageNext); await advance(0); }   // v3.6: three pages
     }
     await click(ID31.app(target.idx));
     await advance(0);
@@ -6480,11 +6600,11 @@ async function v3BrowserSteps(captures) {
     assert(takenIdx.length === 3 && view[target.idx].status === 'mine', 'statuses ' + describe(view.map((e) => e.status)));
     const readPage = async () => ev('[...document.querySelectorAll("#hire-grid .crewcard, #hire-grid button")].filter((b) => /^app-\\d+$/.test(b.id)).map((b) => ({ id: b.id, al: b.getAttribute("aria-label") || "", text: (b.textContent || "").replace(/\\s+/g, " ").trim(), dis: b.getAttribute("aria-disabled") }))');
     const seen = {};
-    for (const pg2 of [1, 2]) {
-      if ((await ev('g.hiringPage')) !== pg2) { await click(pg2 === 2 ? ID31.pageNext : ID31.pagePrev); await advance(0); }
+    for (let pg2 = 1; pg2 <= Math.ceil(P_POOL / 9); pg2++) {   // v3.6: three pages
+      while ((await ev('g.hiringPage')) < pg2) { await click(ID31.pageNext); await advance(0); }
       for (const b of await readPage()) seen[b.id] = b;
     }
-    if ((await ev('g.hiringPage')) !== 1) { await click(ID31.pagePrev); await advance(0); }
+    while ((await ev('g.hiringPage')) > 1) { await click(ID31.pagePrev); await advance(0); }
     let takenRead = 0;
     for (const e of view) {
       const b = seen[ID31.app(e.idx)];
@@ -6962,7 +7082,7 @@ async function browserChecks() {
     assert(v3hooks.rail && v3hooks.sign && v3hooks.panel, 'PitSim.game v3.0 hooks ' + describe(v3hooks));
     // v3.1 (X13.8): the crew and hiringPage getters.
     const v31hooks = await ev('({ crew: "crew" in g, page: "hiringPage" in g, crewVal: g.crew ? Object.keys(g.crew).sort() : null, pageVal: g.hiringPage })');
-    assert(v31hooks.crew && v31hooks.page && sameJSON(v31hooks.crewVal, ['fire', 'prep', 'run']) && v31hooks.pageVal === null, 'PitSim.game v3.1 hooks ' + describe(v31hooks));
+    assert(v31hooks.crew && v31hooks.page && sameJSON(v31hooks.crewVal, ['fire', 'prep', 'run', 'till']) && v31hooks.pageVal === null, 'PitSim.game v3.1 hooks ' + describe(v31hooks));
     await installProbe();
     await advance(0);
     return 'version ' + ver;
@@ -7428,11 +7548,14 @@ async function browserChecks() {
     const spots = await ev('MAP.station("table").spotPx');
     assert(Array.isArray(spots) && spots.some((sp) => sp.x === e.x && sp.y === e.y), 'served at (' + e.x + ',' + e.y + ') is not a spotPx ' + describe(spots));
     const fx = await fxLog();
-    const queue = await ev('MAP.queue.map((q) => ({ x: q.x, y: q.y }))');
-    // The angle redo: the line stands on row 1, so py - 26 falls above the map and the number clamps at y 1.
-    const overQueue = (f) => queue.some((q) => f.y === Math.max(1, q.y * TILE_PX - CASH_ABOVE) && f.x >= q.x * TILE_PX - 9 && f.x <= q.x * TILE_PX + 16);
-    const cashFx = fx.find((f) => f.kind === FX_KIND.cash && overQueue(f));
-    assert(cashFx, 'fxLog has no ' + FX_KIND.cash + ' over a queue spot (py - ' + CASH_ABOVE + '); cash entries ' + describe(fx.filter((f) => f.kind === FX_KIND.cash)));
+    // v3.6: the guest pays at the register (the tutorial rings them up on the spot): a rung event at
+    // the register, and the cash number rises over it (register py - 18, clamped at y 1 on row 1).
+    const rung = await eventsOfType('rung');
+    const reg = await ev('MAP.station("register").tiles[0]');
+    assert(rung.length >= 1 && rung[0].id === e.id && rung[0].x === reg.x * TILE_PX + 8 && rung[0].y === reg.y * TILE_PX, 'no rung event at the register for customer ' + e.id + ': ' + describe(rung.slice(0, 2)));
+    const overReg = (f) => f.y === Math.max(1, reg.y * TILE_PX - 18) && f.x >= reg.x * TILE_PX && f.x <= reg.x * TILE_PX + 16;
+    const cashFx = fx.find((f) => f.kind === FX_KIND.cash && overReg(f));
+    assert(cashFx, 'fxLog has no ' + FX_KIND.cash + ' over the register; cash entries ' + describe(fx.filter((f) => f.kind === FX_KIND.cash)));
     captures.midService = await captureFrame();
     await screenshot(SCREENSHOTS.midService);
     return 'cash ' + cashBefore + ' to ' + cash + ', tip ' + e.tip + ', plate spot (' + e.x + ',' + e.y + ')' + tnote;

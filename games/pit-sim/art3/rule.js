@@ -447,6 +447,28 @@ function trash(r, f) {
   if (f === 1) r.obj(function () { r.ell(cx + 9, g - 9, 2, 6.5, ST.shade); r.ell(cx + 8.6, g - 9.4, 1.2, 5.2, ST.base); });
 }
 
+// v3.6: the register at the line end of the counter: a wood stand to counter height, a steel base
+// with its cash drawer on the line side, the key body and a small display at the back. Frame 1: a
+// guest waits to pay (a coin on the drawer top).
+function register(r, f) {
+  const P = r.F(1, 1), CO = RP.coin;
+  r.obj(function () {
+    r.box(P, 5, 5, 19, 19, 0, 13, WD, { crease: true });
+    r.box(P, 6, 6, 18, 18, 13, 3, ST, { rim: false });
+    r.seg(P, [18, 9, 14.5], [18, 15, 14.5], ST.dark);
+    r.box(P, 9, 8, 16, 16, 16, 3, IR, { crease: false });
+    for (let u = 11; u < 16; u += 2) for (let v = 10; v < 15; v += 2) { const k = P(u, v, 19); r.px(k[0], k[1], BN.hi); }
+    r.box(P, 7, 9, 10, 15, 16, 7, ST, { rim: false });
+    const d = P(7, 12, 21); r.rect(d[0] - 1, d[1] - 1, 3, 2, GL.base);
+    if (f === 1) {
+      const c = P(13, 12, 24);
+      r.ell(c[0], c[1], 3.2, 2.2, CO.dark);
+      r.ell(c[0] - 0.3, c[1] - 0.4, 2.6, 1.7, CO.base);
+      r.px(c[0] - 1, c[1] - 1, CO.hi);
+    }
+  });
+}
+
 function prepTable(r, f) {
   const P = r.F(1, 1), top = f === 0 ? WL : ST;
   r.obj(function () {
@@ -844,6 +866,7 @@ Object.keys(COUNTER_N).forEach(function (name) {
 });
 def('trash', 28, 32, 13, 26, 2, trash, { footprint: [1, 1], shadow: [8, 4] });
 def('prep_table', 44, 40, 22, 26, 3, prepTable, { footprint: [1, 1], shadow: [18, 8] });
+def('register', 32, 50, 16, 36, 2, register, { footprint: [1, 1], shadow: [12, 5] });
 def('warmer', 36, 44, 18, 34, 3, warmer, { footprint: [1, 1], shadow: [14, 6] });
 MEATS.forEach(function (m) { def('plate_' + m, 18, 13, 9, 9, 1, function (r) { plate(r, m, false); }); });
 def('plate_empty', 18, 13, 9, 9, 1, function (r) { plate(r, null, false); });
@@ -907,6 +930,7 @@ const SIZE = Object.freeze({
   counter_long: { h: 13, extra: 28, w: null, rule: 'top 13, 1 tile deep, 4 tiles long' },
   trash: { h: 18, extra: 3, w: 16, rule: 'trash can 18' },
   prep_table: { h: 13, extra: 9, w: null, rule: 'table top 13 (added to B)' },
+  register: { h: 23, extra: 5, w: null, rule: 'v3.6: stand 13, register top 23, a coin above when a guest waits' },
   warmer: { h: 22, extra: 7, w: null, rule: 'box top 22 (added to B)' },
   plate_brisket: { h: 10, total: true, w: 14, rule: 'plate 14 by 7, food 3 above the rim' },
   plate_empty: { h: 7, total: true, w: 14, rule: 'plate 14 by 7' },

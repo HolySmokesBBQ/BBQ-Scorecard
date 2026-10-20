@@ -181,7 +181,7 @@ const RULE_MANIFEST = Object.freeze([
   ['stick_burner', 'rule', 84, 72, 4, 40, 58, 0], ['trailer_rig', 'rule', 96, 84, 4, 46, 66, 0], ['pile', 'rule', 32, 38, 4, 16, 24, 0],
   ['woodpile', 'rule', 44, 38, 3, 22, 24, 0], ['cooler', 'rule', 32, 38, 6, 16, 24, 0], ['board', 'rule', 40, 36, 2, 20, 26, 0],
   ['counter', 'rule', 94, 63, 1, 47, 38, 0], ['counter_long', 'rule', 118, 75, 1, 59, 44, 0], ['trash', 'rule', 28, 32, 2, 13, 26, 0],
-  ['prep_table', 'rule', 44, 40, 3, 22, 26, 0], ['warmer', 'rule', 36, 44, 3, 18, 34, 0], ['plate_sausage', 'rule', 18, 13, 1, 9, 9, 0],
+  ['prep_table', 'rule', 44, 40, 3, 22, 26, 0], ['register', 'rule', 32, 50, 2, 16, 36, 0], ['warmer', 'rule', 36, 44, 3, 18, 34, 0], ['plate_sausage', 'rule', 18, 13, 1, 9, 9, 0],
   ['plate_chicken', 'rule', 18, 13, 1, 9, 9, 0], ['plate_ribs', 'rule', 18, 13, 1, 9, 9, 0], ['plate_butt', 'rule', 18, 13, 1, 9, 9, 0],
   ['plate_brisket', 'rule', 18, 13, 1, 9, 9, 0], ['plate_empty', 'rule', 18, 13, 1, 9, 9, 0], ['platter_sausage', 'rule', 22, 16, 1, 11, 11, 0],
   ['platter_chicken', 'rule', 22, 16, 1, 11, 11, 0], ['platter_ribs', 'rule', 22, 16, 1, 11, 11, 0], ['platter_butt', 'rule', 22, 16, 1, 11, 11, 0],

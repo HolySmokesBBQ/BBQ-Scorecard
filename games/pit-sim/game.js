@@ -412,8 +412,8 @@ const MOOD_PIX = (function () {
     return { map: g.map(function (r) { return r.join(''); }), pal: { '#': '#2A1406', o: sh.fill, e: '#2A1406', w: '#ffffff' } };
   });
 })();
-const ROLE_FALLBACK = ['run', 'fire', 'prep'];
-const ROLE_KIND = { run: 'buddy', fire: 'tender', prep: 'prep' };   // the in-yard sprite prefix of each role (X12.2)
+const ROLE_FALLBACK = ['run', 'fire', 'prep', 'till'];
+const ROLE_KIND = { run: 'buddy', fire: 'tender', prep: 'prep', till: 'till' };   // the in-yard sprite prefix of each role (X12.2)
 const TAG_COLOR = { safe: '#9ff0a8', stretch: '#ffb070', invite: '#F3CF6D' };   // deviation 53
 const CR_ROWS = [   // creator option rows in W17.5 order: [look key, id part, kind, label key]
   ['skin', 'skin', 'swatch', 'crSkin'], ['hair', 'hair', 'chooser', 'crHair'],
@@ -856,6 +856,8 @@ function lookKeyOf(look) {
 // Deviation 54: dresses the role's in-yard sprites in this look unless they already wear it.
 function ensureCrewLook(role, look) {
   if (B3 && look) B3.setCrew(role, copyLook(look));
+  // v3.6: the TILL card is art3 only (sprites.js keeps three roles).
+  if (role === 'till') return look ? 'till:' + lookKeyOf(look) : '';
   if (!art || typeof art.setCrewLook !== 'function' || !look) return '';
   const want = role + ':' + lookKeyOf(look);
   let have = '';
@@ -878,7 +880,7 @@ function moverCard(m) { return m && m.cardId !== undefined && m.cardId !== null 
 // X13.7: at yard_open each lineup card's look goes on its role's in-yard sprites.
 function dressCrew() {
   const s = sim.state;
-  const movers = [['run', s.buddy], ['fire', s.tender], ['prep', s.prep || null]];
+  const movers = [['run', s.buddy], ['fire', s.tender], ['prep', s.prep || null], ['till', s.cashier || null]];
   for (let i = 0; i < movers.length; i++) {
     const card = moverCard(movers[i][1]);
     if (card && card.look) ensureCrewLook(movers[i][0], card.look);
@@ -1250,13 +1252,13 @@ function crewNow() {
     try { key = art && typeof art.crewKey === 'function' ? art.crewKey(role) : ''; } catch (e) { key = ''; }
     return { id: m.cardId !== undefined ? m.cardId : null, key: key };
   };
-  return { run: one(s.buddy, 'run'), fire: one(s.tender, 'fire'), prep: one(s.prep || null, 'prep') };
+  return { run: one(s.buddy, 'run'), fire: one(s.tender, 'fire'), prep: one(s.prep || null, 'prep'), till: s.cashier ? { id: s.cashier.cardId !== undefined ? s.cashier.cardId : null, key: 'till' } : null };
 }
 function hiringPageNow() {
   if (loopOf(sim.state) !== 'hiring') return null;
   const onHiring = currentPanel === 'hiring' || (currentPanel === 'card' && cardCtx && cardCtx.from === 'hiring') ||
     (currentPanel === 'sheet' && sheetFrom === 'hiring');
-  return onHiring ? (hirePage === 2 ? 2 : 1) : null;
+  return onHiring ? Math.max(1, hirePage | 0) : null;   // v3.6: three pages
 }
 
 // Steps the sim, pumps events once, then refreshes the DOM and draws one frame (D14).
@@ -1412,6 +1414,7 @@ function onEvent(ev) {
       }
       break;
     case 'served': onServed(ev, L); break;
+    case 'rung': onRung(ev); break;
     case 'seat_taken': break;
     case 'to_go': announce('No free seat. They took it to go.'); break;
     case 'seat_done': onSeatDone(ev); break;
@@ -1565,14 +1568,27 @@ function onServed(ev, L) {
       : 'Served ' + L + ', ' + ev.price + ', no tip.');
   }
   const x = Math.round(Number(ev.x) || 0), y = Math.round(Number(ev.y) || 0);
-  // Over the served customer (round 2), falling back to the plate spot.
-  const cu = custById(ev.id);
-  const cashStr = '+' + ev.price;
-  let nx = x, ny = y - 6;
-  if (cu) {
-    nx = Math.round(cu.px) + 9;     // the coin on the customer's left edge, the text after it
-    ny = Math.round(cu.py) - CASH_ABOVE_PX;
+  // v3.6: the cash and the tip rise at the register when the guest is rung up (onRung).
+  if (!reduced) {
+    for (let i = 0; i < SPARKLE_OFFS.length; i++) {
+      const sx = x + SPARKLE_OFFS[i][0], sy = y + SPARKLE_OFFS[i][1];
+      sparkles.push({ x: sx, y: sy, at: tAnim + i * FX.SPARKLE_STAGGER_S });
+      log('sparkle', sx, sy);
+    }
+    if (sparkles.length > 24) sparkles.splice(0, sparkles.length - 24);
+    const c = custById(ev.id);
+    if (c) log('hop', Math.round(c.px), Math.round(c.py) - 10);
   }
+}
+
+// v3.6: a guest paid at the register: the ding, then the cash and the tip rise over the register.
+function onRung(ev) {
+  if (ev.by === 'late') announce(ev.tip > 0 ? 'A guest paid on the way out, ' + ev.tip + ' tip.' : 'A guest paid on the way out.');
+  try { if (PitSim.sfx && typeof PitSim.sfx.play === 'function') PitSim.sfx.play('ding'); } catch (e) { /* sound is optional */ }
+  const x = Math.round(Number(ev.x) || 0), y = Math.round(Number(ev.y) || 0);
+  const cashStr = '+' + ev.price;
+  const nx = x + 1, ny = y - 18;
+  const cu = null;
   if (ev.booked === true) {
     // Deviation 29: a booked plate has no price, so only the tip rises, from the cash spot.
     if (ev.tip > 0) {
@@ -1586,16 +1602,6 @@ function onServed(ev, L) {
     const tipStr = '+' + ev.tip + ' TIP';
     const tx = cu ? Math.round(cu.px) : nx;
     addNum('tip', tipStr, numX(tx, tipStr, false), Math.max(1, ny + FX.TIP_GAP_PX), 'white', false);
-  }
-  if (!reduced) {
-    for (let i = 0; i < SPARKLE_OFFS.length; i++) {
-      const sx = x + SPARKLE_OFFS[i][0], sy = y + SPARKLE_OFFS[i][1];
-      sparkles.push({ x: sx, y: sy, at: tAnim + i * FX.SPARKLE_STAGGER_S });
-      log('sparkle', sx, sy);
-    }
-    if (sparkles.length > 24) sparkles.splice(0, sparkles.length - 24);
-    const c = custById(ev.id);
-    if (c) log('hop', Math.round(c.px), Math.round(c.py) - 10);
   }
 }
 
@@ -5193,10 +5199,10 @@ function cardCrewActs(act, d) {
 }
 
 // Review 1: the curve each skill's level line names, and how its value reads.
-const LEVEL_KEY = { run: ['runSpeed', 'runTip'], fire: ['fireSense', 'firePace'], prep: ['prepKnife', 'prepPace'] };
+const LEVEL_KEY = { run: ['runSpeed', 'runTip'], fire: ['fireSense', 'firePace'], prep: ['prepKnife', 'prepPace'], till: ['tillRing', 'tillTip'] };
 function curveWords(key, v) {
   if (!Number.isFinite(v)) return '';
-  if (key === 'runTip') return String(Math.round((1 + v) * 100));
+  if (key === 'runTip' || key === 'tillTip') return String(Math.round((1 + v) * 100));
   if (key === 'prepKnife') return String(Math.round(v * 100));
   if (key === 'fireSense') return String(Math.round(v));
   return (Math.round(v * 10) / 10).toFixed(1);
@@ -6684,7 +6690,8 @@ const BADGE = Object.freeze({
   snow: ['...w...', '.w.w.w.', '..www..', 'wwwwwww', '..www..', '.w.w.w.', '...w...'],
   knife: ['......w', '.....ww', '....ww.', '...ww..', '..ww...', '.b.....', 'b......'],
   plate: ['.......', '..www..', '.wgggw.', 'wgwwwgw', '.wgggw.', '..www..', '.......'],
-  bag: ['..b.b..', '...b...', '.bbbbb.', 'bbkkkbb', 'bbkkkbb', 'bbbbbbb', '.bbbbb.']
+  bag: ['..b.b..', '...b...', '.bbbbb.', 'bbkkkbb', 'bbkkkbb', 'bbbbbbb', '.bbbbb.'],
+  coin: ['..ooo..', '.oyyyo.', 'oywyyyo', 'oyyoyyo', 'oyyyoyo', '.oyyyo.', '..ooo..']   // v3.6: the register
 });
 const BADGE_PAL = Object.freeze({ o: '#f2702a', y: '#ffd35a', w: '#ffffff', b: '#a0622e', g: '#c9d3e0', k: '#4a4a4a' });
 // v3.4 review: the chip is 1.5x the first cut (the icon at 2 rp a pixel on a 16 by 16 chip) and sits
@@ -6716,6 +6723,7 @@ function opaqueBox(name, frame) {
 // not drawn while they stand there; badgeLog keeps this frame's badges for the harness, each with its
 // chip and its station's opaque box (world rp). The kettle has no badge (its fire shows it).
 let peopleBoxes = [], peopleNext = [], badgeLog = [];
+let regClear = null;   // v3.6: the register's opaque box (world rp) this frame, kept clear of other chips
 const custBoxes = new Map();
 function keepPerson(id) {
   const p = B3 && typeof B3.lastPerson === 'function' ? B3.lastPerson() : null;
@@ -6731,9 +6739,17 @@ function drawBadge(kind, name, frame, X, Y) {
   const ob = opaqueBox(name, frame);
   const cx = ob ? Math.round(X) - an.ax + ob.cx : Math.round(X);
   const top = ob ? Math.round(Y) - an.ay + ob.top : Math.round(Y) - an.ay;
-  const x0 = Math.round(cx - 8), y0 = top - 18;
-  const chip = { x0: x0, x1: x0 + 16, y0: y0, y1: y0 + 17 };
-  const by = peopleBoxes.some(function (p) { return overlaps(chip, p); });
+  let x0 = Math.round(cx - 8);
+  const y0 = top - 18;
+  let chip = { x0: x0, x1: x0 + 16, y0: y0, y1: y0 + 17 };
+  // v3.6: a chip that would cover the register slides along its station past it (the counter's
+  // plate chip sat right over the register), or stays off when there is no room.
+  let clash = false;
+  if (kind !== 'coin' && regClear && overlaps(chip, regClear)) {
+    const sb = boxRp(name, frame, X, Y), nx = regClear.x1 + 1;
+    if (nx + 8 <= sb.x1) { x0 = nx; chip = { x0: x0, x1: x0 + 16, y0: y0, y1: y0 + 17 }; } else clash = true;
+  }
+  const by = clash || peopleBoxes.some(function (p) { return overlaps(chip, p); });
   badgeLog.push({ kind: kind, chip: chip, station: boxRp(name, frame, X, Y), shown: !by });
   if (by) return;
   onWorld(function () {
@@ -7263,6 +7279,7 @@ function nearestWalkable(x, y) {
 
 function size(name) {
   let s = SIZE[name];
+  if (!s && /^till_/.test(name)) return (SIZE[name] = size('buddy_' + name.slice(5)));   // v3.6: art3 only, the buddy's box
   if (!s) {
     const sp = art.SPRITES ? art.SPRITES[name] : null;
     s = SIZE[name] = sp ? [sp.w, sp.h, Math.max(1, art.frames(name))] : [16, 16, Math.max(1, art.frames(name))];
@@ -7561,7 +7578,7 @@ function drawGround(s) {
     if (sign && MAP.signText) { const info = signInfo(); if (info) recordGlyphs(info.font, info.text, info.x, info.font === 'font_s' ? MAP.signText.y + 1 : MAP.signText.y); }
   }
   const sale = saleShown() ? forSale() : [];
-  const people = [s.player, s.buddy, s.tender, s.prep].concat(s.customers.filter(function (c) { return c.mode !== 'eating'; }));
+  const people = [s.player, s.buddy, s.tender, s.prep, s.cashier || null].concat(s.customers.filter(function (c) { return c.mode !== 'eating'; }));
   const onTile = function (tiles) {
     return people.some(function (m) { return m && hasTile(tiles, Math.round(m.px / TILE), Math.round(m.py / TILE)); });
   };
@@ -7753,6 +7770,12 @@ function stationItems(st, s, push) {
         for (let k = 0; k < n; k++) { put3o(name, 0, a.X - an.ax + sl[0], a.Y - an.ay + sl[1] - k); recOnly(name, leg.x, leg.y - k, 0); }
       });
     }
+  } else if (st.type === 'register') {
+    // v3.6: frame 1 (a coin on top) while a guest waits to pay.
+    const tk = s.today && Array.isArray(s.today.tickets) ? s.today.tickets.length : 0;
+    const nm = A3 && A3.has('register') ? 'register' : a.name, f = tk > 0 ? 1 : 0;
+    try { const rb = boxRp(nm, 0, a.X, a.Y); regClear = { x0: rb.x0 - 1, x1: rb.x1 + 1, y0: rb.y0 - 1, y1: rb.y1 }; } catch (e) { regClear = null; }
+    pushArt(push, nm, f, a.tiles, { outline: true, badge: 'coin', rec: ['register', d.x, d.y, f], hit: hit });
   } else if (st.type === 'pile') {
     const n = s.charcoal | 0, f = n >= 5 ? 0 : n >= 3 ? 1 : n >= 1 ? 2 : 3;
     pushArt(push, 'pile', f, a.tiles, { outline: true, badge: 'bag', rec: ['pile', d.x, d.y, f], hit: hit });
@@ -7823,7 +7846,7 @@ function drawSorted(s) {
   const items = [];
   let order = 0;
   const push = function (d, l, X, fn) { items.push({ d: d, l: l, x: X, o: order++, f: fn }); };
-  peopleBoxes = peopleNext; peopleNext = []; badgeLog = []; custBoxes.clear();
+  peopleBoxes = peopleNext; peopleNext = []; badgeLog = []; regClear = null; custBoxes.clear();
   const T_ = MAP.T;
   const open = gateOpen(s);
 
@@ -7852,7 +7875,7 @@ function drawSorted(s) {
   for (let i = 0; i < MAP.decor.length; i++) if (s.decor[MAP.decor[i].id] === true) decorItems(MAP.decor[i], s, push);
 
   // People (layer 2): the player, the RUN, FIRE and PREP cards' movers, then customers by id.
-  const staff = [['player', s.player, ''], ['buddy', s.buddy, 'run'], ['tender', s.tender, 'fire'], ['prep', s.prep || null, 'prep']];
+  const staff = [['player', s.player, ''], ['buddy', s.buddy, 'run'], ['tender', s.tender, 'fire'], ['prep', s.prep || null, 'prep'], ['till', s.cashier || null, 'till']];
   for (let i = 0; i < staff.length; i++) {
     const m = staff[i][1], role = staff[i][2];
     if (!m) continue;
@@ -7861,6 +7884,7 @@ function drawSorted(s) {
       const card = moverCard(m);
       if (card && card.look) ensureCrewLook(role, card.look);
       if (kind === 'prep' && !art.has('prep_down')) kind = 'buddy';
+      if (kind === 'till' && !B3) kind = 'buddy';   // v3.6: the TILL card draws through art3
     }
     const mx = Math.round(m.px), my = Math.round(m.py);
     push((mx + my) / TILE, 2, isoX(mx + 8, my + 8) * RS, function () { withShift(moverShift(mx, my), function () { drawMover(kind, m, s); }); keepPerson(null); });

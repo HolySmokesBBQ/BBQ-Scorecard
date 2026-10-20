@@ -507,7 +507,7 @@ const C = Object.freeze({
   // weather
   RAIN_FROM_DAY: 4, RAIN_CHANCE: 0.15, RAIN_ARRIVALS: 0.6,
   // save clamps
-  SAVE_VERSION: 9, MAX_DAY: 999, MAX_CASH: 999999, MAX_STAT: 9999999,   // v3.4: 8 (season.advance); v3.5: 9 (season.plan, pit)
+  SAVE_VERSION: 10, MAX_DAY: 999, MAX_CASH: 999999, MAX_STAT: 9999999,   // v3.4: 8 (season.advance); v3.5: 9 (season.plan, pit); v3.6: 10 (the register, the TILL card)
   // v3.0 season and week [S 3], contract W2
   SEASON_WEEKS: 7,                    // v3.5: six weeks and the competition finale as week 7 (was 9)
   YEAR_MAX: 99,
@@ -589,21 +589,27 @@ const C = Object.freeze({
     runSeatTip: Object.freeze([0, 0.1, 0.4]),      // extra share of the seat tip on a plate the RUN card carried
     runTip: Object.freeze([-0.25, 0, 1.0]),        // review 1: extra share of the plate tip on a plate the RUN card carried
     prepKnife: Object.freeze([1.4, 1.0, 0.6]),     // the PREP card's slice time as a share of MEATS[m].slice
-    prepPace: Object.freeze([3.5, 4.0, 5.5])       // the PREP card's walk, tiles a second
+    prepPace: Object.freeze([3.5, 4.0, 5.5]),      // the PREP card's walk, tiles a second
+    tillRing: Object.freeze([2.0, 1.2, 0.5]),      // v3.6: seconds the TILL card takes to ring one guest up
+    tillTip: Object.freeze([-0.1, 0, 0.3])         // v3.6: extra share of the plate tip on a guest the TILL card rang up
   }),
   ROLE_SKILLS: Object.freeze({                     // the curve keys each skill drives, skill 0 then skill 1
     run: Object.freeze([Object.freeze(['runSpeed']), Object.freeze(['runHandle', 'runSeatTip', 'runTip'])]),
     fire: Object.freeze([Object.freeze(['fireSense']), Object.freeze(['firePace'])]),
-    prep: Object.freeze([Object.freeze(['prepKnife']), Object.freeze(['prepPace'])])
+    prep: Object.freeze([Object.freeze(['prepKnife']), Object.freeze(['prepPace'])]),
+    till: Object.freeze([Object.freeze(['tillRing']), Object.freeze(['tillTip'])])
   }),
   MOOD_STARS: Object.freeze([-1, -0.5, 0, 0, 0.5]),      // added to both skills during a cook, index mood + 2 [S 6.4]
   WAGE_TABLE: Object.freeze([10, 13, 16, 20, 24, 29, 34, 40, 46]),   // overall stars 1, 1.5, 2, ... 5 [S 6.5]
-  ROLE_WAGE: Object.freeze({ run: 1.0, fire: 1.25, prep: 1.0 }),
+  ROLE_WAGE: Object.freeze({ run: 1.0, fire: 1.25, prep: 1.0, till: 1.0 }),
+  // v3.6 the register: a guest pays there after the plate; nobody rings them up in REG_GRACE seconds
+  // and they pay on the way out, keeping REG_LATE_KEEP of the tip.
+  REG_GRACE: 8, REG_LATE_KEEP: 0.75,
   PAYROLL: Object.freeze([60, 90, 140, 220]),            // by rung index; v3.1 is always index 0, the backyard (review 1: kept, X20.13)
   ROSTER_SLOTS: Object.freeze([2, 3, 4, 6]),
   CREW_MAX: 8,                                           // cards a save may hold: the slots plus a full draft
   BENCH_STREAK: 2,                                       // booked events left home in a row that cost a mood step
-  HIRE_ROUNDS: 3, POOL_SIZE: 18, POOL_PAGE: 9,
+  HIRE_ROUNDS: 3, POOL_SIZE: 24, POOL_PAGE: 9,   // v3.6: 24 (6 a role, TILL added; was 18)
   TAKEN_PER_ROUND: 3, TAKEN_SHORTLIST: 6,                // other outfits take 3 of the 6 best open cards after every round
   TRYOUTS: 2,
   WALKINS: Object.freeze([2, 2, 3]),                     // walk-ins a week by fan rating third
@@ -691,7 +697,7 @@ const COOKER_IDS = Object.freeze(['kettle1', 'kettle2', 'drum']);
 const STAT_IDS_V1 = Object.freeze(['days', 'served', 'walkouts', 'past', 'burnt']);
 const STAT_IDS = Object.freeze(['days', 'served', 'walkouts', 'past', 'burnt', 'seated']);
 const GOAL_ORDER = Object.freeze(['kettle2', 'drum', 'bigtable', 'driveway']);   // R-3: the drum second; X4.1: no buddy step (Hiring Day replaces it)
-const ROLE_IDS = Object.freeze(['run', 'fire', 'prep']);   // X1
+const ROLE_IDS = Object.freeze(['run', 'fire', 'prep', 'till']);   // X1; v3.6 adds the TILL card
 const DAY_IDS = Object.freeze(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']);   // D1
 const DAY_KINDS = Object.freeze(['yard', 'prep', 'market', 'train', 'off', 'loadin', 'event']);   // D1 DayKind
 const DIRS = Object.freeze({
@@ -785,7 +791,7 @@ const STATIONS = list([
     sprite: 'cooler', draw: px(64, 96), sortRow: 6 }),
   Object.freeze({ id: 'table', type: 'table', label: 'Serving table', spoken: '', gear: null,
     tiles: list([xy(4, 1), xy(4, 2), xy(4, 3), xy(4, 4, { gear: 'bigtable' })]),
-    use: list([use(3, 1, 'right'), use(3, 2, 'right'), use(3, 3, 'right'), use(3, 4, 'right', 'bigtable')]),
+    use: list([use(3, 2, 'right'), use(3, 3, 'right'), use(3, 4, 'right', 'bigtable')]),   // v3.6: (3,1) is the register's
     sprite: 'counter', draw: px(64, 16), sortRow: 4,
     spotPx: list([px(72, 24), px(72, 40), px(72, 56), xy(72, 68, { gear: 'bigtable' }), xy(72, 76, { gear: 'bigtable' })]) }),
   Object.freeze({ id: 'pile', type: 'pile', label: 'Charcoal pile', spoken: '', gear: null,
@@ -795,7 +801,13 @@ const STATIONS = list([
   Object.freeze({ id: 'trash', type: 'trash', label: 'Trash', spoken: '', gear: null,
     tiles: list([xy(2, 2)]),
     use: list([use(3, 2, 'left'), use(1, 2, 'right')]),
-    sprite: 'trash', draw: px(32, 32), sortRow: 2 })
+    sprite: 'trash', draw: px(32, 32), sortRow: 2 }),
+  // v3.6: the register at the end of the counter nearest the line. The TILL card works it from (2,1);
+  // the pitmaster rings up from (2,1) or (3,2), the counter's use tile next to it.
+  Object.freeze({ id: 'register', type: 'register', label: 'Register', spoken: '', gear: null,
+    tiles: list([xy(3, 1)]),
+    use: list([use(2, 1, 'right'), use(3, 2, 'up')]),
+    sprite: 'register', draw: px(48, 16), sortRow: 1 })
 ]);
 
 function prop(id, sprite, frame, tx, ty, dx, dy, blocks, sortRow) {
@@ -902,7 +914,8 @@ const MAP = Object.freeze({
     Object.freeze({ x: 8, y: 1, face: 'left', gear: 'bigtable' }),
     Object.freeze({ x: 8, y: 2, face: 'up', gear: 'bigtable' })
   ]),
-  buddyIdle: Object.freeze({ x: 2, y: 8, face: 'right' }),
+  buddyIdle: Object.freeze({ x: 3, y: 3, face: 'down' }),    // v3.6: the RUN card waits on the counter's use tile next to the board (was (2,8))
+  tillIdle: Object.freeze({ x: 2, y: 1, face: 'right' }),    // v3.6: the TILL card's post, behind the register
   tenderIdle: Object.freeze({ x: 1, y: 7, face: 'right' }),
   prepIdle: Object.freeze({ x: 1, y: 3, face: 'right' }),   // X5.3: the PREP card's home
   prepUse: Object.freeze({ x: 2, y: 3, face: 'down' }),     // X5.3: where the PREP card slices (the board's back use)
@@ -1101,22 +1114,25 @@ const STRINGS = Object.freeze({
     'Thanks, {name}. We will call you again next year.'
   ]),                                                     // index stars - 1; {name} is state.player.name
   // v3.1 (contract X10, exact text)
-  role: Object.freeze({ run: 'RUN', fire: 'FIRE', prep: 'PREP' }),
-  roleName: Object.freeze({ run: 'Server', fire: 'Pit hand', prep: 'Prep cook' }),
+  role: Object.freeze({ run: 'RUN', fire: 'FIRE', prep: 'PREP', till: 'TILL' }),
+  roleName: Object.freeze({ run: 'Server', fire: 'Pit hand', prep: 'Prep cook', till: 'Cashier' }),
   roleJob: Object.freeze({
     run: 'Carries plates from the board to the table.',
     fire: 'Keeps every lit cooker fed with charcoal.',
-    prep: 'Slices the cuts you leave on the board.'
+    prep: 'Slices the cuts you leave on the board.',
+    till: 'Works the register and rings every guest up.'
   }),
   skill: Object.freeze({
     run: Object.freeze(['Speed', 'Friendliness']),
     fire: Object.freeze(['Fire sense', 'Pace']),
-    prep: Object.freeze(['Knife', 'Pace'])
+    prep: Object.freeze(['Knife', 'Pace']),
+    till: Object.freeze(['Speed', 'Friendliness'])
   }),
   skillHelp: Object.freeze({
     run: Object.freeze(['Walks plates over faster.', 'Hands plates over quicker. Guests tip more on the plates they carry.']),
     fire: Object.freeze(['Keeps the fire hotter.', 'Checks the fires more often.']),
-    prep: Object.freeze(['Slices faster than you do.', 'Walks to the board faster.'])
+    prep: Object.freeze(['Slices faster than you do.', 'Walks to the board faster.']),
+    till: Object.freeze(['Rings guests up faster.', 'Guests tip a little more at the register.'])
   }),
   mood: Object.freeze(['Done', 'Grumpy', 'OK', 'Happy', 'Fired up']),      // index mood + 2
   crewSay: Object.freeze({
@@ -1128,6 +1144,8 @@ const STRINGS = Object.freeze({
     fireHotOne: '{name} added 1 bag and kept the fire hot for {s} seconds. Food came off faster.',
     prep: '{name} sliced {n} cuts and saved you {s} seconds.',
     prepOne: '{name} sliced 1 cut and saved you {s} seconds.',
+    till: '{name} rang up {n} guests. Guests tipped {t}.',
+    tillOne: '{name} rang up 1 guest. Guests tipped {t}.',
     idle: '{name} had nothing to do this time.',
     settled: '{name} worked the event.',
     rested: '{name} rested.'
@@ -1558,7 +1576,9 @@ const STRINGS = Object.freeze({
       fireSense: 'Keeps the fire over {b} instead of {a}.',
       firePace: 'Checks the fire every {b} seconds instead of {a}.',
       prepKnife: 'Slices in {b} percent of your time instead of {a}.',
-      prepPace: 'Walks {b} tiles a second instead of {a}.'
+      prepPace: 'Walks {b} tiles a second instead of {a}.',
+      tillRing: 'Rings a guest up in {b} seconds instead of {a}.',
+      tillTip: 'Guests tip {b} percent of the usual instead of {a}.'
     }),
     levelStars: 'Now {n} stars. The wage stays {w} this contract.',
     firedUp: '{name} is fired up for this one.',
@@ -2588,10 +2608,11 @@ function readHiring(h, year) {
   if (!(typeof round === 'number' && Number.isInteger(round) && round >= 1 && round <= C.HIRE_ROUNDS + 1)) return null;
   if (!(typeof tryouts === 'number' && Number.isInteger(tryouts) && tryouts >= 0 && tryouts <= C.TRYOUTS)) return null;
   const pool = readKey(h, 'pool');
-  if (!Array.isArray(pool) || pool.length !== C.POOL_SIZE) return null;
+  // v3.6: a v9 save's Hiring Day mid way keeps its 18 card pool (no TILL cards in it).
+  if (!Array.isArray(pool) || (pool.length !== C.POOL_SIZE && pool.length !== 18)) return null;
   const used = new Set();
   const out = [];
-  for (let i = 0; i < C.POOL_SIZE; i++) {
+  for (let i = 0; i < pool.length; i++) {
     let e;
     try { e = pool[i]; } catch (x) { return null; }
     const a = cleanApplicant(e, i, used);
@@ -2646,7 +2667,7 @@ function validateSave(obj) {
   try {
     if (!isPlainObject(obj)) return null;
     const v = readKey(obj, 'v');
-    if (v !== 1 && v !== 2 && v !== 3 && v !== 4 && v !== 5 && v !== 6 && v !== 7 && v !== 8 && v !== 9) return null;
+    if (v !== 1 && v !== 2 && v !== 3 && v !== 4 && v !== 5 && v !== 6 && v !== 7 && v !== 8 && v !== 9 && v !== 10) return null;
     const day = toInt(readKey(obj, 'day'), 1, 1, C.MAX_DAY);
     const cash = toInt(readKey(obj, 'cash'), C.START_CASH, 0, C.MAX_CASH);
     const rep = toInt(readKey(obj, 'rep'), C.START_REP, 0, 100);
@@ -2895,7 +2916,9 @@ function createSim(saved, seed) {
       // v3.2 (D3.4)
       weekday: false, prepBonus: 0, overnight: null, dayIdx: 0,
       // v3.3: the live competition (null on every other day) and boxes handed in
-      comp: null, compIn: 0, entry: 0
+      comp: null, compIn: 0, entry: 0,
+      // v3.6 the register: guests served and not yet rung up, and who rang them
+      tickets: [], rungYou: 0, rungTill: 0, rungLate: 0
     };
   }
 
@@ -2963,6 +2986,7 @@ function createSim(saved, seed) {
     state.buddy = null;
     state.tender = null;
     state.prep = null;
+    state.cashier = null;
     state.customers = [];
     state.today = newToday();
     state.till = null;
@@ -3569,11 +3593,9 @@ function createSim(saved, seed) {
     const runRec = ranPlate && state.buddy && state.buddy.vals ? state.today.crew[String(state.buddy.cardId)] || null : null;
     const tipK = runRec !== null ? 1 + state.buddy.vals.runTip : 1;
     const tip = Math.round(m.price * C.TIP_RATE * (1 - frac) * tipK) + (plateAge < C.HOT_PLATE_SECONDS ? C.HOT_PLATE_TIP : 0);
-    if (runRec !== null) runRec.tips += tip;
     const quick = c.wait < C.REP_QUICK_FRAC * c.patienceMax;
-    state.cash += price + tip;
-    t.revenue += price;
-    t.tips += tip;
+    // v3.6: the guest pays at the register (tickRegister); the tutorial day rings them up on the spot.
+    const ticket = { id: c.id, meat: c.want, price, tip, booked, at: state.clock, run: runRec !== null ? String(state.buddy.cardId) : null };
     t.served += 1;
     state.stats.served += 1;
     t.sold[c.want] += 1;
@@ -3590,6 +3612,8 @@ function createSim(saved, seed) {
     c.mood = 'happy';
     c.hop = SERVED_HOP;
     emit('served', { id: c.id, meat: c.want, price, tip, quick, x: spot.x, y: spot.y, booked });
+    if (tutRunning() || state.today.kind === 'tutorial') ringUp(ticket, 'you');
+    else t.tickets.push(ticket);
     // W7.2: the per serve word of mouth counters skip booked guests (their stars carry it).
     if (pick !== null) {
       const id = pick.seat.id;
@@ -3610,6 +3634,56 @@ function createSim(saved, seed) {
       emit('to_go', { id: c.id });
     }
     return true;
+  }
+
+  // ---- v3.6 the register ----------------------------------------------------------------------
+
+  const REG_X = STATION_BY_ID.register.tiles[0].x * TILE + 8, REG_Y = STATION_BY_ID.register.tiles[0].y * TILE;
+  // Take one guest's payment: 'you' (the pitmaster), 'till' (the TILL card, its tip share) or 'late'
+  // (nobody rang them up in REG_GRACE seconds: they pay on the way out, keeping REG_LATE_KEEP of the tip).
+  function ringUp(tk, by) {
+    const t = state.today;
+    const cr = state.cashier;
+    let tip = tk.tip;
+    let rec = null;
+    if (by === 'till' && cr && cr.vals) {
+      tip = Math.max(0, Math.round(tk.tip * (1 + cr.vals.tillTip)));
+      rec = t.crew[String(cr.cardId)] || null;
+    } else if (by === 'late') {
+      tip = Math.floor(tk.tip * C.REG_LATE_KEEP);
+    }
+    state.cash += tk.price + tip;
+    t.revenue += tk.price;
+    t.tips += tip;
+    if (tk.run !== null && t.crew[tk.run]) t.crew[tk.run].tips += tip;
+    if (rec !== null) { rec.plates += 1; rec.tips += tip; }
+    if (by === 'you') t.rungYou += 1; else if (by === 'till') t.rungTill += 1; else t.rungLate += 1;
+    emit('rung', { id: tk.id, meat: tk.meat, price: tk.price, tip, booked: tk.booked, by, x: REG_X, y: REG_Y });
+  }
+  function ringAll(by) {
+    const tks = state.today.tickets;
+    let n = 0;
+    while (tks.length > 0) { ringUp(tks.shift(), by); n += 1; }
+    return n;
+  }
+  function onRegisterUse(p) {
+    if (p.next !== null) return false;
+    return STATION_BY_ID.register.use.some((u) => u.x === p.x && u.y === p.y);
+  }
+  // Each tick: the pitmaster rings everyone up walking past with empty hands; the TILL card rings one
+  // guest every tillRing seconds; anyone left past the grace pays on the way out.
+  function tickRegister(dt) {
+    const tks = state.today.tickets;
+    if (!Array.isArray(tks) || tks.length === 0) { if (state.cashier) state.cashier.t = 0; return; }
+    const p = state.player;
+    if (p.carrying === null && p.busy === null && onRegisterUse(p)) { ringAll('you'); return; }
+    const cr = state.cashier;
+    if (cr) {
+      cr.t += dt;
+      const ring = cr.vals ? cr.vals.tillRing : 1.2;
+      if (cr.t + 1e-9 >= ring) { cr.t = 0; ringUp(tks.shift(), 'till'); }
+    }
+    while (tks.length > 0 && state.clock - tks[0].at + 1e-9 >= C.REG_GRACE) ringUp(tks.shift(), 'late');
   }
 
   function serveLine() {
@@ -3894,6 +3968,12 @@ function createSim(saved, seed) {
         });
       }
       return noop(STRINGS.handsFull, stationId);
+    }
+
+    if (st.type === 'register') {
+      const n = Array.isArray(state.today.tickets) ? state.today.tickets.length : 0;
+      if (n === 0) return noop('Nobody to ring up', stationId);
+      return act(n === 1 ? 'Ring up 1 guest' : 'Ring up ' + n + ' guests', true, stationId, () => { ringAll('you'); });
     }
 
     if (st.type === 'trash') {
@@ -4504,7 +4584,7 @@ function createSim(saved, seed) {
     const speed = b.vals ? b.vals.runSpeed : C.NPC_TILES_PER_S;   // a mover without vals plays v2's 3 star numbers
     const handle = b.vals ? b.vals.runHandle : C.BUDDY_HANDLE;
     const boardUse = STATION_BY_ID.board.use[0];    // the angle redo: (3,4) on the lane, facing left ((2,3) is the PREP card's)
-    const tableUse = STATION_BY_ID.table.use[2];    // (3,3), facing right, one step from the board as in v2
+    const tableUse = STATION_BY_ID.table.use.find((u) => u.x === 3 && u.y === 3);    // (3,3), facing right, one step from the board as in v2
     const comp = compOn();
     if (b.task === 'idle' && comp) {
       // v3.3: the RUN card carries a finished box left on the board to the window.
@@ -5030,6 +5110,7 @@ function createSim(saved, seed) {
     tickPieces(dt);
     tickTurnins();   // v3.3
     customersStage(dt);
+    tickRegister(dt);   // v3.6
     if (state.clock + 1e-9 >= t.endAt) {
       if (t.kind === 'booking') missPending();   // Q-1: the guests still waiting give up at the hard end
       closeOutLine();
@@ -5071,6 +5152,7 @@ function createSim(saved, seed) {
     // [T 2.4] H: the till never runs with the tutorial still running.
     if (tutRunning()) finishTutorial(false);
     const t = state.today;
+    if (Array.isArray(t.tickets)) ringAll('late');   // v3.6: anyone not rung up pays on the way out
     const s = state.season;
     const played = state.day;
     const isBooking = t.kind === 'booking' && t.booking !== null;
@@ -5277,6 +5359,7 @@ function createSim(saved, seed) {
     state.buddy = null;
     state.tender = null;
     state.prep = null;
+    state.cashier = null;
     state.customers = [];
     state.seats = emptySeats();
     state.player.busy = null;
@@ -5573,6 +5656,7 @@ function createSim(saved, seed) {
     state.buddy = null;
     state.tender = null;
     state.prep = null;
+    state.cashier = null;
     if (kind === 'tutorial') return;
     for (const card of lineupCards()) {
       const eff = effectiveSkills(card);
@@ -5584,6 +5668,8 @@ function createSim(saved, seed) {
         state.buddy = Object.assign(newMover(MAP.buddyIdle.x, MAP.buddyIdle.y, MAP.buddyIdle.face), { carrying: null, task: 'idle', t: 0 }, crewBits);
       } else if (card.role === 'fire') {
         state.tender = Object.assign(newMover(MAP.tenderIdle.x, MAP.tenderIdle.y, MAP.tenderIdle.face), { carrying: null, task: 'idle', t: 0, cooker: null, cooldown: 0 }, crewBits);
+      } else if (card.role === 'till') {
+        state.cashier = Object.assign(newMover(MAP.tillIdle.x, MAP.tillIdle.y, MAP.tillIdle.face), { carrying: null, task: 'idle', t: 0 }, crewBits);
       } else {
         state.prep = Object.assign(newMover(MAP.prepIdle.x, MAP.prepIdle.y, MAP.prepIdle.face), { carrying: null, task: 'idle', t: 0 }, crewBits);
       }
@@ -6896,6 +6982,8 @@ function createSim(saved, seed) {
     if (state.buddy) { const bd = state.buddy; bd.carrying = null; bd.task = 'idle'; bd.t = 0; bd.path = []; bd.next = null; bd.walking = false; }
     if (state.tender) { const td = state.tender; td.carrying = null; td.cooker = null; td.task = 'idle'; td.t = 0; td.path = []; td.next = null; td.walking = false; }
     if (state.prep) { const pp = state.prep; pp.carrying = null; pp.task = 'idle'; pp.t = 0; pp.path = []; pp.next = null; pp.walking = false; }
+    if (state.cashier) state.cashier.t = 0;
+    if (state.today && Array.isArray(state.today.tickets)) state.today.tickets = [];
     buddyPick = null;
     state.spawnAt = Infinity;
   }
@@ -7273,6 +7361,10 @@ function createSim(saved, seed) {
       // Review 1: name the hot band when the fire ran in it (food cooks HOT_MULT faster there).
       if (stat.hotS >= 1) return fillText(stat.bags === 1 ? S.fireHotOne : S.fireHot, { name, n: stat.bags, s: stat.hotS });
       return fillText(stat.bags === 1 ? S.fireOne : S.fire, { name, n: stat.bags, p: stat.goodPct });
+    }
+    if (card.role === 'till') {
+      if (stat.plates === 0) return fillText(S.idle, { name });
+      return fillText(stat.plates === 1 ? S.tillOne : S.till, { name, n: stat.plates, t: stat.tips });
     }
     if (stat.cuts === 0) return fillText(S.idle, { name });
     return fillText(stat.cuts === 1 ? S.prepOne : S.prep, { name, n: stat.cuts, s: stat.savedS });
