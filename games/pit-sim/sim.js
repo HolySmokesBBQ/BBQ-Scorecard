@@ -507,7 +507,7 @@ const C = Object.freeze({
   // weather
   RAIN_FROM_DAY: 4, RAIN_CHANCE: 0.15, RAIN_ARRIVALS: 0.6,
   // save clamps
-  SAVE_VERSION: 10, MAX_DAY: 999, MAX_CASH: 999999, MAX_STAT: 9999999,   // v3.4: 8 (season.advance); v3.5: 9 (season.plan, pit); v3.6: 10 (the register, the TILL card)
+  SAVE_VERSION: 11, MAX_DAY: 999, MAX_CASH: 999999, MAX_STAT: 9999999,   // v3.4: 8 (season.advance); v3.5: 9 (season.plan, pit); v3.6: 10 (the register, the TILL card)
   // v3.0 season and week [S 3], contract W2
   SEASON_WEEKS: 7,                    // v3.5: six weeks and the competition finale as week 7 (was 9)
   YEAR_MAX: 99,
@@ -602,9 +602,8 @@ const C = Object.freeze({
   MOOD_STARS: Object.freeze([-1, -0.5, 0, 0, 0.5]),      // added to both skills during a cook, index mood + 2 [S 6.4]
   WAGE_TABLE: Object.freeze([10, 13, 16, 20, 24, 29, 34, 40, 46]),   // overall stars 1, 1.5, 2, ... 5 [S 6.5]
   ROLE_WAGE: Object.freeze({ run: 1.0, fire: 1.25, prep: 1.0, till: 1.0 }),
-  // v3.6 the register: a guest pays there after the plate; nobody rings them up in REG_GRACE seconds
-  // and they pay on the way out, keeping REG_LATE_KEEP of the tip.
-  REG_GRACE: 8, REG_LATE_KEEP: 0.75,
+  // v3.7 the register: a guest orders and pays there first, then sits (or stands at a to go spot)
+  // and waits for the plate; the tip is paid when the plate arrives.
   PAYROLL: Object.freeze([60, 90, 140, 220]),            // by rung index; v3.1 is always index 0, the backyard (review 1: kept, X20.13)
   ROSTER_SLOTS: Object.freeze([2, 3, 4, 6]),
   CREW_MAX: 8,                                           // cards a save may hold: the slots plus a full draft
@@ -914,6 +913,9 @@ const MAP = Object.freeze({
     Object.freeze({ x: 8, y: 1, face: 'left', gear: 'bigtable' }),
     Object.freeze({ x: 8, y: 2, face: 'up', gear: 'bigtable' })
   ]),
+  // v3.7: where a paid guest with no free seat stands by the counter until the plate is set down.
+  togo: list([Object.freeze({ x: 5, y: 3, face: 'left' }), Object.freeze({ x: 5, y: 2, face: 'left' }),
+    Object.freeze({ x: 6, y: 3, face: 'left' }), Object.freeze({ x: 6, y: 2, face: 'left' })]),
   buddyIdle: Object.freeze({ x: 3, y: 3, face: 'down' }),    // v3.6: the RUN card waits on the counter's use tile next to the board (was (2,8))
   tillIdle: Object.freeze({ x: 2, y: 1, face: 'right' }),    // v3.6: the TILL card's post, behind the register
   tenderIdle: Object.freeze({ x: 1, y: 7, face: 'right' }),
@@ -1019,13 +1021,16 @@ const STRINGS = Object.freeze({
     slice: 'Slice it at the board.',
     plate: 'Set the plate on the counter.',
     customer: 'Here comes your first customer.',
-    seated: 'Served. They will sit and eat, then tip a little more.',
+    register: 'Ring up the guest at the register.',
+    deliver: 'Carry the plate to their table.',
+    runner: 'Your runner carries it to their table.',
+    seated: 'Served. They eat, then tip a little more.',
     end: 'You have the hang of it. Keep the fire fed and keep them happy.',
     // v3.0 off the happy path (contract W12.1, W15)
     full: 'The grate is full. Put it back in the cooler.',
     fullGrate: 'Kettle 1 is full. Put this piece on the other cooker.'
   }),
-  tutorialOrder: Object.freeze(['open', 'charcoal', 'light', 'meat', 'puton', 'cook', 'slice', 'plate', 'customer', 'seated', 'end']),
+  tutorialOrder: Object.freeze(['open', 'charcoal', 'light', 'meat', 'puton', 'cook', 'slice', 'customer', 'register', 'plate', 'deliver', 'seated', 'end']),
   pullNow: 'Pull it now',
   burnWarn: Object.freeze({
     sausage: 'The sausage is about to burn.',
@@ -2667,7 +2672,7 @@ function validateSave(obj) {
   try {
     if (!isPlainObject(obj)) return null;
     const v = readKey(obj, 'v');
-    if (v !== 1 && v !== 2 && v !== 3 && v !== 4 && v !== 5 && v !== 6 && v !== 7 && v !== 8 && v !== 9 && v !== 10) return null;
+    if (v !== 1 && v !== 2 && v !== 3 && v !== 4 && v !== 5 && v !== 6 && v !== 7 && v !== 8 && v !== 9 && v !== 10 && v !== 11) return null;
     const day = toInt(readKey(obj, 'day'), 1, 1, C.MAX_DAY);
     const cash = toInt(readKey(obj, 'cash'), C.START_CASH, 0, C.MAX_CASH);
     const rep = toInt(readKey(obj, 'rep'), C.START_REP, 0, 100);
@@ -2917,8 +2922,8 @@ function createSim(saved, seed) {
       weekday: false, prepBonus: 0, overnight: null, dayIdx: 0,
       // v3.3: the live competition (null on every other day) and boxes handed in
       comp: null, compIn: 0, entry: 0,
-      // v3.6 the register: guests served and not yet rung up, and who rang them
-      tickets: [], rungYou: 0, rungTill: 0, rungLate: 0
+      // v3.6 the register: who rang guests up (v3.7: before the plate; rungLate stays 0)
+      rungYou: 0, rungTill: 0, rungLate: 0, refunds: 0
     };
   }
 
@@ -3164,7 +3169,25 @@ function createSim(saved, seed) {
   }
 
   function playerBfs(sx, sy, goal) {
-    return bfs(sx, sy, goal, walkable);
+    return bfs(sx, sy, goal, carrierWalkable);
+  }
+
+  // v3.7: a plate carrier (the pitmaster or the RUN card) walks the patio and the guests' lawn, never
+  // through a prop, a blocking decor tile or a seat. Taps still only stop on the patio (walkable).
+  function carrierWalkable(x, y) {
+    if (walkable(x, y)) return true;
+    if (!inMap(x, y)) return false;
+    if (TILES[y * MAP_W + x] !== T.LAWN) return false;
+    if (PROP_BLOCKED[y * MAP_W + x] === 1) return false;
+    if (decorBlocks(x, y)) return false;
+    return ownedSeatAt(x, y) === null;
+  }
+  function nextToSeat(seat) {
+    return (x, y) => Math.abs(x - seat.x) + Math.abs(y - seat.y) === 1;
+  }
+  function carrierRoute(m, goal) {
+    const a = moverAnchor(m);
+    return bfs(a.x, a.y, goal, carrierWalkable);
   }
 
   function nearestWalkableTo(x, y) {
@@ -3297,6 +3320,15 @@ function createSim(saved, seed) {
       p.target = { station: st.id, auto: true };
       return true;
     }
+    const dv = deliveryAt(tx, ty);
+    if (dv !== null) {
+      // v3.7: carry the plate in hand to the seated guest whose table was tapped.
+      const path = carrierRoute(p, nextToSeat(SEAT_BY_ID[dv.seat]));
+      if (path === null) { emit('blocked'); return false; }
+      p.path = path;
+      p.target = { deliver: dv.id };
+      return true;
+    }
     if (walkable(tx, ty)) {
       const path = playerBfs(anchor.x, anchor.y, (x, y) => x === tx && y === ty);
       if (path === null) { emit('blocked'); return false; }
@@ -3318,7 +3350,7 @@ function createSim(saved, seed) {
     if (p.next !== null) return false;
     const nx = p.x + DIRS[dir].dx;
     const ny = p.y + DIRS[dir].dy;
-    if (!walkable(nx, ny)) return false;
+    if (!(walkable(p.x, p.y) ? walkable(nx, ny) : carrierWalkable(nx, ny))) return false;   // v3.7: back from a table
     p.next = { x: nx, y: ny };
     p.walking = true;
     return true;
@@ -3421,7 +3453,7 @@ function createSim(saved, seed) {
   // its knife, or in someone's hands, and not already on the counter.
   function otherMeatsDue(meat) {
     const due = new Set();
-    for (const c of waitingCustomers()) if (c.want) due.add(c.want);
+    for (const c of hungryCustomers()) if (c.want) due.add(c.want);
     const brd = state.stations.board;
     for (const st of brd.stacks) if (st.times.length > 0) due.add(st.meat);
     if (brd.slicing) due.add(brd.slicing.meat);
@@ -3484,7 +3516,7 @@ function createSim(saved, seed) {
   function chooseBoardStack() {
     const stacks = state.stations.board.stacks;
     if (stacks.length === 0) return null;
-    for (const c of waitingCustomers()) {
+    for (const c of hungryCustomers()) {
       const st = boardStackOf(c.want);
       if (st && !tableStackOf(c.want)) return st;
     }
@@ -3564,38 +3596,46 @@ function createSim(saved, seed) {
     return null;
   }
 
-  // ---- serving ([V2.5] steps 3 to 7, D8) -----------------------------------------------------
+  // ---- v3.7 order and pay at the register, then sit -----------------------------------------------
 
-  // Serve one customer from the table stack of their meat. Returns true when served.
-  function serveFromTable(c) {
-    const spots = state.stations.table.spots;
-    // [S 19.6] The plate in front of the guest, else the nearest one with their meat.
-    const qs = c.queueIndex >= 0 ? MAP.queue[c.queueIndex] : null;
-    const gx = (qs ? qs.x : c.x) * 16 + 8;
-    const gy = (qs ? qs.y : c.y) * 16 + 8;
-    let idx = -1;
-    for (const i of spotsNearest(gx, gy)) {
-      if (spots[i] && spots[i].meat === c.want && spots[i].times.length > 0) { idx = i; break; }
-    }
-    if (idx < 0) return false;
-    const sp = spots[idx];
-    const sliced = sp.times.shift();
-    const ranPlate = Array.isArray(sp.run) ? sp.run.shift() === true : false;   // X5.3
-    if (sp.times.length === 0) spots[idx] = null;
-    c.runPlate = ranPlate;
-    const m = MEATS[c.want];
+  // A guest who paid and has no plate yet: walking to a seat, seated, or standing at a to go spot.
+  function awaitsPlate(c) {
+    return c.paid === true && c.fed !== true && (c.mode === 'toSeat' || c.mode === 'seated' || c.mode === 'togo');
+  }
+  // v3.7: the line plus paid guests still waiting on a plate; arrivals stop at queueSpotCount(), as
+  // the line alone did when guests waited in it for the plate.
+  function hungryCount() {
+    let n = 0;
+    for (const c of state.customers) if (c.queueIndex >= 0 || awaitsPlate(c)) n += 1;
+    return n;
+  }
+  // Who wants food soon: paid guests with no plate (oldest first), then the line.
+  function hungryCustomers() {
+    const paid = state.customers.filter(awaitsPlate).sort((a, b) => a.paidAt - b.paidAt || a.id - b.id);
+    return paid.concat(waitingCustomers());
+  }
+
+  // The plate reaches the guest: by the RUN card ('run'), the pitmaster ('you') or, at a to go spot,
+  // the guest's own hand ('self'). The tip is paid here: faster tips more, the RUN card's
+  // Friendliness and the TILL card's tip share nudge it.
+  function deliverTo(c, plateAt, by) {
     const t = state.today;
+    const m = MEATS[c.want];
     const booked = c.booked === true;
-    const price = booked ? 0 : m.price;   // W7.2: a booked guest pays no plate price
     const frac = Math.min(1, c.wait / c.patienceMax);
-    const plateAge = state.clock - sliced;
-    // Review 1 (contract X20.1): a plate the RUN card set down tips (1 + runTip) times the plate tip.
-    const runRec = ranPlate && state.buddy && state.buddy.vals ? state.today.crew[String(state.buddy.cardId)] || null : null;
-    const tipK = runRec !== null ? 1 + state.buddy.vals.runTip : 1;
-    const tip = Math.round(m.price * C.TIP_RATE * (1 - frac) * tipK) + (plateAge < C.HOT_PLATE_SECONDS ? C.HOT_PLATE_TIP : 0);
+    const plateAge = state.clock - plateAt;
+    const run = by === 'run' && state.buddy && state.buddy.vals ? state.buddy : null;
+    const runRec = run ? t.crew[String(run.cardId)] || null : null;
+    let tip = Math.round(m.price * C.TIP_RATE * (1 - frac) * (run ? 1 + run.vals.runTip : 1)) + (plateAge < C.HOT_PLATE_SECONDS ? C.HOT_PLATE_TIP : 0);
+    const cr = c.rungBy === 'till' && state.cashier && state.cashier.vals ? state.cashier : null;
+    if (cr) tip = Math.round(tip * (1 + cr.vals.tillTip));
+    tip = Math.max(0, tip);
+    state.cash += tip;
+    t.tips += tip;
+    if (runRec) { runRec.plates += 1; runRec.tips += tip; }
+    const tillRec = cr ? t.crew[String(cr.cardId)] || null : null;
+    if (tillRec) tillRec.tips += tip;
     const quick = c.wait < C.REP_QUICK_FRAC * c.patienceMax;
-    // v3.6: the guest pays at the register (tickRegister); the tutorial day rings them up on the spot.
-    const ticket = { id: c.id, meat: c.want, price, tip, booked, at: state.clock, run: runRec !== null ? String(state.buddy.cardId) : null };
     t.served += 1;
     state.stats.served += 1;
     t.sold[c.want] += 1;
@@ -3606,15 +3646,127 @@ function createSim(saved, seed) {
       if (t.addon !== null && c.want === t.addon) t.addonServed += 1;
       if (!(t.rail[c.want] > 0)) t.offMenu += 1;
     }
-    const spot = STATION_BY_ID.table.spotPx[idx];
-    const pick = pickSeat(c);
-    leaveLine(c);
+    c.fed = true;
+    c.incoming = null;
+    c.runPlate = run !== null;
     c.mood = 'happy';
     c.hop = SERVED_HOP;
-    emit('served', { id: c.id, meat: c.want, price, tip, quick, x: spot.x, y: spot.y, booked });
-    if (tutRunning() || state.today.kind === 'tutorial') ringUp(ticket, 'you');
-    else t.tickets.push(ticket);
-    // W7.2: the per serve word of mouth counters skip booked guests (their stars carry it).
+    const s = c.seat ? SEAT_BY_ID[c.seat] : null;
+    const x = s ? s.x * TILE + 8 : c.x * TILE + 8, y = s ? s.y * TILE : c.y * TILE;
+    emit('served', { id: c.id, meat: c.want, price: c.price, tip, quick, x, y, booked, by });
+    if (c.togo) {
+      t.togo += 1;
+      if (!booked) { if (quick) t.togoQuick += 1; else t.ok += 1; }
+      sendOut(c, 'togo', 'happy', true);
+      emit('to_go', { id: c.id });
+      return;
+    }
+    if (!booked) { if (quick) t.happy += 1; else t.ok += 1; }
+    if (c.mode === 'seated') { c.mode = 'eating'; c.eat = c.eatMax; c.pause = 0; }
+  }
+
+  // Take one plate of `meat` off the counter (the spot nearest the guest's point): its slice time, or null.
+  function takeCounterPlate(meat, gx, gy) {
+    const spots = state.stations.table.spots;
+    for (const i of spotsNearest(gx, gy)) {
+      const sp = spots[i];
+      if (!sp || sp.meat !== meat || sp.times.length === 0) continue;
+      const at = sp.times.shift();
+      if (Array.isArray(sp.run)) sp.run.shift();
+      if (sp.times.length === 0) spots[i] = null;
+      return at;
+    }
+    return null;
+  }
+
+  // A guest at a to go spot picks up their plate as soon as it is on the counter.
+  function serveTogo() {
+    const wait = state.customers.filter((c) => c.togo && awaitsPlate(c)).sort((a, b) => a.paidAt - b.paidAt || a.id - b.id);
+    for (const c of wait) {
+      if (!tableStackOf(c.want)) continue;
+      const at = takeCounterPlate(c.want, c.x * TILE + 8, c.y * TILE + 8);
+      if (at !== null) deliverTo(c, at, 'self');
+    }
+  }
+
+  // The seated guest a tap on (tx, ty) means, holding plates of their meat: their seat, the table
+  // in front of it, or the tile over their head. Oldest paid first; null when none.
+  function deliveryAt(tx, ty) {
+    const h = state.player.carrying;
+    if (h === null || h.kind !== 'plates' || h.times.length === 0) return null;
+    const cands = state.customers.filter((c) => awaitsPlate(c) && !c.togo && c.seat && c.want === h.meat)
+      .sort((a, b) => a.paidAt - b.paidAt || a.id - b.id);
+    for (const c of cands) {
+      const s = SEAT_BY_ID[c.seat];
+      if (tx === s.x && (ty === s.y || ty === s.y + 1 || ty === s.y - 1)) return c;
+    }
+    return null;
+  }
+
+  // On arrival next to the seat: hand over one plate. A guest who left, or got theirs, hands it to
+  // another seated guest of that meat in reach, if any.
+  function handDeliver(id) {
+    const p = state.player;
+    const h = p.carrying;
+    if (h === null || h.kind !== 'plates' || h.times.length === 0) return false;
+    const fits = (o) => o && awaitsPlate(o) && !o.togo && o.seat && o.want === h.meat
+      && Math.abs(p.x - SEAT_BY_ID[o.seat].x) + Math.abs(p.y - SEAT_BY_ID[o.seat].y) === 1;
+    let c = state.customers.find((o) => o.id === id) || null;
+    if (!fits(c)) c = state.customers.find(fits) || null;
+    if (c === null) { emit('blocked'); return false; }
+    const s = SEAT_BY_ID[c.seat];
+    p.face = faceToward(p.x, p.y, s.x, s.y);
+    const at = h.times.shift();
+    if (h.times.length === 0) p.carrying = null;
+    deliverTo(c, at, 'you');
+    emit('delivered', { id: c.id, meat: c.want, by: 'you' });
+    return true;
+  }
+
+  // The counter spot to take a plate from: the meat the longest waiting seated guest nobody is
+  // bringing a plate to wants, else the first spot with plates; -1 when the counter is empty.
+  function counterPick() {
+    const spots = state.stations.table.spots;
+    const wants = state.customers.filter((c) => awaitsPlate(c) && !c.togo && c.incoming === null)
+      .sort((a, b) => a.paidAt - b.paidAt || a.id - b.id);
+    for (const c of wants) {
+      const i = spots.findIndex((sp) => sp && sp.meat === c.want && sp.times.length > 0);
+      if (i >= 0) return i;
+    }
+    return spots.findIndex((sp) => sp && sp.times.length > 0);
+  }
+
+  // ---- v3.6 the register (v3.7: the guest pays first) -------------------------------------------
+
+  const REG_X = STATION_BY_ID.register.tiles[0].x * TILE + 8, REG_Y = STATION_BY_ID.register.tiles[0].y * TILE;
+
+  function frontGuest() {
+    return state.customers.find((o) => o.queueIndex === 0 && o.mode === 'waiting') || null;
+  }
+
+  // Ring one guest up: 'you' (the pitmaster), 'till' (the TILL card) or 'booked' (a booked guest,
+  // paid ahead). They take a number and go to the first free seat, or to a to go spot.
+  function ringGuest(c, by) {
+    const t = state.today;
+    const booked = c.booked === true;
+    const price = booked ? 0 : MEATS[c.want].price;
+    state.cash += price;
+    t.revenue += price;
+    c.paid = true;
+    c.price = price;
+    c.paidAt = state.clock;
+    c.rungBy = by;
+    if (by === 'you') t.rungYou += 1;
+    else if (by === 'till') {
+      t.rungTill += 1;
+      const rec = state.cashier ? t.crew[String(state.cashier.cardId)] || null : null;
+      if (rec) rec.plates += 1;
+    }
+    emit('rung', { id: c.id, meat: c.want, price, tip: 0, booked, by, x: REG_X, y: REG_Y });
+    const pick = pickSeat(c);
+    leaveLine(c);
+    c.reason = null;
+    c.pause = 0;
     if (pick !== null) {
       const id = pick.seat.id;
       state.seats[id] = c.id;
@@ -3622,72 +3774,46 @@ function createSim(saved, seed) {
       c.eatMax = C.EAT_MIN + (C.EAT_MAX - C.EAT_MIN) * rng();
       c.eat = 0;
       c.mode = 'toSeat';
-      c.reason = null;
-      c.pause = C.LEAVE_TURN_SECONDS;
       setRoute(c, pick.path);
-      if (!booked) { if (quick) t.happy += 1; else t.ok += 1; }
       emit('seat_taken', { id: c.id, seat: id });
-    } else {
-      t.togo += 1;
-      if (!booked) { if (quick) t.togoQuick += 1; else t.ok += 1; }
-      sendOut(c, 'togo', 'happy', true);
-      emit('to_go', { id: c.id });
+      return;
     }
-    return true;
-  }
-
-  // ---- v3.6 the register ----------------------------------------------------------------------
-
-  const REG_X = STATION_BY_ID.register.tiles[0].x * TILE + 8, REG_Y = STATION_BY_ID.register.tiles[0].y * TILE;
-  // Take one guest's payment: 'you' (the pitmaster), 'till' (the TILL card, its tip share) or 'late'
-  // (nobody rang them up in REG_GRACE seconds: they pay on the way out, keeping REG_LATE_KEEP of the tip).
-  function ringUp(tk, by) {
-    const t = state.today;
-    const cr = state.cashier;
-    let tip = tk.tip;
-    let rec = null;
-    if (by === 'till' && cr && cr.vals) {
-      tip = Math.max(0, Math.round(tk.tip * (1 + cr.vals.tillTip)));
-      rec = t.crew[String(cr.cardId)] || null;
-    } else if (by === 'late') {
-      tip = Math.floor(tk.tip * C.REG_LATE_KEEP);
-    }
-    state.cash += tk.price + tip;
-    t.revenue += tk.price;
-    t.tips += tip;
-    if (tk.run !== null && t.crew[tk.run]) t.crew[tk.run].tips += tip;
-    if (rec !== null) { rec.plates += 1; rec.tips += tip; }
-    if (by === 'you') t.rungYou += 1; else if (by === 'till') t.rungTill += 1; else t.rungLate += 1;
-    emit('rung', { id: tk.id, meat: tk.meat, price: tk.price, tip, booked: tk.booked, by, x: REG_X, y: REG_Y });
+    const used = new Set(state.customers.filter((o) => o !== c && o.mode === 'togo').map((o) => o.spot));
+    let k = 0;
+    while (k < MAP.togo.length - 1 && used.has(k)) k += 1;
+    const sp = MAP.togo[k];
+    c.togo = true;
+    c.spot = k;
+    c.mode = 'togo';
+    setRoute(c, custRoute(c, sp.x, sp.y) || []);
+    emit('togo_wait', { id: c.id });
   }
   function ringAll(by) {
-    const tks = state.today.tickets;
     let n = 0;
-    while (tks.length > 0) { ringUp(tks.shift(), by); n += 1; }
+    for (let c = frontGuest(); c !== null; c = frontGuest()) { ringGuest(c, c.booked === true ? 'booked' : by); n += 1; }
     return n;
+  }
+  function lineWaiting() {
+    return state.customers.filter((o) => o.queueIndex >= 0 && o.mode === 'waiting').length;
   }
   function onRegisterUse(p) {
     if (p.next !== null) return false;
     return STATION_BY_ID.register.use.some((u) => u.x === p.x && u.y === p.y);
   }
-  // Each tick: the pitmaster rings everyone up walking past with empty hands; the TILL card rings one
-  // guest every tillRing seconds; anyone left past the grace pays on the way out.
+  // Each tick: a booked guest at the front goes straight through; the pitmaster rings up the whole
+  // line standing at the register with empty hands; the TILL card rings one every tillRing seconds.
   function tickRegister(dt) {
-    const tks = state.today.tickets;
-    if (!Array.isArray(tks) || tks.length === 0) { if (state.cashier) state.cashier.t = 0; return; }
+    let c = frontGuest();
+    while (c !== null && c.booked === true) { ringGuest(c, 'booked'); c = frontGuest(); }
+    const cr = state.cashier;
+    if (c === null) { if (cr) cr.t = 0; return; }
     const p = state.player;
     if (p.carrying === null && p.busy === null && onRegisterUse(p)) { ringAll('you'); return; }
-    const cr = state.cashier;
     if (cr) {
       cr.t += dt;
       const ring = cr.vals ? cr.vals.tillRing : 1.2;
-      if (cr.t + 1e-9 >= ring) { cr.t = 0; ringUp(tks.shift(), 'till'); }
+      if (cr.t + 1e-9 >= ring) { cr.t = 0; ringGuest(c, 'till'); }
     }
-    while (tks.length > 0 && state.clock - tks[0].at + 1e-9 >= C.REG_GRACE) ringUp(tks.shift(), 'late');
-  }
-
-  function serveLine() {
-    for (const c of waitingCustomers()) serveFromTable(c);
   }
 
   // Set down the plates in `hands` (a Carry of kind plates). Places what fits, serves anyone
@@ -3706,7 +3832,7 @@ function createSim(saved, seed) {
       sp.times.push(hands.times.shift());
       sp.run.push(byRun === true);
       placed += 1;
-      serveLine();
+      serveTogo();
     }
     return placed;
   }
@@ -3715,7 +3841,7 @@ function createSim(saved, seed) {
   // else the quickest meat in stock. Only meats with stock count.
   function autoSelect() {
     const stock = state.stock;
-    for (const c of waitingCustomers()) {
+    for (const c of hungryCustomers()) {
       const m = c.want;
       if (stock[m] <= 0) continue;
       let busy = tableStackOf(m) !== null || boardStackOf(m) !== null;
@@ -3957,7 +4083,20 @@ function createSim(saved, seed) {
     }
 
     if (st.type === 'table') {
-      if (c === null) return noop(STRINGS.nothing, stationId);
+      if (c === null) {
+        // v3.7: take a plate off the counter to carry to a seated guest.
+        const i = counterPick();
+        if (i < 0) return noop(STRINGS.nothing, stationId);
+        const sp = state.stations.table.spots[i];
+        const n = Math.min(state.gear.tray ? C.TRAY_PLATES : 1, sp.times.length);
+        return act('Take ' + MEATS[sp.meat].label + (n === 1 ? ' plate' : ' plates'), true, stationId, () => {
+          const times = sp.times.splice(0, n);
+          if (Array.isArray(sp.run)) sp.run.splice(0, n);
+          if (sp.times.length === 0) state.stations.table.spots[i] = null;
+          p.carrying = { kind: 'plates', meat: sp.meat, times };
+          emit('picked_up', { meat: sp.meat, n });
+        });
+      }
       if (c.kind === 'plates') {
         if (!tableFits(c.meat)) return noop('No room on the table', stationId);
         return act('Set down ' + MEATS[c.meat].label, true, stationId, () => {
@@ -3971,7 +4110,7 @@ function createSim(saved, seed) {
     }
 
     if (st.type === 'register') {
-      const n = Array.isArray(state.today.tickets) ? state.today.tickets.length : 0;
+      const n = lineWaiting();
       if (n === 0) return noop('Nobody to ring up', stationId);
       return act(n === 1 ? 'Ring up 1 guest' : 'Ring up ' + n + ' guests', true, stationId, () => { ringAll('you'); });
     }
@@ -4277,7 +4416,9 @@ function createSim(saved, seed) {
     return Object.assign(newMover(MAP.custSpawn.x, MAP.custSpawn.y, 'up'), {
       id: custSeq, body, want, patienceMax, patience: patienceMax, wait: 0,
       queueIndex: -1, mode: 'arriving', mood: 'neutral', reason: null, pause: 0, hop: 0,
-      seat: null, eat: 0, eatMax: 0, bonusPaid: false, booked: false, runPlate: false
+      seat: null, eat: 0, eatMax: 0, bonusPaid: false, booked: false, runPlate: false,
+      // v3.7: paid at the register, plate delivered, standing at a to go spot, who carries the plate
+      paid: false, fed: false, togo: false, spot: -1, price: 0, paidAt: 0, rungBy: null, incoming: null
     });
   }
 
@@ -4294,7 +4435,7 @@ function createSim(saved, seed) {
     const patienceMax = C.PATIENCE_BASE + (rPatience * 2 - 1) * C.PATIENCE_SPREAD;
     const c = newCustomer(want, patienceMax);
     const inLine = state.customers.filter((o) => o.queueIndex >= 0).length;
-    if (order === null || inLine >= queueSpotCount()) {
+    if (order === null || hungryCount() >= queueSpotCount()) {   // v3.7: a full line or every guest still waiting on food
       // Nothing left to sell, or no room in line: look in from the gate and leave at no cost.
       c.mode = 'passing';
       setRoute(c, custRoute(c, MAP.passStop.x, MAP.passStop.y) || []);
@@ -4370,14 +4511,14 @@ function createSim(saved, seed) {
     // X5.10 and X18.1 item 38: after ARRIVAL_PULL_S with no booked guest arriving or waiting while
     // food is in progress, the next party arrives now.
     if (state.clock + 1e-9 >= t.gateAt) {
-      const busy = state.customers.some((c) => c.booked === true && (c.mode === 'arriving' || c.mode === 'waiting'));
+      const busy = state.customers.some((c) => c.booked === true && (c.mode === 'arriving' || c.mode === 'waiting' || awaitsPlate(c)));
       pullT = busy ? 0 : pullT + C.TICK_SECONDS;
       if (!busy && pullT + 1e-9 >= C.ARRIVAL_PULL_S && foodInProgress()) {
         pullParty();
         pullT = 0;
       }
     }
-    let free = queueSpotCount() - state.customers.filter((c) => c.queueIndex >= 0).length;
+    let free = queueSpotCount() - hungryCount();   // v3.7: the line and the guests waiting on a plate
     while (free > 0 && t.pending > 0 && schedIdx < schedule.length && state.clock + 1e-9 >= schedule[schedIdx]) {
       schedIdx += 1;
       spawnBookedGuest();
@@ -4432,7 +4573,7 @@ function createSim(saved, seed) {
     const keep = [];
     for (const c of state.customers) {
       if (c.hop > 0) c.hop = Math.max(0, c.hop - dt);
-      if (c.mode === 'eating') { keep.push(c); continue; }
+      if (c.mode === 'eating' || c.mode === 'seated') { keep.push(c); continue; }
       if (c.pause > 0) {
         c.pause = Math.max(0, c.pause - dt);
         c.walking = false;
@@ -4456,11 +4597,15 @@ function createSim(saved, seed) {
         } else if (c.mode === 'toSeat') {
           const s = SEAT_BY_ID[c.seat];
           if (s && c.x === s.x && c.y === s.y) {
-            c.mode = 'eating';
+            // v3.7: they sit and wait for the plate; one delivered on the way starts the meal.
+            c.mode = c.fed ? 'eating' : 'seated';
             c.face = s.face;
-            c.eat = c.eatMax;
+            c.eat = c.fed ? c.eatMax : 0;
             c.pause = 0;
           }
+        } else if (c.mode === 'togo') {
+          const sp = MAP.togo[c.spot] || null;
+          if (sp && c.x === sp.x && c.y === sp.y) c.face = sp.face;
         } else if (c.mode === 'passing') {
           if (c.x === MAP.passStop.x && c.y === MAP.passStop.y) {
             c.pause = C.WALK_PAST_PAUSE;
@@ -4497,15 +4642,38 @@ function createSim(saved, seed) {
     emit('seat_done', { id: c.id, seat: c.seat, bonus, x: s.x * TILE, y: s.y * TILE, atClose: atClose === true });
   }
 
+  // v3.7: a paid guest who leaves without the plate gets the plate price back.
+  function refundGuest(c) {
+    if (c.paid !== true || c.fed === true || !(c.price > 0)) return 0;
+    const r = c.price;
+    state.cash = Math.max(0, state.cash - r);
+    state.today.revenue -= r;
+    state.today.refunds += 1;
+    c.price = 0;
+    return r;
+  }
+
+  // v3.7: nothing left to cook or carry: everyone who paid and waits goes home with their money back.
+  function closeOutWaiting() {
+    for (const c of state.customers.filter(awaitsPlate)) {
+      state.today.close += 1;
+      const refund = refundGuest(c);
+      freeSeat(c);
+      sendOut(c, 'close', 'neutral', true);
+      emit('left_at_close', { id: c.id, refund });
+    }
+  }
+
   function freeSeat(c) {
     if (c.seat && state.seats[c.seat] === c.id) state.seats[c.seat] = null;
   }
 
   // Stage 5: serve checks, patience, walk-outs, then eating, the heart pause and standing up.
   function customersStage(dt) {
-    serveLine();
-    // [T 2.4] D: patience, wait and mood hold while the tutorial runs.
-    const waiters = tutRunning() ? [] : waitingCustomers();
+    serveTogo();
+    // [T 2.4] D: patience, wait and mood hold while the tutorial runs. v3.7: patience drains in
+    // the line and again while a paid guest waits for the plate.
+    const waiters = tutRunning() ? [] : waitingCustomers().concat(state.customers.filter(awaitsPlate));
     for (const c of waiters) {
       c.wait += dt;
       c.patience -= dt;
@@ -4513,9 +4681,12 @@ function createSim(saved, seed) {
         c.patience = 0;
         state.today.walkouts += 1;
         state.stats.walkouts += 1;
-        leaveLine(c);
+        const refund = refundGuest(c);
+        const from = c.mode;
+        if (c.queueIndex >= 0) leaveLine(c);
+        freeSeat(c);
         sendOut(c, 'walkout', 'unhappy', true);
-        emit('walk_out', { id: c.id });
+        emit('walk_out', { id: c.id, refund, from });
       } else if (c.patience <= c.patienceMax * C.PATIENCE_WARN_FRAC && c.mood === 'neutral') {
         c.mood = 'unhappy';
       }
@@ -4558,6 +4729,7 @@ function createSim(saved, seed) {
   // Hard end, after the line closes out: pay every unpaid seat tip (atClose), then stand everyone
   // up so nobody is left in toSeat or eating (deviation 17).
   function closeOutSeats() {
+    closeOutWaiting();
     for (const c of state.customers) {
       if (c.mode !== 'toSeat' && c.mode !== 'eating') continue;
       if (!c.bonusPaid) payBonus(c, true);
@@ -4567,7 +4739,7 @@ function createSim(saved, seed) {
   }
 
   function seatsBusy() {
-    return state.customers.some((c) => c.mode === 'toSeat' || c.mode === 'eating');
+    return state.customers.some((c) => c.mode === 'toSeat' || c.mode === 'seated' || c.mode === 'togo' || c.mode === 'eating');
   }
 
   // ---- 5.8 the buddy ([V2.4]) -----------------------------------------------------------------
@@ -4600,6 +4772,17 @@ function createSim(saved, seed) {
       return;
     }
     if (b.task === 'idle') {
+      // v3.7: first a plate on the counter for a seated guest, carried to their table.
+      if (runJob() !== null) {
+        const path = buddyRouteTo(b, tableUse.x, tableUse.y);
+        if (path !== null) {
+          b.task = 'fetch';
+          b.path = path;
+          b.t = handle;
+          if (path.length === 0) b.face = tableUse.face;
+          return;
+        }
+      }
       const stack = chooseBoardStack();
       if (stack && tableFits(stack.meat)) {
         const path = buddyRouteTo(b, boardUse.x, boardUse.y);
@@ -4693,7 +4876,7 @@ function createSim(saved, seed) {
         const n = setDown(b.carrying, true);
         if (n > 0) emit('set_down', { meat, n });
         const rec = state.today.crew[String(b.cardId)];
-        if (rec) rec.plates += n;
+        if (rec) rec.plates += n;   // v3.7: a plate counts once on the counter and once at the table
         if (b.carrying.times.length === 0) b.carrying = null;
         b.t = handle;
         return;
@@ -4704,6 +4887,57 @@ function createSim(saved, seed) {
       b.task = 'return';
       return;
     }
+    if (b.task === 'fetch') {
+      if (b.next !== null || b.path.length > 0) {
+        advanceMover(b, speed, dt);
+        if (b.next === null && b.path.length === 0) { b.face = tableUse.face; b.t = handle; }
+        return;
+      }
+      b.t -= dt;
+      if (b.t > 1e-9) return;
+      b.t = 0;
+      const c = runJob();
+      if (c === null) { b.task = 'idle'; return; }
+      const at = takeCounterPlate(c.want, tableUse.x * TILE + 8, tableUse.y * TILE + 8);
+      if (at === null) { b.task = 'idle'; return; }
+      b.carrying = { kind: 'plates', meat: c.want, times: [at] };
+      runTo(b, c);
+      return;
+    }
+    if (b.task === 'deliver') {
+      advanceMover(b, speed, dt);
+      if (b.next === null && b.path.length === 0) { b.task = 'handoff'; b.t = handle; }
+      return;
+    }
+    if (b.task === 'handoff') {
+      b.t -= dt;
+      if (b.t > 1e-9) return;
+      b.t = 0;
+      const h = b.carrying;
+      const fits = (o) => o && awaitsPlate(o) && !o.togo && o.seat && h && o.want === h.meat
+        && Math.abs(b.x - SEAT_BY_ID[o.seat].x) + Math.abs(b.y - SEAT_BY_ID[o.seat].y) === 1;
+      let c = state.customers.find((o) => o.id === b.deliver) || null;
+      if (!fits(c)) c = state.customers.find(fits) || null;
+      if (c !== null) {
+        const s = SEAT_BY_ID[c.seat];
+        b.face = faceToward(b.x, b.y, s.x, s.y);
+        const at = h.times.shift();
+        b.carrying = null;
+        b.deliver = null;
+        deliverTo(c, at, 'run');
+        emit('delivered', { id: c.id, meat: c.want, by: 'run' });
+        b.path = carrierRoute(b, (x, y) => x === MAP.buddyIdle.x && y === MAP.buddyIdle.y) || [];
+        b.task = 'return';
+        return;
+      }
+      // The guest left or got theirs: another seated guest of that meat, else back to the counter.
+      const other = h ? state.customers.find((o) => awaitsPlate(o) && !o.togo && o.seat && o.want === h.meat && o.incoming === null) || null : null;
+      if (other !== null && runTo(b, other)) return;
+      b.deliver = null;
+      b.path = carrierRoute(b, (x, y) => x === tableUse.x && y === tableUse.y) || [];
+      b.task = 'carry';
+      return;
+    }
     if (b.task === 'return') {
       advanceMover(b, speed, dt);
       if (b.next === null && b.path.length === 0) {
@@ -4712,6 +4946,29 @@ function createSim(saved, seed) {
         b.t = 0;
       }
     }
+  }
+
+  // v3.7: the oldest paid seated guest nobody is bringing a plate to, whose meat is on the counter.
+  function runJob() {
+    const wants = state.customers.filter((c) => awaitsPlate(c) && !c.togo && c.seat && c.incoming === null && tableStackOf(c.want))
+      .sort((a, b) => a.paidAt - b.paidAt || a.id - b.id);
+    return wants[0] || null;
+  }
+  // Route the RUN card (holding the plate) to the tile beside the guest's seat.
+  function runTo(b, c) {
+    const path = carrierRoute(b, nextToSeat(SEAT_BY_ID[c.seat]));
+    if (path === null) {
+      setDown(b.carrying, true);
+      if (b.carrying.times.length === 0) b.carrying = null;
+      b.task = 'idle';
+      return false;
+    }
+    c.incoming = 'run';
+    b.deliver = c.id;
+    b.path = path;
+    b.task = 'deliver';
+    if (path.length === 0) { b.task = 'handoff'; b.t = 0; }
+    return true;
   }
 
   // ---- 5.9 the fire tender ------------------------------------------------------------------
@@ -4938,6 +5195,12 @@ function createSim(saved, seed) {
     }
     const hadStep = p.next !== null || p.path.length > 0;
     if (hadStep) advanceMover(p, C.WALK_TILES_PER_S, dt);
+    if (p.next === null && p.path.length === 0 && p.target !== null && p.target.deliver !== undefined) {
+      const id = p.target.deliver;
+      p.target = null;
+      handDeliver(id);
+      return;
+    }
     if (p.next === null && p.path.length === 0 && p.target !== null) {
       const st = STATION_BY_ID[p.target.station];
       const autoOnly = p.target.auto;
@@ -5068,7 +5331,7 @@ function createSim(saved, seed) {
     if (t.comp) return t.comp.slots.every((sl) => sl.done);   // v3.3: the last turn-in judged
     if (t.kind === 'booking') {
       if (state.clock + 1e-9 < t.gateAt || t.pending > 0) return false;
-      return !state.customers.some((c) => c.mode === 'arriving' || c.mode === 'waiting' || c.mode === 'toSeat' || c.mode === 'eating');
+      return !state.customers.some((c) => c.mode === 'arriving' || c.mode === 'waiting' || c.mode === 'toSeat' || c.mode === 'seated' || c.mode === 'togo' || c.mode === 'eating');
     }
     if (state.clock + 1e-9 >= t.gateAt && soldOut()) return !seatsBusy();
     if (state.clock + 1e-9 >= t.lastCallAt) {
@@ -5121,6 +5384,7 @@ function createSim(saved, seed) {
     if (!t.comp && state.clock + 1e-9 >= t.gateAt && soldOut()) {
       // Sold out stays sold out: close the line and stop arrivals while the eaters finish.
       closeOutLine();
+      closeOutWaiting();   // v3.7
       state.spawnAt = Infinity;
       if (t.kind === 'booking') missPending(true);
     }
@@ -5152,7 +5416,6 @@ function createSim(saved, seed) {
     // [T 2.4] H: the till never runs with the tutorial still running.
     if (tutRunning()) finishTutorial(false);
     const t = state.today;
-    if (Array.isArray(t.tickets)) ringAll('late');   // v3.6: anyone not rung up pays on the way out
     const s = state.season;
     const played = state.day;
     const isBooking = t.kind === 'booking' && t.booking !== null;
@@ -6983,7 +7246,6 @@ function createSim(saved, seed) {
     if (state.tender) { const td = state.tender; td.carrying = null; td.cooker = null; td.task = 'idle'; td.t = 0; td.path = []; td.next = null; td.walking = false; }
     if (state.prep) { const pp = state.prep; pp.carrying = null; pp.task = 'idle'; pp.t = 0; pp.path = []; pp.next = null; pp.walking = false; }
     if (state.cashier) state.cashier.t = 0;
-    if (state.today && Array.isArray(state.today.tickets)) state.today.tickets = [];
     buddyPick = null;
     state.spawnAt = Infinity;
   }
@@ -7029,7 +7291,8 @@ function createSim(saved, seed) {
 
   // ---- v2.1 guided tutorial ([T 2], contract K3 to K5) ---------------------------------------
 
-  const TUT_LATCHED = Object.freeze({ customer: true, seated: true, end: true });
+  // v3.7: the guest comes once the first plate is sliced, then register, plate, deliver (or runner).
+  const TUT_LATCHED = Object.freeze({ customer: true, register: true, plate: true, deliver: true, runner: true, seated: true, end: true });
 
   function tutRunning() {
     return state.tutorial.done === false;
@@ -7056,7 +7319,7 @@ function createSim(saved, seed) {
       if (kind === 'raw') return 'puton';
       return 'charcoal';
     }
-    if (kind === 'plates' || (board.stacks.length > 0 && board.slicing === null && h === null)) return 'plate';
+    if (kind === 'plates' || (board.stacks.length > 0 && board.slicing === null && h === null)) return 'customer';
     if (kind === 'cooked' || board.slicing !== null) return 'slice';
     if (ck.pieces.length > 0) return 'cook';
     if (kind === 'raw') return 'puton';
@@ -7077,6 +7340,8 @@ function createSim(saved, seed) {
         return h === null && state.stations.kettle1.pieces.some((pc) => pc.state === 'done') ? 'kettle1' : null;
       case 'slice': return 'board';
       case 'plate': return h !== null && h.kind === 'plates' ? 'table' : 'board';
+      case 'register': return 'register';
+      case 'deliver': return h !== null && h.kind === 'plates' ? null : 'table';
       case 'full': return 'cooler';   // P-6: put it back, nothing wasted (the #act verb there)
       case 'fullGrate': { const fg = tutFullGrate(); return typeof fg === 'string' ? fg : null; }
       default: return null;
@@ -7194,7 +7459,7 @@ function createSim(saved, seed) {
         return;
       }
       let next;
-      if (cur === 'customer') next = state.today.served >= 1 ? 'seated' : cur;
+      if (TUT_SERVE[cur] === true) next = tutServeRow();
       else if (cur === 'seated') next = state.today.seated + state.today.togo >= 1 ? 'end' : cur;
       else next = tutorialRow();
       if (next === cur) { emitTutorialStep(); return; }
@@ -7207,6 +7472,21 @@ function createSim(saved, seed) {
       }
       if (TUT_LATCHED[next] !== true) return;   // rows 1 to 11 settle in one pass
     }
+  }
+
+  // v3.7: the latched rows from the first guest to the first plate delivered.
+  const TUT_SERVE = Object.freeze({ customer: true, register: true, plate: true, deliver: true, runner: true });
+  function tutServeRow() {
+    if (state.today.served >= 1) return 'seated';
+    const c = state.customers.find((o) => o.mode !== 'passing' && o.mode !== 'leaving') || null;
+    if (c === null || c.mode === 'arriving') return 'customer';
+    if (!c.paid) return 'register';
+    const cur = state.tutorial.step;
+    if (cur === 'deliver' || cur === 'runner') return cur;   // a plate picked back up keeps the step
+    const onCounter = state.stations.table.spots.some((sp) => sp !== null);
+    const bh = state.buddy ? state.buddy.carrying : null;
+    if (state.buddy && (onCounter || (bh !== null && bh.kind === 'plates'))) return 'runner';
+    return onCounter || state.player.target !== null && state.player.target.deliver !== undefined ? 'deliver' : 'plate';
   }
 
   // [T 2.5] and contract K4.

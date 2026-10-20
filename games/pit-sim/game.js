@@ -1419,7 +1419,7 @@ function onEvent(ev) {
     case 'to_go': announce('No free seat. They took it to go.'); break;
     case 'seat_done': onSeatDone(ev); break;
     case 'walk_out': {
-      announce('A customer walked out.');
+      announce(ev.refund > 0 ? 'A customer walked out. Refunded ' + ev.refund + '.' : 'A customer walked out.');
       markX.set(ev.id, tAnim + FX.WALKOUT_MARK_S);
       const c = custById(ev.id);
       if (c) log('mark', Math.round(c.px) + 18, Math.round(c.py) - 20);
@@ -1563,12 +1563,14 @@ function onServed(ev, L) {
   if (ev.booked === true) {
     announce(ev.tip > 0 ? SAY('servedBooked', { L: L, tip: ev.tip }) : SAY('servedBookedNoTip', { L: L }));
   } else {
-    announce(ev.tip > 0
-      ? 'Served ' + L + ', ' + ev.price + ' plus ' + ev.tip + ' tip.'
-      : 'Served ' + L + ', ' + ev.price + ', no tip.');
+    announce(ev.tip > 0 ? 'Served ' + L + ', ' + ev.tip + ' tip.' : 'Served ' + L + ', no tip.');
   }
   const x = Math.round(Number(ev.x) || 0), y = Math.round(Number(ev.y) || 0);
-  // v3.6: the cash and the tip rise at the register when the guest is rung up (onRung).
+  // v3.7: the price rises at the register (onRung); the tip rises at the table when the plate lands.
+  if (ev.tip > 0) {
+    const tipStr = '+' + ev.tip + ' TIP';
+    addNum('tip', tipStr, numX(x, tipStr, false), Math.max(1, y - 18), 'white', false);
+  }
   if (!reduced) {
     for (let i = 0; i < SPARKLE_OFFS.length; i++) {
       const sx = x + SPARKLE_OFFS[i][0], sy = y + SPARKLE_OFFS[i][1];
@@ -6402,7 +6404,7 @@ function observe() {
 }
 
 function sweating(c) {
-  return c.mode === 'waiting' && c.patienceMax > 0 && c.patience <= c.patienceMax * C.SWEAT_FRAC;
+  return (c.mode === 'waiting' || waitsPlate(c)) && c.patienceMax > 0 && c.patience <= c.patienceMax * C.SWEAT_FRAC;
 }
 
 function updateFx(dt) {
@@ -7203,6 +7205,8 @@ function hitWorld(X, Y) {
   const g = unIso(X / RS, Y / RS), tx = Math.floor(g.x / TILE), ty = Math.floor(g.y / TILE);
   const inMap = tx >= 0 && tx < MAP.W && ty >= 0 && ty < MAP.H;
   const standable = inMap && sim.walkable(tx, ty);
+  // v3.7: holding a plate, a tap on the seat, table or head of the guest who ordered it delivers it.
+  if (inMap && deliverTile(tx, ty)) return { tile: { x: tx, y: ty } };
   for (let i = hits.length - 1; i >= 0; i--) {
     const h = hits[i];
     if (!hitOne(h, X, Y)) continue;
@@ -7220,6 +7224,14 @@ function hitWorld(X, Y) {
   }
   if (standable) return { tile: { x: tx, y: ty } };
   return { tile: nearestWalkable(g.x, g.y) };
+}
+function deliverTile(tx, ty) {
+  const s = sim.state, h = s.player && s.player.carrying;
+  if (!h || h.kind !== 'plates' || !Array.isArray(s.customers)) return false;
+  return s.customers.some(function (c) {
+    const st = waitsPlate(c) && !c.togo && c.want === h.meat ? seatOf(c) : null;
+    return !!st && st.x === tx && Math.abs(st.y - ty) <= 1;
+  });
 }
 function clientToWorld(cx, cy) {
   const r = el.cv.getBoundingClientRect(), k = r.width > 0 ? r.width / cam.vw : 1, o = camOrigin();
@@ -7578,7 +7590,7 @@ function drawGround(s) {
     if (sign && MAP.signText) { const info = signInfo(); if (info) recordGlyphs(info.font, info.text, info.x, info.font === 'font_s' ? MAP.signText.y + 1 : MAP.signText.y); }
   }
   const sale = saleShown() ? forSale() : [];
-  const people = [s.player, s.buddy, s.tender, s.prep, s.cashier || null].concat(s.customers.filter(function (c) { return c.mode !== 'eating'; }));
+  const people = [s.player, s.buddy, s.tender, s.prep, s.cashier || null].concat(s.customers.filter(function (c) { return c.mode !== 'eating' && c.mode !== 'seated'; }));
   const onTile = function (tiles) {
     return people.some(function (m) { return m && hasTile(tiles, Math.round(m.px / TILE), Math.round(m.py / TILE)); });
   };
@@ -7771,8 +7783,8 @@ function stationItems(st, s, push) {
       });
     }
   } else if (st.type === 'register') {
-    // v3.6: frame 1 (a coin on top) while a guest waits to pay.
-    const tk = s.today && Array.isArray(s.today.tickets) ? s.today.tickets.length : 0;
+    // v3.6: frame 1 (a coin on top) while a guest waits to pay (v3.7: at the front of the line).
+    const tk = s.customers.some(function (c) { return c.queueIndex === 0 && c.mode === 'waiting'; }) ? 1 : 0;
     const nm = A3 && A3.has('register') ? 'register' : a.name, f = tk > 0 ? 1 : 0;
     try { const rb = boxRp(nm, 0, a.X, a.Y); regClear = { x0: rb.x0 - 1, x1: rb.x1 + 1, y0: rb.y0 - 1, y1: rb.y1 }; } catch (e) { regClear = null; }
     pushArt(push, nm, f, a.tiles, { outline: true, badge: 'coin', rec: ['register', d.x, d.y, f], hit: hit });
@@ -7892,14 +7904,14 @@ function drawSorted(s) {
   const custs = s.customers.slice().sort(byId);
   for (let i = 0; i < custs.length; i++) {
     const c = custs[i];
-    const seat = c.mode === 'eating' ? seatOf(c) : null;
+    const seat = c.mode === 'eating' || c.mode === 'seated' ? seatOf(c) : null;   // v3.7: seated, waiting for the plate
     if (seat) {
       const q = seatRp(seat);
       push(seat.x + seat.y, 2, q[0], function () { drawSeated(c, seat); keepPerson(c.id); });
       // The eater's plate: on the table top in front of the seat, or in the lap on a chair.
       const tb = seatTable(seat), sx = seat.x * TILE, sy = seat.y * TILE;
       const px = sx + 4, py = tb ? sy + 17 : sy + 9;
-      if (tb) push(seat.x + seat.y + 1, 1.5, q[0], function () { drawRp('plate_' + c.want, 0, q[0] + 1, q[1] + 4, px, py); });
+      if (c.mode !== 'eating') { /* v3.7: no plate on the table yet */ } else if (tb) push(seat.x + seat.y + 1, 1.5, q[0], function () { drawRp('plate_' + c.want, 0, q[0] + 1, q[1] + 4, px, py); });
       else push(seat.x + seat.y, 2.5, q[0], function () { drawRp('plate_' + c.want, 0, q[0] + 1, q[1] - 9, px, py); });
     } else {
       const cx = Math.round(c.px), cy = Math.round(c.py);
@@ -8087,8 +8099,13 @@ function staffHand(kind, m, s) {
   return null;
 }
 
+// v3.7: a guest waiting on the plate (paid, walking to a seat, seated or at a to go spot).
+function waitsPlate(c) {
+  return c.paid === true && c.fed !== true && (c.mode === 'toSeat' || c.mode === 'seated' || c.mode === 'togo');
+}
+
 function custHand(c) {
-  if (c.mode === 'toSeat') return 'hand_plate_' + c.want;
+  if (c.mode === 'toSeat' && c.fed === true) return 'hand_plate_' + c.want;
   if (c.mode === 'leaving' && c.reason === 'togo') return 'hand_togo';
   return null;
 }
@@ -8177,7 +8194,7 @@ function smallOrderBubble(c, showMark, s) {
   const counters = counterBoxes();
   let best = null;
   for (let up = 0; up <= 24 && !best; up += 4) {
-    for (let k = 0; k <= 40; k += 2) {
+    for (let k = 0; k <= 64; k += 2) {   // v3.7: 64, a guest seated in front of the counter slides past its end
       for (const dx of k ? [k, -k] : [0]) {
         const r = { x0: hx - W / 2 + dx, x1: hx + W / 2 + dx, y0: hy - ORDER_BUB.tail - H - up, y1: hy - ORDER_BUB.tail - up };
         if (!counters.some(function (b) { return overlaps(r, b); })) { best = r; break; }
@@ -8220,11 +8237,11 @@ function drawCues(s, custs) {
   // Bubbles: order icon or walk out mark, then food bubbles.
   for (let i = 0; i < custs.length; i++) {
     const c = custs[i];
-    const inLine = c.mode === 'arriving' || c.mode === 'waiting';
+    const inLine = c.mode === 'arriving' || c.mode === 'waiting' || waitsPlate(c);   // v3.7: the chip stays up until the plate arrives
     const until = markX.get(c.id);
     const showMark = until !== undefined && until > tAnim;
     const px = Math.round(c.px), py = Math.round(c.py) + hopOffset(c);
-    const seatC = c.mode === 'eating' ? seatOf(c) : null;
+    const seatC = c.mode === 'eating' || c.mode === 'seated' ? seatOf(c) : null;
     octx.save();
     const csh = seatC ? seatShift(seatC) : moverShift(Math.round(c.px), Math.round(c.py));
     octx.translate(csh.dx, csh.dy);
@@ -8270,7 +8287,7 @@ function drawCues(s, custs) {
   const mid = typeof C.PATIENCE_MID_FRAC === 'number' ? C.PATIENCE_MID_FRAC : 0.5;
   for (let i = 0; i < custs.length; i++) {
     const c = custs[i];
-    if (c.mode !== 'arriving' && c.mode !== 'waiting') continue;
+    if (c.mode !== 'arriving' && c.mode !== 'waiting' && !waitsPlate(c)) continue;
     if (orderBubbles.some(function (b) { return b.id === c.id; })) continue;
     const px = Math.round(c.px), py = Math.round(c.py) + hopOffset(c);
     const frac = c.patienceMax > 0 ? Math.max(0, Math.min(1, c.patience / c.patienceMax)) : 1;

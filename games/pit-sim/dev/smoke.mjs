@@ -287,7 +287,7 @@ const DEVICE_SIZES = [
 ];
 
 // Contract D2 and D3.
-const C_EXPECT = { WALK_TILES_PER_S: 6, SAVE_VERSION: 10, PATIENCE_MID_FRAC: 0.5, GEAR_RESERVE: 30, QUEUE_SPOTS: 3, QUEUE_SPOTS_BIG: 5, TABLE_SPOTS: 3, TABLE_SPOTS_BIG: 5 };
+const C_EXPECT = { WALK_TILES_PER_S: 6, SAVE_VERSION: 11, PATIENCE_MID_FRAC: 0.5, GEAR_RESERVE: 30, QUEUE_SPOTS: 3, QUEUE_SPOTS_BIG: 5, TABLE_SPOTS: 3, TABLE_SPOTS_BIG: 5 };
 const C_NEW_KEYS = ['EAT_MIN', 'EAT_MAX', 'HEART_SECONDS', 'SEAT_BONUS_BASE', 'SEAT_BONUS_MAX', 'CHARM_STEP', 'CHARM_MAX', 'REP_TOGO_QUICK', 'SWEAT_FRAC', 'ZZZ_AFTER', 'FX', 'PATIENCE_MID_FRAC', 'GEAR_RESERVE'];
 const FX_KEYS = ['NUMBER_S', 'NUMBER_RISE_PX', 'NUMBER_FADE_AT', 'TIP_GAP_PX', 'SPARKLE_S', 'SPARKLE_FRAME_S', 'SPARKLE_STAGGER_S',
   'HEART_S', 'HEART_FRAME_S', 'HEART_RISE_PX', 'HEART_FADE_S', 'EAT_FRAME_S', 'PUFF_EVERY_LOW', 'PUFF_EVERY_GOOD', 'PUFF_EVERY_HOT',
@@ -301,7 +301,7 @@ const C_V21 = { WARN_FRAC: 0.4, HOT_BURN_MULT: 1, TUTORIAL_FIRE_FLOOR: 30, TUTOR
 const FX_V21 = { ARROW_BOB_S: 0.3, WARN_BLINK_S: 0.25 };
 const MEAT_WINDOW = { sausage: 14, chicken: 16, ribs: 18, butt: 22, brisket: 26 };
 // Contract K1 and K8.
-const TUTORIAL_ORDER = ['open', 'charcoal', 'light', 'meat', 'puton', 'cook', 'slice', 'plate', 'customer', 'seated', 'end'];
+const TUTORIAL_ORDER = ['open', 'charcoal', 'light', 'meat', 'puton', 'cook', 'slice', 'customer', 'register', 'plate', 'deliver', 'seated', 'end'];   // v3.7
 const TUTORIAL_TEXT = {
   open: 'This is your morning. The cart is already filled. Tap Open the yard.',
   charcoal: 'Grab charcoal from the pile.',
@@ -312,7 +312,10 @@ const TUTORIAL_TEXT = {
   slice: 'Slice it at the board.',
   plate: 'Set the plate on the counter.',
   customer: 'Here comes your first customer.',
-  seated: 'Served. They will sit and eat, then tip a little more.',
+  register: 'Ring up the guest at the register.',   // v3.7
+  deliver: 'Carry the plate to their table.',
+  runner: 'Your runner carries it to their table.',
+  seated: 'Served. They eat, then tip a little more.',
   end: 'You have the hang of it. Keep the fire fed and keep them happy.'
 };
 const PULL_NOW = 'Pull it now';
@@ -411,7 +414,7 @@ const C_W2 = {
 };
 const C_W2_FIXED = ['SAVE_VERSION', 'SEASON_WEEKS', 'NAME_MAX', 'NAME_PUNCT', 'LENGTHS'];
 // W2 changed values and the v2.1 keys that stay (W2 last paragraph).
-const C_W2_EXACT = { SAVE_VERSION: 10, DRIVEWAY_PRICE: 400, GATE_OPENS: 30, LAST_CALL: 110, DAY_SECONDS: 125, STEPPER_MAX: 99, START_CASH: 80, START_REP: 20 };
+const C_W2_EXACT = { SAVE_VERSION: 11, DRIVEWAY_PRICE: 400, GATE_OPENS: 30, LAST_CALL: 110, DAY_SECONDS: 125, STEPPER_MAX: 99, START_CASH: 80, START_REP: 20 };
 // W22.18: the keys whose starting values the W19 literals assume.
 const LITERAL_KEYS = ['FEE_MULT', 'FEE_ROUND', 'DEPOSIT_FRAC', 'PAY_BASE', 'PAY_PER_STAR', 'STAR_FANS', 'REP_DAY_MIN', 'SPARE_FRAC', 'BAGS_PER_COOKER',
   'SCORE_FED', 'SCORE_WAIT', 'SCORE_QUALITY', 'STAR_EDGES', 'WAIT_FULL_S', 'WAIT_ZERO_S', 'BURNT_PENALTY', 'OFFMENU_PENALTY', 'COOLER_CAP', 'SEASON_CARRY_REP', 'SEASON_REP_FLOOR',
@@ -560,7 +563,7 @@ const ID3 = {
 };
 const SEASON_WEEKS = 7;   // v3.5: six weeks and the competition finale (was 9)
 const P_POOL = 24;        // v3.6: the Hiring Day pool (6 a role, 4 roles)
-const SAVE_V = 10;        // v3.5: save v9 (season.plan, pit); v3.6: v10 (the register, the TILL card)
+const SAVE_V = 11;        // v3.5: save v9 (season.plan, pit); v3.6: v10 (the register, the TILL card); v3.7: v11 (pay, then sit)
 // W19 step 51: the v2.1 (v3) save sample.
 const SAVE_V3_SAMPLE = {
   v: 3, day: 5, cash: 150, rep: 20,
@@ -1167,7 +1170,8 @@ const TILE = {
   kettle1: { x: 4, y: 5 },
   cooler: { x: 4, y: 6 },
   board: { x: 2, y: 4 },
-  table: { x: 4, y: 1 }
+  table: { x: 4, y: 1 },
+  register: { x: 3, y: 1 }   // v3.7
 };
 const SPAWN = { x: 3, y: 2 };
 const ARROW_DOWN_Y = 3;   // the angle redo: left of the spawn is the trash, so the key test walks down the lane
@@ -1203,7 +1207,7 @@ const SAVE_V1_SAMPLE = {
   drivewayShown: false
 };
 const SAVE_DIRTY = { v: 1, day: 'abc', cash: -50, rep: 400, stock: { sausage: 200, bogus: 1 }, gear: { drum: true, kettle2: false }, hires: { tender: true }, extra: 1 };
-const INVALID_SAVES = [null, 'x', [], {}, undefined, 42, { v: '5' }, { v: 0 }, { v: '3' }, { v: '4' }, { v: 11 }];   // v3.6: v 1 to 10 accepted
+const INVALID_SAVES = [null, 'x', [], {}, undefined, 42, { v: '5' }, { v: 0 }, { v: '3' }, { v: '4' }, { v: 12 }];   // v3.7: v 1 to 11 accepted
 
 // The shopping list for day 1 and later days. Two sausage units give four plates, so later
 // customers walk out and the walk out step has something to assert.
@@ -1565,7 +1569,8 @@ async function nodeChecks() {
   await step('thirds and offers, headless', () => thirdsHeadless(globalThis[GLOBAL_NAME]));
   await step('v2.1 and v3.0 saves migrate to cards, headless', () => migrateHeadless(globalThis[GLOBAL_NAME]));
   await step('four plates set down land in four counter spots, headless', () => countersHeadless(globalThis[GLOBAL_NAME]));
-  await step('v3.6 the register: guests pay there, a TILL card rings them up, the crew idle by their work, save v10, headless', () => registerHeadless(globalThis[GLOBAL_NAME]));
+  await step('v3.7 the register: guests order and pay first, a TILL card rings them up, to go spots, the crew idle by their work, save v11, headless', () => registerHeadless(globalThis[GLOBAL_NAME]));
+  await step('v3.7 pay then sit: the RUN card and the pitmaster deliver to the table, eating starts on delivery, refunds, headless', () => deliveryHeadless(globalThis[GLOBAL_NAME]));
   // v3.2 (D10.1): the Node legs of steps 73 to 75, the day loop and save v6.
   await step('v3.2 days: the day loop, prices and save v6, headless', () => daysLoopHeadless(globalThis[GLOBAL_NAME]));
   await step('v3.4 days: the morning shop (Confirm, Back, the reserve warning), the start pick, automatic prep and training, the broke rescue, headless', () => daysStockHeadless(globalThis[GLOBAL_NAME]));
@@ -1986,11 +1991,37 @@ function countersHeadless(P) {
   return 'spots ' + landed.join(', ') + ' from the line end';
 }
 
-// v3.6: the register at the line end of the counter. A guest pays there after the plate: the
-// pitmaster rings them up (a tap on the register, or walking past it with empty hands), a TILL card on
-// shift rings them up on its own, and nobody in REG_GRACE seconds means they pay on the way out with
-// REG_LATE_KEEP of the tip. Every crew idle tile sits by its job (the RUN card within 2 steps of the
-// counter and the board). A v9 save loads as v10 with its crew and no TILL card.
+// v3.6: the register at the line end of the counter. v3.7: a guest orders and pays there first: the
+// pitmaster rings them up (a tap on the register, or standing at it with empty hands) or a TILL card on
+// shift rings them up on its own; nobody ringing means they wait in line. Paid, they take the first
+// free seat (or a to go spot) and wait for the plate. Every crew idle tile sits by its job (the RUN
+// card within 2 steps of the counter and the board). A v10 save loads as v11.
+function lineGuest(h, id, meat, fields) {
+  return Object.assign({ x: 5, y: 1, px: 80, py: 16, face: 'left', next: null, path: [], walking: false, anim: 0, id, body: 0, want: meat || 'sausage',
+    patienceMax: 60, patience: 60, wait: 0, queueIndex: 0, mode: 'waiting', mood: 'neutral', reason: null, pause: 0, hop: 0,
+    seat: null, eat: 0, eatMax: 0, bonusPaid: false, booked: false, runPlate: false,
+    paid: false, fed: false, togo: false, spot: -1, price: 0, paidAt: 0, rungBy: null, incoming: null }, fields || {});
+}
+// A paid guest already in a seat, waiting for the plate (fixture).
+function seatedGuest(h, id, meat, seatId, fields) {
+  const st = h.st();
+  const seat = h.P.MAP.seats.find((x) => x.id === seatId);
+  st.seats[seatId] = id;
+  const c = lineGuest(h, id, meat, Object.assign({ x: seat.x, y: seat.y, px: seat.x * 16, py: seat.y * 16, face: seat.face, queueIndex: -1, mode: 'seated',
+    seat: seatId, eatMax: 9, paid: true, price: h.P.MEATS[meat].price, paidAt: st.clock, rungBy: 'you' }, fields || {}));
+  st.customers.push(c);
+  return c;
+}
+function clearYardFixture(h) {
+  const st = h.st();
+  st.customers = []; st.spawnAt = Infinity;
+  for (const k of Object.keys(st.seats)) st.seats[k] = null;
+  if (st.today.pending !== undefined) st.today.pending = 0;
+  st.stations.table.spots = st.stations.table.spots.map(() => null);
+  st.stations.board.stacks = [];
+  const pl = st.player;
+  pl.x = 1; pl.y = 4; pl.px = 16; pl.py = 64; pl.path = []; pl.next = null; pl.walking = false; pl.carrying = null; pl.busy = null; pl.target = null; pl.queued = null;
+}
 function registerHeadless(P) {
   const C = P.C, M = P.MAP, notes = [];
   const reg = M.station('register');
@@ -1999,7 +2030,7 @@ function registerHeadless(P) {
   const lineEnd = M.station('table').tiles.find((t) => t.y === 1);
   assert(lineEnd && Math.abs(lineEnd.x - reg.tiles[0].x) + Math.abs(lineEnd.y - reg.tiles[0].y) === 1 && M.queue[0].y === reg.tiles[0].y, 'the register is not beside the counter end nearest the line');
   assert(reg.use.some((u) => u.x === 2 && u.y === 1) && M.tillIdle && M.tillIdle.x === 2 && M.tillIdle.y === 1, 'the TILL post is not the register use tile on the kitchen side ' + describe(M.tillIdle));
-  assert(typeof C.REG_GRACE === 'number' && C.REG_GRACE > 0 && C.REG_LATE_KEEP > 0 && C.REG_LATE_KEEP < 1, 'REG_GRACE ' + C.REG_GRACE + ', REG_LATE_KEEP ' + C.REG_LATE_KEEP);
+  assert(Array.isArray(M.togo) && M.togo.length >= 2 && M.togo.every((t) => M.at(t.x, t.y) === M.T.LAWN), 'MAP.togo ' + describe(M.togo));
   // Idle tiles against their jobs (lane steps over the yard with every gear owned).
   const hi = headless(P, null, 31);
   for (const g of GEAR_IDS) hi.st().gear[g] = true;   // fixture
@@ -2013,66 +2044,73 @@ function registerHeadless(P) {
   assert(idle.run[0] <= 2 && idle.run[1] <= 2, 'the RUN idle tile ' + describe(M.buddyIdle) + ' is ' + idle.run.join(' and ') + ' steps from the counter and the board, wanted 2 or less');
   assert(idle.fire[0] <= 2 && idle.prep[0] <= 1 && idle.till[0] === 0, 'idle steps ' + describe(idle));
   notes.push('idle steps RUN ' + idle.run.join('/') + ', FIRE ' + idle.fire[0] + ', PREP ' + idle.prep[0] + ', TILL ' + idle.till[0]);
-  // One served guest on a booking, the player off the register (fixtures).
-  const serveOne = (h, id) => {
+  // One guest at the front of the line, a plate on the counter, the player off the register (fixtures).
+  const queueOne = (h, id) => {
+    clearYardFixture(h);
     const st = h.st();
-    st.customers = []; st.spawnAt = Infinity;
-    if (st.today.pending !== undefined) st.today.pending = 0;
-    const pl = st.player;
-    pl.x = 1; pl.y = 4; pl.px = 16; pl.py = 64; pl.path = []; pl.next = null; pl.walking = false; pl.carrying = null; pl.busy = null; pl.target = null; pl.queued = null;
     st.stations.table.spots[0] = { meat: 'sausage', times: [st.clock], run: [false] };
-    st.customers.push({ x: 5, y: 1, px: 80, py: 16, face: 'left', next: null, path: [], walking: false, anim: 0, id, body: 0, want: 'sausage',
-      patienceMax: 60, patience: 60, wait: 0, queueIndex: 0, mode: 'waiting', mood: 'neutral', reason: null, pause: 0, hop: 0,
-      seat: null, eat: 0, eatMax: 0, bonusPaid: false, booked: false, runPlate: false });
-    const cash0 = st.cash;
-    h.tick();
-    const sv = h.log.filter((e) => e.type === 'served' && e.id === id);
-    assert(sv.length === 1, 'guest ' + id + ' not served: ' + describe(h.log.slice(-4)));
-    return { cash0, ev: sv[0] };
+    st.customers.push(lineGuest(h, id, 'sausage'));
+    return st.cash;
   };
   const rungOf = (h, id) => h.log.filter((e) => e.type === 'rung' && e.id === id);
   const RX = reg.tiles[0].x * 16 + 8, RY = reg.tiles[0].y * 16;
-  // (a) Served is not paid: the cash waits at the register until the pitmaster taps it.
-  const ha = feltRun(P, 'run', 3, 41);
-  const sa = serveOne(ha, 9001);
-  assert(ha.st().cash === sa.cash0 && ha.st().today.tickets.length === 1 && rungOf(ha, 9001).length === 0, 'paid before the register: cash ' + sa.cash0 + ' to ' + ha.st().cash + ', tickets ' + describe(ha.st().today.tickets));
+  // (a) Nobody eats before paying: the plate waits on the counter, the guest waits in line.
+  const ha = feltRun(P, 'fire', 3, 41);
+  const cash0 = queueOne(ha, 9001);
+  for (let i = 0; i < ha.ticksFor(10); i++) ha.tick();
+  const ga0 = ha.st().customers.find((c) => c.id === 9001);
+  assert(ga0 && ga0.queueIndex === 0 && ga0.paid === false && ha.st().cash === cash0 && rungOf(ha, 9001).length === 0 && !ha.log.some((e) => e.type === 'served' && e.id === 9001),
+    'the guest paid or ate with nobody at the register: ' + describe(ga0 && { q: ga0.queueIndex, paid: ga0.paid, mode: ga0.mode }));
+  notes.push('nobody at the register: the guest waits in line, unpaid');
   const pa = ha.st().player;
   pa.x = 3; pa.y = 2; pa.px = 48; pa.py = 32; pa.face = 'up';
-  pa.carrying = { kind: 'plates', meat: 'sausage', times: [ha.st().clock] };   // hands full, so walking past does not ring
+  pa.carrying = { kind: 'plates', meat: 'sausage', times: [ha.st().clock] };   // hands full, so standing there does not ring
   assert(ha.sim.reach() === 'register', 'reach() from (3,2) facing up is ' + describe(ha.sim.reach()));
   pa.carrying = null;
   const ra = ha.sim.interact();
   ha.drain();
   const ga = rungOf(ha, 9001);
-  assert(ra && ra.ok === true && ga.length === 1 && ga[0].by === 'you' && ga[0].x === RX && ga[0].y === RY, 'tapping the register: ' + describe(ra) + ', rung ' + describe(ga));
-  assert(ha.st().cash === sa.cash0 + sa.ev.price + sa.ev.tip && ga[0].tip === sa.ev.tip, 'rung up for ' + (ha.st().cash - sa.cash0) + ', wanted ' + (sa.ev.price + sa.ev.tip));
-  notes.push('a tap rang up ' + (sa.ev.price + sa.ev.tip) + ' at the register');
-  // (b) Walking past with empty hands rings up too.
-  const sb = serveOne(ha, 9002);
+  const price = P.MEATS.sausage.price;
+  assert(ra && ra.ok === true && ga.length === 1 && ga[0].by === 'you' && ga[0].x === RX && ga[0].y === RY && ga[0].price === price, 'tapping the register: ' + describe(ra) + ', rung ' + describe(ga));
+  assert(ha.st().cash === cash0 + price, 'rung up for ' + (ha.st().cash - cash0) + ', wanted ' + price);
+  const gp = ha.st().customers.find((c) => c.id === 9001);
+  assert(gp.paid === true && gp.queueIndex === -1 && gp.mode === 'toSeat' && gp.seat !== null, 'after paying the guest is ' + describe({ mode: gp.mode, seat: gp.seat, q: gp.queueIndex }));
+  ha.until(() => gp.mode === 'seated', 10);
+  assert(gp.mode === 'seated' && gp.eat === 0 && !ha.log.some((e) => e.type === 'served' && e.id === 9001), 'the paid guest did not sit and wait: ' + gp.mode);
+  notes.push('a tap rang up ' + price + ', then they sat with a number');
+  // (b) Standing at the register with empty hands rings up too.
+  queueOne(ha, 9002);
   const pb = ha.st().player;
   pb.x = 2; pb.y = 1; pb.px = 32; pb.py = 16;
   ha.tick();
-  assert(rungOf(ha, 9002).length === 1 && rungOf(ha, 9002)[0].by === 'you' && ha.st().cash === sb.cash0 + sb.ev.price + sb.ev.tip, 'walking past the register did not ring up ' + describe(rungOf(ha, 9002)));
-  // (c) Nobody rings: the guest still sits, then pays on the way out at the grace.
-  const sc = serveOne(ha, 9003);
-  const cu = ha.st().customers.find((c) => c.id === 9003);
-  assert(cu && (cu.mode === 'toSeat' || cu.mode === 'leaving'), 'an unpaid guest did not go to a seat: ' + describe(cu && cu.mode));
-  ha.until(() => rungOf(ha, 9003).length > 0, C.REG_GRACE + 1);
-  const gc = rungOf(ha, 9003);
-  assert(gc.length === 1 && gc[0].by === 'late' && gc[0].tip === Math.floor(sc.ev.tip * C.REG_LATE_KEEP) && ha.st().clock - sc.ev._at >= C.REG_GRACE - 0.2, 'the grace: ' + describe(gc) + ' after ' + (ha.st().clock - sc.ev._at) + ' s');
-  notes.push('unrung guests pay after ' + C.REG_GRACE + ' s with ' + gc[0].tip + ' of ' + sc.ev.tip + ' tip');
+  assert(rungOf(ha, 9002).length === 1 && rungOf(ha, 9002)[0].by === 'you', 'standing at the register did not ring up ' + describe(rungOf(ha, 9002)));
+  // (c) No free seat: a to go spot by the counter, and the plate on the counter goes home with them.
+  clearYardFixture(ha);
+  for (const k of Object.keys(ha.st().seats)) ha.st().seats[k] = -1;   // every seat taken (fixture)
+  ha.st().customers.push(lineGuest(ha, 9003, 'sausage'));
+  const pc = ha.st().player;
+  pc.x = 2; pc.y = 1; pc.px = 32; pc.py = 16;
+  ha.tick();
+  const g3 = ha.st().customers.find((c) => c.id === 9003);
+  assert(g3 && g3.togo === true && g3.mode === 'togo', 'no seat: ' + describe(g3 && { mode: g3.mode, togo: g3.togo }));
+  for (let i = 0; i < 10; i++) ha.tick();
+  assert(!ha.log.some((e) => e.type === 'served' && e.id === 9003), 'the to go guest got food from an empty counter');
+  ha.st().stations.table.spots[0] = { meat: 'sausage', times: [ha.st().clock], run: [false] };
+  ha.tick();
+  const tg = ha.log.filter((e) => e.type === 'to_go' && e.id === 9003);
+  assert(tg.length === 1 && g3.mode === 'leaving' && g3.reason === 'togo' && ha.st().stations.table.spots[0] === null, 'the to go pickup ' + describe({ tg: tg.length, mode: g3.mode }));
+  notes.push('no seat: they stand at a to go spot and take it home');
   // (d) A TILL card on shift rings everyone up on its own, faster with stars.
   const ringT = {};
   for (const stars of [1, 5]) {
     const ht = feltRun(P, 'till', stars, 43);
     const cr = ht.st().cashier;
     assert(cr && cr.x === M.tillIdle.x && cr.y === M.tillIdle.y && cr.vals && cr.vals.tillRing === P.skillValue('tillRing', stars), 'TILL mover ' + describe(cr && { x: cr.x, y: cr.y, vals: cr.vals }));
-    const st = serveOne(ht, 9100);
+    queueOne(ht, 9100);
     const t0 = ht.st().clock;
     ht.until(() => rungOf(ht, 9100).length > 0, 4);
     const gt = rungOf(ht, 9100);
     assert(gt.length === 1 && gt[0].by === 'till', 'the TILL card did not ring up (' + stars + ' stars): ' + describe(gt));
-    assert(gt[0].tip === Math.max(0, Math.round(st.ev.tip * (1 + cr.vals.tillTip))), 'TILL tip ' + gt[0].tip + ' from ' + st.ev.tip);
     const rec = ht.st().today.crew['1'];
     assert(rec && rec.plates === 1, 'the TILL crew row ' + describe(rec));
     ringT[stars] = Math.round((ht.st().clock - t0) * 100) / 100;
@@ -2085,14 +2123,102 @@ function registerHeadless(P) {
   let wk = 0;
   for (let sd = 1; sd <= 30 && !wk; sd++) for (let w = 2; w <= 7 && !wk; w++) wk = P.genWalkins({ seed: sd, year: 1, week: w, rep: 80 }).filter((e) => e.role === 'till').length;
   assert(wk > 0, 'no TILL walk-in over 30 seeds');
-  // (f) Save v10: a v9 save keeps its crew and gets no TILL card.
+  // (f) Save v11: a v10 save keeps its crew; guests in flight are never saved.
   const ser = ha.sim[SIM_METHODS.serialize]();
-  assert(ser.v === 10, 'serialize v ' + ser.v);
+  assert(ser.v === SAVE_V && !('customers' in ser), 'serialize v ' + ser.v);
   const old = JSON.parse(JSON.stringify(ser));
-  old.v = 9;
+  old.v = 10;
   const back = P.validateSave(old);
-  assert(back && back.v === 10 && back.crew.length === ser.crew.length && !back.crew.some((c) => c.role === 'till'), 'v9 save to v10 ' + describe(back && { v: back.v, crew: back.crew.map((c) => c.role) }));
-  notes.push('v9 saves load as v10 with no TILL card');
+  assert(back && back.v === SAVE_V && back.crew.length === ser.crew.length, 'v10 save to v11 ' + describe(back && { v: back.v, crew: back.crew.map((c) => c.role) }));
+  const mid = P.createSim(back, 5);
+  assert(mid.state.customers.length === 0 && Object.values(mid.state.seats).every((x) => x === null), 'a loaded save has guests in flight');
+  notes.push('v10 saves load as v11 with no guests in flight');
+  return notes.join('; ');
+}
+
+// v3.7: plates go from the counter to the seated guest who ordered that meat: the RUN card walks it
+// over, or the pitmaster taps the plate on the counter, then the guest's table. A guest eats only once
+// the plate arrives; patience drains at the table, and a walk-out is refunded. Faster tips more.
+function deliveryHeadless(P) {
+  const notes = [];
+  const M = P.MAP;
+  const adj = (m, seatId) => { const s = M.seats.find((x) => x.id === seatId); return Math.abs(m.x - s.x) + Math.abs(m.y - s.y) === 1; };
+  // (a) The RUN card takes the sausage plate to the sausage guest, not the chicken guest beside them.
+  const hr = feltRun(P, 'run', 3, 51);
+  clearYardFixture(hr);
+  const b = hr.st().buddy;
+  const chick = seatedGuest(hr, 9201, 'chicken', 'pt1a', { paidAt: hr.st().clock - 2 });
+  const saus = seatedGuest(hr, 9202, 'sausage', 'pt1b');
+  hr.st().stations.table.spots[1] = { meat: 'sausage', times: [hr.st().clock], run: [false] };
+  let carried = false;
+  hr.until(() => { if (b.carrying && b.carrying.kind === 'plates' && b.x >= 5) carried = true; return hr.log.some((e) => e.type === 'served' && e.id === 9202); }, 15);
+  const sv = hr.log.find((e) => e.type === 'served' && e.id === 9202);
+  assert(sv && sv.by === 'run' && carried && adj(b, 'pt1b') && saus.mode === 'eating' && saus.eat > 0, 'the RUN delivery ' + describe(sv && strip(sv)) + ', runner at ' + b.x + ',' + b.y + ', carried on the lawn ' + carried + ', guest ' + saus.mode);
+  assert(chick.mode === 'seated' && chick.fed !== true && !hr.log.some((e) => e.type === 'served' && e.id === 9201), 'the chicken guest got the sausage plate');
+  const runTip = sv.tip;
+  hr.until(() => b.task === 'idle', 10);
+  assert(b.x === M.buddyIdle.x && b.y === M.buddyIdle.y, 'the RUN card did not come back to the counter ' + b.x + ',' + b.y);
+  notes.push('RUN walked the sausage plate to pt1b (' + sv.tip + ' tip), the chicken guest still waiting');
+  // (b) The pitmaster by hand: tap the plate on the counter, then the guest's table.
+  const hp = feltRun(P, 'fire', 3, 52);
+  clearYardFixture(hp);
+  const g = seatedGuest(hp, 9301, 'sausage', 'pt1a');
+  hp.st().stations.table.spots[0] = { meat: 'sausage', times: [hp.st().clock], run: [false] };
+  for (let i = 0; i < 20; i++) hp.tick();
+  assert(g.mode === 'seated' && !hp.log.some((e) => e.type === 'served' && e.id === 9301), 'the guest ate a plate nobody carried');
+  let taps = 0;
+  taps += hp.sim.walkTo(4, 1) === true ? 1 : 0;
+  hp.drain();
+  hp.until(() => hp.st().player.carrying !== null, 5);
+  assert(hp.st().player.carrying && hp.st().player.carrying.kind === 'plates' && hp.st().stations.table.spots[0] === null, 'the counter tap did not pick the plate up ' + describe(hp.st().player.carrying));
+  const seat = M.seats.find((x) => x.id === 'pt1a');
+  taps += hp.sim.walkTo(seat.x, seat.y + 1) === true ? 1 : 0;   // the table in front of the seat
+  hp.drain();
+  hp.until(() => hp.log.some((e) => e.type === 'served' && e.id === 9301), 10);
+  const sh = hp.log.find((e) => e.type === 'served' && e.id === 9301);
+  assert(sh && sh.by === 'you' && taps === 2 && g.mode === 'eating' && hp.st().player.carrying === null, 'hand delivery ' + describe(sh && strip(sh)) + ' in ' + taps + ' taps, guest ' + g.mode);
+  // The way back is a tap on any patio station.
+  assert(hp.sim.walkTo(4, 8) === true, 'the pitmaster could not walk back from the table');
+  hp.drain();
+  hp.until(() => hp.st().player.path.length === 0 && hp.st().player.next === null, 8);
+  assert(hp.st().player.x <= 4, 'the pitmaster stuck on the lawn at ' + hp.st().player.x + ',' + hp.st().player.y);
+  notes.push('by hand: 2 taps from the counter (1 straight from the board), ' + sh.tip + ' tip');
+  // (c) Faster tips more: the same plate after a long wait tips less.
+  clearYardFixture(hp);
+  const slow = seatedGuest(hp, 9302, 'sausage', 'pt1b', { wait: 40, patience: 20 });
+  hp.st().player.carrying = { kind: 'plates', meat: 'sausage', times: [hp.st().clock] };
+  const sb = M.seats.find((x) => x.id === 'pt1b');
+  hp.sim.walkTo(sb.x, sb.y);
+  hp.drain();
+  hp.until(() => hp.log.some((e) => e.type === 'served' && e.id === 9302), 10);
+  const ss = hp.log.find((e) => e.type === 'served' && e.id === 9302);
+  assert(ss && ss.tip < sh.tip, 'a slow plate tipped ' + (ss && ss.tip) + ', a quick one ' + sh.tip);
+  assert(slow.mode === 'eating', 'slow guest ' + slow.mode);
+  // (d) Patience drains at the table; a walk-out leaves without food and gets the price back.
+  clearYardFixture(hp);
+  const w = seatedGuest(hp, 9303, 'sausage', 'pt1a', { patience: 0.3 });
+  const cash0 = hp.st().cash, rev0 = hp.st().today.revenue, wo0 = hp.st().today.walkouts;
+  hp.until(() => hp.log.some((e) => e.type === 'walk_out' && e.id === 9303), 3);
+  const wo = hp.log.find((e) => e.type === 'walk_out' && e.id === 9303);
+  assert(wo && wo.refund === w.price || (wo && wo.refund === P.MEATS.sausage.price), 'walk-out ' + describe(wo && strip(wo)));
+  assert(hp.st().cash === cash0 - P.MEATS.sausage.price && hp.st().today.revenue === rev0 - P.MEATS.sausage.price && hp.st().today.walkouts === wo0 + 1 && hp.st().seats.pt1a === null && w.mode === 'leaving',
+    'refund: cash ' + cash0 + ' to ' + hp.st().cash + ', walkouts ' + hp.st().today.walkouts);
+  notes.push('a table walk-out refunded ' + P.MEATS.sausage.price + ' and counts as a walk-out');
+  // (e) RUN Friendliness nudges the tip: a 5 star runner's tip beats a 1 star's on the same plate.
+  const tipAt = {};
+  for (const st of [1, 5]) {
+    const h = feltRun(P, 'run', st, 53);
+    clearYardFixture(h);
+    seatedGuest(h, 9400, 'ribs', 'pt1a');
+    h.st().stations.table.spots[0] = { meat: 'ribs', times: [h.st().clock], run: [false] };
+    // the walk itself is timed by stars; hold the wait still so only the tip share differs
+    h.fixture = (s2) => { const c = s2.customers.find((x) => x.id === 9400); if (c) c.wait = 0; };
+    h.until(() => h.log.some((e) => e.type === 'served' && e.id === 9400), 15);
+    const e = h.log.find((x) => x.type === 'served' && x.id === 9400);
+    tipAt[st] = e ? e.tip : null;
+  }
+  assert(tipAt[1] !== null && tipAt[5] !== null && tipAt[5] > tipAt[1], 'RUN tips ' + describe(tipAt));
+  notes.push('RUN tip on ribs ' + tipAt[1] + ' at 1 star, ' + tipAt[5] + ' at 5 (3 star sausage ' + runTip + ')');
   return notes.join('; ');
 }
 
@@ -2247,24 +2373,41 @@ function tutorialHeadless(P) {
   assert(k1().fire === C.TUTORIAL_FIRE_FLOOR, 'kettle1.fire ' + k1().fire + ' after the hold, wanted the floor ' + C.TUTORIAL_FIRE_FLOOR);
 
   assert(h.goSettled('kettle1', () => h.stepIs('slice') && carryIs(h, CARRY_KIND.cooked, MEAT)), 'the pull did not give step slice with cooked sausage: ' + describe(h.step()) + ', carrying ' + describe(st().player.carrying));
+  // v3.7: the first plate off the board brings the guest; they pay at the register, the plate goes
+  // on the counter, then the pitmaster carries it to their table (no RUN card on the tutorial day).
   const sliceIdx = h.log.length;
-  assert(h.go('board', () => h.has(EVENT.sliceDone, sliceIdx) && h.stepIs('plate'), 10), 'board: no slice_done and step plate; step ' + describe(h.step()));
-  assert(h.stepIs('plate', 'table'), 'after slice_done the step is ' + describe(h.step()) + ', wanted plate with target table');
-
-  const tableIdx = h.log.length;
-  assert(h.go('table', () => h.has(EVENT.setDown, tableIdx)), 'table: no set_down; carrying ' + describe(st().player.carrying));
-  const setDown = h.log[h.idx(EVENT.setDown, tableIdx)];
-  const batch = h.log.filter((e) => e._b === setDown._b);
-  const order = [EVENT.setDown, EVENT.tutorialStep, EVENT.gateOpen, EVENT.customerArrived];
+  assert(h.go('board', () => h.has(EVENT.sliceDone, sliceIdx) && h.stepIs('customer'), 10), 'board: no slice_done and step customer; step ' + describe(h.step()));
+  const sliceEv = h.log[h.idx(EVENT.sliceDone, sliceIdx)];
+  const batch = h.log.filter((e) => e._b === sliceEv._b);
+  const order = [EVENT.sliceDone, EVENT.tutorialStep, EVENT.gateOpen, EVENT.customerArrived];
   const at = order.map((t) => batch.findIndex((e) => e.type === t && (t !== EVENT.tutorialStep || e.id === 'customer')));
-  assert(at.every((i) => i >= 0) && at.every((i, j) => j === 0 || i > at[j - 1]), 'the set down drain is ' + describe(batch.map((e) => e.type + (e.id !== undefined ? ':' + e.id : ''))) + ', wanted ' + order.join(', ') + ' in order');
+  assert(at.every((i) => i >= 0) && at.every((i, j) => j === 0 || i > at[j - 1]), 'the slice drain is ' + describe(batch.map((e) => e.type + (e.id !== undefined ? ':' + e.id : ''))) + ', wanted ' + order.join(', ') + ' in order');
   const arrived = batch[at[3]];
   assert(arrived.id === 1 && arrived.meat === MEAT, 'scripted customer_arrived ' + describe(strip(arrived)));
-  assert(st().clock === C.GATE_OPENS, 'clock after the plate ' + st().clock + ', wanted ' + C.GATE_OPENS);
-
+  assert(st().clock === C.GATE_OPENS, 'clock after the slice ' + st().clock + ', wanted ' + C.GATE_OPENS);
+  assert(h.until(() => h.stepIs('register', 'register'), WAIT_S.headlessServe), 'no step register: ' + describe(h.step()));
+  const g1 = () => st().customers.find((c) => c.id === 1);
+  assert(!g1().paid && !h.has(EVENT.served), 'the guest paid or ate before the register: ' + describe({ paid: g1().paid }));
+  const ringIdx = h.log.length;
+  assert(h.go('register', () => h.has('rung', ringIdx)), 'register: no rung; step ' + describe(h.step()));
+  const rung = h.log[h.idx('rung', ringIdx)];
+  assert(rung.id === 1 && rung.by === 'you' && g1().paid === true && g1().queueIndex === -1, 'rung ' + describe(strip(rung)) + ', guest ' + describe({ paid: g1().paid, q: g1().queueIndex }));
+  assert(h.until(() => g1().mode === 'seated' && h.stepIs('plate', 'table'), WAIT_S.headlessSeat), 'the paid guest did not sit with step plate: ' + describe({ mode: g1().mode, step: h.step() }));
+  assert(!h.has(EVENT.served) && g1().eat === 0, 'eating before the plate arrived');
+  const tableIdx = h.log.length;
+  assert(h.go('table', () => h.has(EVENT.setDown, tableIdx) && h.stepIs('deliver', 'table')), 'table: no set_down and step deliver; step ' + describe(h.step()));
+  for (let i = 0; i < 20; i++) h.tick();
+  assert(!h.has(EVENT.served, tableIdx) && g1().mode === 'seated', 'the seated guest got a plate nobody carried');
+  assert(h.go('table', () => carryIs(h, CARRY_KIND.plates, MEAT) && h.stepIs('deliver', null)), 'table: did not take the plate back up; step ' + describe(h.step()) + ', carrying ' + describe(st().player.carrying));
+  const seat1 = P.MAP.seats.find((x) => x.id === g1().seat);
   const servedIdx0 = h.log.length;
-  assert(h.until(() => h.has(EVENT.served, servedIdx0), WAIT_S.headlessServe), 'no served within ' + WAIT_S.headlessServe + ' s');
+  assert(h.sim.walkTo(seat1.x, seat1.y + 1) === true, 'walkTo the guest\'s table refused');
+  h.drain();
+  assert(h.until(() => h.has(EVENT.served, servedIdx0), WAIT_S.headlessServe), 'no served within ' + WAIT_S.headlessServe + ' s of the table tap');
   const servedIdx = h.idx(EVENT.served, servedIdx0);
+  const sv1 = h.log[servedIdx];
+  assert(sv1.id === 1 && sv1.by === 'you' && g1().mode === 'eating' && st().player.carrying === null, 'hand delivery ' + describe(strip(sv1)) + ', guest ' + g1().mode);
+
   assert(h.idx(EVENT.tutorialStep, servedIdx, (e) => e.id === 'seated') > servedIdx, 'no tutorial_step seated after served');
   assert(h.until(() => h.has(EVENT.seatDone, servedIdx), WAIT_S.headlessSeat), 'no seat_done within ' + WAIT_S.headlessSeat + ' s');
   const seatDoneIdx = h.idx(EVENT.seatDone, servedIdx);
@@ -4428,7 +4571,7 @@ function daysLoopHeadless(P) {
   assert(d3.season.day === 5 && d3.season.loadin === false && sameJSON(d3.season.dayLog, ['off', 'off', 'off', 'off', 'off', null, null]), 'no pick keeps the day, never the Load-in ' + describe(d3.season));
   const d4 = V(v6Save({ season: { week: 5, pick: 'birthday', day: 3 } }));
   assert(d4.season.week === 3 && d4.season.day === 0, 'a week that does not hold opens Monday ' + describe(d4.season));
-  assert(V({ v: 11 }) === null, '{ v: 11 } accepted');
+  assert(V({ v: 12 }) === null, '{ v: 12 } accepted');
   notes.push('morning shops cost ' + seen.join(', ') + ' Monday to Thursday');
   return notes.join('; ') + '; the report save reloads on Sunday, a Yard week writes { yard, 0 }, dirty v6 keys clamp';
 }
@@ -5088,7 +5231,9 @@ function foodInProgress(P, s) {
   return cook || board.stacks.some((x) => x.times.length > 0) || (Array.isArray(board.waiting) && board.waiting.length > 0) || board.slicing !== null
     || s.stations.table.spots.some((sp) => sp && sp.times.length > 0);
 }
-const threeWaiting = (s) => s.customers.filter((c) => c.booked === true && c.mode === 'waiting').length >= 3;
+// v3.7: booked guests go straight past the register, so 'waiting' is paid and waiting for the plate.
+const awaitsPlate = (c) => c.paid === true && c.fed !== true && (c.mode === 'toSeat' || c.mode === 'seated' || c.mode === 'togo');
+const threeWaiting = (s) => s.customers.filter((c) => c.booked === true && (c.mode === 'waiting' || awaitsPlate(c))).length >= 3;
 
 // Review 1 (X20.10): the full booking legs. A scripted player (econ.mjs's competent bot, ported) that
 // leaves one role's job to the card: 'run' never takes plates off the board (the plate a slice hands
@@ -5123,7 +5268,12 @@ function feltBotPick(P, s, leave) {
       return boardFits(c.meat, M[c.meat].plates) ? tile('board') : null;
     }
     if (c.kind === 'burnt') return tile('trash');
-    if (c.kind === 'plates') return tableFits(c.meat) ? tile('table') : null;
+    if (c.kind === 'plates') {
+      // v3.7: carry it to the seated guest who ordered it (the RUN leg leaves that to the card).
+      const g = leave === 'run' ? null : s.customers.filter((cu) => awaitsPlate(cu) && !cu.togo && cu.seat && cu.want === c.meat).sort((a, b) => a.paidAt - b.paidAt)[0];
+      if (g) { const se = P.MAP.seats.find((x) => x.id === g.seat); return { x: se.x, y: se.y }; }
+      return tableFits(c.meat) ? tile('table') : null;
+    }
     return null;
   }
   let pull = null, pullKey = -Infinity;
@@ -5133,6 +5283,8 @@ function feltBotPick(P, s, leave) {
     if (key > pullKey) { pullKey = key; pull = id; }
   }
   if (pull && pullKey >= 1) return tile(pull);
+  // v3.7: a plate on the counter for a seated guest goes to their table.
+  if (leave !== 'run' && s.customers.some((cu) => awaitsPlate(cu) && !cu.togo && cu.seat && s.stations.table.spots.some((x) => x && x.meat === cu.want))) return tile('table');
   const stockLeft = MEAT_IDS.some((m) => s.stock[m] > 0);
   const needsFire = (id, under) => {
     const ck = s.stations[id];
@@ -5148,7 +5300,7 @@ function feltBotPick(P, s, leave) {
   if (!stockLeft) return null;
   const cookable = (m) => !M[m].drumOnly || s.gear.drum === true;
   let pick = null;
-  const waiting = s.customers.filter((cu) => cu.mode === 'waiting' && cu.queueIndex >= 0).sort((a, b) => a.queueIndex - b.queueIndex);
+  const waiting = s.customers.filter((cu) => awaitsPlate(cu)).concat(s.customers.filter((cu) => cu.mode === 'waiting' && cu.queueIndex >= 0).sort((a, b) => a.queueIndex - b.queueIndex));
   for (const cu of waiting) {
     const m = cu.want;
     if (!(s.stock[m] > 0) || !cookable(m)) continue;
@@ -5170,7 +5322,8 @@ function feltBotPick(P, s, leave) {
 // booked, fed and wait sum (an unfed guest counts WAIT_ZERO_S, W22.9) and the card's row.
 // The angle redo: the RUN card idles at (2,8), five lane steps from the board (v2: one), so the fed
 // window opens a second later than v2's 4 s.
-const RUN_FED_S = 5;
+// v3.7: the RUN card now carries board to counter, then counter to table, so the window is wider.
+const RUN_FED_S = 8;
 const FIRE_SEEDS = [70, 71, 72, 73, 74, 75, 76, 77, 78, 79];
 function feltBooking(P, role, s, seed, kind) {
   const h = headless(P, null, seed);
@@ -5244,7 +5397,7 @@ function feltHeadless(P) {
     const t0 = st.clock;
     const rail = st.today.rail;
     st.stations.board.stacks = MEAT_IDS.filter((x) => rail[x] > 0).map((x) => ({ meat: x, times: new Array(rail[x]).fill(t0) }));   // fixture (X15.3)
-    const waitIds = st.customers.filter((c) => c.booked === true && c.mode === 'waiting').sort((a, b) => a.queueIndex - b.queueIndex).slice(0, 3).map((c) => c.id);
+    const waitIds = st.customers.filter((c) => c.booked === true && (c.mode === 'waiting' || awaitsPlate(c))).sort((a, b) => (a.paidAt || 1e9) - (b.paidAt || 1e9) || a.id - b.id).slice(0, 3).map((c) => c.id);
     const n0 = h.log.length;
     let fed4 = null, plates10 = null, gap = 0, maxGap = 0;
     const endAt = st.today.endAt;
@@ -5255,7 +5408,7 @@ function feltHeadless(P) {
       if (fed4 === null && s2.clock >= t0 + RUN_FED_S - 1e-9) fed4 = td.fed;
       if (plates10 === null && s2.clock >= t0 + 10 - 1e-9) plates10 = td.crew && td.crew['1'] ? td.crew['1'].plates : 0;
       if (s === 5 && td.pending > 0 && s2.clock < endAt - C.LAST_CALL_GUARD - 1e-9) {
-        const lineEmpty = !s2.customers.some((c) => c.booked === true && (c.mode === 'arriving' || c.mode === 'waiting'));
+        const lineEmpty = !s2.customers.some((c) => c.booked === true && (c.mode === 'arriving' || c.mode === 'waiting' || awaitsPlate(c)));
         if (lineEmpty && foodInProgress(P, s2)) { gap += dt; if (gap > maxGap) maxGap = gap; } else gap = 0;
       }
       return s2.loop === LOOP.report;
@@ -5761,6 +5914,32 @@ async function canvasTap(tx, ty) {
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   }
   taps += 1;
+}
+// v3.7: guests pay first. Ring up anyone waiting in line with a register tap.
+const lineWaitingExpr = F.customers + '.some((c) => c.queueIndex >= 0 && c.mode === "waiting")';
+async function ringLine() {
+  if (!(await ev(lineWaitingExpr)) || !(await ev(F.carrying + ' === null'))) return false;
+  const r = await goto('register', '!(' + lineWaitingExpr + ')');
+  return r.ok;
+}
+const seatedWants = (meatExpr) => F.customers + '.filter((c) => c.paid && !c.fed && !c.togo && c.seat && (c.mode === "seated" || c.mode === "toSeat") && c.want === ' + meatExpr + ').sort((a, b) => a.paidAt - b.paidAt)';
+const counterForSeated = F.customers + '.some((c) => c.paid && !c.fed && !c.togo && c.seat && (c.mode === "seated" || c.mode === "toSeat") && ' + F.tableSpots + '.some((sp) => sp && sp.meat === c.want && sp.times.length > 0))';
+// v3.7: a plate in hand goes to the seated guest who ordered it (a tap on their table), else onto the counter.
+async function deliverOrSet() {
+  const seat = await ev('(() => { const h = ' + F.carrying + '; if (!h || h.kind !== "plates") return null; const c = ' + seatedWants('h.meat') + '[0]; return c ? MAP.seats.find((x) => x.id === c.seat) : null; })()');
+  if (seat) {
+    const n0 = await ev(F.today + '.served');
+    await canvasTap(seat.x, seat.y + 1);
+    await settle();
+    if ((await ev(F.today + '.served')) > n0) return true;
+    tapNotes.push('seat via walkTo');
+    await ev('sim.' + SIM_METHODS.walkTo + '(' + seat.x + ', ' + seat.y + ')');
+    taps += 1;
+    await settle();
+    if ((await ev(F.today + '.served')) > n0) return true;
+  }
+  const r = await goto('table', F.carrying + ' === null');
+  return r.ok;
 }
 async function settle(maxSec = WAIT_S.walk) {
   const r = await until('!' + F.walking + ' && ' + F.nextTile + ' === null && ' + F.pathLen + ' === 0', maxSec);
@@ -7481,7 +7660,7 @@ async function browserChecks() {
     const sliced = await eventsOfType(EVENT.sliceDone);
     assert(sliced.length >= 1, 'no ' + EVENT.sliceDone + ' event');
     await advance(0);
-    if (t0) await expectStep('plate', 'table', 'after slice_done');
+    if (t0) await expectStep('customer', null, 'after slice_done');   // v3.7: the first plate brings the guest
     await liveBreath();
     return sliced[0].plates + ' plates sliced; board ' + (await ev(F.boardStacks + '.reduce((a, st) => a + st.times.length, 0)')) + ', in hand ' + (await ev(F.carrying + ' ? ' + F.carrying + '.times.length : 0'));
   }, { fatal: true });
@@ -7493,72 +7672,80 @@ async function browserChecks() {
   }, { fatal: true });
 
   await step('served with cash up and a served event', async () => {
+    const clk = [];
     const t0 = await tut();
-    if (t0) assert(t0.id === 'plate' && t0.target === 'table', 'the plate target is ' + describe(t0));
-    const nSet = await eventCount();
-    const a = await goto('table', tableHas(MEAT));
-    assert(a.ok, 'plate did not land on the table');
-    const setDown = await eventsOfType(EVENT.setDown);
-    assert(setDown.length >= 1, 'no ' + EVENT.setDown + ' event');
+    if (t0) assert(t0.id === 'customer' || t0.id === 'register', 'the step with the plate in hand is ' + describe(t0));
     let custId = null, tnote = '';
+    const rungAny = 'globalThis.__smoke.events.some((e) => e.type === "rung")';
     if (t0) {
-      // v2.1 step i: right after the set down, the gate opens on the plate and customer 1 walks in.
-      const evs = await eventsFrom(nSet);
-      const iSet = evs.findIndex((e) => e.type === EVENT.setDown);
+      // v3.7 step i: the slice opens the gate and customer 1 walks in, then pays at the register.
+      const evs = await eventsFrom(0);
+      const iSl = evs.findIndex((e) => e.type === EVENT.sliceDone);
       const iStep = evs.findIndex((e) => e.type === EVENT.tutorialStep && e.id === 'customer');
       const iGate = evs.findIndex((e) => e.type === EVENT.gateOpen);
       const iArr = evs.findIndex((e) => e.type === EVENT.customerArrived);
-      assert(iSet >= 0 && iStep > iSet && iGate > iStep && iArr > iGate, 'events after the set down ' + describe(evs.map((e) => e.type + (e.id !== undefined ? ':' + e.id : ''))));
+      assert(iSl >= 0 && iStep > iSl && iGate > iStep && iArr > iGate, 'events after the slice ' + describe(evs.slice(Math.max(0, iSl)).map((e) => e.type + (e.id !== undefined ? ':' + e.id : ''))));
       const gateOpens = await ev('C.' + C_NAMES.gateOpens);
       assert(nearly(evs[iGate].at, gateOpens, 0.1), EVENT.gateOpen + ' at clock ' + evs[iGate].at + ', wanted ' + gateOpens + ' (deviation 5)');
-      assert(await ev(F.clock + ' >= C.' + C_NAMES.gateOpens), 'clock ' + (await ev(F.clock)) + ' under GATE_OPENS after the plate');
       const opens = await eventsOfType(EVENT.gateOpen);
       assert(opens.length === 1, opens.length + ' ' + EVENT.gateOpen + ' events on day 1');
       const arr = evs[iArr];
       assert(arr.id === 1 && arr.meat === MEAT, 'first customer_arrived ' + describe(arr));
       custId = arr.id;
+    clk.push('A' + Math.round(await ev(F.clock)));
+      const w = await until('(' + F.customers + '.some((c) => c.id === 1 && c.mode === "waiting"))', WAIT_S.serve);
+      assert(w.ok, 'customer 1 never reached the front of the line');
       await advance(0);
-      const t1 = await tut();
-      assert(t1 && (t1.id === 'customer' || t1.id === 'seated'), 'step after the set down ' + describe(t1));
+      await expectStep('register', 'register', 'with the guest at the front');
       await screenshot(SCREENSHOTS.tutorialCustomer);
       tnote = '; gate open at ' + evs[iGate].at + ', banner ' + describe((await banner()) && (await banner()).lines);
       await liveBreath();
     }
-    // Carry any plate still on the board while the first one waits for a customer.
-    for (let i = 0; i < 3 && (await ev(boardHasPlates)); i++) {
-      const p = await goto('board', hasKind(CARRY_KIND.plates));
-      if (!p.ok) break;
-      await goto('table', F.carrying + ' === null');
-    }
+    // Pay first: the register rings the guest up, the price rises over it, and they go sit.
     const cashBefore = await ev(F.cash);
-    const servedBefore = await ev(F.today + '.served');
+    clk.push('B' + Math.round(await ev(F.clock)));
+    const g = await goto('register', rungAny);
+    assert(g.ok, 'the register tap rang nobody up; customers ' + describe(await ev(F.customers + '.map((c) => c.want + ":" + c.mode)')));
+    const rung = await eventsOfType('rung');
+    const reg = await ev('MAP.station("register").tiles[0]');
+    assert(rung.length >= 1 && (custId === null || rung[0].id === custId) && rung[0].by === 'you' && rung[0].x === reg.x * TILE_PX + 8 && rung[0].y === reg.y * TILE_PX, 'no rung event at the register: ' + describe(rung.slice(0, 2)));
+    const fx = await fxLog();
+    const overReg = (f) => f.y === Math.max(1, reg.y * TILE_PX - 18) && f.x >= reg.x * TILE_PX && f.x <= reg.x * TILE_PX + 16;
+    assert(fx.find((f) => f.kind === FX_KIND.cash && overReg(f)), 'fxLog has no ' + FX_KIND.cash + ' over the register; cash entries ' + describe(fx.filter((f) => f.kind === FX_KIND.cash)));
+    const cid = rung[0].id;
+    clk.push('C' + Math.round(await ev(F.clock)));
+    const seated = await until(F.customers + '.some((c) => c.id === ' + cid + ' && c.mode === "seated")', WAIT_S.serve);
+    assert(seated.ok && (await eventsOfType(EVENT.served)).length === 0, 'the paid guest did not sit and wait: ' + describe(await ev(F.customers + '.map((c) => c.id + ":" + c.mode)')));
+    if (t0) await expectStep('plate', 'table', 'after paying');
+    // Then the plate: on the counter, back up, and to the guest's table.
+    clk.push('D' + Math.round(await ev(F.clock)));
+    const a = await goto('table', tableHas(MEAT));
+    assert(a.ok, 'plate did not land on the counter');
+    assert((await eventsOfType(EVENT.setDown)).length >= 1, 'no ' + EVENT.setDown + ' event');
+    if (t0) await expectStep('deliver', 'table', 'with the plate on the counter');
+    clk.push('E' + Math.round(await ev(F.clock)));
+    const b2 = await goto('table', hasKind(CARRY_KIND.plates));
+    assert(b2.ok, 'did not take the plate back off the counter');
+    const seatId = await ev(F.customers + '.find((c) => c.id === ' + cid + ').seat');
+    const seat = await ev('MAP.seats.find((x) => x.id === ' + JSON.stringify(seatId) + ')');
+    clk.push('F' + Math.round(await ev(F.clock)));
+    await canvasTap(seat.x, seat.y + 1);   // the table in front of the guest
     let r = await until(F.today + '.served >= 1 || !(' + inService + ')', WAIT_S.serve);
     if (!(await ev(F.today + '.served >= 1'))) {
-      // Serving may need the player at the table; try once more from there.
-      await goto('table', 'true');
+      tapNotes.push('delivery via walkTo');
+      await ev('sim.' + SIM_METHODS.walkTo + '(' + seat.x + ', ' + seat.y + ')');
       r = await until(F.today + '.served >= 1 || !(' + inService + ')', WAIT_S.serveRetry);
     }
     await advance(0);
     const served = await eventsOfType(EVENT.served);
     const cash = await ev(F.cash);
     assert(served.length >= 1, 'no ' + EVENT.served + ' event after ' + r.t + 's; customers ' + describe(await ev(F.customers + '.map((c) => c.want + ":" + c.mode)')));
-    assert(cash > cashBefore || servedBefore >= 1, 'cash ' + cash + ' not above ' + cashBefore);
+    assert(cash > cashBefore, 'cash ' + cash + ' not above ' + cashBefore);
     const e = served[0];
-    if (custId !== null) assert(e.id === custId, 'the first served event is for customer ' + e.id + ', wanted ' + custId);
-    const spots = await ev('MAP.station("table").spotPx');
-    assert(Array.isArray(spots) && spots.some((sp) => sp.x === e.x && sp.y === e.y), 'served at (' + e.x + ',' + e.y + ') is not a spotPx ' + describe(spots));
-    const fx = await fxLog();
-    // v3.6: the guest pays at the register (the tutorial rings them up on the spot): a rung event at
-    // the register, and the cash number rises over it (register py - 18, clamped at y 1 on row 1).
-    const rung = await eventsOfType('rung');
-    const reg = await ev('MAP.station("register").tiles[0]');
-    assert(rung.length >= 1 && rung[0].id === e.id && rung[0].x === reg.x * TILE_PX + 8 && rung[0].y === reg.y * TILE_PX, 'no rung event at the register for customer ' + e.id + ': ' + describe(rung.slice(0, 2)));
-    const overReg = (f) => f.y === Math.max(1, reg.y * TILE_PX - 18) && f.x >= reg.x * TILE_PX && f.x <= reg.x * TILE_PX + 16;
-    const cashFx = fx.find((f) => f.kind === FX_KIND.cash && overReg(f));
-    assert(cashFx, 'fxLog has no ' + FX_KIND.cash + ' over the register; cash entries ' + describe(fx.filter((f) => f.kind === FX_KIND.cash)));
+    assert(e.id === cid && e.by === 'you' && e.x === seat.x * TILE_PX + 8 && e.y === seat.y * TILE_PX, 'the first served event ' + describe(e) + ', wanted customer ' + cid + ' by hand at ' + seatId);
     captures.midService = await captureFrame();
     await screenshot(SCREENSHOTS.midService);
-    return 'cash ' + cashBefore + ' to ' + cash + ', tip ' + e.tip + ', plate spot (' + e.x + ',' + e.y + ')' + tnote;
+    return 'cash ' + cashBefore + ' to ' + cash + ', tip ' + e.tip + ', carried to ' + seatId + ' at clock ' + Math.round(await ev(F.clock)) + ' ' + clk.join(',') + tnote;
   }, { fatal: true });
 
   let tutorialRan = false;
@@ -7643,6 +7830,14 @@ async function browserChecks() {
   await step('rest of the day cooked and carried', async () => {
     let cycles = 0;
     let loaded = 0;
+    const why = await ev('({ clock: ' + F.clock + ', stock: ' + F.stock + '.' + MEAT + ', carrying: ' + F.carrying + ', board: ' + boardHasPlates + ', phase: ' + F.phase + ' })');
+    // v3.7: the plate still on the board goes to whoever paid for it, or onto the counter.
+    for (let i = 0; i < 3 && (await ev(boardHasPlates)) && (await ev(inService)); i++) {
+      const p = await goto('board', hasKind(CARRY_KIND.plates));
+      if (!p.ok) break;
+      await ringLine();
+      await deliverOrSet();
+    }
     // v2.1: the tutorial put one unit on (step 22); the second goes on here.
     if ((await ev(inService)) && (await ev(F.stock + '.' + MEAT + ' > 0')) && (await ev(F.carrying + ' === null'))) {
       await feedFireIfLow();
@@ -7661,18 +7856,27 @@ async function browserChecks() {
         if (!a.ok) break;
         await goto('board', F.busy + ' !== null || ' + boardHasPlates);
         await until('(' + boardHasPlates + ' || ' + hasKind(CARRY_KIND.plates) + ') && ' + F.busy + ' === null', WAIT_S.slice);
-        if (await ev(hasKind(CARRY_KIND.plates))) await goto('table', F.carrying + ' === null');
+        await ringLine();
+        if (await ev(hasKind(CARRY_KIND.plates))) await deliverOrSet();
         for (let j = 0; j < 3 && (await ev(boardHasPlates)); j++) {
           const p = await goto('board', hasKind(CARRY_KIND.plates));
           if (!p.ok) break;
-          await goto('table', F.carrying + ' === null');
+          await ringLine();
+          await deliverOrSet();
+        }
+        // Plates left on the counter for guests who sat down since.
+        for (let j = 0; j < 3 && (await ev(counterForSeated)); j++) {
+          const q = await goto('table', hasKind(CARRY_KIND.plates));
+          if (!q.ok) break;
+          await deliverOrSet();
         }
         cycles += 1;
       } else if (hasCooking) {
+        await ringLine();
         await waitForDone();
       } else break;
     }
-    return loaded + ' unit(s) put on, ' + cycles + ' extra plate cycle(s)';
+    return loaded + ' unit(s) put on, ' + cycles + ' extra plate cycle(s); at the start ' + describe(why);
   });
 
   await step('day over', async () => {
@@ -9056,8 +9260,9 @@ async function browserChecks() {
     await nextDayTap();
     await quickTap('yard');
     for (let i = 0; i < 20 && (await ev('S().phase')) !== 'service'; i++) await advance(1);
-    for (let i = 0; i < 120 && !(await ev('S().customers.some((c) => c.mode === "waiting")')); i++) await advance(0.5);
-    assert(await ev('S().customers.some((c) => c.mode === "waiting")'), 'no waiting guest ' + describe(await ev('S().customers.map((c) => c.mode)')));
+    // v3.7: waiting is in line, or paid and waiting on the plate (the chip stays up for both).
+    for (let i = 0; i < 120 && !(await ev('S().customers.some((c) => c.mode === "waiting" || (c.paid && !c.fed && (c.mode === "seated" || c.mode === "togo")))')); i++) await advance(0.5);
+    assert(await ev('S().customers.some((c) => c.mode === "waiting" || (c.paid && !c.fed && (c.mode === "seated" || c.mode === "togo")))'), 'no waiting guest ' + describe(await ev('S().customers.map((c) => c.mode)')));
     await emulate({ width: 390, height: 844, deviceScaleFactor: 3, mobile: true });
     try {
       await sleep(TIMEOUT_MS.resize);
@@ -9075,7 +9280,7 @@ async function browserChecks() {
       // Order bubbles: small, tail on the head, never on a counter.
       const ob = await ev('g.orderBubbles');
       const badB = ob.filter((b) => (b.rect.x1 - b.rect.x0) > 24 || b.rect.y1 > b.head.y0 || b.counters.some((c) => b.rect.x0 < c.x1 && c.x0 < b.rect.x1 && b.rect.y0 < c.y1 && c.y0 < b.rect.y1));
-      assert(ob.length >= 1 && badB.length === 0, 'order bubbles ' + describe(ob));
+      assert(ob.length >= 1 && badB.length === 0, 'order bubbles ' + describe(ob) + ' guests ' + describe(await ev('S().customers.map((c) => [c.id, c.mode, c.paid, c.fed, c.x, c.y])')));
       // The near view centres the kitchen block vertically.
       const cm = await ev('g.camera.get()');
       const kc = await ev('g.kitchenBox');
