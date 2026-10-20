@@ -473,12 +473,10 @@ const C = Object.freeze({
   // v3.0 season and week [S 3], contract W2
   SEASON_WEEKS: 9,
   YEAR_MAX: 99,
+  // Every cook runs the Normal length (Joel 2026-10-19: one set time, no length setting).
   LENGTHS: Object.freeze({
-    short: Object.freeze({ seconds: 90, window: 55, factor: 0.7 }),
-    normal: Object.freeze({ seconds: 125, window: 80, factor: 1.0 }),
-    long: Object.freeze({ seconds: 160, window: 105, factor: 1.3 })
+    normal: Object.freeze({ seconds: 125, window: 80, factor: 1.0 })
   }),
-  LENGTH_ORDER: Object.freeze(['short', 'normal', 'long']),
   BASE_WINDOW: 80,                    // the Normal window every booking window is written in
   LAST_CALL_GUARD: 5,                 // last call is never later than the hard end minus this
   // fees and pay [S 3.2], [S 3.3], [S 5.4]
@@ -1035,7 +1033,6 @@ const STRINGS = Object.freeze({
   }),
   thirdName: Object.freeze(['Neighbors', "Word's out", 'In demand']),
   flames: Object.freeze(['Easy', 'Medium', 'Hard']),
-  lengthLabel: Object.freeze({ short: 'Short', normal: 'Normal', long: 'Long' }),
   defaultName: 'Pitmaster',
   defaultPit: 'Your Pit',
   names: Object.freeze(['June', 'Marcus', 'Rosa', 'Theo', 'Maya', 'Dale', 'Nora', 'Gus', 'Ivy', 'Hank',
@@ -1282,8 +1279,6 @@ const STRINGS = Object.freeze({
     news: 'Pit news',
     finaleNews: 'The finale is week 9. With the drum smoker it is a {n} guest cook.',   // R-3
     finaleTable: 'The finale is {n} guests. A bigger table lets five wait in line.',   // Q-6
-    lengthH: 'Event length',
-    lengthHelp: '{s} seconds a cook.',
     controls: 'Controls',
     newGame: 'New game',
     // sheets
@@ -1823,8 +1818,8 @@ function mix32(a, b, c) {
   return h >>> 0;
 }
 
-function lengthRow(len) {
-  return C.LENGTH_ORDER.includes(len) ? C.LENGTHS[len] : C.LENGTHS.normal;
+function lengthRow() {
+  return C.LENGTHS.normal;
 }
 
 function hasGear(gear, id) {
@@ -1926,8 +1921,8 @@ function feeFor(headcount, menu, k) {
 // Fee, deposit and the rest of an offer at a length, without the host. Q-2: the Season finale
 // ignores the length (its own window, Normal's headcount factor). X3.4 step 3: `menuIn` is the week's
 // menu pair (undefined reads the row's own menu) and `k` the third's fee factor.
-function offerFields(rowDef, gear, len, menuIn, k) {
-  const L = rowDef.id === 'finale' ? C.LENGTHS.normal : lengthRow(len);
+function offerFields(rowDef, gear, menuIn, k) {
+  const L = lengthRow();
   const isYard = rowDef.id === 'yard';
   const menu = menuOf(menuIn === undefined ? rowDef : { id: rowDef.id, menu: menuIn }, gear);
   const win = rowDef.window * L.window / C.BASE_WINDOW;
@@ -2029,7 +2024,6 @@ function genOffers(input) {
   const cash = finiteOr0(readKey(inp, 'cash'));
   const gearIn = readKey(inp, 'gear');
   const gear = isPlainObject(gearIn) ? gearIn : {};
-  const len = C.LENGTH_ORDER.includes(readKey(inp, 'length')) ? readKey(inp, 'length') : 'normal';
   const r = mulberry32(mix32(seed, year, week));
   const ry = mulberry32(mix32(seed ^ 0x4D454E55, year, 0));
   const rv = mulberry32(mix32(seed ^ 0x56415249, year, week));
@@ -2077,13 +2071,13 @@ function genOffers(input) {
     seen.add(t.id);
     const n = menus.length;
     let mi = (m0 + week - 1) % n;
-    let o = offerFields(t, gear, len, menus[mi], kThird);
+    let o = offerFields(t, gear, menus[mi], kThird);
     if (!o.safe && mi !== 0) {
-      const first = offerFields(t, gear, len, menus[0], kThird);
+      const first = offerFields(t, gear, menus[0], kThird);
       if (first.safe) {
         for (let k = 1; k < n; k++) {
           const j = (mi + k) % n;
-          const oj = j === 0 ? first : offerFields(t, gear, len, menus[j], kThird);
+          const oj = j === 0 ? first : offerFields(t, gear, menus[j], kThird);
           if (oj.safe) { mi = j; o = oj; break; }
         }
       }
@@ -2196,7 +2190,7 @@ function genOffers(input) {
         const n = best.menus.length;
         for (let k = 1; k <= n; k++) {
           const j = (best.o.menuIdx + k) % n;
-          const oj = offerFields(best.row, gear, len, best.menus[j], kThird);
+          const oj = offerFields(best.row, gear, best.menus[j], kThird);
           if (!oj.safe) continue;
           oj.id = 'invite';
           oj.invite = true;
@@ -2231,7 +2225,7 @@ function genOffers(input) {
     || a.o.difficulty - b.o.difficulty || a.o.pay - b.o.pay || a.idx - b.idx);
   const out = picked.map((x) => freezeOffer(x.o, drawHost()));
   if (inviteO !== null) out.push(freezeOffer(inviteO, drawHost()));
-  out.push(freezeOffer(offerFields(BOOKINGS.yard, gear, len, undefined, kThird), null));
+  out.push(freezeOffer(offerFields(BOOKINGS.yard, gear, undefined, kThird), null));
   return out;
 }
 
@@ -2634,8 +2628,6 @@ function validateSave(obj) {
       ? { name: cleanName(readKey(playerIn, 'name'), STRINGS.defaultName), look: cleanLook(readKey(playerIn, 'look')) }
       : null;
     const pitName = v >= 4 ? cleanName(readKey(obj, 'pitName'), STRINGS.defaultPit, C.PIT_NAME_MAX) : STRINGS.defaultPit;
-    const lenIn = v >= 4 ? readKey(readKey(obj, 'settings'), 'length') : undefined;
-    const settings = { length: C.LENGTH_ORDER.includes(lenIn) ? lenIn : 'normal' };
     if (owed) {
       player = null;
       season.results = [];
@@ -2680,7 +2672,7 @@ function validateSave(obj) {
     return {
       v: C.SAVE_VERSION, day, cash, rep, stock, charcoal, wood, gear, decor, stats, drivewayShown,
       tutorial: { done: !owed },
-      season, crew, crewSeq, hiring, player, pitName, settings, trophies, ribbons, offseason
+      season, crew, crewSeq, hiring, player, pitName, trophies, ribbons, offseason
     };
   } catch (e) {
     return null;
@@ -2870,7 +2862,7 @@ function createSim(saved, seed) {
     state.customers = [];
     state.today = newToday();
     state.till = null;
-    // v3.0 (W4.1, W22.1): the season, the creator's profile, the pit name, settings and wood.
+    // v3.0 (W4.1, W22.1): the season, the creator's profile, the pit name and wood. An old save's settings key is ignored.
     // createSim() settles state.loop from the save (W13.3).
     state.wood = s ? s.wood : 0;
     state.loop = owed ? 'tutorial' : 'week';
@@ -2904,7 +2896,6 @@ function createSim(saved, seed) {
     state.offseason = null;
     state.profile = s && s.player ? { name: s.player.name, look: cleanLook(s.player.look) } : null;
     state.pitName = s ? s.pitName : STRINGS.defaultPit;
-    state.settings = { length: s ? s.settings.length : 'normal' };
     acc = 0;
     tickCount = 0;
     pieceSeq = 0;
@@ -5205,7 +5196,7 @@ function createSim(saved, seed) {
   // About how many people today's rep and weather bring between the gate and last call: the
   // event length setting's window (W5.2), the v2.1 window on the tutorial day.
   function expectedCrowd() {
-    const win = state.loop === 'tutorial' ? (C.LAST_CALL - C.GATE_OPENS) : lengthRow(state.settings.length).window;
+    const win = state.loop === 'tutorial' ? (C.LAST_CALL - C.GATE_OPENS) : lengthRow().window;
     return Math.round(win / spawnInterval());
   }
 
@@ -5511,7 +5502,7 @@ function createSim(saved, seed) {
   function offerInput() {
     const s = state.season;
     return { seed: s.seed, year: s.year, week: s.week, rep: state.rep, cash: s.weekCash,
-      gear: Object.assign({}, state.gear), length: state.settings.length, avoid: avoidNames() };
+      gear: Object.assign({}, state.gear), avoid: avoidNames() };
   }
 
   function addonLegal(offer, meat) {
@@ -5569,7 +5560,7 @@ function createSim(saved, seed) {
     });
   }
 
-  // W22.11 and setLength(): this week's offers again from the stored inputs. Without `force` they
+  // W22.11: this week's offers again from the stored inputs. Without `force` they
   // are replaced only when the result differs. The pick keeps by id, the add-on when still legal.
   // `keep` (a gear buy) holds the shown cards' numbers (keepShown).
   function regenOffers(force, keep) {
@@ -5664,9 +5655,9 @@ function createSim(saved, seed) {
       const can = canLoadUp();
       if (!can.ok) return { ok: false, message: can.reason };
     }
-    const b = yardDay ? freezeOffer(offerFields(BOOKINGS.yard, state.gear, state.settings.length, undefined, 1), null) : s.booking;
+    const b = yardDay ? freezeOffer(offerFields(BOOKINGS.yard, state.gear, undefined, 1), null) : s.booking;
     const isBooking = !yardDay;
-    const L = lengthRow(state.settings.length);
+    const L = lengthRow();
     const weekday = yardDay && s.day <= 4;
     const endAt = b.type === 'finale' ? C.COMP_SECONDS : (weekday ? Math.round(L.seconds * C.YARD_DAY_FRAC) : L.seconds);   // Q-2, D4.3
     let overnight = null;
@@ -6332,7 +6323,7 @@ function createSim(saved, seed) {
     };
   }
 
-  // W11: cash, gear, decor, hires, the profile, settings and stats keep; word of mouth carries at
+  // W11: cash, gear, decor, hires, the profile and stats keep; word of mouth carries at
   // the larger of the floor and 75 percent; the cooler empties; charcoal and wood keep.
   function startSeason() {
     if (state.loop !== 'seasonEnd') return false;
@@ -6406,20 +6397,6 @@ function createSim(saved, seed) {
 
   function look() {
     return Object.assign({}, state.profile !== null ? state.profile.look : DEFAULT_LOOK);
-  }
-
-  function setLength(len) {
-    if (typeof len !== 'string' || !C.LENGTH_ORDER.includes(len) || state.phase !== 'morning') return { ok: false, message: '' };
-    if (state.loop === 'tutorial') {
-      state.settings.length = len;
-      emit('save_wanted', { reason: 'settings' });
-      return { ok: true, message: '' };
-    }
-    if (!inWeek()) return { ok: false, message: '' };
-    state.settings.length = len;
-    regenOffers(true);
-    emit('save_wanted', { reason: 'settings' });
-    return { ok: true, message: '' };
   }
 
   function fanThird() {
@@ -6518,7 +6495,7 @@ function createSim(saved, seed) {
       return tot;
     }
     // R-5: BAGS_PER_COOKER is a Normal cook's worth; a Short or Long cook scales it by its seconds.
-    const secs = b !== null && b.type === 'finale' ? C.COMP_SECONDS : lengthRow(state.settings.length).seconds;   // Q-2, v3.3
+    const secs = b !== null && b.type === 'finale' ? C.COMP_SECONDS : lengthRow().seconds;   // Q-2, v3.3
     let perCooker = Math.ceil(C.BAGS_PER_COOKER * secs / C.LENGTHS.normal.seconds - 1e-9);
     // Review 1 (contract X20.2): a FIRE card whose fireSense sits above FIRE_MAX - FIRE_ADD adds a bag
     // every (FIRE_MAX - fireSense) / KETTLE_DECAY seconds, so the cart buys that many a cooker when
@@ -7439,7 +7416,6 @@ function createSim(saved, seed) {
       ? { name: cleanName(state.profile.name, STRINGS.defaultName), look: cleanLook(state.profile.look) }
       : null;
     out.pitName = cleanName(state.pitName, STRINGS.defaultPit, C.PIT_NAME_MAX);
-    out.settings = { length: C.LENGTH_ORDER.includes(state.settings.length) ? state.settings.length : 'normal' };
     // v3.3: the shelf, the ribbons and the open Offseason picks
     out.trophies = state.trophies.slice(0, C.TROPHY_MAX).map((x) => ({ year: x.year, contest: x.contest, place: 1 }));
     out.ribbons = {};
@@ -7525,7 +7501,7 @@ function createSim(saved, seed) {
     skipTutorial, tutorialStep,
     // v3.0 (W5.1)
     bookOffer, setAddon, railFor, canLoadUp, loadUp, finishReport, startSeason, seasonEndPreview,
-    setPlayer, randomLook, look, setLength, fanThird, offerSlots, coolerCap, inventory, meatRoom,
+    setPlayer, randomLook, look, fanThird, offerSlots, coolerCap, inventory, meatRoom,
     prefill, settle,
     gateWaiting,   // Q-6
     // v3.1 (X7)

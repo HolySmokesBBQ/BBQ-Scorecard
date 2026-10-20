@@ -3170,8 +3170,7 @@ function buildWeekAt(level) {
   if (rv) { body.appendChild(tWeek); body.appendChild(tPit); body.appendChild(tSeason); }
   else { body.insertBefore(strip, body.firstChild); body.appendChild(tWeek); body.appendChild(tPit); body.appendChild(tSeason); }
 
-  // Event length, Controls, New game.
-  foot.appendChild(lengthSection(s));
+  // Controls, New game.
   const how = btn('week-controls', U('controls'), 'alt', function () { openHowto('week-controls'); });
   const fresh = btn('week-new', U('newGame'), 'alt', function () { openConfirm('week'); });
   foot.appendChild(mk('div', { cls: 'foot-row' }, [how, fresh]));
@@ -3448,8 +3447,7 @@ function finaleWith(s, extra) {
   const gear = Object.assign({}, s.gear, extra || {});
   let list = null;
   try {
-    list = PitSim.genOffers({ seed: se.seed, year: se.year, week: C.SEASON_WEEKS || 9, rep: s.rep, cash: se.weekCash, gear: gear,
-      length: s.settings && s.settings.length ? s.settings.length : 'normal' });
+    list = PitSim.genOffers({ seed: se.seed, year: se.year, week: C.SEASON_WEEKS || 9, rep: s.rep, cash: se.weekCash, gear: gear });
   } catch (e) { list = null; }
   return list && list[0] && list[0].type === 'finale' ? list[0] : null;
 }
@@ -3777,26 +3775,6 @@ function newsCard(s) {
   }
   sec.appendChild(nb);
   sec.hidden = shown === 0;
-  return sec;
-}
-
-function lengthSection(s) {
-  const cur = s.settings && s.settings.length ? s.settings.length : 'normal';
-  const sec = mk('section', { id: 'len', cls: 'len', attrs: { 'aria-labelledby': 'len-h' } });
-  const lh = mk('div', { cls: 'len-head' });
-  lh.appendChild(mk('h3', { id: 'len-h', text: U('lengthH') }));
-  sec.appendChild(lh);
-  const row = mk('div', { cls: 'lenrow', attrs: { role: 'group', 'aria-labelledby': 'len-h' } });
-  const order = C.LENGTH_ORDER || ['short', 'normal', 'long'];
-  for (let i = 0; i < order.length; i++) {
-    const id = order[i];
-    const b = btn('len-' + id, STRINGS.lengthLabel ? STRINGS.lengthLabel[id] : id, 'alt', function () { sim.setLength(id); afterAct(); });
-    b.setAttribute('aria-pressed', id === cur ? 'true' : 'false');
-    row.appendChild(b);
-  }
-  sec.appendChild(row);
-  const L = C.LENGTHS && C.LENGTHS[cur] ? C.LENGTHS[cur].seconds : C.DAY_SECONDS;
-  lh.appendChild(mk('p', { id: 'len-help', cls: 'muted', text: U('lengthHelp', { s: L }) }));
   return sec;
 }
 

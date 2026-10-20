@@ -21,7 +21,7 @@
 //      node games/pit-sim/dev/econ.mjs --seeds 1-24     summary over a seed range
 //
 // 2. The season bot (W20): whole seasons with forced client stars per policy.
-//      node games/pit-sim/dev/econ.mjs --season [--seeds 50] [--seasons 5] [--length normal] [--verbose] [--trace]
+//      node games/pit-sim/dev/econ.mjs --season [--seeds 50] [--seasons 5] [--verbose] [--trace]
 //    Policies by forced stars: sharp 5, steady 3, rough 2. Each week, in the W22.19 order: pick
 //    (sharp and steady the highest pay safe offer; rough the Yard day while word of mouth is under
 //    C.DRIVEWAY_REP, else the highest pay safe offer it can load up; week 9 always the finale),
@@ -145,7 +145,6 @@ function seedList(spec) {
 }
 const SEEDS = seedList(arg('--seeds', SEASON_MODE ? '50' : '1-8'));
 const SEASONS = Math.max(1, Number(arg('--seasons', 5)) | 0);
-const LENGTH = arg('--length', 'normal');
 
 const DECOR_ORDER = ['chair1', 'lights', 'chair2', 'picnic2', 'flowers', 'birdbath'];
 const GEAR_ORDER = ['kettle2', 'cooler', 'runCard', 'bigtable', 'drum', 'tray', 'canopy'];   // the v2.1 day bot; v3.1: the buddy row is a RUN walk-in
@@ -155,7 +154,7 @@ const COOKERS = ['kettle1', 'kettle2', 'drum'];
 const ROW = Object.fromEntries(CATALOG.map((r) => [r.id, r]));
 const DEFAULT_NAME = 'Pitmaster', DEFAULT_PIT = 'Your Pit';
 
-const V3_METHODS = ['bookOffer', 'loadUp', 'finishReport', 'startSeason', 'setPlayer', 'settle', 'canLoadUp', 'setLength', 'prefill'];
+const V3_METHODS = ['bookOffer', 'loadUp', 'finishReport', 'startSeason', 'setPlayer', 'settle', 'canLoadUp', 'prefill'];
 function requireV3() {
   const probe = P.createSim(null, 1);
   const missing = V3_METHODS.filter((m) => typeof probe[m] !== 'function');
@@ -358,14 +357,13 @@ function passHiringDay(sim) {
 
 // A sim on the week 1 hub: the tutorial skipped, the creator finished with the default look, Hiring
 // Day left to the caller (draft true) or passed (draft false).
-function newSeasonSim(seed, length, draft) {
+function newSeasonSim(seed, draft) {
   const sim = P.createSim(null, seed);
   sim.skipTutorial();
   sim.drainEvents();
   sim.setPlayer(P.DEFAULT_LOOK, DEFAULT_NAME, DEFAULT_PIT);
   sim.drainEvents();
   if (!draft) passHiringDay(sim);
-  if (length && length !== 'normal' && sim.state.loop === 'week') sim.setLength(length);   // V-10: setLength is week only
   sim.drainEvents();
   return sim;
 }
@@ -431,7 +429,7 @@ function morning(sim) {
 }
 
 function dayRun(seed, days) {
-  const sim = newSeasonSim(seed, LENGTH, false);
+  const sim = newSeasonSim(seed, false);
   const rows = [];
   const firsts = {};
   for (let d = 1; d <= days; d++) {
@@ -484,7 +482,7 @@ function table(rows) {
 
 function dayMode() {
   const one = dayRun(SEED, DAYS);
-  console.log('Competent bot' + (WITH_DECOR ? ' with decor' : '') + ', seed ' + SEED + ', ' + DAYS + ' events through the week hub, length ' + LENGTH
+  console.log('Competent bot' + (WITH_DECOR ? ' with decor' : '') + ', seed ' + SEED + ', ' + DAYS + ' events through the week hub, Normal length'
     + ' (Yard days, week 9 the finale; wages includes the ' + C.DAILY_COSTS + ' daily costs; pay = deposit + rest + menu bonus; seat = seat tips)\n');
   console.log(table(one.rows));
   console.log('\nFirst bought: ' + (Object.entries(one.firsts).map(([k, v]) => k + ' day ' + v).join(', ') || 'nothing'));
@@ -517,11 +515,11 @@ function median(list) {
 }
 const medianNum = (list) => { const v = list.filter((x) => Number.isFinite(x)).sort((a, b) => a - b); return v.length ? v[Math.floor(v.length / 2)] : NaN; };
 
-// The Birthday's prefill meat cost on an empty cooler at this length (W22.21), now on the v3.1
+// The Birthday's prefill meat cost on an empty cooler (W22.21), now on the v3.1
 // Birthday of seed 1, week 1 (its size is one SAFE_SIZES draw, X3.4).
-function birthdayMeatCost(length) {
+function birthdayMeatCost() {
   const gear = Object.fromEntries(Object.keys(P.createSim(null, 1).state.gear).map((g) => [g, false]));
-  const offers = P.genOffers({ seed: 1, year: 1, week: 1, rep: C.START_REP, cash: C.START_CASH, gear, length });
+  const offers = P.genOffers({ seed: 1, year: 1, week: 1, rep: C.START_REP, cash: C.START_CASH, gear });
   const b = offers.find((o) => o.type === 'birthday');
   let cost = 0;
   for (const m of MEAT_IDS) {
@@ -585,10 +583,10 @@ function spendPass(sim, reserve) {
   return bought;
 }
 
-function seasonRun(policy, seed, seasons, length) {
-  const sim = newSeasonSim(seed, length, true);
+function seasonRun(policy, seed, seasons) {
+  const sim = newSeasonSim(seed, true);
   const s = sim.state;
-  const bdayCost = birthdayMeatCost(length);
+  const bdayCost = birthdayMeatCost();
   const res = { seed, drum: null, driveway: null, seasonCash: [], stuck: null, underZero: [], idle: [], weeks: [], fallbacks: 0,
     maxWages: 0, overBudget: [], wagesBySeason: [], payBySeason: [], left1: 0, sendoffs1: 0, walkins1: 0, crewAt: [], stretchLow: [],
     secsBySeason: [], yardDays: 0, noCook: 0 };   // v3.2: play seconds a season (2 s a quick day, cooks at endAt), the grinder's weekday Yard days
@@ -601,7 +599,6 @@ function seasonRun(policy, seed, seasons, length) {
     }
   };
   count(hiringDay(sim, true));
-  if (length && length !== 'normal') { sim.setLength(length); sim.drainEvents(); }   // setLength is week only (sim.js V-10)
   let lowStreak = 0;
   let wages = 0, pay = 0, secs = 0;
   const total = seasons * W();
@@ -841,8 +838,8 @@ function foodInProgress(s) {
   if (b.stacks.some((x) => x.times.length > 0) || (Array.isArray(b.waiting) && b.waiting.length > 0) || b.slicing !== null) return true;
   return s.stations.table.spots.some((sp) => sp && sp.times.length > 0);
 }
-function birthdayRun(seed, length) {
-  const sim = newSeasonSim(seed, length, false);
+function birthdayRun(seed) {
+  const sim = newSeasonSim(seed, false);
   const s = sim.state;
   const b = s.season.offers.find((o) => o.type === 'birthday');
   if (!b || !sim.bookOffer(b.id).ok) return { seed, error: 'no Birthday on offer' };
@@ -869,8 +866,8 @@ function birthdayRun(seed, length) {
 function seasonMode() {
   requireV3();
   requireV31();
-  const header = 'econ season bot (v3.1, X16): ' + SEEDS.length + ' seeds (' + SEEDS[0] + ' to ' + SEEDS[SEEDS.length - 1] + '), ' + SEASONS + ' seasons, length ' + LENGTH
-    + '; Birthday meat on an empty cooler ' + birthdayMeatCost(LENGTH) + '; driveway ' + C.DRIVEWAY_PRICE + ' at word of mouth ' + C.DRIVEWAY_REP + '; payroll budget ' + C.PAYROLL[0];
+  const header = 'econ season bot (v3.1, X16): ' + SEEDS.length + ' seeds (' + SEEDS[0] + ' to ' + SEEDS[SEEDS.length - 1] + '), ' + SEASONS + ' seasons, Normal length'
+    + '; Birthday meat on an empty cooler ' + birthdayMeatCost() + '; driveway ' + C.DRIVEWAY_PRICE + ' at word of mouth ' + C.DRIVEWAY_REP + '; payroll budget ' + C.PAYROLL[0];
   console.log(header);
   console.log('policy stars drum band result drivewayAffordable band(info) stuck idle');
   const checks = [];
@@ -878,7 +875,7 @@ function seasonMode() {
   const extra = [];
   const summary = {};
   for (const pol of POLICIES) {
-    const runs = SEEDS.map((seed) => seasonRun(pol, seed, SEASONS, LENGTH));
+    const runs = SEEDS.map((seed) => seasonRun(pol, seed, SEASONS));
     const drumMed = median(runs.map((r) => r.drum));
     const dwMed = median(runs.map((r) => r.driveway));
     const stuck = runs.filter((r) => r.stuck);
@@ -956,7 +953,7 @@ function seasonMode() {
   for (const line of extra) console.log(line);
   // X16 check 7, information.
   const bdays = [];
-  for (let seed = 1; seed <= 8; seed++) bdays.push(birthdayRun(seed, LENGTH));
+  for (let seed = 1; seed <= 8; seed++) bdays.push(birthdayRun(seed));
   const okB = bdays.filter((b) => !b.error);
   console.log('Birthday tick by tick, competent bot, no crew, seeds 1 to 8 (information): ' + bdays.map((b) => b.error ? 'seed ' + b.seed + ' ' + b.error
     : 'seed ' + b.seed + ' ' + b.fed + '/' + b.booked + ' fed, ' + b.stars + ' stars, empty line ' + b.maxGap + ' s').join('; '));

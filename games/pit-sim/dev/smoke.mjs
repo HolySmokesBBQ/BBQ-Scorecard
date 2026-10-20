@@ -148,9 +148,9 @@
 //  Q-2. Step 11 (a2): with the grate full, a tap on the cooler (walkTo its tile, the call a canvas tap
 //       makes) puts the raw piece back with no button; (b) checks the put back stays a button verb
 //       while a grate has room.
-//  Q-3. Step 12's reference model reads the finale at Normal whatever the length (sim.js Q-2); the
-//       literals are 16, 33 and 40 guests (fees 190, 390, 560) at every length, and the Birthday's
-//       window is 60 (41.25 at Short, 78.75 at Long).
+//  Q-3. Step 12's reference model reads every cook at Normal (2026-10-19: the length setting is
+//       gone); the finale literals are 16, 33 and 40 guests (fees 190, 390, 560), and the Birthday's
+//       window is 60.
 //  Q-4. Step 13 (pay): after the 3 star picnic the next week opens on the picnic again (sim.js Q-7).
 //       Step 14 (W7.3): the idle Birthday's last call is 90 (W26 literal); guests_missed fires after
 //       last_call, at the hard end, with the report's missed count. Step 16 (season end): the finale
@@ -187,7 +187,7 @@
 //      sequence: the r draws are the same, but the v3.1 display order (tiers, sizes) hands them to
 //      different cards, and the top third's repeat invite draws one host more than v3.0 did.
 //  25. W19 literals that the X3 variance moved (the Birthday's 12 guests, fee 100, deposit 30, rest
-//      14; the picnic's 275 and 83; the short and long fees; the week 2 add-on rail 8, 7, 5) are asserted
+//      14; the picnic's 275 and 83; the week 2 add-on rail 8, 7, 5) are asserted
 //      only on the draw that keeps the v3.0 shape (base menu, factor 1, safe tier, bottom third), and the
 //      reference formula is asserted on every draw.
 //  26. Step 21 "changing one look key changes the bust for every index" is checked pairwise, as step
@@ -393,8 +393,7 @@ const COLOR_KEYS = 'K U C O outline woodD woodM woodL paver paverD lawnA lawnB l
 // W2: the new C keys. FIXED keys must equal; the rest are tunable starting values (same kind).
 const C_W2 = {
   SEASON_WEEKS: 9, YEAR_MAX: 99,
-  LENGTHS: { short: { seconds: 90, window: 55, factor: 0.7 }, normal: { seconds: 125, window: 80, factor: 1.0 }, long: { seconds: 160, window: 105, factor: 1.3 } },
-  LENGTH_ORDER: ['short', 'normal', 'long'],
+  LENGTHS: { normal: { seconds: 125, window: 80, factor: 1.0 } },
   BASE_WINDOW: 80, LAST_CALL_GUARD: 5,
   FEE_MULT: 1.25, FEE_ROUND: 5, DEPOSIT_FRAC: 0.3, PAY_BASE: 0.3, PAY_PER_STAR: 0.14,
   ADDON_SHARE: 0.25, MENU_BONUS: 0.1, SPARE_FRAC: 0.1, BAGS_PER_COOKER: 6, LOW_CASH_BIRTHDAY: 60, SAFE_LOAD: 0.8,
@@ -409,7 +408,7 @@ const C_W2 = {
   SEASON_CARRY_REP: 0.75, SEASON_REP_FLOOR: 20,
   DRIVEWAY_REP: 34
 };
-const C_W2_FIXED = ['SAVE_VERSION', 'SEASON_WEEKS', 'NAME_MAX', 'NAME_PUNCT', 'LENGTHS', 'LENGTH_ORDER'];
+const C_W2_FIXED = ['SAVE_VERSION', 'SEASON_WEEKS', 'NAME_MAX', 'NAME_PUNCT', 'LENGTHS'];
 // W2 changed values and the v2.1 keys that stay (W2 last paragraph).
 const C_W2_EXACT = { SAVE_VERSION: 8, DRIVEWAY_PRICE: 400, GATE_OPENS: 30, LAST_CALL: 110, DAY_SECONDS: 125, STEPPER_MAX: 99, START_CASH: 80, START_REP: 20 };
 // W22.18: the keys whose starting values the W19 literals assume.
@@ -522,7 +521,7 @@ const FONT_FRAME = (ch) => {   // W16.2 font frame mapping
 };
 // W5.1: every new sim method (own properties).
 const SIM_METHODS_V3 = ['bookOffer', 'setAddon', 'railFor', 'canLoadUp', 'loadUp', 'finishReport', 'startSeason', 'seasonEndPreview',
-  'setPlayer', 'randomLook', 'look', 'setLength', 'fanThird', 'offerSlots', 'coolerCap', 'inventory', 'meatRoom', 'prefill', 'settle',
+  'setPlayer', 'randomLook', 'look', 'fanThird', 'offerSlots', 'coolerCap', 'inventory', 'meatRoom', 'prefill', 'settle',
   'gateWaiting'];   // W26 Q-6
 const LOOP = { tutorial: 'tutorial', creator: 'creator', week: 'week', prep: 'prep', cook: 'cook', report: 'report', seasonEnd: 'seasonEnd', hiring: 'hiring' };   // X1: hiring
 const EV3 = {
@@ -547,7 +546,7 @@ const ID3 = {
   offers: 'offers', offer: (id) => 'offer-' + id, book: (id) => 'book-' + id, nextEvent: 'next-event', go: 'go', goWhy: 'go-why',
   goDeposit: 'go-deposit', cardShop: 'card-shop', cardGear: 'card-gear', cardMenu: 'card-menu', cardCrew: 'card-crew',
   invCard: 'inv-card', invCharcoal: 'inv-charcoal', invEmpty: 'inv-empty', invCooler: 'inv-cooler', invSpoil: 'inv-spoil',
-  inv: (m) => 'inv-' + m, goal: 'goal', len: (id) => 'len-' + id, lenHelp: 'len-help', weekControls: 'week-controls', weekNew: 'week-new',
+  inv: (m) => 'inv-' + m, goal: 'goal', weekControls: 'week-controls', weekNew: 'week-new',
   sheet: 'sheet', sheetH: 'sheet-h', sheetBack: 'sheet-back', have: (id) => 'have-' + id, after: (id) => 'after-' + id, shopRoom: 'shop-room',
   creator: 'creator', creatorH: 'creator-h', crSub: 'cr-sub', crSign: 'cr-sign', crScene: 'cr-scene', crRandom: 'cr-random',
   crName: 'cr-name', crNameCount: 'cr-name-count', crPit: 'cr-pit', crPitCount: 'cr-pit-count', crGo: 'cr-go', crBack: 'cr-back', crNote: 'cr-note',
@@ -642,7 +641,6 @@ const W15 = ({
   weekLabel: Object.freeze(['Early spring', 'Spring', 'Late spring', 'Early summer', 'Summer', 'Late summer', 'Early fall', 'Fall', 'Competition weekend']),
   thirdName: Object.freeze(['Neighbors', "Word's out", 'In demand']),
   flames: Object.freeze(['Easy', 'Medium', 'Hard']),
-  lengthLabel: Object.freeze({ short: 'Short', normal: 'Normal', long: 'Long' }),
   defaultName: 'Pitmaster',
   defaultPit: 'Your Pit',
   names: Object.freeze(['June', 'Marcus', 'Rosa', 'Theo', 'Maya', 'Dale', 'Nora', 'Gus', 'Ivy', 'Hank',
@@ -806,8 +804,6 @@ const W15 = ({
     news: 'Pit news',
     finaleNews: 'The finale is week 9. With the drum smoker it is a {n} guest cook.',
     finaleTable: 'The finale is {n} guests. A bigger table lets five wait in line.',
-    lengthH: 'Event length',
-    lengthHelp: '{s} seconds a cook.',
     controls: 'Controls',
     newGame: 'New game',
     // sheets
@@ -2257,8 +2253,8 @@ function refModel(P) {
   const C = P.C, M = P.MEATS;
   const R = {};
   // W26 Q-2: the Season finale reads Normal whatever the length.
-  R.headcount = (row, L) => Math.round(row.guests * C.LENGTHS[row.id === 'finale' ? 'normal' : L].factor);
-  R.windowAt = (row, L) => row.window * C.LENGTHS[row.id === 'finale' ? 'normal' : L].window / C.BASE_WINDOW;
+  R.headcount = (row, L) => Math.round(row.guests * C.LENGTHS.normal.factor);
+  R.windowAt = (row, L) => row.window * C.LENGTHS.normal.window / C.BASE_WINDOW;
   // W3.3: an Offer's menu is in MEAT_IDS order, whatever order the row lists it in (the stretch stub lists brisket first).
   R.menuOf = (row, gear) => (row.menu === null ? MEAT_IDS.filter((m) => m !== 'brisket' || (gear && gear.drum === true)) : MEAT_IDS.filter((m) => row.menu.includes(m)));
   R.fee = (n, menu) => (menu.length ? Math.round(n * (menu.reduce((a, m) => a + M[m].price, 0) / menu.length) * C.FEE_MULT / C.FEE_ROUND) * C.FEE_ROUND : 0);
@@ -2318,7 +2314,7 @@ function refModel(P) {
   // W24 P-1: the grate time test. Slot seconds of the rail against grate slots x (gate + window) x SAFE_LOAD.
   R.capNeeds = (row, input) => {
     if (row.id === 'yard' || row.id === 'finale') return '';
-    const L = input.length;
+    const L = 'normal';   // every cook runs the Normal length
     const rail = R.rail(R.headcount(row, L), R.menuOf(row, input.gear), null);
     let need = 0;
     for (const m of MEAT_IDS) if (rail[m] > 0) need += Math.ceil(rail[m] / M[m].plates) * M[m].slots * M[m].cook;
@@ -2333,7 +2329,7 @@ function refModel(P) {
   };
   R.safe = (row, input) => R.menuOf(row, input.gear).every((m) => R.cookable(m, input.gear)) && R.unlockMet(row, input.rep, input.gear) && R.capNeeds(row, input) === '';
   R.offer = (row, input) => {
-    const L = input.length;
+    const L = 'normal';   // every cook runs the Normal length
     const menu = R.menuOf(row, input.gear);
     const n = row.id === 'yard' ? 0 : (row.id === 'finale' ? R.finaleCount(row, L, input.gear) : R.headcount(row, L));
     const fee = row.id === 'yard' ? 0 : R.fee(n, menu);
@@ -2394,9 +2390,9 @@ function refModel(P) {
   R.kOf = (third, stretch) => C.THIRD_PAY[third] * (stretch ? C.STRETCH_PAY : 1);   // X3.3
   R.feeK = (n, menu, k) => (menu.length ? Math.round(n * (menu.reduce((a, m) => a + M[m].price, 0) / menu.length) * C.FEE_MULT * k / C.FEE_ROUND) * C.FEE_ROUND : 0);
   R.pair = (pair) => MEAT_IDS.filter((m) => pair.includes(m));
-  R.base = (row, L) => Math.round(row.guests * C.LENGTHS[L].factor);
+  R.base = (row, L) => Math.round(row.guests * C.LENGTHS.normal.factor);
   R.capNeedsAt = (row, menu, n, input) => {
-    const L = input.length;
+    const L = 'normal';   // every cook runs the Normal length
     const need = R.slotSec(R.rail(n, menu, null));
     const span = C.GATE_OPENS + R.windowAt(row, L);
     const g = input.gear || {};
@@ -2409,7 +2405,7 @@ function refModel(P) {
   };
   R.safeAt = (row, menu, n, input) => menu.every((m) => R.cookable(m, input.gear)) && R.unlockMet(row, input.rep, input.gear) && R.capNeedsAt(row, menu, n, input) === '';
   R.offerAt = (row, menu, n, input, o) => {
-    const L = input.length;
+    const L = 'normal';   // every cook runs the Normal length
     const fee = R.feeK(n, menu, o.k);
     return { id: o.id || row.id, type: row.id, label: row.label, venue: row.venue, host: null, headcount: n, menu: menu.slice(),
       rail: R.rail(n, menu, null), pay: fee, deposit: R.deposit(fee), difficulty: row.flames, window: R.windowAt(row, L), patience: row.patience,
@@ -2430,7 +2426,7 @@ function refModel(P) {
       return names[k];
     };
     const avoidSet = () => new Set(Array.isArray(input.avoid) ? input.avoid : []);   // review 1: crew and pitmaster names
-    const L = input.length;
+    const L = 'normal';   // every cook runs the Normal length
     const third = R.thirdOf(input.rep);
     const kT = R.kOf(third, false), kS = R.kOf(third, true);
     if (input.week === C.SEASON_WEEKS) return { offers: R.comps(input), stretchId: null };   // step 1, v3.3: the competition
@@ -2670,7 +2666,7 @@ function migratedDefaults(s, label) {
   assert(s.season && s.season.year === 1 && s.season.week === 1 && sameJSON(s.season.results, []), label + ': season ' + describe(s.season));
   assert(s.season.pick === null && s.season.addon === null, label + ': pick and addon ' + describe(s.season && [s.season.pick, s.season.addon]));
   assert(Number.isInteger(s.season.seed) && s.season.seed >= 0, label + ': season.seed ' + describe(s.season.seed));
-  assert(s.settings && s.settings.length === 'normal', label + ': settings ' + describe(s.settings));
+  assert(!('settings' in s), label + ': kept a settings key ' + describe(s.settings));
   assert(s.wood === 0, label + ': wood ' + describe(s.wood));
   // v3.1 (X11.3, X15.1 step 6): no hires, so no cards, and Hiring Day is still owed.
   assert(!('hires' in s), label + ': kept a hires key ' + describe(s.hires));
@@ -2687,6 +2683,7 @@ function validateV4(P) {
   const want4 = base();
   want4.v = 8;
   delete want4.hires;
+  delete want4.settings;   // 2026-10-19: an old save's length setting is ignored
   Object.assign(want4, { crew: [], crewSeq: 1, hiring: null });
   // v3.3: the shelf, the ribbons and no open Offseason.
   Object.assign(want4, { trophies: [], ribbons: { sausage: 0, chicken: 0, ribs: 0, butt: 0, brisket: 0 }, offseason: null });
@@ -2706,7 +2703,7 @@ function validateV4(P) {
     ['player.name Ana<b>!', (s) => { s.player.name = 'Ana<b>!'; }, (r) => r.player && r.player.name === 'Anab'],
     ['look.skin 9', (s) => { s.player.look.skin = 9; }, (r) => r.player && r.player.look.skin === DEFAULT_LOOK.skin],
     ["pitName ''", (s) => { s.pitName = ''; }, (r) => r.pitName === W15.defaultPit],
-    ['settings.length turbo', (s) => { s.settings.length = 'turbo'; }, (r) => r.settings.length === 'normal'],
+    ['settings.length turbo', (s) => { s.settings.length = 'turbo'; }, (r) => !('settings' in r)],
     ['day 1 owing the tutorial with a player', (s) => { s.day = 1; s.tutorial = { done: false }; }, (r) => r.player === null && r.tutorial.done === false && r.season.week === 1 && r.season.results.length === 0],
     ['no results and no hires', (s) => { s.season.week = 1; s.season.results = []; s.season.pick = null; }, (r) => r.season.drafted === false && sameJSON(r.crew, [])]
   ];
@@ -2717,7 +2714,7 @@ function validateV4(P) {
     try { r = V(s); } catch (e) { throw new Error('v4 ' + label + ' threw: ' + e.message); }
     assert(r && r.v === 8, 'v4 ' + label + ' returned ' + describe(r && r.v));
     assert(!('hires' in r), 'v4 ' + label + ' kept a hires key');
-    assert(ok(r), 'v4 ' + label + ' gave ' + describe({ charcoal: r.charcoal, wood: r.wood, season: r.season, player: r.player, pitName: r.pitName, settings: r.settings, crew: r.crew }));
+    assert(ok(r), 'v4 ' + label + ' gave ' + describe({ charcoal: r.charcoal, wood: r.wood, season: r.season, player: r.player, pitName: r.pitName, crew: r.crew }));
   }
   const cyc = base(); cyc.season.self = cyc; cyc.player.look.loop = cyc;
   let threw = null;
@@ -2734,6 +2731,7 @@ function validateV5(P) {
   // D9: a v5 save migrates to v 6 on that week's Monday, nothing else moves.
   const want5 = base();
   want5.v = 8;
+  delete want5.settings;   // 2026-10-19: an old save's length setting is ignored
   Object.assign(want5.season, { day: 0, dayLog: [null, null, null, null, null, null, null], prepped: false, loadin: false, overnight: null, advance: 0 });
   // v3.3: the shelf, the ribbons and no open Offseason.
   Object.assign(want5, { trophies: [], ribbons: { sausage: 0, chicken: 0, ribs: 0, butt: 0, brisket: 0 }, offseason: null });
@@ -2823,6 +2821,16 @@ function crewWeek(P, seed, cards, over = {}) {
   if (over.rep !== undefined) h.st().rep = over.rep;
   if (over.gear) Object.assign(h.st().gear, over.gear);
   return h;
+}
+// Fixture: this week's offers again from the sim's own inputs (what setLength(current) used to do).
+function reOffer(h) {
+  const st = h.st(), se = st.season;
+  const avoid = st.crew.map((c) => c.name);
+  if (st.profile && typeof st.profile.name === 'string') avoid.push(st.profile.name);
+  se.offers = h.P.genOffers({ seed: se.seed, year: se.year, week: se.week, rep: st.rep, cash: se.weekCash, gear: Object.assign({}, st.gear), avoid });
+  se.booking = se.offers[0] || null;
+  se.addon = null;
+  st.cart = h.sim.prefill();
 }
 const cardOf = (h, id) => h.st().crew.find((c) => c.id === id) || null;
 // Book an offer, load up and settle it; returns the till.
@@ -3027,25 +3035,18 @@ function generatorHeadless(P) {
   } else notes.push('Birthday ' + bd.headcount + ' guests of ' + bd.menu.join(' and ') + ', fee ' + bd.pay);
   if (lit && sameJSON(pc.menu, ['chicken', 'butt'])) assert(R.feeK(20, pc.menu, 1) === 275, 'literal: the base picnic fee ' + R.feeK(20, pc.menu, 1) + ', wanted 275');
   notes.push('the stretch picnic pays ' + pc.pay + ' (' + pc.menu.join(' and ') + ')');
-  // W24 P-1: one kettle cannot feed the Church picnic, two can; the Birthday fits one at every length.
-  for (const L of C.LENGTH_ORDER) {
+  // W24 P-1: one kettle cannot feed the Church picnic, two can; the Birthday fits one. An old
+  // input's length key changes nothing (2026-10-19).
+  for (const L of ['normal', 'short']) {
     const one = P.genOffers(Object.assign({}, base, { week: 1, length: L }));
     const two = P.genOffers(Object.assign({}, base, { week: 1, length: L, gear: k2Gear }));
+    if (L !== 'normal') assert(sameJSON(one, P.genOffers(Object.assign({}, base, { week: 1 }))), 'a length key moved the offers ' + describe(one.map(offerBrief)));
     const p1 = by(one, 'picnic'), p2 = by(two, 'picnic'), b1 = by(one, 'birthday');
     assert(p1.safe === false && p1.needs === P.STRINGS.ui.needsKettle2, L + ': one kettle picnic safe ' + p1.safe + ', needs ' + describe(p1.needs));
     assert(p2.safe === true && p2.needs === '', L + ': two kettle picnic safe ' + p2.safe + ', needs ' + describe(p2.needs));
     assert(b1.safe === true, L + ': one kettle Birthday is not safe: ' + describe(b1.needs));
   }
-  notes.push('the picnic needs the second kettle at every length');
-  const LENS = { short: { bd: 8, pc: 14, bdWin: 41.25, win: 55, fees: [65, 195] }, long: { bd: 16, pc: 26, bdWin: 78.75, win: 105, fees: [130, 360] } };
-  for (const [L, want] of Object.entries(LENS)) {
-    const list = cmp(Object.assign({}, base, { week: 1, length: L }), L).got;
-    const b2 = by(list, 'birthday'), p2 = by(list, 'picnic');
-    assert(b2.base === want.bd && sizesOf(want.bd, b2.menu.length).includes(b2.headcount) && p2.headcount === want.pc && p2.base === want.pc, L + ' headcounts ' + b2.headcount + ' (base ' + b2.base + '), ' + p2.headcount);
-    assert(b2.window === want.bdWin && p2.window === want.win, L + ' windows ' + b2.window + ', ' + p2.window + ', wanted ' + want.bdWin + ' and ' + want.win);
-    if (lit && b2.headcount === want.bd && sameJSON(b2.menu, ['sausage', 'chicken'])) assert(b2.pay === want.fees[0], L + ' Birthday fee ' + b2.pay + ', wanted ' + want.fees[0]);
-    if (lit && sameJSON(p2.menu, ['chicken', 'butt'])) assert(R.feeK(want.pc, p2.menu, 1) === want.fees[1] && p2.pay === R.feeK(want.pc, p2.menu, kS0), L + ' picnic fee ' + p2.pay + ' (base ' + R.feeK(want.pc, p2.menu, 1) + ', wanted ' + want.fees[1] + ')');
-  }
+  notes.push('the picnic needs the second kettle');
   // X15.1 step 12: weeks 2 to 8 on two kettles, two loadable cards, exactly one sized up stretch, and
   // each type's menu pair moves on from the week before.
   let prev = null;
@@ -3093,12 +3094,10 @@ function generatorHeadless(P) {
     }
   }
   notes.push(invites + ' repeat invites at rep 80');
-  // v3.3 [S 3.5]: week 9 is the competition the fan rating third picks, the same at every length and gear.
-  for (const L of ['short', 'long']) {
-    for (const gear of [noGear, k2Gear, drumGear]) {
-      const o = P.genOffers(Object.assign({}, base, { week: 9, gear, length: L }))[0];
-      assert(o.id === 'finale' && o.comp && o.headcount === 0 && o.pay === 0 && o.deposit === 0 && o.host === null && o.day === 5, L + ' competition ' + describe(offerView(o)));
-    }
+  // v3.3 [S 3.5]: week 9 is the competition the fan rating third picks, the same at every gear.
+  for (const gear of [noGear, k2Gear, drumGear]) {
+    const o = P.genOffers(Object.assign({}, base, { week: 9, gear }))[0];
+    assert(o.id === 'finale' && o.comp && o.headcount === 0 && o.pay === 0 && o.deposit === 0 && o.host === null && o.day === 5, 'competition ' + describe(offerView(o)));
   }
   const f9 = cmp(Object.assign({}, base, { week: 9 }), 'week 9').got;
   assert(f9.length === 1 && f9[0].id === 'finale' && f9[0].comp.contest === 'backyard' && sameJSON(f9[0].menu, ['chicken', 'sausage', 'ribs', 'butt']) && f9[0].comp.entry === 20
@@ -3158,7 +3157,7 @@ function generatorHeadless(P) {
   }
   notes.push('stub slots 2, 3, 3 plus invite; the stretch list kept a safe offer every week');
   if (variantHits.size) notes.push('deviation 22 readings matched: ' + [...variantHits].map((i) => describe(GEN_VARIANTS[i])).join(', '));
-  return 'X3.4 reference matched on every input (ids, tiers, sizes, pay, menus, hosts), short and long, the finale; ' + notes.join('; ');
+  return 'X3.4 reference matched on every input (ids, tiers, sizes, pay, menus, hosts), Normal length, the finale; ' + notes.join('; ');
 }
 
 function starsHeadless(P) {
@@ -3406,13 +3405,11 @@ function weekLoopHeadless(P) {
   assert(deepEq(cartView(st()), h.sim.prefill()), 'cart after setAddon is not prefill()');
   const bad = h.sim.setAddon(pk2.menu[0]);
   assert(bad && bad.ok === false && bad.message === UI.addonNo, 'setAddon ' + pk2.menu[0] + ' ' + describe(bad));
-  const sl = h.sim.setLength('short');
-  assert(sl && sl.ok, 'setLength short ' + describe(sl));
-  assert(st().season.booking.id === 'picnic' && st().season.booking.headcount === Math.round(20 * C.LENGTHS.short.factor), 'after setLength short the pick is ' + describe(st().season.booking && [st().season.booking.id, st().season.booking.headcount]));
-  assert(st().settings.length === 'short', 'settings.length ' + st().settings.length);
+  // 2026-10-19: no length setting; every cook is Normal and the save carries no settings.
+  assert(typeof h.sim.setLength === 'undefined' && !('settings' in st()) && !('settings' in h.sim.serialize()), 'a length setting is still there ' + describe(st().settings));
   notes.push('max line ' + maxLine + ', spawned ' + arrived.length + ', missed ' + t.missed + ', orders ' + describe(orders));
   notes.push(boardHeadless(P));
-  return 'creator, Hiring Day passed, week 1 Birthday of ' + bk.headcount + ' idle to 1 star and rest pay ' + t.payRest + ', week 2 picnic plus ' + addon + ' ' + describe(r2) + ', short picnic 14; ' + notes.join('; ');
+  return 'creator, Hiring Day passed, week 1 Birthday of ' + bk.headcount + ' idle to 1 star and rest pay ' + t.payRest + ', week 2 picnic plus ' + addon + ' ' + describe(r2) + ', no length setting; ' + notes.join('; ');
 }
 
 // W25 R-2 (sim.js R-2): the second pork butt slices onto a board that holds the first butt's plates;
@@ -4146,7 +4143,7 @@ function daysLoopHeadless(P) {
   emptyCartNode(h.sim); h.sim.buy('sausage', 3); h.sim.buy('charcoal', 3);
   const y = h.sim.chooseDay('yard');
   h.drain();
-  const L = C.LENGTHS[h.st().settings.length];
+  const L = C.LENGTHS.normal;
   assert(y.ok && h.st().today.endAt === Math.round(L.seconds * C.YARD_DAY_FRAC) && h.st().today.weekday === true
     && h.st().today.lastCallAt === Math.min(h.st().today.gateAt + Math.round(L.window * C.YARD_DAY_FRAC), h.st().today.endAt - C.LAST_CALL_GUARD), 'the Tuesday Yard day ' + describe({ y, endAt: h.st().today.endAt }));
   h.until(() => h.st().loop === 'report', 200);
@@ -4192,7 +4189,7 @@ function daysPlaytestHeadless(P) {
   // V32-10: the weekday Yard day halves the gate too.
   const y = h.sim.chooseDay('yard');
   h.drain();
-  const t = h.st().today, L = C.LENGTHS[h.st().settings.length];
+  const t = h.st().today, L = C.LENGTHS.normal;
   const gate = Math.round(C.GATE_OPENS * C.YARD_DAY_FRAC);
   assert(y.ok && t.gateAt === gate && t.endAt === Math.round(L.seconds * C.YARD_DAY_FRAC)
     && t.lastCallAt === Math.min(gate + Math.round(L.window * C.YARD_DAY_FRAC), t.endAt - C.LAST_CALL_GUARD) && h.st().spawnAt === gate, 'the half day ' + describe({ gateAt: t.gateAt, lastCallAt: t.lastCallAt, endAt: t.endAt, spawnAt: h.st().spawnAt }));
@@ -4789,7 +4786,7 @@ function moodHeadless(P) {
   let stretchNote = 'no loadable stretch on seeds 671 to 690';
   for (let sd = 671; sd <= 690; sd++) {
     const ha = crewWeek(P, sd, [mkCard(P, 1, 'Rosa', 'run', [2, 2], { mood: 1 }), mkCard(P, 2, 'Dale', 'fire', [2, 2], { mood: 2 })], { cash: 400, gear: { kettle2: true } });
-    ha.sim.setLength(ha.st().settings.length);   // the offers again on the fixture's two kettles
+    reOffer(ha);   // the offers again on the fixture's two kettles
     ha.drain();
     const st5 = pickTier(ha, 'stretch');
     if (!st5) continue;
@@ -4929,7 +4926,7 @@ function feltBooking(P, role, s, seed, kind) {
   st().crewSeq = 2;
   st().cash = 2000;   // fixture: the cart buys the whole rail and the card's charcoal
   if (kind === 'picnic') st().gear.kettle2 = true;   // fixture
-  h.sim.setLength(st().settings.length);   // the offers again on the fixture's gear
+  reOffer(h);   // the offers again on the fixture's gear
   h.drain();
   const o = st().season.offers.find((x) => x.type === kind && x.safe);
   assert(o, role + ' ' + s + ' ' + kind + ': no loadable ' + kind + ' card in ' + describe(st().season.offers.map((x) => [x.id, x.safe])));
@@ -6454,7 +6451,7 @@ async function v3BrowserSteps(captures) {
     assert(!(await visible(ID3.goal)) && !(await visible('news')), '#goal or #news visible in week 1');
     const gearTile = await attrOf(ID3.cardGear, 'aria-label');
     assert(gearTile && gearTile.includes(fill(UI.gearNext, { label: goal.label, price: goal.price })), '#card-gear reads ' + describe(gearTile));
-    assert((await attrOf(ID3.len('normal'), 'aria-pressed')) === 'true', '#len-normal not pressed');
+    assert(await ev("!document.getElementById('len') && !document.querySelector('[id^=len-]')"), 'the event length buttons are still on the hub');
     // Height at 375 by 812 (W17.2), every control 44 px.
     let height;
     try {
@@ -8464,7 +8461,7 @@ async function browserChecks() {
     await nextDayTap();
     const r0 = await ev('S().season.results.length');
     await quickTap('yard');   // v3.4: #hub-start or Change plan
-    const L = C.LENGTHS[await ev('S().settings.length')];
+    const L = C.LENGTHS.normal;
     assert((await ev('S().today.endAt')) === Math.round(L.seconds * 0.5) && (await ev('S().today.weekday')) === true, 'the Tuesday Yard day endAt ' + (await ev('S().today.endAt')));
     for (let i = 0; i < 40 && !(await visible(ID.till)); i++) await advance(3);
     assert(await visible(ID.till) && (await ev('S().till.kind')) === 'yard', 'the short till did not show');
