@@ -1,6 +1,7 @@
-// Your Pit: background music. Original chiptune loops made with WebAudio at run time (square and
-// triangle oscillators, a noise hat, short envelopes). No audio files, no samples. The melodies are
-// written note by note from chord tones by a seeded generator, so every theme is our own.
+// Your Pit: background music. Original country and southern rock tunes played on a chiptune, made
+// with WebAudio at run time: a boom-chicka bass on the triangle, a train beat on noise, a picked lead
+// on a pulse wave with slides into notes, and banjo-style rolls on a second square. No audio files,
+// no samples. Every melody below is hand written for this game, one hook per theme in AABA form.
 //
 // PitSim.music.update({ day, week, comp, cook, waiting }) is called by game.js as the game runs; the
 // module picks a theme from the weekday (or the week 9 competition), a hub or cook version, and a
@@ -17,29 +18,100 @@
   const TICK_MS = 30;
   const RISE_PER_GUEST = 0.02;  // cook tempo rise per guest waiting
   const RISE_CAP = 0.14;        // at most 14 percent faster
+  const SQUARE_LP_HZ = 2600;    // lowpass on the square voices so the highs stay soft
 
-  const MAJOR = [0, 2, 4, 5, 7, 9, 11];
-  const MINOR = [0, 2, 3, 5, 7, 8, 10];
+  // Chords by name: root in semitones above the key and the triad shape.
+  const CH = {
+    I: [0, 'M'], ii: [2, 'm'], IV: [5, 'M'], V: [7, 'M'], vi: [9, 'm'],
+    i: [0, 'm'], iv: [5, 'm'], bVI: [8, 'M'], bVII: [10, 'M']
+  };
+  const SHAPE = { M: [0, 4, 7], m: [0, 3, 7] };
 
-  // Each theme: tempo, key, scale, chord roots (scale degrees, one per bar), steps per bar, swing,
-  // a seed for the melody and the hat and lead density for the hub and the cook versions.
+  // Each theme: tempo, key (MIDI of the tonic, lead plays an octave up), eighth-note swing, steps per
+  // bar (16 is 4/4 in sixteenths, 12 is a 3/4 waltz), whether the hub version has banjo rolls, the
+  // form and the sections. A section is four bars of [chord, melody]. Melody tokens are
+  // <offset>.<sixteenths> with the offset in semitones from the lead tonic, r for a rest, and an
+  // optional lead mark: ~ a slide up a whole step into the note (a bend), _ a half step slide, h a
+  // quick hammer-on from a whole step under.
   const THEMES = {
-    easy:   { bpm: 82,  key: 53, scale: MAJOR, prog: [0, 5, 3, 4], steps: 16, swing: 0.18, seed: 11, hub: { lead: 0.30, hat: 0.25 }, cook: { lead: 0.50, hat: 0.5 } },
-    bright: { bpm: 98,  key: 55, scale: MAJOR, prog: [0, 3, 1, 4], steps: 16, swing: 0.10, seed: 23, hub: { lead: 0.40, hat: 0.4 },  cook: { lead: 0.60, hat: 0.75 } },
-    party:  { bpm: 118, key: 57, scale: MAJOR, prog: [0, 3, 0, 4, 5, 3, 1, 4], steps: 16, swing: 0.0, seed: 37, hub: { lead: 0.50, hat: 0.6 }, cook: { lead: 0.70, hat: 1 } },
-    picnic: { bpm: 88,  key: 60, scale: MAJOR, prog: [0, 3, 4, 0], steps: 12, swing: 0.0, seed: 41, hub: { lead: 0.40, hat: 0.3 },  cook: { lead: 0.55, hat: 0.6 } },
-    comp:   { bpm: 110, key: 50, scale: MINOR, prog: [0, 6, 5, 6], steps: 16, swing: 0.0, seed: 59, hub: { lead: 0.45, hat: 0.5 },  cook: { lead: 0.65, hat: 0.9 } }
+    // Monday, Tuesday: a lazy front-porch shuffle in F.
+    easy: {
+      bpm: 84, key: 53, swing: 0.33, steps: 16, rolls: false,
+      form: ['A', 'A2', 'B', 'A2'],
+      sec: {
+        A:  [['I', 'r.2 ~4.2 7.4 9.2 7.2 4.4'], ['IV', '5.4 ~9.4 7.2 5.2 2.4'],
+             ['I', 'r.2 ~4.2 7.4 9.2 7.2 12.4'], ['V', '~11.4 9.2 7.2 ~2.6 r.2']],
+        A2: [['I', 'r.2 ~4.2 7.4 9.2 7.2 4.4'], ['IV', '5.4 ~9.4 7.2 5.2 2.4'],
+             ['I', 'r.2 ~4.2 7.4 9.2 7.2 12.4'], ['I', '9.2 7.2 4.2 2.2 ~0.6 r.2']],
+        B:  [['IV', '12.4 ~14.4 12.2 9.2 5.4'], ['IV', 'r.2 9.2 12.2 9.2 ~5.8'],
+             ['I', '4.2 7.2 9.2 12.2 ~9.4 7.4'], ['V', '~7.6 4.2 2.4 r.4']]
+      }
+    },
+    // Wednesday to Friday: a mid-tempo two-step in G, I vi IV V.
+    bright: {
+      bpm: 104, key: 55, swing: 0.15, steps: 16, rolls: false,
+      form: ['A', 'A2', 'B', 'A2'],
+      sec: {
+        A:  [['I', '7.2 7.2 ~9.2 7.2 4.4 r.2 2.2'], ['vi', '4.2 4.2 h7.2 4.2 ~2.4 0.4'],
+             ['IV', 'r.2 4.2 7.2 9.2 ~12.4 9.2 7.2'], ['V', '9.4 ~11.2 9.2 7.6 r.2']],
+        A2: [['I', '7.2 7.2 ~9.2 7.2 4.4 r.2 2.2'], ['vi', '4.2 4.2 h7.2 4.2 ~2.4 0.4'],
+             ['IV', 'r.2 4.2 7.2 9.2 ~12.4 9.2 7.2'], ['I', '9.2 7.2 4.2 2.2 ~4.2 0.6']],
+        B:  [['IV', '12.2 12.2 ~14.2 12.2 9.4 7.4'], ['IV', 'r.2 9.2 12.2 14.2 ~16.4 14.4'],
+             ['I', '12.2 9.2 7.2 4.2 ~7.4 4.2 2.2'], ['V', '~2.4 r.2 2.2 h4.2 2.2 -1.4']]
+      }
+    },
+    // Saturday: a fast hoedown in A with banjo rolls.
+    party: {
+      bpm: 138, key: 57, swing: 0, steps: 16, rolls: true,
+      form: ['A', 'A2', 'B', 'A2'],
+      sec: {
+        A:  [['I', '~4.2 4.1 7.1 9.2 7.2 12.2 9.1 7.1 4.2 r.2'], ['IV', '~9.2 9.1 12.1 14.2 12.2 9.4 r.4'],
+             ['I', '~4.2 4.1 7.1 9.2 7.2 12.2 14.1 12.1 9.2 7.2'], ['V', '~11.4 9.2 7.2 4.1 2.1 4.2 7.4']],
+        A2: [['I', '~4.2 4.1 7.1 9.2 7.2 12.2 9.1 7.1 4.2 r.2'], ['IV', '~9.2 9.1 12.1 14.2 12.2 9.4 r.4'],
+             ['I', '~4.2 4.1 7.1 9.2 7.2 12.2 14.1 12.1 9.2 7.2'], ['I', '9.2 7.1 4.1 2.2 4.2 ~0.6 r.2']],
+        B:  [['vi', 'r.2 9.2 12.2 9.2 ~16.4 12.2 9.2'], ['IV', '14.2 12.2 9.2 12.2 ~14.6 r.2'],
+             ['I', '12.2 16.2 12.2 9.2 7.2 9.2 ~4.4'], ['V', '7.1 9.1 7.1 4.1 2.2 4.2 ~7.6 r.2']]
+      }
+    },
+    // Sunday: a gentle gospel-picnic waltz in C.
+    picnic: {
+      bpm: 92, key: 48, swing: 0.2, steps: 12, rolls: false,
+      form: ['A', 'A2', 'B', 'A2'],
+      sec: {
+        A:  [['I', '4.4 ~7.4 9.2 7.2'], ['IV', '~9.4 12.4 9.2 7.2'],
+             ['I', '4.4 ~7.4 12.2 9.2'], ['V', '~7.6 4.2 2.4']],
+        A2: [['I', '4.4 ~7.4 9.2 7.2'], ['IV', '~9.4 12.4 9.2 7.2'],
+             ['I', '4.4 ~7.4 12.2 9.2'], ['I', '4.4 2.2 ~0.6']],
+        B:  [['IV', '~12.4 14.4 12.2 9.2'], ['I', '7.6 4.2 ~7.4'],
+             ['IV', '9.4 12.4 ~14.4'], ['V', '~11.6 9.2 7.4']]
+      }
+    },
+    // Week 9: an outlaw competition stomp in D minor.
+    comp: {
+      bpm: 112, key: 50, swing: 0, steps: 16, rolls: false,
+      form: ['A', 'A2', 'B', 'A2'],
+      sec: {
+        A:  [['i', '0.2 0.2 ~3.2 0.2 _5.2 3.2 0.4'], ['bVII', 'r.2 -2.2 0.2 3.2 ~7.4 3.2 0.2'],
+             ['bVI', '0.2 0.2 ~3.2 0.2 _5.2 3.2 ~10.4'], ['V', '~7.6 4.2 r.2 _1.2 -3.4']],
+        A2: [['i', '0.2 0.2 ~3.2 0.2 _5.2 3.2 0.4'], ['bVII', 'r.2 -2.2 0.2 3.2 ~7.4 3.2 0.2'],
+             ['bVI', '0.2 0.2 ~3.2 0.2 _5.2 3.2 ~10.4'], ['i', '7.2 5.2 3.2 _0.6 r.4']],
+        B:  [['iv', '~12.2 10.2 7.2 10.2 12.4 r.4'], ['iv', '~15.2 12.2 10.2 7.2 ~10.6 r.2'],
+             ['i', '12.2 12.2 10.2 7.2 _5.2 3.2 0.4'], ['V', '~4.4 7.2 4.2 1.4 ~4.4']]
+      }
+    }
   };
   // Monday 0 to Sunday 6.
   const DAY_THEME = ['easy', 'easy', 'bright', 'bright', 'bright', 'party', 'picnic'];
+  // A forward banjo roll over [root, third, fifth, octave], one note per sixteenth.
+  const ROLL = [1, 2, 3, 1, 2, 3, 1, 3];
 
   let AC = null;
   try { AC = root.AudioContext || root.webkitAudioContext || null; } catch (e) { AC = null; }
 
-  let ctx = null, master = null, noiseBuf = null;
+  let ctx = null, master = null, env = null;
   let muted = false, started = false, timer = null, created = 0;
   let want = { day: 0, week: 1, comp: false, cook: false, waiting: 0 };
-  let cur = null;               // the playing voice: { key, theme, mode, bus, step, next, bpm, pat }
+  let cur = null;               // the playing voice: { key, theme, mode, bus, sq, step, next, bpm, pat }
   const compiled = {};
 
   function midiHz(m) { return 440 * Math.pow(2, (m - 69) / 12); }
@@ -53,56 +125,69 @@
       return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
   }
-  function deg(th, d, oct) {
-    const n = th.scale.length;
-    const o = Math.floor(d / n);
-    const i = ((d % n) + n) % n;
-    return th.key + th.scale[i] + 12 * (o + (oct || 0));
+
+  function parseBar(str, S) {
+    const notes = [];
+    let pos = 0;
+    for (const tok of String(str).trim().split(/\s+/)) {
+      const m = /^([~_h]?)(r|-?\d+)\.(\d+)$/.exec(tok);
+      if (!m) continue;
+      const len = +m[3];
+      if (m[2] !== 'r' && pos < S) notes.push({ at: pos, off: +m[2], len: Math.min(len, S - pos), mark: m[1] });
+      pos += len;
+    }
+    return notes;
   }
 
-  // Build one loop: per step, an optional lead note, bass note, arp note and hat.
+  // Build one loop: per step, an optional lead note, bass note, chord stab or roll note, and drums.
   function compile(name, mode) {
     const k = name + ':' + mode;
     if (compiled[k]) return compiled[k];
     const th = THEMES[name];
-    const dens = th[mode];
-    const r = rng(th.seed);   // the same seed for both versions keeps the tune; density changes the fill
-    const S = th.steps, beat = S === 12 ? 3 : 4;
+    const S = th.steps, B = S / 4;
+    const cook = mode === 'cook';
+    const rolls = cook || th.rolls;
+    const bars = [];
+    for (const s of th.form) for (const b of th.sec[s]) bars.push(b);
     const out = [];
-    let last = 4;             // melody position in scale degrees above the root
-    for (let b = 0; b < th.prog.length; b++) {
-      const c = th.prog[b];
-      for (let i = 0; i < S; i++) {
-        const st = { lead: null, bass: null, arp: null, hat: 0 };
-        const onBeat = i % beat === 0;
-        // bass: root on beat one, fifth on the middle beat, a passing note at the end of some bars
-        if (i === 0) st.bass = deg(th, c, -2);
-        else if (i === S / 2) st.bass = deg(th, c + 4, -2);
-        else if (i === S - beat && r() < 0.4) st.bass = deg(th, c + 2, -2);
-        // arp: chord tones on the off beats, quiet
-        if (!onBeat && i % 2 === 0) st.arp = deg(th, c + [0, 2, 4][(i / 2) % 3], 0);
-        // lead: walk by step or leap to a chord tone, rest by density
-        const pr = r(), pr2 = r(), pr3 = r();
-        const keep = onBeat ? 0.6 + dens.lead * 0.4 : dens.lead * 0.7;
-        if (pr < keep) {
-          if (onBeat) {
-            const tones = [c, c + 2, c + 4, c + 7];
-            let best = tones[0];
-            for (const t of tones) if (Math.abs(t - last) < Math.abs(best - last)) best = t;
-            last = pr2 < 0.25 ? tones[Math.floor(pr3 * tones.length)] : best;
-          } else {
-            last += pr2 < 0.5 ? -1 : 1;
-          }
-          if (last < -1) last += 2;
-          if (last > 9) last -= 2;
-          st.lead = deg(th, last, 1);
-          st.len = onBeat && pr3 < 0.5 ? 2 : 1;
-        }
-        // hat: off beats always at full density, sixteenths by density
-        const hp = r();
-        if (!onBeat && (i % 2 === 0 ? hp < 0.3 + dens.hat * 0.7 : hp < dens.hat * 0.5)) st.hat = i % 2 === 0 ? 1 : 0.6;
-        out.push(st);
+    for (let bi = 0; bi < bars.length; bi++) {
+      const ch = CH[bars[bi][0]] || CH.I;
+      const nx = CH[bars[(bi + 1) % bars.length][0]] || CH.I;
+      const rootOff = ch[0] > 6 ? ch[0] - 12 : ch[0];
+      const bassRoot = th.key - 12 + rootOff;
+      const bassFifth = rootOff - 5 >= -7 ? bassRoot - 5 : bassRoot + 7;
+      const nxRoot = th.key - 12 + (nx[0] > 6 ? nx[0] - 12 : nx[0]);
+      const walk = bi % 4 === 3 && nx[0] !== ch[0];
+      const tri = SHAPE[ch[1]].map(function (x) { return th.key + ch[0] % 12 + x; });
+      const tones4 = [tri[0], tri[1], tri[2], tri[0] + 12];
+      const lead = parseBar(bars[bi][1], S);
+      const bar = [];
+      for (let i = 0; i < S; i++) bar.push({ lead: null, len: 0, mark: '', bass: null, blen: 3, stab: null, roll: null, kick: 0, snare: 0, hat: 0 });
+      for (const n of lead) { const st = bar[n.at]; st.lead = th.key + 12 + n.off; st.len = n.len; st.mark = n.mark; }
+      // Boom: root on beat one, the fifth on the middle beat (alternate bars in a waltz).
+      bar[0].bass = (B === 3 && bi % 2 === 1) ? bassFifth : bassRoot;
+      if (B === 4) bar[8].bass = bassFifth;
+      if (walk) {
+        const ws = B === 4 ? [8, 12, 14] : [4, 8, 10];
+        const wn = [-5, -3, -1];
+        for (let j = 0; j < 3; j++) { bar[ws[j]].bass = nxRoot + wn[j]; bar[ws[j]].blen = 1.8; }
       }
+      // Chicka: a short chord on the back beats, or a banjo roll in its place.
+      for (let i = 0; i < S; i++) {
+        const st = bar[i];
+        const beat = i % 4 === 0 ? i / 4 : -1;
+        if (rolls) st.roll = tones4[ROLL[i % 8]];
+        else if (beat > 0 && (B === 3 || beat % 2 === 1)) st.stab = tri;
+        // Train beat: soft kick on one and three, a snare burst on two and four, chugging eighths.
+        if (beat === 0 || (B === 4 && beat === 2)) st.kick = cook ? 1 : 0.8;
+        if (B === 4 && (beat === 1 || beat === 3)) st.snare = cook ? 1 : 0.6;
+        if (B === 3 && beat > 0) st.snare = cook ? 0.5 : 0.3;
+        if (i % 2 === 0) {
+          if (cook) st.hat = i % 4 === 2 ? 1 : 0.55;
+          else if (i % 4 === 2) st.hat = 0.6;
+        } else if (cook && name === 'party' && i % 4 === 3) st.hat = 0.35;
+      }
+      for (const st of bar) out.push(st);
     }
     return (compiled[k] = out);
   }
@@ -118,37 +203,86 @@
     return b;
   }
 
-  function tone(type, hz, t, dur, vol, bus) {
-    const o = ctx.createOscillator();
-    const g = ctx.createGain();
-    o.type = type;
-    o.frequency.setValueAtTime(hz, t);
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.linearRampToValueAtTime(vol, t + 0.006);
-    g.gain.setValueAtTime(vol, t + dur * 0.4);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    o.connect(g); g.connect(bus);
-    o.start(t); o.stop(t + dur + 0.02);
-  }
-  function hat(t, vol, bus) {
-    if (!noiseBuf) return;
-    const s = ctx.createBufferSource();
-    s.buffer = noiseBuf;
-    const f = ctx.createBiquadFilter();
-    f.type = 'highpass'; f.frequency.value = 7000;
-    const g = ctx.createGain();
-    g.gain.setValueAtTime(vol, t);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.04);
-    s.connect(f); f.connect(g); g.connect(bus);
-    s.start(t); s.stop(t + 0.05);
+  // The sound sources. E is { c: context, noise: buffer, pulse: periodic wave }.
+  function makeEnv(c) {
+    const n = Math.floor(c.sampleRate * 0.25);
+    const noise = c.createBuffer(1, n, c.sampleRate);
+    const d = noise.getChannelData(0);
+    const r = rng(7);
+    for (let i = 0; i < n; i++) d[i] = r() * 2 - 1;
+    // A 25 percent pulse with 24 harmonics: the twangy lead, without the top end of a true square.
+    const H = 24, re = new Float32Array(H + 1), im = new Float32Array(H + 1);
+    for (let h = 1; h <= H; h++) im[h] = (2 / (h * Math.PI)) * Math.sin(h * Math.PI * 0.25) * (1 - h / (H + 2));
+    let pulse = null;
+    try { pulse = c.createPeriodicWave(re, im); } catch (e) { pulse = null; }
+    return { c, noise, pulse };
   }
 
-  function playStep(v, t, sd) {
+  function note(E, kind, hz, t, dur, vol, out, mark) {
+    const c = E.c;
+    const o = c.createOscillator();
+    const g = c.createGain();
+    if (kind === 'pulse' && E.pulse) o.setPeriodicWave(E.pulse);
+    else o.type = kind === 'pulse' ? 'square' : kind;
+    if (mark === '~' || mark === '_') {
+      o.frequency.setValueAtTime(hz * Math.pow(2, (mark === '~' ? -2 : -1) / 12), t);
+      o.frequency.exponentialRampToValueAtTime(hz, t + Math.min(0.07, dur * 0.4));
+    } else if (mark === 'h') {
+      o.frequency.setValueAtTime(hz * Math.pow(2, -2 / 12), t);
+      o.frequency.setValueAtTime(hz, t + Math.min(0.035, dur * 0.3));
+    } else {
+      o.frequency.setValueAtTime(hz, t);
+    }
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(vol, t + 0.004);
+    g.gain.setValueAtTime(vol, t + dur * 0.35);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(out);
+    o.start(t); o.stop(t + dur + 0.02);
+  }
+  function noiseHit(E, t, type, freq, q, decay, vol, out) {
+    if (!E.noise) return;
+    const c = E.c;
+    const s = c.createBufferSource();
+    s.buffer = E.noise;
+    const f = c.createBiquadFilter();
+    f.type = type; f.frequency.value = freq; f.Q.value = q;
+    const g = c.createGain();
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + decay);
+    s.connect(f); f.connect(g); g.connect(out);
+    s.start(t); s.stop(t + decay + 0.02);
+  }
+  function kick(E, t, vol, out) {
+    const c = E.c;
+    const o = c.createOscillator();
+    const g = c.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(120, t);
+    o.frequency.exponentialRampToValueAtTime(45, t + 0.09);
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.14);
+    o.connect(g); g.connect(out);
+    o.start(t); o.stop(t + 0.16);
+  }
+
+  function playStep(E, v, t, sd) {
     const st = v.pat[v.step % v.pat.length];
-    if (st.bass !== null) tone('triangle', midiHz(st.bass), t, sd * 3.5, 0.9, v.bus);
-    if (st.arp !== null) tone('square', midiHz(st.arp), t, sd * 0.8, 0.10, v.bus);
-    if (st.lead !== null) tone('square', midiHz(st.lead), t, sd * (st.len || 1) * 0.9, 0.22, v.bus);
-    if (st.hat) hat(t, 0.25 * st.hat, v.bus);
+    if (st.bass !== null) note(E, 'triangle', midiHz(st.bass), t, sd * st.blen, 0.8, v.bus, '');
+    if (st.lead !== null) {
+      const len = st.len || 1;
+      const gate = len <= 2 ? 0.5 : (len <= 4 ? 0.7 : 0.85);   // short picked notes, longer ones ring
+      note(E, 'pulse', midiHz(st.lead), t, sd * len * gate, 0.30, v.sq, st.mark);
+    }
+    if (st.roll !== null) note(E, 'square', midiHz(st.roll), t, sd * 0.85, 0.055, v.sq, '');
+    if (st.stab) for (const m of st.stab) note(E, 'square', midiHz(m), t, sd * 1.1, 0.04, v.sq, '');
+    if (st.kick) kick(E, t, 0.7 * st.kick, v.bus);
+    if (st.snare) noiseHit(E, t, 'bandpass', 1600, 0.8, 0.09, 0.45 * st.snare, v.bus);
+    if (st.hat) noiseHit(E, t, 'highpass', 6000, 0.7, 0.03, 0.12 * st.hat, v.bus);
+  }
+  function stepLen(th, v) {
+    const base = 60 / v.bpm / 4;
+    return base * ((v.step % 4) < 2 ? 1 + th.swing : 1 - th.swing);   // swing on the eighth pairs
   }
 
   function tick() {
@@ -159,21 +293,28 @@
       const horizon = ctx.currentTime + LOOKAHEAD_S;
       if (v.next < ctx.currentTime - 0.5) v.next = ctx.currentTime + 0.05;   // after a suspend, catch up
       while (v.next < horizon) {
-        const base = 60 / v.bpm / (th.steps === 12 ? 3 : 4);
-        const sw = v.step % 2 === 0 ? 1 + th.swing : 1 - th.swing;
-        playStep(v, v.next, base);
-        v.next += base * sw;
+        playStep(env, v, v.next, 60 / v.bpm / 4);
+        v.next += stepLen(th, v);
         v.step++;
       }
     } catch (e) { /* never let the music break the game */ }
   }
 
+  function makeBus(c, dest, fadeIn) {
+    const bus = c.createGain();
+    if (fadeIn) {
+      bus.gain.setValueAtTime(0.0001, c.currentTime);
+      bus.gain.linearRampToValueAtTime(1, c.currentTime + FADE_S);
+    }
+    bus.connect(dest);
+    const sq = c.createBiquadFilter();
+    sq.type = 'lowpass'; sq.frequency.value = SQUARE_LP_HZ; sq.Q.value = 0.5;
+    sq.connect(bus);
+    return { bus, sq };
+  }
   function voice(name, mode) {
-    const bus = ctx.createGain();
-    bus.gain.setValueAtTime(0.0001, ctx.currentTime);
-    bus.gain.linearRampToValueAtTime(1, ctx.currentTime + FADE_S);
-    bus.connect(master);
-    return { key: name + ':' + mode, theme: name, mode, bus, step: 0, next: ctx.currentTime + 0.08, bpm: bpmFor(name, want), pat: compile(name, mode) };
+    const b = makeBus(ctx, master, true);
+    return { key: name + ':' + mode, theme: name, mode, bus: b.bus, sq: b.sq, step: 0, next: ctx.currentTime + 0.08, bpm: bpmFor(name, want), pat: compile(name, mode) };
   }
   function fadeOut(v) {
     try {
@@ -209,12 +350,8 @@
       master = ctx.createGain();
       master.gain.value = VOLUME;
       master.connect(ctx.destination);
-      const n = Math.floor(ctx.sampleRate * 0.06);
-      noiseBuf = ctx.createBuffer(1, n, ctx.sampleRate);
-      const d = noiseBuf.getChannelData(0);
-      const r = rng(7);
-      for (let i = 0; i < n; i++) d[i] = r() * 2 - 1;
-    } catch (e) { ctx = null; master = null; }
+      env = makeEnv(ctx);
+    } catch (e) { ctx = null; master = null; env = null; }
   }
 
   function startTimer() {
@@ -291,5 +428,28 @@
     };
   }
 
-  PitSim.music = { init, update, setMuted, isMuted: function () { return muted; }, state, themes: Object.keys(THEMES) };
+  // Dev only: render a theme into an OfflineAudioContext and report the peak. Not used by the game.
+  function renderTest(name, mode, seconds, waiting) {
+    const OAC = root.OfflineAudioContext || root.webkitOfflineAudioContext;
+    if (!OAC || !THEMES[name]) return Promise.resolve(null);
+    const sr = 44100, secs = seconds || 6;
+    const c = new OAC(1, Math.ceil(sr * secs), sr);
+    const m = c.createGain();
+    m.gain.value = VOLUME;
+    m.connect(c.destination);
+    const E = makeEnv(c);
+    const b = makeBus(c, m, false);
+    const w = { cook: mode === 'cook', waiting: waiting || 0 };
+    const v = { theme: name, bus: b.bus, sq: b.sq, step: 0, next: 0.02, bpm: bpmFor(name, w), pat: compile(name, mode) };
+    const th = THEMES[name];
+    while (v.next < secs - 0.3) { playStep(E, v, v.next, 60 / v.bpm / 4); v.next += stepLen(th, v); v.step++; }
+    return c.startRendering().then(function (buf) {
+      const d = buf.getChannelData(0);
+      let peak = 0, sum = 0;
+      for (let i = 0; i < d.length; i++) { const a = Math.abs(d[i]); if (a > peak) peak = a; sum += d[i] * d[i]; }
+      return { name, mode, bpm: Math.round(v.bpm), steps: v.step, peak, rms: Math.sqrt(sum / d.length) };
+    });
+  }
+
+  PitSim.music = { init, update, setMuted, isMuted: function () { return muted; }, state, themes: Object.keys(THEMES), _renderTest: renderTest };
 })();
