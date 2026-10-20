@@ -3208,6 +3208,7 @@ function createSim(saved, seed) {
   const state = {};
   const events = [];
   let acc = 0;              // step accumulator in seconds
+  let moveBuf = null;       // one keyed step pressed mid-step, taken when it lands (not saved)
   let tickCount = 0;        // ticks since openGate, drives state.clock
   let pieceSeq = 0;         // piece ids within the day
   let planDraft = null;     // v3.5: the Monday planner's unsaved draft
@@ -3652,6 +3653,7 @@ function createSim(saved, seed) {
   // ---- 2.5.5 tap to walk and keyboard --------------------------------------------------------
 
   function walkTo(tx, ty) {
+    moveBuf = null;
     tx = Math.trunc(Number(tx));
     ty = Math.trunc(Number(ty));
     if (state.phase === 'service' && !state.paused && state.player.busy !== null) {
@@ -3701,14 +3703,26 @@ function createSim(saved, seed) {
     return false;
   }
 
-  function move(dir) {
-    if (!playerIdle()) return false;
+  // Joel 2026-10-20: between days the pitmaster walks the yard freely (keys only; nothing there
+  // costs time and every station stays shut). The next service starts him at the gate as before.
+  function hubWalk() {
+    return state.phase !== 'service' && !state.paused && !!state.player && state.player.busy === null;
+  }
+
+  // A press while a step is under way is kept (the latest one) and taken when the step lands;
+  // `noBuffer` (a held key polled every frame) skips that, so letting go never adds a step.
+  function move(dir, noBuffer) {
+    if (!playerIdle() && !hubWalk()) return false;
     if (!DIRS[dir]) return false;
     const p = state.player;
     p.path = [];
     p.target = null;
+    if (p.next !== null) {
+      if (!noBuffer) moveBuf = dir;
+      return !noBuffer;
+    }
+    moveBuf = null;
     p.face = dir;
-    if (p.next !== null) return false;
     const nx = p.x + DIRS[dir].dx;
     const ny = p.y + DIRS[dir].dy;
     if (!(walkable(p.x, p.y) ? walkable(nx, ny) : carrierWalkable(nx, ny))) return false;   // v3.7: back from a table
@@ -5578,6 +5592,7 @@ function createSim(saved, seed) {
     }
     const hadStep = p.next !== null || p.path.length > 0;
     if (hadStep) advanceMover(p, C.WALK_TILES_PER_S, dt);
+    takeMoveBuf();
     if (p.next === null && p.path.length === 0 && p.target !== null && p.target.deliver !== undefined) {
       const id = p.target.deliver;
       p.target = null;
@@ -5798,7 +5813,26 @@ function createSim(saved, seed) {
     }
   }
 
+  function takeMoveBuf() {
+    const p = state.player;
+    if (moveBuf === null || p.next !== null || p.path.length > 0) return;
+    const d = moveBuf;
+    moveBuf = null;
+    move(d);
+  }
+
   function step(dt) {
+    if (state.phase !== 'service' && hubWalk()) {
+      // Between days: only the pitmaster's own keyed steps advance.
+      let d = Number(dt);
+      if (!Number.isFinite(d) || d < 0) d = 0;
+      if (d > C.MAX_FRAME_DT) d = C.MAX_FRAME_DT;
+      const p = state.player;
+      p.path = []; p.target = null;
+      if (p.next !== null) advanceMover(p, C.WALK_TILES_PER_S, d);
+      takeMoveBuf();
+      return;
+    }
     if (state.phase !== 'service' || state.paused) return;
     applyLayout(state.layout);
     let d = Number(dt);
@@ -6334,6 +6368,7 @@ function createSim(saved, seed) {
 
   // The v2 service setup shared by openGate() and loadUp().
   function startService(kind) {
+    moveBuf = null;
     tickCount = 0;
     acc = 0;
     pieceSeq = 0;

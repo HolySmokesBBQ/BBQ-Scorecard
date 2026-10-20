@@ -426,13 +426,18 @@ const DIRS = {
   ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right',
   w: 'up', a: 'left', s: 'down', d: 'right'
 };
+// The yard is drawn angled (tile x runs down and right, tile y down and left), so each key keeps
+// its grid direction, the one of the two nearest its screen direction that the pitmaster has always
+// had: Up walks up and right, Right down and right, Down down and left, Left up and left. Measured
+// on screen by dev/smoke.mjs --desktop (keyboard checks).
 const KEY_HELP = [
-  ['Arrow keys, W A S D', 'Move one tile a press. Hold a key to keep walking. Walking into a station turns you to face it.'],
-  ['Space, E', 'Do what the action button says.'],
+  ['Arrow keys, W A S D', 'Walk one tile a press, also between days. The yard is angled: Up goes up and right, Right goes down and right, Down goes down and left, Left goes up and left. Hold a key to keep walking.'],
+  ['Space, E', 'During service, do what the action button says.'],
   ['1 to 5', 'Pick sausage, chicken, ribs, pork butt or brisket.'],
   ['Q, Shift+Q', 'Next or previous meat.'],
   ['Escape, P', 'Pause and resume.'],
-  ['Tap the yard', 'Walk there. Tap a station to walk over and use it.']
+  ['Tap the yard', 'Walk there. Tap a station to walk over and use it.'],
+  ['Arrange yard', 'Tap a piece to pick it up. Arrow keys move it, Enter or Space sets it down, Escape leaves.']
 ];
 const BOARD_OFFS = [[1, 3], [8, 3], [1, 9], [8, 9], [4, 6]];   // board stacks, from the board's draw px (R-2: a fifth)
 const BOARD_DRAW_MAX = 8;                                  // R-2: plates drawn a stack, whatever C.BOARD_STACK holds
@@ -1205,9 +1210,10 @@ function readSeed() {
 function exposeGame() {
   PitSim.game = {
     // v3.9: arrange mode state for the harness (read only).
-    arrange: function () { return arr ? { draft: JSON.parse(JSON.stringify(arr.draft)), lift: arr.lift, aim: arr.aim ? { ok: arr.aim.ok, reason: arr.aim.reason, tiles: arr.aim.tiles } : null, msg: (document.getElementById('arr-msg') || {}).textContent || '' } : null; },
+    arrange: function () { return arr ? { draft: JSON.parse(JSON.stringify(arr.draft)), lift: arr.lift, aim: arr.aim ? { x: arr.aim.x, y: arr.aim.y, ok: arr.aim.ok, reason: arr.aim.reason, tiles: arr.aim.tiles } : null, msg: (document.getElementById('arr-msg') || {}).textContent || '' } : null; },
     // v3.6: the client x, y a tap on tile (tx, ty) acts on, after panning it into view (spec F).
     tileToClient: tileToClient,
+    playerClient: playerClient,
     camera: {
       // z and cssPerRp: CSS px per rp; device: device px per rp.
     get: function () { const o = camOrigin(); return { mode: cam.mode, x0: o[0], y0: o[1], vw: cam.vw, vh: cam.vh, z: cssPerRp(), cssPerRp: cssPerRp(), device: cam.z, follow: cam.follow, home: homeBox() }; },
@@ -1340,8 +1346,8 @@ function frame(now) {
   if (dt > C.MAX_FRAME_DT) dt = C.MAX_FRAME_DT;
 
   let s = sim.state;
-  if (held.size && !currentPanel && !s.paused && s.phase === 'service') {
-    held.forEach(function (d) { sim.move(d); });
+  if (held.size && !s.paused && ((!currentPanel && !arr) || besideYard())) {
+    held.forEach(function (d) { sim.move(d, true); });
   }
   sim.step(dt);
   pump();
@@ -6464,6 +6470,27 @@ function feedback() {
   setTimeout(function () { el.act.style.transform = ''; }, 100);
 }
 
+// Joel 2026-10-20: the desktop hub's side panel sits beside the yard, not over it, so the walk keys
+// still walk there (every other panel covers the yard or is a dialog).
+function besideYard() { return (currentPanel === 'clipboard' || currentPanel === 'week') && !!(mqDesktop && mqDesktop.matches); }
+function typing(t) {
+  const tag = t && t.tagName ? t.tagName : '';
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || !!(t && t.isContentEditable);
+}
+// Arrange: arrow keys move the lifted piece's preview a tile, Enter or Space sets it down.
+function arrKey(e, key, dir) {
+  if (!arr || !arr.lift || !arr.grab) return false;
+  if (dir) {
+    const v = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }[dir];
+    const at = arr.aim ? arr.aim : arr.grab;
+    arr.aim = arrAim(at.x + v[0], at.y + v[1]);
+    arrMsg(arr.aim.ok ? arrLifted() : arr.aim.reason);
+    return true;
+  }
+  if ((key === 'Enter' || key === ' ') && arr.aim) { arrDrop(arr.aim.x, arr.aim.y); return true; }
+  return false;
+}
+
 function onKeyDown(e) {
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   const key = e.key || '';
@@ -6473,8 +6500,19 @@ function onKeyDown(e) {
     return;
   }
   if (arr && !currentPanel) {
-    if (key === 'Escape') { e.preventDefault(); leaveArrange(false); }
+    if (key === 'Escape') { e.preventDefault(); leaveArrange(false); return; }
+    if (typing(e.target)) return;
+    const adir = DIRS[key] || DIRS[lower];
+    if (arrKey(e, key, adir)) { e.preventDefault(); return; }
     return;
+  }
+  if (besideYard() && !typing(e.target)) {
+    const hdir = DIRS[key] || DIRS[lower];
+    if (hdir) {
+      e.preventDefault();
+      if (!e.repeat) { held.add(hdir); sim.move(hdir); pump(); }
+      return;
+    }
   }
   if (currentPanel) {
     if (currentPanel === 'pause' && (key === 'Escape' || lower === 'p')) {
@@ -6507,6 +6545,7 @@ function onKeyDown(e) {
   const onControl = tag === 'BUTTON' || tag === 'A' || tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
   const dir = DIRS[key] || DIRS[lower];
   if (dir) {
+    if (typing(t)) return;
     e.preventDefault();
     if (!e.repeat) { held.add(dir); sim.move(dir); pump(); }
     return;
@@ -7517,6 +7556,13 @@ function clientToWorld(cx, cy) {
 // The client point of tile (tx, ty): its centre, or the nearest point that a tap there acts on the
 // tile (a station's own sprite, a walkable tile's diamond). Pans first unless opts.pan is false;
 // null when the point is off the canvas and pan is false.
+// The client point where the last frame drew the pitmaster's feet (harness: key directions on screen).
+let playerDrawn = null;
+function playerClient() {
+  if (!playerDrawn) return null;
+  const w = clientToWorld(0, 0);
+  return { x: w.r.left + (playerDrawn[0] - w.o[0]) * w.k, y: w.r.top + (playerDrawn[1] - w.o[1]) * w.k, X: playerDrawn[0], Y: playerDrawn[1] };
+}
 function tileToClient(tx, ty, opts) {
   if (!(opts && opts.pan === false)) camReveal(tx, ty);
   const w = clientToWorld(0, 0);
@@ -8178,6 +8224,7 @@ function drawSorted(s) {
       if (kind === 'till' && !B3) kind = 'buddy';   // v3.6: the TILL card draws through art3
     }
     const mx = Math.round(m.px), my = Math.round(m.py);
+    if (kind === 'player') playerDrawn = [isoX(mx + 8, my + 8) * RS, isoY(mx + 8, my + 8) * RS];
     push((mx + my) / TILE, 2, isoX(mx + 8, my + 8) * RS, function () { withShift(moverShift(mx, my), function () { drawMover(kind, m, s); }); keepPerson(null); });
   }
   const custs = s.customers.slice().sort(byId);

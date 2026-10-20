@@ -1220,7 +1220,11 @@ const KEYS = {
   escape: { key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 },
   p: { key: 'p', code: 'KeyP', windowsVirtualKeyCode: 80 },
   left: { key: 'ArrowLeft', code: 'ArrowLeft', windowsVirtualKeyCode: 37 },
-  down: { key: 'ArrowDown', code: 'ArrowDown', windowsVirtualKeyCode: 40 }
+  down: { key: 'ArrowDown', code: 'ArrowDown', windowsVirtualKeyCode: 40 },
+  up: { key: 'ArrowUp', code: 'ArrowUp', windowsVirtualKeyCode: 38 },
+  right: { key: 'ArrowRight', code: 'ArrowRight', windowsVirtualKeyCode: 39 },
+  w: { key: 'w', code: 'KeyW', windowsVirtualKeyCode: 87 },
+  space: { key: ' ', code: 'Space', windowsVirtualKeyCode: 32 }
 };
 const PHONE = { width: 375, height: 812, deviceScaleFactor: 2, mobile: true };
 const DESKTOP = { width: 1024, height: 820, deviceScaleFactor: 1, mobile: false };
@@ -9724,6 +9728,84 @@ async function browserChecks() {
     const def = await ev('({ lay: S().layout, ls: JSON.parse(localStorage.getItem(' + JSON.stringify(SAVE_KEY) + ')).layout, y: MAP.station("cooler").tiles[0].y })');
     assert(sameJSON(def.lay, {}) && sameJSON(def.ls, {}) && def.y === 6, 'Reset and Done ' + describe(def));
     return 'Cancel kept the moved yard; Reset and Done saved the default';
+  });
+
+  // Joel 2026-10-20: "the controls for desktop no longer work". Real key events (CDP), real frames.
+  await step('desktop keys: the hub walks beside its panel, each arrow on its screen diagonal, a press mid-step is kept, service walks and Space acts', async () => {
+    if (!DESKTOP_MODE) return 'desktop run only';
+    await reload(arrFixture());
+    await sleep(300);
+    const DV = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
+    // Screen sign of each key on the angled yard: [dX, dY] of the drawn feet.
+    const SCREEN = { up: [1, -1], right: [1, 1], down: [-1, 1], left: [-1, -1] };
+    const pos = () => ev('(() => { const p = S().player, c = g.playerClient(); return { x: p.x, y: p.y, next: p.next, panel: g.panel, phase: S().phase, X: c && c.X, Y: c && c.Y }; })()');
+    const open = (x, y) => ev('sim.walkable(' + x + ', ' + y + ')');
+    const hub = await pos();
+    assert((hub.panel === 'week' || hub.panel === 'clipboard') && hub.phase !== 'service', 'not on the desktop hub: ' + describe(hub));
+    // Down until all four neighbours are open (the spawn sits by the kettles).
+    for (let i = 0; i < 6; i++) {
+      const p = await pos();
+      const all = await ev('[[0,-1],[0,1],[-1,0],[1,0]].every(([dx, dy]) => sim.walkable(' + p.x + ' + dx, ' + p.y + ' + dy))');
+      if (all) break;
+      if (!(await open(p.x, p.y + 1))) { await keyPress(KEYS.right); await sleep(450); continue; }
+      await keyPress(KEYS.down); await sleep(450);
+    }
+    const start = await pos();
+    assert(start.y > hub.y || start.x > hub.x, 'hub keys did not walk the pitmaster: ' + describe(hub) + ' to ' + describe(start));
+    const seen = [];
+    for (const d of ['down', 'up', 'right', 'left']) {
+      const a = await pos();
+      await keyPress(KEYS[d]); await sleep(450);
+      const b = await pos();
+      const dX = Math.sign(Math.round(b.X - a.X)), dY = Math.sign(Math.round(b.Y - a.Y));
+      assert(b.x - a.x === DV[d][0] && b.y - a.y === DV[d][1], d + ' moved the tile ' + describe(a) + ' to ' + describe(b));
+      assert(dX === SCREEN[d][0] && dY === SCREEN[d][1], d + ' moved on screen by ' + describe([b.X - a.X, b.Y - a.Y]) + ', wanted signs ' + describe(SCREEN[d]));
+      seen.push(d + ' ' + (dX > 0 ? '+' : '-') + 'X' + (dY > 0 ? '+' : '-') + 'Y');
+    }
+    // W walks like ArrowUp.
+    const w0 = await pos();
+    await keyPress(KEYS.w); await sleep(450);
+    const w1 = await pos();
+    assert(w1.y === w0.y - 1 && w1.x === w0.x, 'W did not walk up: ' + describe(w0) + ' to ' + describe(w1));
+    // Two quick presses: the second lands mid-step and is kept.
+    const q0 = await pos();
+    await keyPress(KEYS.down); await keyPress(KEYS.down);
+    const mid = await pos();
+    await sleep(900);
+    const q1 = await pos();
+    assert(mid.next !== null && q1.y === q0.y + 2 && q1.x === q0.x, 'second press mid-step was dropped: ' + describe(q0) + ' mid ' + describe(mid) + ' to ' + describe(q1));
+    // Arrange: an arrow moves the lifted piece's preview a tile, Escape leaves with the yard kept.
+    await enterArrange();
+    await canvasTap(4, 6); await advance(0);
+    const l0 = await AR();
+    assert(l0.lift === 'cooler', 'tap did not lift the cooler: ' + describe(l0));
+    await keyPress(KEYS.down); await sleep(150);
+    const l1 = await AR();
+    assert(l1.aim && l1.aim.x === 4 && l1.aim.y === 7, 'Down did not move the preview: ' + describe(l1.aim));
+    await keyPress(KEYS.escape); await sleep(150);
+    assert((await AR()) === null && sameJSON(await ev('S().layout'), {}), 'Escape did not leave arrange unchanged');
+    // Service: an arrow walks, then facing the kettle with charcoal in hand, Space feeds it.
+    assert(await toService(), 'no service day');
+    await sleep(200);
+    const s0 = await pos();
+    const sd = (await open(s0.x, s0.y + 1)) ? 'down' : (await open(s0.x + 1, s0.y)) ? 'right' : 'left';
+    await keyPress(KEYS[sd]); await sleep(450);
+    const s1 = await pos();
+    assert(s1.x - s0.x === DV[sd][0] && s1.y - s0.y === DV[sd][1], 'service ' + sd + ' did not walk: ' + describe(s0) + ' to ' + describe(s1));
+    await goto('pile', hasKind(CARRY_KIND.charcoal));
+    const use = await ev('MAP.station("kettle1").use[0]');
+    await ev('sim.' + SIM_METHODS.walkTo + '(' + use.x + ', ' + use.y + ')');
+    await settle();
+    await keyPress(KEYS[use.face]); await sleep(200);
+    const reach = await ev('sim.reach()');
+    assert(reach === 'kettle1', describe(use.face) + ' by the kettle faces ' + describe(reach));
+    const f0 = await ev(F.fire('kettle1'));
+    const c0 = await ev(hasKind(CARRY_KIND.charcoal));
+    await keyPress(KEYS.space); await sleep(400);
+    const f1 = await ev(F.fire('kettle1'));
+    const c1 = await ev(hasKind(CARRY_KIND.charcoal));
+    assert(c0 && !c1 && f1 > f0, 'Space at the kettle did nothing: fire ' + f0 + ' to ' + f1 + ', charcoal ' + c0 + ' to ' + c1);
+    return 'hub (' + hub.panel + ' open): ' + seen.join(', ') + '; W up; 2 quick presses = 2 tiles; service ' + sd + ' walked; Space fed kettle1 ' + f0 + ' to ' + f1;
   });
 
   await step('zero console errors across the run', () => {
