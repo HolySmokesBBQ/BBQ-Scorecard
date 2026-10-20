@@ -3,6 +3,35 @@
 // no browser storage. Randomness only through the seeded generator on the sim object. Runs in
 // Node under vm.runInThisContext and in the browser as a classic deferred script.
 //
+// v4.0 Economy (2026-10-20, Joel: "a few sessions in I was losing money", "as the facility grows so
+// does the ability to hire staff"). dev/econ.mjs plays whole seasons on these rules. The leak: every
+// lineup card was paid its full wage on every cook, a half length weekday Yard day too, and Hiring Day
+// let a one kettle yard sign two headliners (about 45 to 55 a cook), so the planner's Monday and
+// Wednesday Yard days lost about 30 each and the typical crew player sat near flat for three weeks.
+//   C.YARD_DAY_WAGE 0.5: a weekday Yard day pays each card half (till.halfShift, ui.halfShift).
+//   C.PAYROLL_START 30 and C.PAYROLL_PER_GEAR 10: the wages the yard can sign grow with the gear owned,
+//     up to C.PAYROLL[0]. hireApplicant, hireReferral and hireWalkin refuse past it (ui.hireCap).
+//     payroll() adds hire (that cap) and signed (every card's wage); budget is still C.PAYROLL[0].
+//   A Yard day's till.net now comes after the meat, charcoal and spoilage it used (as a booking's), so
+//     the report's Take today is what the day made; game.js shows Costs and Wages above it and the
+//     stock row (Bought for later, Bought earlier) in place of Paid at the shop. ui.yardTake.
+//
+// v4.1 The gear ladder (2026-10-20, Joel: start with an old kettle, work up to a full trailer). The
+// main cooker (station and unit id 'kettle1') climbs PIT_TIERS: kettle, cabinet smoker (gear.cabinet),
+// offset stick burner (gear.offset, needs the cabinet) and trailer rig (gear.trailer, needs the offset).
+// Each upgrade takes the kettle's place (the old cooker goes; nothing to sell), holds more meat and
+// loses heat slower. pitTier(gear) is 0 to 3. The station's live record (label, sprite, slots, decay,
+// fuel, brisket, tiles and use tiles) is the tier's: buildGeom(lay, tier), applyLayout(lay, tier).
+//   Wood. The stick burner and the trailer burn wood splits (fuel 'wood'), never charcoal: the shop's
+//     wood row (cart.wood, C.WOOD_PRICE), state.wood rolls over like charcoal. A split goes in from the
+//     cooker's own rack: tap the cooker with empty hands ("Add a split"); a FIRE card feeds splits too.
+//     today.splits counts them; a cook's costs take splits * WOOD_PRICE beside the charcoal.
+//   Crew. crewSlots() is C.TIER_SLOTS[tier], the lineup budget C.TIER_PAYROLL[tier]; the wages the
+//     yard can sign (hireBudget) add C.PAYROLL_PER_TIER a tier on top of the per gear amount.
+//   Offers. A row's headcount takes C.TIER_GUESTS[tier], and the grate time counts every slot owned.
+//   Brisket cooks on any cooker with brisket true (the drum, the stick burner, the trailer):
+//     canBrisket(gear). Save v13 (v12 and older migrate with no upgrades).
+//
 // v3.4 Simpler days (2026-10-19, Joel's playtest). NOTE FOR THE GAME BUILDER, the names this step adds:
 //   Days. dayOptions() now offers only 'yard' and 'off' on every day but the booked one, which offers
 //     'event' (plus 'off' when it cannot load). Market run, Prep, Train and Load-in are gone as choices
@@ -507,7 +536,7 @@ const C = Object.freeze({
   // weather
   RAIN_FROM_DAY: 4, RAIN_CHANCE: 0.15, RAIN_ARRIVALS: 0.6,
   // save clamps
-  SAVE_VERSION: 12, MAX_DAY: 999, MAX_CASH: 999999, MAX_STAT: 9999999,   // v3.4: 8 (season.advance); v3.5: 9 (season.plan, pit); v3.6: 10 (the register, the TILL card)
+  SAVE_VERSION: 13, MAX_DAY: 999, MAX_CASH: 999999, MAX_STAT: 9999999,   // v3.4: 8 (season.advance); v3.5: 9 (season.plan, pit); v3.6: 10 (the register, the TILL card)
   // v3.0 season and week [S 3], contract W2
   SEASON_WEEKS: 7,                    // v3.5: six weeks and the competition finale as week 7 (was 9)
   YEAR_MAX: 99,
@@ -606,6 +635,20 @@ const C = Object.freeze({
   // v3.7 the register: a guest orders and pays there first, then sits (or stands at a to go spot)
   // and waits for the plate; the tip is paid when the plate arrives.
   PAYROLL: Object.freeze([60, 90, 140, 220]),            // by rung index; v3.1 is always index 0, the backyard (review 1: kept, X20.13)
+  // v4.0 economy (Joel 2026-10-20, "as the facility grows so does the ability to hire staff"): the
+  // wages the yard can sign for start at PAYROLL_START with one kettle and each piece of gear owned
+  // adds PAYROLL_PER_GEAR, up to PAYROLL[0]. A hire (draft, referral or walk-in) that takes the crew's
+  // wages past it is refused. A weekday Yard day is a half shift: each card is paid YARD_DAY_WAGE of
+  // its wage (rounded).
+  PAYROLL_START: 30, PAYROLL_PER_GEAR: 10, YARD_DAY_WAGE: 0.5,
+  // v4.1 the gear ladder, by pitTier (kettle, cabinet smoker, stick burner, trailer rig): crew slots,
+  // the lineup budget, the extra signable wages a tier and the booking headcount factor.
+  TIER_SLOTS: Object.freeze([2, 3, 4, 5]),
+  TIER_PAYROLL: Object.freeze([60, 80, 110, 150]),
+  PAYROLL_PER_TIER: 10,
+  TIER_GUESTS: Object.freeze([1, 1.1, 1.25, 1.45]),
+  CABINET_SLOTS: 4, CABINET_DECAY: 0.5, OFFSET_SLOTS: 6, OFFSET_DECAY: 0.4, TRAILER_SLOTS: 8, TRAILER_DECAY: 0.3,
+  WOOD_PRICE: 3, WOOD_ADD: 40, SPLITS_PER_COOKER: 7,   // a split adds 40 (a bag 30); prefill splits per wood cooker
   ROSTER_SLOTS: Object.freeze([2, 3, 4, 6]),
   CREW_MAX: 8,                                           // cards a save may hold: the slots plus a full draft
   BENCH_STREAK: 2,                                       // booked events left home in a row that cost a mood step
@@ -689,7 +732,7 @@ const MEATS = Object.freeze({
   brisket: Object.freeze({ id: 'brisket', label: 'Brisket', plateLabel: 'Brisket', unit: 38, plates: 7, cook: 50, window: 26, price: 18, slots: 2, slice: 7, drumOnly: true, key: '5' })
 });
 
-const GEAR_IDS = Object.freeze(['kettle2', 'cooler', 'bigtable', 'tray', 'canopy', 'drum']);
+const GEAR_IDS = Object.freeze(['kettle2', 'cooler', 'bigtable', 'tray', 'canopy', 'drum', 'cabinet', 'offset', 'trailer']);   // v4.1: the gear ladder last
 const DECOR_IDS = Object.freeze(['chair1', 'chair2', 'flowers', 'birdbath', 'lights', 'picnic2']);
 const SEAT_IDS = Object.freeze(['pt1b', 'pt1a', 'chair1', 'chair2', 'pt2b', 'pt2a']);
 const HIRE_IDS = Object.freeze(['buddy', 'tender']);
@@ -769,7 +812,7 @@ const STATIONS0 = list([
   Object.freeze({ id: 'kettle1', type: 'cooker', label: 'Kettle 1', spoken: 'kettle 1', gear: null,
     tiles: list([xy(4, 5)]),
     use: list([use(3, 5, 'right')]),
-    slots: C.KETTLE_SLOTS, decay: C.KETTLE_DECAY,
+    slots: C.KETTLE_SLOTS, decay: C.KETTLE_DECAY, fuel: 'charcoal', brisket: false, tier: 0,
     sprite: 'kettle', draw: px(64, 80), sortRow: 5, slotPx: KETTLE_SLOT_PX }),
   Object.freeze({ id: 'kettle2', type: 'cooker', label: 'Kettle 2', spoken: 'kettle 2', gear: 'kettle2',
     tiles: list([xy(4, 7)]),
@@ -779,7 +822,7 @@ const STATIONS0 = list([
   Object.freeze({ id: 'drum', type: 'cooker', label: 'Drum smoker', spoken: 'the drum', gear: 'drum',
     tiles: list([xy(2, 5), xy(2, 6)]),
     use: list([use(3, 5, 'left'), use(3, 6, 'left'), use(1, 5, 'right'), use(1, 6, 'right')]),
-    slots: C.DRUM_SLOTS, decay: C.DRUM_DECAY,
+    slots: C.DRUM_SLOTS, decay: C.DRUM_DECAY, brisket: true,
     sprite: 'drum', draw: px(32, 80), sortRow: 6, slotPx: DRUM_SLOT_PX }),
   Object.freeze({ id: 'board', type: 'board', label: 'Cutting board', spoken: '', gear: null,
     tiles: list([xy(2, 4)]),
@@ -809,6 +852,52 @@ const STATIONS0 = list([
     use: list([use(2, 1, 'right'), use(3, 2, 'up')]),
     sprite: 'register', draw: px(48, 16), sortRow: 1 })
 ]);
+
+// v4.1 the gear ladder: what the main cooker (station and unit 'kettle1') is at each pitTier. The
+// cabinet stands on the kettle's tile; the two long cookers (2 tiles along x) sit on the patio's front
+// corner, (1,8) and (2,8), worked from (3,8) and from (1,7) and (2,7) behind them. slotPx is the v2
+// record (its length is the slot count the renderer splits the grate into).
+function slotGrid(n) {
+  const out = [];
+  for (let i = 0; i < n; i++) out.push(px((i % 2) * 6, Math.floor(i / 2) * 5 - 7));
+  return list(out);
+}
+const LONG_PIT = Object.freeze({ tiles: list([xy(1, 8), xy(2, 8)]),
+  use: list([use(3, 8, 'left'), use(1, 7, 'down'), use(2, 7, 'down')]), draw: px(16, 128), sortRow: 8 });
+function pitTierRow(id, gear, label, spoken, noun, sprite, slots, decay, fuel, brisket, geo) {
+  return Object.freeze({ id, gear, label, spoken, noun, sprite, slots, decay, fuel, brisket, geo, slotPx: slots === C.KETTLE_SLOTS ? KETTLE_SLOT_PX : slotGrid(slots) });
+}
+const PIT_TIERS = list([
+  pitTierRow('kettle', null, 'Kettle 1', 'kettle 1', 'kettle', 'kettle', C.KETTLE_SLOTS, C.KETTLE_DECAY, 'charcoal', false, null),
+  pitTierRow('cabinet', 'cabinet', 'Cabinet smoker', 'the cabinet smoker', 'cabinet smoker', 'cabinet', C.CABINET_SLOTS, C.CABINET_DECAY, 'charcoal', false, null),
+  pitTierRow('offset', 'offset', 'Stick burner', 'the stick burner', 'stick burner', 'stick_burner', C.OFFSET_SLOTS, C.OFFSET_DECAY, 'wood', true, LONG_PIT),
+  pitTierRow('trailer', 'trailer', 'Trailer rig', 'the trailer rig', 'trailer rig', 'trailer_rig', C.TRAILER_SLOTS, C.TRAILER_DECAY, 'wood', true, LONG_PIT)
+]);
+const TIER_GEAR = Object.freeze(['cabinet', 'offset', 'trailer']);
+// 0 kettle, 1 cabinet smoker, 2 stick burner, 3 trailer rig (each needs the one before).
+function pitTier(gear) {
+  if (!gear || typeof gear !== 'object') return 0;
+  if (gear.cabinet !== true) return 0;
+  if (gear.offset !== true) return 1;
+  return gear.trailer === true ? 3 : 2;
+}
+// Can the owned gear cook brisket (the drum, the stick burner or the trailer)?
+function canBrisket(gear) {
+  return !!gear && (gear.drum === true || pitTier(gear) >= 2);
+}
+const TIER_STATIONS = [];
+function stationsFor(tier) {
+  const t = tier | 0;
+  if (t <= 0 || !PIT_TIERS[t]) return STATIONS0;
+  if (!TIER_STATIONS[t]) {
+    const R = PIT_TIERS[t];
+    TIER_STATIONS[t] = list(STATIONS0.map((st) => st.id !== 'kettle1' ? st : Object.freeze(Object.assign({}, st, {
+      label: R.label, spoken: R.spoken, sprite: R.sprite, slots: R.slots, decay: R.decay, fuel: R.fuel, brisket: R.brisket,
+      tier: t, slotPx: R.slotPx }, R.geo || {}))));
+  }
+  return TIER_STATIONS[t];
+}
+function stationNoun(sid, tier) { return sid === 'kettle1' ? PIT_TIERS[tier | 0].noun : STATION_NOUN[sid]; }
 
 function prop(id, sprite, frame, tx, ty, dx, dy, blocks, sortRow) {
   return Object.freeze({ kind: 'prop', id, sprite, frame, tile: px(tx, ty), draw: px(dx, dy),
@@ -943,7 +1032,7 @@ const FORSALE0 = Object.freeze({
   lights: list([px(0, 7)]),
   picnic2: list([px(6, 8), px(7, 8)])
 });
-const FORSALE_UNIT = Object.freeze({ kettle2: 'kettle2', drum: 'drum', bigtable: 'counter', canopy: 'counter', chair1: 'chair1', chair2: 'chair2', picnic2: 'picnic2' });
+const FORSALE_UNIT = Object.freeze({ cabinet: 'kettle1', offset: 'kettle1', trailer: 'kettle1', kettle2: 'kettle2', drum: 'drum', bigtable: 'counter', canopy: 'counter', chair1: 'chair1', chair2: 'chair2', picnic2: 'picnic2' });
 const GATE_TILE = px(8, 11);
 const CUST_SPAWN = px(8, 12);
 const PASS_STOP = px(8, 10);
@@ -981,8 +1070,8 @@ function shXY(o, d) { return (d[0] || d[1]) ? Object.freeze(Object.assign({}, o,
 function shPx(o, d) { return (d[0] || d[1]) ? Object.freeze(Object.assign({}, o, { x: o.x + d[0] * TILE, y: o.y + d[1] * TILE })) : o; }
 
 // The shifted copies of every positioned record for a clean layout.
-function buildGeom(lay) {
-  const stations = list(STATIONS0.map((st) => {
+function buildGeom(lay, tier) {
+  const stations = list(stationsFor(tier).map((st) => {
     const d = offOf(lay, UNIT_OF.station[st.id]);
     if (!d[0] && !d[1]) return st;
     const o = Object.assign({}, st);
@@ -1082,7 +1171,8 @@ function gridBfs(starts, passable) {
 // piece being placed: its overlaps are reported by the other piece's name.
 function checkLayout(layIn, gear, decor, focus) {
   const lay = cleanLayout(layIn);
-  const geo = buildGeom(lay);
+  const tier = pitTier(gear);
+  const geo = buildGeom(lay, tier);
   const fail = (reason, unit) => ({ ok: false, reason, unit: unit || focus || null });
   const order = UNITS.filter((u) => u.id !== focus && unitOwned(u, gear, decor));
   if (focus && UNIT_BY_ID[focus] && unitOwned(UNIT_BY_ID[focus], gear, decor)) order.push(UNIT_BY_ID[focus]);
@@ -1107,7 +1197,7 @@ function checkLayout(layIn, gear, decor, focus) {
       if (c !== null && c !== u.id) {
         if (c === 'gate') return fail('Blocks the gate path', u.id);
         if (c === 'thing') return fail('Something is already there', u.id);
-        return fail('Overlaps the ' + (UNIT_BY_ID[c] ? UNIT_BY_ID[c].noun : c), u.id);
+        return fail('Overlaps the ' + (c === 'kettle1' ? PIT_TIERS[tier].noun : (UNIT_BY_ID[c] ? UNIT_BY_ID[c].noun : c)), u.id);
       }
       claim[i] = u.id;
     }
@@ -1124,7 +1214,7 @@ function checkLayout(layIn, gear, decor, focus) {
     for (const t of parts[u.id].use) {
       if (pit[t.y * MAP_W + t.x]) continue;
       const own = unitOfStation(t.st) === focus;
-      return fail(own ? 'No room to work the ' + STATION_NOUN[t.st] : 'Blocks the path to the ' + STATION_NOUN[t.st]);
+      return fail(own ? 'No room to work the ' + stationNoun(t.st, tier) : 'Blocks the path to the ' + stationNoun(t.st, tier));
     }
   }
   // Guests from the gate.
@@ -1199,6 +1289,7 @@ function fitLayout(layIn, gear, decor) {
 
 const STATION_BY_ID0 = Object.freeze(STATIONS0.reduce((acc, s) => { acc[s.id] = s; return acc; }, {}));
 let LAYOUT_KEY = null;
+let LAYOUT_TIER = 0;
 let GEO = null;
 let STATIONS = STATIONS0, PROPS = PROPS0, DECOR = DECOR0, SEATS = SEATS0;
 let STATION_BY_ID = STATION_BY_ID0;
@@ -1207,12 +1298,14 @@ let PROP_BLOCKED = new Uint8Array(MAP_W * MAP_H);
 let IDLE = { tender: TENDER_IDLE0, prep: PREP_IDLE0, dogHome: DOG_HOME0, dogRoam: DOG_ROAM0 };
 
 // Points the live records at a layout. Cheap when nothing changed.
-function applyLayout(layIn) {
+function applyLayout(layIn, tier) {
   const lay = cleanLayout(layIn);
-  const key = JSON.stringify(lay);
+  const t = tier | 0;
+  const key = JSON.stringify(lay) + '|' + t;
   if (key === LAYOUT_KEY) return false;
   LAYOUT_KEY = key;
-  GEO = buildGeom(lay);
+  LAYOUT_TIER = t;
+  GEO = buildGeom(lay, t);
   STATIONS = GEO.stations; PROPS = GEO.props; DECOR = GEO.decor; SEATS = GEO.seats;
   STATION_BY_ID = Object.freeze(GEO.byId);
   SEAT_BY_ID = Object.freeze(SEATS.reduce((acc, s) => { acc[s.id] = s; return acc; }, {}));
@@ -1245,7 +1338,7 @@ applyLayout({});
 
 // The unit whose foot or seat holds (x, y) under this ownership, or null.
 function unitAt(layIn, x, y, gear, decor) {
-  const geo = buildGeom(cleanLayout(layIn));
+  const geo = buildGeom(cleanLayout(layIn), pitTier(gear));
   for (const u of UNITS) {
     if (!unitOwned(u, gear, decor)) continue;
     const pt = unitParts(geo, u, gear, decor);
@@ -1254,7 +1347,7 @@ function unitAt(layIn, x, y, gear, decor) {
   return null;
 }
 function unitTiles(layIn, uid, gear, decor) {
-  const geo = buildGeom(cleanLayout(layIn));
+  const geo = buildGeom(cleanLayout(layIn), pitTier(gear));
   const pt = unitParts(geo, UNIT_BY_ID[uid], gear, decor);
   return pt.foot.concat(pt.seats).map((t) => ({ x: t.x, y: t.y }));
 }
@@ -1320,6 +1413,9 @@ function tileOwned(entry, gear, decor) {
 function row(id, kind, label, price, effect, needs, needsText, sets) {
   return Object.freeze({ id, kind, label, price, effect, needs: needs ? Object.freeze(needs) : null, needsText, sets });
 }
+function tierRow(id, label, price, effect, needs, needsText, tier) {
+  return Object.freeze({ id, kind: 'gear', label, price, effect, needs: needs ? Object.freeze(needs) : null, needsText, sets: 'gear.' + id + ', the main cooker becomes tier ' + tier, tier });
+}
 function decorRow(id, label, price, seats, charm, effect, needs, needsText, sets) {
   return Object.freeze({ id, kind: 'decor', label, price, effect, needs: needs ? Object.freeze(needs) : null, needsText, sets, seats, charm });
 }
@@ -1329,14 +1425,20 @@ const CATALOG = Object.freeze([
   row('chicken', 'meat', 'Chicken thighs', 6, '2 plates, 22 seconds on good fire, sells for 8.', null, '', 'cart.meat.chicken'),
   row('ribs', 'meat', 'Pork ribs', 12, '3 plates, 32 seconds, sells for 11.', null, '', 'cart.meat.ribs'),
   row('butt', 'meat', 'Pork butt', 20, '5 plates of pulled pork, 40 seconds, both grate slots, sells for 14.', null, '', 'cart.meat.butt'),
-  row('brisket', 'meat', 'Brisket', 38, '7 plates, 50 seconds on the drum, sells for 18.', { gear: 'drum' }, 'Needs the drum smoker.', 'cart.meat.brisket'),
+  row('brisket', 'meat', 'Brisket', 38, '7 plates, 50 seconds on the drum, sells for 18.', { gear: 'drum', orGear: ['offset'] }, 'Needs the drum smoker or the stick burner.', 'cart.meat.brisket'),
   row('charcoal', 'fuel', 'Charcoal', 2, 'One bag lights a cold cooker to 60 or adds 30 to a lit one. A kettle burns about nine bags a cook. Bags left over keep.', null, '', 'cart.charcoal, then charcoal on open'),
+  // v4.1: the stick burner and the trailer rig burn wood splits (fed from the cooker's own rack).
+  row('wood', 'fuel', 'Wood splits', C.WOOD_PRICE, 'Feeds the stick burner and the trailer rig. One split lights a cold one or adds 40. Splits left over keep.', { gear: 'offset' }, 'Needs the stick burner.', 'cart.wood, then wood on open'),
   row('kettle2', 'gear', 'Second kettle', 90, 'Two more grate slots. Twice the meat on the fire.', null, '', 'gear.kettle2, stations.kettle2 becomes active'),
   row('cooler', 'gear', 'Cooler', 60, 'Keeps ' + C.COOLER_CAP[1] + ' units of raw meat overnight. Without it, meat left after a cook spoils.', null, '', 'gear.cooler'),
   row('bigtable', 'gear', 'Bigger table', 70, 'Five people can wait instead of three, and five plate spots instead of three.', null, '', 'gear.bigtable, table.spots grows to 5, queue spots 4 and 5 activate'),
   row('tray', 'gear', 'Serving tray', 50, 'Carry two plates at a time.', null, '', 'gear.tray'),
   row('canopy', 'gear', 'Canopy', 80, 'Rain days run at full crowd.', null, '', 'gear.canopy'),
-  row('drum', 'gear', 'Drum smoker', 280, 'Four grate slots, holds heat longer, and the only cooker that takes brisket.', { gear: 'kettle2' }, 'Needs the second kettle.', 'gear.drum, stations.drum active, brisket and tender rows unlock'),
+  row('drum', 'gear', 'Drum smoker', 280, 'Four grate slots, holds heat longer, and cooks brisket.', { gear: 'kettle2' }, 'Needs the second kettle.', 'gear.drum, stations.drum active, brisket and tender rows unlock'),
+  // v4.1 the gear ladder: each takes the main cooker's place (tier), so the yard can run more crew.
+  tierRow('cabinet', 'Cabinet smoker', 110, "Takes the kettle's place: 4 grate slots, holds heat twice as long, bigger bookings.", null, '', 1),
+  tierRow('offset', 'Stick burner', 220, "Takes the cabinet's place: 6 grate slots, burns wood splits, cooks brisket.", { gear: 'cabinet' }, 'Needs the cabinet smoker.', 2),
+  tierRow('trailer', 'Trailer rig', 900, "Takes the stick burner's place: 8 grate slots, burns wood splits, the biggest bookings.", { gear: 'offset' }, 'Needs the stick burner.', 3),
   decorRow('chair1', 'Lawn chair', 25, 1, 3, 'One more seat by the line. Charm 3.', null, '', 'decor.chair1, seat chair1'),
   decorRow('chair2', 'Second lawn chair', 25, 1, 3, 'One more seat by the line. Charm 3.', { decor: 'chair1' }, 'Needs the first lawn chair.', 'decor.chair2, seat chair2'),
   decorRow('flowers', 'Flower bed', 30, 0, 4, 'Flowers along the fence by the gate. Charm 4.', null, '', 'decor.flowers'),
@@ -1359,7 +1461,7 @@ const STRINGS = Object.freeze({
   cookerLabel: Object.freeze({ kettle1: 'Kettle 1', kettle2: 'Kettle 2', drum: 'Drum smoker' }),
   hire: Object.freeze({ buddy: 'the buddy', tender: 'the fire tender' }),
   hireLabel: Object.freeze({ buddy: 'Buddy', tender: 'Fire tender' }),
-  gearLabel: Object.freeze({ kettle2: 'Second kettle', cooler: 'Cooler', bigtable: 'Bigger table', tray: 'Serving tray', canopy: 'Canopy', drum: 'Drum smoker', driveway: 'Driveway pop-up' }),
+  gearLabel: Object.freeze({ kettle2: 'Second kettle', cooler: 'Cooler', bigtable: 'Bigger table', tray: 'Serving tray', canopy: 'Canopy', drum: 'Drum smoker', cabinet: 'Cabinet smoker', offset: 'Stick burner', trailer: 'Trailer rig', driveway: 'Driveway pop-up' }),
   decorLabel: Object.freeze({ chair1: 'Lawn chair', chair2: 'Second lawn chair', flowers: 'Flower bed', birdbath: 'Bird bath', lights: 'String lights', picnic2: 'Second picnic table' }),
   walk: 'Walk', handsFull: 'Hands full', nothing: 'Nothing to do here', slicing: 'Slicing',
   cantGetThere: "Can't get there", handsEmpty: 'Hands empty',
@@ -1719,6 +1821,7 @@ const STRINGS = Object.freeze({
     back: 'Back',
     youHave: 'You have {n}',
     afterBags: 'After this: {n} bags',
+    afterSplits: 'After this: {n} splits',   // v4.1
     afterUnits: 'After this: {n}',
     pileFull: 'The pile holds 200 bags.',
     coolerRoom: 'The cooler holds {cap} units overnight. This cook can use about {e} more units of meat.',
@@ -1904,6 +2007,21 @@ const STRINGS = Object.freeze({
     rowExtras: 'Tips and bonus',
     rowCosts: 'Costs',
     costsDetail: 'meat, charcoal, spoilage and daily costs',   // review 1: wages have their own row
+    // v4.0 economy: the Yard day's take comes after what the cook used; a weekday Yard day pays half wages.
+    yardTake: 'sales and tips after costs and wages',
+    halfShift: 'half shift, half wages',
+    // v4.1 the gear ladder
+    burnsWood: 'This one burns wood. Tap it with empty hands to add a split',
+    addSplit: 'Add a split ({n} left)',
+    lightSplit: 'Light it with a split ({n} left)',
+    outOfWood: 'Out of wood splits',
+    buyWood: 'Buy at least one wood split.',
+    crewSlots: 'Crew slots {n} of {s}',
+    tierSlots: 'Crew slots {a} to {b}. Payroll {p} to {q}.',
+    tierBigger: 'Bigger cooker, bigger yard: {s} crew slots, payroll up to {p}.',
+    rowWood: 'Wood',
+    payrollGrows: 'Your yard can sign {b} in wages. Each piece of gear adds {n}, up to {max}.',
+    hireCap: 'Your yard can sign {b} in wages. Each piece of gear adds {n}.',
     rowCrewPaid: 'Signing and send-off',
     moneyMore: 'Show every row',
     moneyLess: 'Hide the rows',
@@ -2272,7 +2390,7 @@ function unlockMet(rowDef, rep, gear) {
 
 // The finale menu: every meat the owned gear can cook, in MEAT_IDS order (brisket needs the drum).
 function finaleMenu(gear) {
-  return MEAT_IDS.filter((m) => !MEATS[m].drumOnly || hasGear(gear, 'drum'));
+  return MEAT_IDS.filter((m) => !MEATS[m].drumOnly || canBrisket(gear));
 }
 
 function menuOf(rowDef, gear) {
@@ -2285,7 +2403,7 @@ function menuOf(rowDef, gear) {
 function needsFor(menu, gear) {
   for (const m of menu) {
     const r = CATALOG_BY_ID[m];
-    if (r.needs && r.needs.gear && !hasGear(gear, r.needs.gear)) return r.needsText;
+    if (r.needs && r.needs.gear && !hasGear(gear, r.needs.gear) && !(r.needs.orGear && r.needs.orGear.some((g) => hasGear(gear, g)))) return r.needsText;
   }
   return '';
 }
@@ -2317,9 +2435,14 @@ function slotSeconds(rail) {
 }
 
 // P-1: the grate seconds the cookers give before last call, at SAFE_LOAD.
-function grateSeconds(k2, drum, win) {
-  return (C.KETTLE_SLOTS * (k2 ? 2 : 1) + (drum ? C.DRUM_SLOTS : 0)) * (C.EVENT_GATE + win) * C.SAFE_LOAD;
+function grateSeconds(k2, drum, win, tier) {
+  return grateSlots(k2, drum, tier) * (C.EVENT_GATE + win) * C.SAFE_LOAD;
 }
+// v4.1: grate slots of the owned cookers (the main cooker by its tier).
+function grateSlots(k2, drum, tier) {
+  return (PIT_TIERS[tier | 0] || PIT_TIERS[0]).slots + (k2 ? C.KETTLE_SLOTS : 0) + (drum ? C.DRUM_SLOTS : 0);
+}
+function tierGuests(gear) { return C.TIER_GUESTS[pitTier(gear)] || 1; }
 
 // P-1: the Needs line when the rail needs more grate time than the owned cookers give before last
 // call, '' when it fits. Names the cooker that makes it fit. The finale (sized to the grate, R-3)
@@ -2327,7 +2450,8 @@ function grateSeconds(k2, drum, win) {
 function capacityNeeds(rowDef, rail, gear, win) {
   if (rowDef.id === 'yard' || rowDef.id === 'finale') return '';
   const need = slotSeconds(rail);
-  const fits = (k2, drum) => need <= grateSeconds(k2, drum, win) + 1e-9;
+  const tier = pitTier(gear);
+  const fits = (k2, drum) => need <= grateSeconds(k2, drum, win, tier) + 1e-9;
   const k2 = hasGear(gear, 'kettle2'), dr = hasGear(gear, 'drum');
   if (fits(k2, dr)) return '';
   if (!k2 && fits(true, dr)) return STRINGS.ui.needsKettle2;
@@ -2338,9 +2462,9 @@ function capacityNeeds(rowDef, rail, gear, win) {
 // R-3: the Season finale books the most guests, up to its row's headcount at the length, whose rail
 // fits the owned grate at SAFE_LOAD; never fewer than one guest a meat.
 function finaleHeadcount(rowDef, menu, gear, L, win) {
-  const top = Math.round(rowDef.guests * L.factor);
+  const top = Math.round(rowDef.guests * L.factor * tierGuests(gear));
   const least = Math.min(top, menu.length);
-  const cap = grateSeconds(hasGear(gear, 'kettle2'), hasGear(gear, 'drum'), win) + 1e-9;
+  const cap = grateSeconds(hasGear(gear, 'kettle2'), hasGear(gear, 'drum'), win, pitTier(gear)) + 1e-9;
   for (let h = top; h > least; h--) if (slotSeconds(railSplit(h, menu, null)) <= cap) return h;
   return least;
 }
@@ -2362,7 +2486,7 @@ function offerFields(rowDef, gear, menuIn, k) {
   const isYard = rowDef.id === 'yard';
   const menu = menuOf(menuIn === undefined ? rowDef : { id: rowDef.id, menu: menuIn }, gear);
   const win = rowDef.window * L.window / C.BASE_WINDOW;
-  const headcount = isYard ? 0 : (rowDef.id === 'finale' ? finaleHeadcount(rowDef, menu, gear, L, win) : Math.round(rowDef.guests * L.factor));
+  const headcount = isYard ? 0 : (rowDef.id === 'finale' ? finaleHeadcount(rowDef, menu, gear, L, win) : Math.round(rowDef.guests * L.factor * tierGuests(gear)));
   const rail = railSplit(headcount, menu, null);
   const pay = isYard ? 0 : feeFor(headcount, menu, typeof k === 'number' && Number.isFinite(k) ? k : 1);
   const deposit = isYard ? 0 : Math.round(pay * C.DEPOSIT_FRAC);
@@ -2396,7 +2520,7 @@ function compOffer(ct, gear, id, extra) {
   const rail = zeroByMeat();
   for (const m of ct.cats) rail[m] = 1;
   const label = STRINGS.contest[ct.id];
-  const noDrum = ct.cats.some((m) => MEATS[m].drumOnly) && !hasGear(gear, 'drum');
+  const noDrum = ct.cats.some((m) => MEATS[m].drumOnly) && !canBrisket(gear);
   return freezeOffer({
     id, type: 'finale', label, venue: 'grounds', host: null,
     headcount: 0, menu: ct.cats.slice(), rail, pay: 0, deposit: 0,
@@ -2591,7 +2715,7 @@ function genOffers(input) {
     }
   } else if (picked.length > 0) {
     const u = rv();
-    const slotsN = C.KETTLE_SLOTS * (hasGear(gear, 'kettle2') ? 2 : 1) + (hasGear(gear, 'drum') ? C.DRUM_SLOTS : 0);
+    const slotsN = grateSlots(hasGear(gear, 'kettle2'), hasGear(gear, 'drum'), pitTier(gear));
     const safeN = new Map();
     for (const x of picked) {
       const f = C.SAFE_SIZES[Math.floor(rv() * C.SAFE_SIZES.length)];
@@ -3026,7 +3150,7 @@ function validateSave(obj) {
   try {
     if (!isPlainObject(obj)) return null;
     const v = readKey(obj, 'v');
-    if (v !== 1 && v !== 2 && v !== 3 && v !== 4 && v !== 5 && v !== 6 && v !== 7 && v !== 8 && v !== 9 && v !== 10 && v !== 11 && v !== 12) return null;
+    if (v !== 1 && v !== 2 && v !== 3 && v !== 4 && v !== 5 && v !== 6 && v !== 7 && v !== 8 && v !== 9 && v !== 10 && v !== 11 && v !== 12 && v !== 13) return null;
     const day = toInt(readKey(obj, 'day'), 1, 1, C.MAX_DAY);
     const cash = toInt(readKey(obj, 'cash'), C.START_CASH, 0, C.MAX_CASH);
     const rep = toInt(readKey(obj, 'rep'), C.START_REP, 0, 100);
@@ -3039,6 +3163,8 @@ function validateSave(obj) {
     const gear = {};
     for (const g of GEAR_IDS) gear[g] = toBool(readKey(gearIn, g));
     if (!gear.kettle2) gear.drum = false;
+    if (!gear.cabinet) gear.offset = false;   // v4.1: each rung needs the one before
+    if (!gear.offset) gear.trailer = false;
     // A v1 save had no decor, so it migrates with none.
     const decorIn = v >= 2 ? readKey(obj, 'decor') : undefined;
     const decor = {};
@@ -3049,7 +3175,7 @@ function validateSave(obj) {
     const hires = {};
     for (const h of HIRE_IDS) hires[h] = toBool(readKey(hiresIn, h));
     if (!gear.drum) hires.tender = false;
-    if (!gear.drum) stock.brisket = 0;
+    if (!canBrisket(gear)) stock.brisket = 0;
     const statsIn = readKey(obj, 'stats');
     const stats = {};
     for (const s of STAT_IDS_V1) stats[s] = toInt(readKey(statsIn, s), 0, 0, C.MAX_STAT);
@@ -3093,7 +3219,7 @@ function validateSave(obj) {
         : (pickIn === 'birthday' || pickIn === 'picnic' || pickIn === 'yard' || pickIn === 'invite');   // X11.2: 'invite' in weeks 1 to 8
       season.pick = !complete && pickOk ? pickIn : null;
       const addonIn = readKey(seasonIn, 'addon');
-      season.addon = (typeof addonIn === 'string' && MEAT_IDS.includes(addonIn) && (!MEATS[addonIn].drumOnly || gear.drum)) ? addonIn : null;
+      season.addon = (typeof addonIn === 'string' && MEAT_IDS.includes(addonIn) && (!MEATS[addonIn].drumOnly || canBrisket(gear))) ? addonIn : null;
     }
     // W13.3 and W22.1: the save key player holds the creator data (state.profile).
     const playerIn = v >= 4 ? readKey(obj, 'player') : undefined;
@@ -3121,7 +3247,7 @@ function validateSave(obj) {
     // v3.5: the week plan, only on the same week (five 'yard' or 'off' entries).
     const planIn = v >= 9 && sameWeek ? readKey(seasonIn, 'plan') : undefined;
     season.plan = readPlan(planIn);
-    season.overnight = (typeof onMeat === 'string' && C.OVERNIGHT_MEATS.includes(onMeat) && (!MEATS[onMeat].drumOnly || gear.drum)
+    season.overnight = (typeof onMeat === 'string' && C.OVERNIGHT_MEATS.includes(onMeat) && (!MEATS[onMeat].drumOnly || canBrisket(gear))
       && typeof onN === 'number' && Number.isInteger(onN) && onN >= 1 && onN <= C.OVERNIGHT_PIECES) ? { meat: onMeat, n: onN } : null;
     // X11.2 and X11.3: the crew, the next card id, Hiring Day and the three season keys.
     const seasonV5 = v >= 5 && isPlainObject(seasonIn) ? seasonIn : undefined;
@@ -3256,7 +3382,7 @@ function createSim(saved, seed) {
 
   function newToday() {
     return {
-      revenue: 0, tips: 0, foodCost: 0, bags: 0, wages: 0, spoilCost: 0, wasteCost: 0, wastePlates: 0, wasteBurnt: 0, grateCost: 0,
+      revenue: 0, tips: 0, foodCost: 0, bags: 0, splits: 0, wages: 0, spoilCost: 0, wasteCost: 0, wastePlates: 0, wasteBurnt: 0, grateCost: 0,
       customers: 0, served: 0, walkouts: 0, past: 0, close: 0, happy: 0, ok: 0, burnt: 0,
       seated: 0, togo: 0, togoQuick: 0, seatTips: 0,
       spoiled: zeroByMeat(), grateLeft: zeroByMeat(),
@@ -3318,7 +3444,7 @@ function createSim(saved, seed) {
     if (!state.decor.chair1) state.decor.chair2 = false;
     // v3.9: the yard layout, live before any mover is placed.
     state.layout = s && s.layout ? cleanLayout(s.layout) : {};
-    applyLayout(state.layout);
+    applyLayout(state.layout, pitTier(state.gear));
     state.seats = emptySeats();
     // v3.1 (X4.1): crew cards replace state.hires.
     state.crew = s ? s.crew.map(copyCard) : [];
@@ -3336,7 +3462,7 @@ function createSim(saved, seed) {
     state.rain = false;
     state.comingNext = false;
     state.yesterday = null;
-    state.cart = { meat: zeroByMeat(), charcoal: 0 };
+    state.cart = { meat: zeroByMeat(), charcoal: 0, wood: 0 };
     state.selected = 'sausage';
     state.spawnAt = Infinity;
     state.arrivals = 0;
@@ -3761,7 +3887,7 @@ function createSim(saved, seed) {
     const m = MEATS[meat];
     for (const id of COOKER_IDS) {
       if (!stationActive(STATION_BY_ID[id])) continue;
-      if (m.drumOnly && id !== 'drum') continue;
+      if (m.drumOnly && STATION_BY_ID[id].brisket !== true) continue;
       if (freeSlotFor(state.stations[id], m.slots) >= 0) return true;
     }
     return false;
@@ -4333,6 +4459,8 @@ function createSim(saved, seed) {
 
     if (st.type === 'cooker') {
       const cooker = state.stations[st.id];
+      const burnsWood = st.fuel === 'wood';   // v4.1: the stick burner and the trailer rig
+      if (c !== null && c.kind === 'charcoal' && burnsWood) return noop(STRINGS.ui.burnsWood, stationId);
       if (c !== null && c.kind === 'charcoal') {
         const cold = cooker.fire < C.COLD_UNDER;
         return act(cold ? 'Light the fire' : 'Add charcoal', true, stationId, () => {
@@ -4342,7 +4470,7 @@ function createSim(saved, seed) {
       }
       if (c !== null && c.kind === 'raw') {
         const m = MEATS[c.meat];
-        if (m.drumOnly && st.id !== 'drum') return noop('Brisket needs the drum', stationId);
+        if (m.drumOnly && st.brisket !== true) return noop(canBrisket(state.gear) ? 'Brisket goes on the ' + (state.gear.drum ? 'drum' : stationNoun('kettle1', pitTier(state.gear))) : 'Brisket needs the drum', stationId);
         const slot = freeSlotFor(cooker, m.slots);
         if (slot < 0) return noop('Grate is full', stationId);
         return act('Put ' + m.label + ' on', true, stationId, () => {
@@ -4366,6 +4494,16 @@ function createSim(saved, seed) {
             p.carrying = { kind: pick.state === 'burnt' ? 'burnt' : 'cooked', meat: pick.meat, pulledAt: state.clock, don: donenessOf(pick) };   // v3.3
           });
         }
+        // v4.1: a wood cooker is fed from its own rack, one split a tap.
+        if (burnsWood && state.wood > 0 && cooker.fire < C.FIRE_MAX - 5) {
+          const cold = cooker.fire < C.COLD_UNDER;
+          return act(fillText(cold ? STRINGS.ui.lightSplit : STRINGS.ui.addSplit, { n: state.wood }), true, stationId, () => {
+            state.wood -= 1;
+            state.today.splits += 1;
+            addFuel(cooker, 'wood');
+          });
+        }
+        if (burnsWood && state.wood <= 0 && cooker.fire < C.FIRE_LOW_WARN) return noop(STRINGS.ui.outOfWood, stationId);
         if (cooker.pieces.length > 0) {
           let left = Infinity;
           for (const pc of cooker.pieces) left = Math.min(left, MEATS[pc.meat].cook - pc.prog);
@@ -4608,7 +4746,7 @@ function createSim(saved, seed) {
     }
     return {
       contest: ct.contest, label: b.label, cats: ct.cats.slice(), entry: ct.entry, prizes: ct.prizes.slice(), show: (C.CONTESTS.find((x) => x.id === ct.contest) || { show: 0 }).show, judges, rivals,
-      noDrum: ct.cats.some((m) => MEATS[m].drumOnly) && !state.gear.drum,
+      noDrum: ct.cats.some((m) => MEATS[m].drumOnly) && !canBrisket(state.gear),
       slots: ct.cats.map((m, i) => ({ meat: m, at: ct.times[i], box: null, score: null, done: false }))
     };
   }
@@ -4675,9 +4813,11 @@ function createSim(saved, seed) {
       noDrum: cp.noDrum, onBoard: state.stations.board.boxes.map((bx) => bx.meat), holdFull: C.COMP_HOLD_FULL_S };
   }
 
-  function addCharcoal(cooker) {
+  function addCharcoal(cooker) { addFuel(cooker, 'charcoal'); }
+  // v4.1: a bag adds FIRE_ADD, a split WOOD_ADD; either lights a cold cooker to FIRE_LIGHT.
+  function addFuel(cooker, kind) {
     if (cooker.fire < C.COLD_UNDER) cooker.fire = C.FIRE_LIGHT;
-    else cooker.fire = Math.min(C.FIRE_MAX, cooker.fire + C.FIRE_ADD);
+    else cooker.fire = Math.min(C.FIRE_MAX, cooker.fire + (kind === 'wood' ? C.WOOD_ADD : C.FIRE_ADD));
     decayAcc[cooker.id] = 0;
     refreshFireFlags(cooker);
   }
@@ -5376,6 +5516,7 @@ function createSim(saved, seed) {
     for (const id of COOKER_IDS) {
       const st = STATION_BY_ID[id];
       if (!stationActive(st)) continue;
+      if ((st.fuel === 'wood' ? state.wood : state.charcoal) <= 0) continue;   // v4.1: the fuel it burns
       const ck = state.stations[id];
       if (ck.fire < threshold && (best === null || ck.fire < best.fire)) best = ck;
     }
@@ -5392,7 +5533,7 @@ function createSim(saved, seed) {
 
   // X5.3: a bag the FIRE card adds counts on its crew row.
   function tenderAdd(t) {
-    addCharcoal(state.stations[t.cooker]);
+    addFuel(state.stations[t.cooker], t.carrying && t.carrying.kind === 'wood' ? 'wood' : 'charcoal');
     const rec = state.today.crew[String(t.cardId)];
     if (rec) rec.bags += 1;
     emit('fire_fed', { cooker: t.cooker, id: t.cardId === undefined ? null : t.cardId, x: t.x, y: t.y });   // v3.3: the FIRE puff [S 19.8]
@@ -5403,12 +5544,18 @@ function createSim(saved, seed) {
     if (!t) return;
     if (t.cooldown > 0) t.cooldown = Math.max(0, t.cooldown - dt);
     if (t.task === 'idle') {
-      if (t.cooldown > 0 || state.charcoal <= 0) return;
+      if (t.cooldown > 0 || (state.charcoal <= 0 && state.wood <= 0)) return;
       const ck = cookerNeedingFire(t.vals ? t.vals.fireSense : C.TENDER_THRESHOLD);
       if (!ck) return;
-      state.charcoal -= 1;
-      state.today.bags += 1;
-      t.carrying = { kind: 'charcoal' };
+      if (STATION_BY_ID[ck.id].fuel === 'wood') {   // v4.1: a split from the cooker's rack
+        state.wood -= 1;
+        state.today.splits += 1;
+        t.carrying = { kind: 'wood' };
+      } else {
+        state.charcoal -= 1;
+        state.today.bags += 1;
+        t.carrying = { kind: 'charcoal' };
+      }
       t.cooker = ck.id;
       t.cooldown = t.vals ? t.vals.firePace : C.TENDER_CYCLE;
       t.task = 'grab';
@@ -5745,7 +5892,7 @@ function createSim(saved, seed) {
 
   function tick() {
     if (state.phase !== 'service' || state.paused) return;
-    applyLayout(state.layout);
+    applyLayout(state.layout, pitTier(state.gear));
     tickStages();
     checkTutorial();
   }
@@ -5834,7 +5981,7 @@ function createSim(saved, seed) {
       return;
     }
     if (state.phase !== 'service' || state.paused) return;
-    applyLayout(state.layout);
+    applyLayout(state.layout, pitTier(state.gear));
     let d = Number(dt);
     if (!Number.isFinite(d) || d < 0) d = 0;
     if (d > C.MAX_FRAME_DT) d = C.MAX_FRAME_DT;
@@ -5879,7 +6026,8 @@ function createSim(saved, seed) {
     for (const bx of brd.boxes || []) { t.wastePlates += MEATS[bx.meat].plates; t.wasteCost += MEATS[bx.meat].unit; }   // v3.3
     // X5.4: wages for every lineup card, booking or Yard day.
     t.wages = 0;
-    for (const c of state.crew) if (inLineupToday(c)) t.wages += c.wage;
+    for (const c of state.crew) if (inLineupToday(c)) t.wages += wageToday(c);   // v4.0: half on a weekday Yard day
+    t.halfShift = t.kind === 'yard' && t.weekday === true && t.wages > 0;
     const maxToday = repMax();
     let rawDelta;
     let net;
@@ -5939,7 +6087,9 @@ function createSim(saved, seed) {
     const crewOut = t.kind === 'tutorial' ? { rows: [], left: [], changes: [], levels: [], notices: [] }
       : crewAfterEvent(isBooking, stars, forced !== undefined);
     // P-3: a booking's take is what the cook made after what it used, so the report's rows add up.
-    if (isBooking) net -= t.foodCost + t.rawWaste + t.bags * C.CHARCOAL_PRICE + t.spoilCost;
+    // v4.0: a Yard day's take also comes after the meat, charcoal and spoilage it used, so the big
+    // number on its report is what the day made (the tutorial day keeps the v2.1 take).
+    if (isBooking || t.kind === 'yard') net -= t.foodCost + t.rawWaste + t.bags * C.CHARCOAL_PRICE + (t.splits | 0) * C.WOOD_PRICE + t.spoilCost;
     state.day += 1;
     state.stats.days += 1;
     state.yesterday = { served: t.served, walkouts: t.walkouts, past: t.past };
@@ -5991,6 +6141,7 @@ function createSim(saved, seed) {
     till.coolerCap = cap;
     till.coolerAfter = Object.assign({}, state.stock);
     till.charcoalAfter = state.charcoal;
+    till.woodAfter = state.wood;   // v4.1
     till.spoilReason = spoilReason;
     // R-4: what the shop took that morning besides the cart, and the cash the morning opened with.
     till.gearSpent = morningBuys.reduce((a, b) => a + b.price, 0);
@@ -6090,7 +6241,7 @@ function createSim(saved, seed) {
       state.broke = brokeTest();
       if (state.broke) emit('broke');
     }
-    state.cart = { meat: zeroByMeat(), charcoal: 0 };
+    state.cart = { meat: zeroByMeat(), charcoal: 0, wood: 0 };
     if (state.day === 1 && totalStock() === 0 && state.charcoal === 0) {
       // A first morning starts with a sensible cart (34 of the 80) instead of a row of zeros.
       state.cart = { meat: Object.assign(zeroByMeat(), { sausage: 3, chicken: 2 }), charcoal: 5 };
@@ -6127,7 +6278,7 @@ function createSim(saved, seed) {
   }
 
   function cartTotal() {
-    let total = lineCost('charcoal', state.cart.charcoal);
+    let total = lineCost('charcoal', state.cart.charcoal) + lineCost('wood', state.cart.wood | 0);
     for (const m of MEAT_IDS) total += lineCost(m, state.cart.meat[m]);
     return total;
   }
@@ -6150,11 +6301,13 @@ function createSim(saved, seed) {
     if (!morningOpen()) return { ok: false, message: '' };
     if (rowDef.kind === 'meat' || rowDef.kind === 'fuel') {
       const isMeat = rowDef.kind === 'meat';
-      if (isMeat && MEATS[id].drumOnly && !state.gear.drum) return { ok: false, message: rowDef.needsText };
+      if (isMeat && MEATS[id].drumOnly && !canBrisket(state.gear)) return { ok: false, message: rowDef.needsText };
       const q = Math.trunc(Number(qty));
       if (!Number.isFinite(q) || q === 0) return { ok: false, message: '' };
-      const cur = isMeat ? state.cart.meat[id] : state.cart.charcoal;
-      const lineMax = isMeat ? Math.max(0, C.STEPPER_MAX - state.stock[id]) : Math.max(0, C.CHARCOAL_MAX - state.charcoal);
+      const isWood = id === 'wood';   // v4.1
+      if (isWood && rowDef.needs && state.gear[rowDef.needs.gear] !== true) return { ok: false, message: rowDef.needsText };
+      const cur = isMeat ? state.cart.meat[id] : (isWood ? state.cart.wood | 0 : state.cart.charcoal);
+      const lineMax = isMeat ? Math.max(0, C.STEPPER_MAX - state.stock[id]) : (isWood ? Math.max(0, C.WOOD_MAX - state.wood) : Math.max(0, C.CHARCOAL_MAX - state.charcoal));
       let next = clamp(cur + q, 0, lineMax);
       let roomCut = false;
       if (isMeat && next > cur) {
@@ -6174,7 +6327,7 @@ function createSim(saved, seed) {
         }
         return { ok: false, message };
       }
-      if (isMeat) state.cart.meat[id] = next; else state.cart.charcoal = next;
+      if (isMeat) state.cart.meat[id] = next; else if (isWood) state.cart.wood = next; else state.cart.charcoal = next;
       return { ok: true, message: roomCut && next > cur ? coolerFullMessage() : '' };
     }
     if (rowDef.kind === 'gear' || rowDef.kind === 'decor') {
@@ -6185,6 +6338,7 @@ function createSim(saved, seed) {
       if (rowDef.kind === 'gear') {
         state.gear[id] = true;
         placeBought(id);
+        if (TIER_GEAR.includes(id)) { state.stations.kettle1 = newCooker('kettle1'); decayAcc.kettle1 = 0; }   // v4.1: the new cooker
         reconfigureYard();
         emit('purchase', { id, label: rowDef.label, price: rowDef.price, kind: 'gear' });
         emit('save_wanted', { reason: 'gear' });
@@ -6227,19 +6381,22 @@ function createSim(saved, seed) {
   function placeBought(id) {
     const uid = FORSALE_UNIT[id] || (UNIT_BY_ID[id] ? id : null);
     let lay = cleanLayout(state.layout);
+    // v4.1: the stick burner is the first long cooker, so the main cooker starts from its own spot.
+    if (id === 'offset') delete lay.kettle1;
     if (!checkLayout(lay, state.gear, state.decor).ok) {
       const next = uid ? placeUnit(lay, uid, state.gear, state.decor) : null;
       lay = next && checkLayout(next, state.gear, state.decor).ok ? next : {};
     }
     state.layout = settleUnowned(lay, state.gear, state.decor);
-    applyLayout(state.layout);
+    applyLayout(state.layout, pitTier(state.gear));
   }
   // Only between days, on the week hub (never in service or the tutorial).
   function canArrange() {
     return state.loop === 'week' && state.phase !== 'service' && state.tutorial.done === true && !state.broke;
   }
   function arrangeView() {
-    const units = UNITS.filter((u) => unitOwned(u, state.gear, state.decor)).map((u) => ({ id: u.id, label: u.label, kind: u.kind,
+    const tier = pitTier(state.gear);
+    const units = UNITS.filter((u) => unitOwned(u, state.gear, state.decor)).map((u) => ({ id: u.id, label: u.id === 'kettle1' && tier > 0 ? PIT_TIERS[tier].label : u.label, kind: u.kind,
       tiles: unitTiles(state.layout, u.id, state.gear, state.decor) }));
     return { ok: canArrange(), layout: cleanLayout(state.layout), units };
   }
@@ -6251,15 +6408,15 @@ function createSim(saved, seed) {
     const r = checkLayout(next, state.gear, state.decor, uid);
     return { ok: r.ok, reason: r.reason, layout: next };
   }
-  function previewLayout(draft) { applyLayout(draft === null || draft === undefined ? state.layout : draft); }
+  function previewLayout(draft) { applyLayout(draft === null || draft === undefined ? state.layout : draft, pitTier(state.gear)); }
   // Done: the draft becomes the layout (refused when invalid or outside the hub).
   function setLayout(draft) {
-    if (!canArrange()) { applyLayout(state.layout); return { ok: false, reason: '' }; }
+    if (!canArrange()) { applyLayout(state.layout, pitTier(state.gear)); return { ok: false, reason: '' }; }
     const lay = cleanLayout(draft);
     const r = checkLayout(lay, state.gear, state.decor);
-    if (!r.ok) { applyLayout(state.layout); return { ok: false, reason: r.reason }; }
+    if (!r.ok) { applyLayout(state.layout, pitTier(state.gear)); return { ok: false, reason: r.reason }; }
     state.layout = settleUnowned(lay, state.gear, state.decor);
-    applyLayout(state.layout);
+    applyLayout(state.layout, pitTier(state.gear));
     const p = state.player;
     if (p) Object.assign(p, newMover(MAP.spawn.x, MAP.spawn.y, MAP.spawn.face), { carrying: p.carrying, busy: null, target: null, queued: null });
     emit('layout', { layout: cleanLayout(state.layout) });
@@ -6323,6 +6480,15 @@ function createSim(saved, seed) {
       sales.push(sellDrum());
     } else if (id === 'drum') {
       sales.push(sellDrum());
+    } else if (TIER_GEAR.includes(id)) {
+      // v4.1: a rung goes with every rung above it (the trailer first); the kettle comes back.
+      for (let i = TIER_GEAR.length - 1; i >= TIER_GEAR.indexOf(id); i--) if (state.gear[TIER_GEAR[i]]) sales.push(sellOne(TIER_GEAR[i]));
+      if (!canBrisket(state.gear)) { state.stock.brisket = 0; state.cart.meat.brisket = 0; }
+      const lay = cleanLayout(state.layout);
+      if (pitTier(state.gear) < 2) delete lay.kettle1;
+      state.layout = fitLayout(lay, state.gear, state.decor);
+      applyLayout(state.layout, pitTier(state.gear));
+      state.stations.kettle1 = newCooker('kettle1');
     } else if (id === 'chair1' && state.decor.chair2) {
       sales.push(sellOne('chair1'));
       sales.push(sellOne('chair2'));
@@ -6353,7 +6519,7 @@ function createSim(saved, seed) {
   function canOpen() {
     if (state.loop !== 'tutorial') return { ok: false, reason: '' };
     if (!morningOpen()) return { ok: false, reason: '' };
-    if (state.charcoal + state.cart.charcoal === 0) return { ok: false, reason: 'Buy at least one bag of charcoal.' };
+    if (fuelWhy() !== null) return { ok: false, reason: fuelWhy() };
     if (totalStock() + sumValues(state.cart.meat) === 0) return { ok: false, reason: 'Buy at least one unit of meat.' };
     return { ok: true, reason: '' };
   }
@@ -6364,6 +6530,8 @@ function createSim(saved, seed) {
     for (const m of MEAT_IDS) { state.stock[m] += state.cart.meat[m]; state.cart.meat[m] = 0; }
     state.charcoal = Math.min(C.CHARCOAL_MAX, state.charcoal + state.cart.charcoal);
     state.cart.charcoal = 0;
+    state.wood = Math.min(C.WOOD_MAX, state.wood + (state.cart.wood | 0));   // v4.1
+    state.cart.wood = 0;
   }
 
   // The v2 service setup shared by openGate() and loadUp().
@@ -6451,10 +6619,17 @@ function createSim(saved, seed) {
     return state.loop === 'week' && state.phase === 'morning';
   }
 
-  function ownedCookers() {
+  function ownedCookers(fuel) {
     let n = 0;
-    for (const id of COOKER_IDS) if (stationActive(STATION_BY_ID[id])) n += 1;
+    for (const id of COOKER_IDS) if (stationActive(STATION_BY_ID[id]) && (fuel === undefined || (STATION_BY_ID[id].fuel || 'charcoal') === fuel)) n += 1;
     return n;
+  }
+  // v4.1: null when the owned cookers have fuel for a cook (in the pile, the rack or the cart), else why.
+  function fuelWhy() {
+    const coal = ownedCookers('charcoal') > 0, wood = ownedCookers('wood') > 0;
+    if (coal && state.charcoal + (state.cart.charcoal | 0) > 0) return null;
+    if (wood && state.wood + (state.cart.wood | 0) > 0) return null;
+    return coal ? 'Buy at least one bag of charcoal.' : STRINGS.ui.buyWood;
   }
 
   function offerInput() {
@@ -6465,7 +6640,7 @@ function createSim(saved, seed) {
 
   function addonLegal(offer, meat) {
     return offer !== null && offer !== undefined && offer.type !== 'yard' && !offer.comp && typeof meat === 'string'
-      && MEAT_IDS.includes(meat) && !offer.menu.includes(meat) && (!MEATS[meat].drumOnly || state.gear.drum === true);
+      && MEAT_IDS.includes(meat) && !offer.menu.includes(meat) && (!MEATS[meat].drumOnly || canBrisket(state.gear));
   }
 
   function emitOffersReady() {
@@ -6585,7 +6760,7 @@ function createSim(saved, seed) {
     // X5.4: the lineup's wages against the payroll budget (Yard days too, X18.1 item 41).
     const pr = payroll();
     if (pr.now > pr.budget) return { ok: false, reason: fillText(STRINGS.ui.goPayroll, { p: pr.now, b: pr.budget }) };
-    if (state.charcoal + state.cart.charcoal === 0) return { ok: false, reason: 'Buy at least one bag of charcoal.' };
+    if (fuelWhy() !== null) return { ok: false, reason: fuelWhy() };
     let units = 0;
     if (b.type === 'yard') units = totalStock() + sumValues(state.cart.meat);
     else {
@@ -6629,6 +6804,7 @@ function createSim(saved, seed) {
       s.overnight = null;
     }
     const charcoalStart = state.charcoal, stockStart = Object.assign({}, state.stock);   // Q-9
+    const woodStart = state.wood;   // v4.1
     // v3.4: an advance already paid the deposit (rescueAdvance()).
     const adv = isBooking ? Math.min(s.advance | 0, b.deposit) : 0;
     state.cash += b.deposit - adv;
@@ -6641,6 +6817,7 @@ function createSim(saved, seed) {
     t.entry = entry;
     t.deposit = b.deposit;
     t.charcoalStart = charcoalStart;
+    t.woodStart = woodStart;
     t.stockStart = stockStart;
     t.gateAt = weekday ? Math.round(C.EVENT_GATE * C.YARD_DAY_FRAC) : C.EVENT_GATE;   // V32-10, v3.5
     t.lastCallAt = Math.min(t.gateAt + (isBooking ? b.window : (weekday ? Math.round(L.window * C.YARD_DAY_FRAC) : L.window)), endBase - C.LAST_CALL_GUARD) + extra;
@@ -6707,7 +6884,7 @@ function createSim(saved, seed) {
     const s = state.season;
     const bd = bookedDay();
     const cookDay = !eventPlayed() && (bd !== null ? s.day === bd : s.day >= 5);   // V32-8: Monday too
-    return cookDay ? prefill() : { meat: zeroByMeat(), charcoal: 0 };
+    return cookDay ? prefill() : { meat: zeroByMeat(), charcoal: 0, wood: 0 };
   }
 
   // What canLoadUp() asks of a Yard day: null when it can cook, else the reason.
@@ -6715,14 +6892,14 @@ function createSim(saved, seed) {
     if (state.broke) return '';
     const pr = payroll();
     if (pr.now > pr.budget) return fillText(STRINGS.ui.goPayroll, { p: pr.now, b: pr.budget });
-    if (state.charcoal + state.cart.charcoal === 0) return 'Buy at least one bag of charcoal.';
+    if (fuelWhy() !== null) return fuelWhy();
     if (totalStock() + sumValues(state.cart.meat) === 0) return 'Buy at least one unit of meat.';
     if (cartTotal() > state.cash) return STRINGS.ui.goCash;
     return null;
   }
 
   function cartCount() {
-    return sumValues(state.cart.meat) + state.cart.charcoal;
+    return sumValues(state.cart.meat) + state.cart.charcoal + (state.cart.wood | 0);
   }
 
   // V32-9: units of meat past tonight's cooler room once today's cart is bought.
@@ -6781,7 +6958,8 @@ function createSim(saved, seed) {
       const plates = rail[m] - (state.stock[m] + keep * state.cart.meat[m]) * MEATS[m].plates;
       if (plates > 0) total += cost(m, Math.ceil(plates / MEATS[m].plates));
     }
-    total += cost('charcoal', Math.max(0, C.BAGS_PER_COOKER * ownedCookers() - state.charcoal - keep * state.cart.charcoal));
+    total += cost('charcoal', Math.max(0, C.BAGS_PER_COOKER * ownedCookers('charcoal') - state.charcoal - keep * state.cart.charcoal));
+    total += cost('wood', Math.max(0, C.SPLITS_PER_COOKER * ownedCookers('wood') - state.wood - keep * (state.cart.wood | 0)));
     const cashIn = b.deposit - (s.advance | 0);
     return { need: Math.max(0, total - cashIn + (b.comp ? compDayCost(b) : 0)), day: bd };
   }
@@ -6804,7 +6982,7 @@ function createSim(saved, seed) {
       return Math.max(0, meat + bag - (b.deposit - (s.advance | 0)) + (b.comp ? compDayCost(b) : 0));
     }
     let meat = totalStock() > 0 ? 0 : Infinity;
-    if (meat !== 0) for (const m of MEAT_IDS) if (!MEATS[m].drumOnly || state.gear.drum) meat = Math.min(meat, lineCost(m, 1));
+    if (meat !== 0) for (const m of MEAT_IDS) if (!MEATS[m].drumOnly || canBrisket(state.gear)) meat = Math.min(meat, lineCost(m, 1));
     return meat + bag;
   }
 
@@ -6819,7 +6997,7 @@ function createSim(saved, seed) {
     // v3.4 review: with an event booked ahead, today cooks that event's meats (the same units).
     const bn = bookingNeeds();
     if (bn !== null) {
-      const on = MEAT_IDS.filter((m) => bn.rail[m] > 0 && (!MEATS[m].drumOnly || state.gear.drum));
+      const on = MEAT_IDS.filter((m) => bn.rail[m] > 0 && (!MEATS[m].drumOnly || canBrisket(state.gear)));
       if (on.length) {
         const units = Math.max(on.length, sumValues(c.meat));
         for (const m of MEAT_IDS) c.meat[m] = 0;
@@ -6835,7 +7013,8 @@ function createSim(saved, seed) {
       return p;
     };
     while (cartTotal() > budget && sumValues(c.meat) > 1) c.meat[costliest()] -= 1;
-    while (cartTotal() > budget && c.charcoal > (state.charcoal > 0 ? 0 : 1)) c.charcoal -= 1;
+    while (cartTotal() > budget && c.charcoal > (state.charcoal > 0 || ownedCookers('charcoal') === 0 ? 0 : 1)) c.charcoal -= 1;
+    while (cartTotal() > budget && (c.wood | 0) > (state.wood > 0 || ownedCookers('wood') === 0 ? 0 : 1)) c.wood -= 1;
     state.cart = was;
     return c;
   }
@@ -6877,10 +7056,11 @@ function createSim(saved, seed) {
 
   function shopOpen(kind) {
     if (!inWeek()) return null;
-    shopKeep = { meat: Object.assign({}, state.cart.meat), charcoal: state.cart.charcoal };
+    shopKeep = { meat: Object.assign({}, state.cart.meat), charcoal: state.cart.charcoal, wood: state.cart.wood | 0 };
+    const noFuel = (ownedCookers('charcoal') > 0 && state.charcoal === 0) || (ownedCookers('wood') > 0 && state.wood === 0);   // v4.1
     if (cartCount() === 0) {
-      if (kind === 'yard' && (totalStock() === 0 || state.charcoal === 0)) state.cart = yardCart();
-      else if (kind === 'event' && (state.charcoal === 0 || !railStocked())) state.cart = prefill();
+      if (kind === 'yard' && (totalStock() === 0 || noFuel)) state.cart = yardCart();
+      else if (kind === 'event' && (noFuel || !railStocked())) state.cart = prefill();
     }
     return shopView(kind);
   }
@@ -6931,7 +7111,7 @@ function createSim(saved, seed) {
   }
 
   function shopBack() {
-    if (shopKeep !== null) state.cart = { meat: Object.assign({}, shopKeep.meat), charcoal: shopKeep.charcoal };
+    if (shopKeep !== null) state.cart = { meat: Object.assign({}, shopKeep.meat), charcoal: shopKeep.charcoal, wood: shopKeep.wood | 0 };
     shopKeep = null;
     return { ok: true, message: '' };
   }
@@ -7020,6 +7200,7 @@ function createSim(saved, seed) {
     const out = [];
     for (const m of MEAT_IDS) if (state.cart.meat[m] > 0) out.push({ id: m, qty: state.cart.meat[m], cost: lineCost(m, state.cart.meat[m]) });
     if (state.cart.charcoal > 0) out.push({ id: 'charcoal', qty: state.cart.charcoal, cost: lineCost('charcoal', state.cart.charcoal) });
+    if ((state.cart.wood | 0) > 0) out.push({ id: 'wood', qty: state.cart.wood, cost: lineCost('wood', state.cart.wood) });
     return out;
   }
 
@@ -7341,7 +7522,7 @@ function createSim(saved, seed) {
   function toSeasonEnd() {
     const s = state.season;
     clearYard();   // deviation 45: no rain roll
-    state.cart = { meat: zeroByMeat(), charcoal: 0 };
+    state.cart = { meat: zeroByMeat(), charcoal: 0, wood: 0 };
     s.offers = [];
     s.booking = null;
     s.addon = null;
@@ -7616,7 +7797,7 @@ function createSim(saved, seed) {
         meat.sausage = units - meat.chicken;
       }
       for (const m of MEAT_IDS) {
-        if (MEATS[m].drumOnly && !state.gear.drum) meat[m] = 0;
+        if (MEATS[m].drumOnly && !canBrisket(state.gear)) meat[m] = 0;
         meat[m] = clamp(meat[m], 0, Math.max(0, C.STEPPER_MAX - state.stock[m]));
       }
       while (sumValues(meat) > room) {   // deviation 36
@@ -7627,7 +7808,7 @@ function createSim(saved, seed) {
       return meat;
     }
     function total(meat, bags) {
-      let tot = lineCost('charcoal', bags);
+      let tot = lineCost('charcoal', bags) + lineCost('wood', splits);
       for (const m of MEAT_IDS) tot += lineCost(m, meat[m]);
       return tot;
     }
@@ -7643,15 +7824,23 @@ function createSim(saved, seed) {
       const gap = Math.max(1, Math.min(C.FIRE_ADD, C.FIRE_MAX - sense));
       perCooker = Math.max(perCooker, Math.ceil(secs * C.KETTLE_DECAY / gap - 1e-9));
     }
-    let bags = Math.max(0, perCooker * ownedCookers() - state.charcoal);
-    if (state.charcoal === 0) bags = Math.max(bags, 1);
+    const coalN = ownedCookers('charcoal'), woodN = ownedCookers('wood');
+    let bags = Math.max(0, perCooker * coalN - state.charcoal);
+    if (state.charcoal === 0 && coalN > 0) bags = Math.max(bags, 1);
     bags = Math.min(bags, Math.max(0, C.CHARCOAL_MAX - state.charcoal));
+    // v4.1: a wood cooker's splits, scaled as the bags are (a split adds WOOD_ADD, a bag FIRE_ADD).
+    const perWood = Math.ceil(perCooker * C.SPLITS_PER_COOKER / C.BAGS_PER_COOKER - 1e-9);
+    let splits = Math.max(0, perWood * woodN - state.wood);
+    if (state.wood === 0 && woodN > 0) splits = Math.max(splits, 1);
+    splits = Math.min(splits, Math.max(0, C.WOOD_MAX - state.wood));
     let meat = meatLines(true);
     if (total(meat, bags) > budget) meat = meatLines(false);
     while (total(meat, bags) > budget && sumValues(meat) > 1) meat[costliest(meat)] -= 1;
-    const minBags = Math.max(0, 1 - state.charcoal);
+    const minBags = coalN > 0 ? Math.max(0, 1 - state.charcoal) : 0;
     while (total(meat, bags) > budget && bags > minBags) bags -= 1;
-    return { meat, charcoal: bags };
+    const minSplits = woodN > 0 ? Math.max(0, 1 - state.wood) : 0;
+    while (total(meat, bags) > budget && splits > minSplits) splits -= 1;
+    return { meat, charcoal: bags, wood: splits };
   }
 
   // W8.4 with W22.27, dev and harness only (game.js never calls it): ends the booking now with
@@ -7675,9 +7864,12 @@ function createSim(saved, seed) {
       t.foodCost += units * MEATS[m].unit;
       t.sold[m] = plates;
     }
-    const bags = Math.min(state.charcoal, C.BAGS_PER_COOKER * ownedCookers());
+    const bags = Math.min(state.charcoal, C.BAGS_PER_COOKER * ownedCookers('charcoal'));
     state.charcoal -= bags;
     t.bags += bags;
+    const splits = Math.min(state.wood, C.SPLITS_PER_COOKER * ownedCookers('wood'));   // v4.1
+    state.wood -= splits;
+    t.splits += splits;
     let plates = 0;
     let worth = 0;
     for (const m of MEAT_IDS) { plates += t.rail[m]; worth += t.rail[m] * MEATS[m].price; }
@@ -7700,7 +7892,7 @@ function createSim(saved, seed) {
     for (const sl of t.comp.slots) {
       if (sl.done) continue;
       if (sl.box === null) {
-        const ok = state.stock[sl.meat] > 0 && (!MEATS[sl.meat].drumOnly || state.gear.drum);
+        const ok = state.stock[sl.meat] > 0 && (!MEATS[sl.meat].drumOnly || canBrisket(state.gear));
         if (ok) {
           state.stock[sl.meat] -= 1;
           t.foodCost += MEATS[sl.meat].unit;
@@ -7713,9 +7905,12 @@ function createSim(saved, seed) {
       }
       judgeSlot(sl);
     }
-    const bags = Math.min(state.charcoal, C.BAGS_PER_COOKER * ownedCookers());
+    const bags = Math.min(state.charcoal, C.BAGS_PER_COOKER * ownedCookers('charcoal'));
     state.charcoal -= bags;
     t.bags += bags;
+    const splits = Math.min(state.wood, C.SPLITS_PER_COOKER * ownedCookers('wood'));   // v4.1
+    state.wood -= splits;
+    t.splits += splits;
     clearService();
     endDay({ comp: true, stars });
   }
@@ -7845,7 +8040,7 @@ function createSim(saved, seed) {
     if (freeSlotFor(state.stations.kettle1, m.slots) >= 0) return undefined;
     for (const id of ['kettle2', 'drum']) {
       if (!stationActive(STATION_BY_ID[id])) continue;
-      if (m.drumOnly && id !== 'drum') continue;
+      if (m.drumOnly && STATION_BY_ID[id].brisket !== true) continue;
       if (freeSlotFor(state.stations[id], m.slots) >= 0) return id;
     }
     return null;
@@ -8050,7 +8245,35 @@ function createSim(saved, seed) {
   function payroll() {
     let now = 0;
     for (const c of lineupCards()) now += c.wage;
-    return { now, budget: C.PAYROLL[0], slots: C.ROSTER_SLOTS[0], count: state.crew.length };
+    const tier = pitTier(state.gear);   // v4.1: the facility grows with the main cooker
+    return { now, budget: C.TIER_PAYROLL[tier], slots: C.TIER_SLOTS[tier], count: state.crew.length, hire: hireBudget(), signed: crewWages(), tier };
+  }
+
+  // v4.0: the wages the yard can sign for. PAYROLL_START with one kettle, plus PAYROLL_PER_GEAR for
+  // each piece of gear owned, up to the rung's PAYROLL.
+  function hireBudget() {
+    let n = 0;
+    for (const id of GEAR_IDS) if (state.gear && state.gear[id] === true) n += 1;
+    const tier = pitTier(state.gear);
+    return Math.min(C.TIER_PAYROLL[tier], C.PAYROLL_START + C.PAYROLL_PER_GEAR * n + C.PAYROLL_PER_TIER * tier);
+  }
+
+  // v4.0: every card's wage, brought or resting (what the crew is signed for).
+  function crewWages() {
+    let n = 0;
+    for (const c of state.crew) n += c.wage | 0;
+    return n;
+  }
+  // v4.0: null when a card at `wage` can sign, else the reason.
+  function hireCapWhy(wage) {
+    const b = hireBudget();
+    return crewWages() + (wage | 0) > b ? fillText(STRINGS.ui.hireCap, { b, n: C.PAYROLL_PER_GEAR }) : null;
+  }
+
+  // v4.0: what a lineup card is paid for today's cook: half on a weekday Yard day (a half shift).
+  function wageToday(c) {
+    const t = state.today;
+    return t && t.kind === 'yard' && t.weekday === true ? Math.round(c.wage * C.YARD_DAY_WAGE) : c.wage;
   }
 
   function crewLoop() {
@@ -8241,7 +8464,7 @@ function createSim(saved, seed) {
     s.offers = [];
     s.booking = null;
     s.addon = null;
-    state.cart = { meat: zeroByMeat(), charcoal: 0 };
+    state.cart = { meat: zeroByMeat(), charcoal: 0, wood: 0 };
     const pool = restore
       ? restore.pool.map((e, idx) => {
         const stars = cardStars(e.skills);
@@ -8305,6 +8528,8 @@ function createSim(saved, seed) {
     const e = poolEntry(idx);
     if (e === null || e.status !== 'open') return no();
     if (state.crew.length >= C.CREW_MAX) return no(STRINGS.ui.crewFull);   // X18.1 item 45
+    const cap = hireCapWhy(e.wage);   // v4.0: the yard's wages grow with its gear
+    if (cap !== null) return no(cap);
     const card = newCard(e, 2, true);   // Hiring Day: no signing fee, two seasons, NEW
     e.status = 'mine';
     emit('crew_hired', { id: card.id, name: card.name, role: card.role, from: 'draft', fee: 0 });
@@ -8319,6 +8544,8 @@ function createSim(saved, seed) {
     const e = state.hiring.refs.find((x) => x.idx === i) || null;
     if (e === null || e.status !== 'open') return no();
     if (state.crew.length >= C.CREW_MAX) return no(STRINGS.ui.crewFull);
+    const capR = hireCapWhy(e.wage);   // v4.0
+    if (capR !== null) return no(capR);
     const card = newCard(e, 2, true);
     e.status = 'mine';
     emit('crew_hired', { id: card.id, name: card.name, role: card.role, from: 'referral', fee: 0 });
@@ -8353,6 +8580,8 @@ function createSim(saved, seed) {
     const w = s.walkins[i];
     if (!w || w.hired) return no();
     if (state.crew.length >= payroll().slots || state.crew.length >= C.CREW_MAX) return no(STRINGS.ui.crewFull);
+    const capW = hireCapWhy(w.wage);   // v4.0
+    if (capW !== null) return no(capW);
     const fee = w.wage;
     const dep = s.booking !== null ? s.booking.deposit : 0;
     if (fee > state.cash || state.cash + dep - cartTotal() < fee) return no('Not enough cash');   // the R-1 rule
@@ -8508,10 +8737,12 @@ function createSim(saved, seed) {
     out.gear = {};
     for (const g of GEAR_IDS) out.gear[g] = state.gear[g] === true;
     if (!out.gear.kettle2) out.gear.drum = false;
+    if (!out.gear.cabinet) out.gear.offset = false;
+    if (!out.gear.offset) out.gear.trailer = false;
     out.decor = {};
     for (const d of DECOR_IDS) out.decor[d] = state.decor[d] === true;
     if (!out.decor.chair1) out.decor.chair2 = false;
-    if (!out.gear.drum) out.stock.brisket = 0;
+    if (!canBrisket(out.gear)) out.stock.brisket = 0;
     out.stats = {};
     for (const k of STAT_IDS) out.stats[k] = clamp(Math.trunc(state.stats[k]), 0, C.MAX_STAT);
     out.drivewayShown = state.drivewayShown === true;
@@ -8734,5 +8965,10 @@ PitSim.unitAt = unitAt;
 PitSim.unitTiles = unitTiles;
 PitSim.applyLayout = applyLayout;
 PitSim.layoutKey = function () { return LAYOUT_KEY; };
+// v4.1 the gear ladder
+PitSim.PIT_TIERS = PIT_TIERS;
+PitSim.TIER_GEAR = TIER_GEAR;
+PitSim.pitTier = pitTier;
+PitSim.canBrisket = canBrisket;
 
 })();

@@ -197,6 +197,34 @@ RS.log = function (P, u0, u1, vc, zc, rad, rr, cap, rings) {
     else this.poly(ring(rad * 0.7), cap.shade);
   }
 };
+// v4.1: the lower half of a lying cylinder (an open cook chamber with its lid up).
+RS.trough = function (P, u0, u1, vc, zc, rad, rr) {
+  for (let u = u0; u <= u1; u += 0.5) {
+    for (let i = 0; i < THETA.length; i++) {
+      const cs = THETA[i][0], sn = THETA[i][1];
+      if (sn > 0.02) continue;
+      const L = 0.8 * sn + 0.5 * cs;
+      const c = L > 0.62 ? rr.hi : L > 0.05 ? rr.base : L > -0.5 ? rr.shade : rr.dark;
+      for (let d = rad - 0.6; d <= rad; d += 0.6) { const p = P(u, vc + d * cs, zc + d * sn); this.px(p[0], p[1], c); }
+    }
+  }
+};
+// v4.1: an open chamber's top: dark coals under a steel grate, the lid stood up on its back hinge.
+function openChamber(r, P, u0, u1, vc, zc, rad, rr, band) {
+  r.obj(function () {   // the lid, hinged on the back edge and stood up behind the grate
+    r.q(P, [[u0, vc - rad, zc], [u1, vc - rad, zc], [u1, vc - rad - 5, zc + rad * 1.5], [u0, vc - rad - 5, zc + rad * 1.5]], rr.shade);
+    r.q(P, [[u0 + 1, vc - rad - 0.6, zc + 1], [u1 - 1, vc - rad - 0.6, zc + 1], [u1 - 1, vc - rad - 4.6, zc + rad * 1.5 - 1], [u0 + 1, vc - rad - 4.6, zc + rad * 1.5 - 1]], rr.base);
+    r.seg(P, [u0, vc - rad - 5, zc + rad * 1.5], [u1, vc - rad - 5, zc + rad * 1.5], rr.hi);
+  });
+  r.obj(function () {
+    r.trough(P, u0, u1, vc, zc, rad, rr);
+    r.q(P, [[u0, vc - rad + 0.5, zc], [u1, vc - rad + 0.5, zc], [u1, vc + rad - 0.5, zc], [u0, vc + rad - 0.5, zc]], CH.dark);
+    if (band > 0) for (let u = u0 + 2; u < u1 - 1; u += 3) { const p = P(u, vc + ((u * 7) % 5) - 2, zc); r.px(p[0], p[1], band >= 2 ? EM.base : EM.shade); }
+    for (let v = vc - rad + 2; v <= vc + rad - 2; v += 2.5) r.seg(P, [u0 + 1, v, zc], [u1 - 1, v, zc], ST.shade);
+    for (let u = u0 + 2; u <= u1 - 2; u += 7) r.seg(P, [u, vc - rad + 1, zc], [u, vc + rad - 1, zc], ST.base);
+    r.seg(P, [u0, vc + rad - 0.3, zc], [u1, vc + rad - 0.3, zc], rr.hi);   // the lit front lip
+  });
+}
 function glow(r, pts, band) {
   if (band <= 0) return;
   pts.forEach(function (p, i) {
@@ -275,26 +303,42 @@ function drum(r, f) {
   r.obj(function () { stackPipe(r, cx + 3, g - 40, g - 25, K); r.rect(cx + 3, g - 31, 4, 1, K.dark); });
 }
 
+// Frames 0 to 3 closed by fire band; v4.1 frames 4 to 7 the same bands with the door open on two racks.
 function cabinet(r, f) {
-  const P = r.F(1, 1);
+  const P = r.F(1, 1), open = f >= 4, band = f % 4;
   r.obj(function () {
     r.box(P, 5, 17, 7, 19, 0, 4, K, { rim: false }); r.box(P, 17, 5, 19, 7, 0, 4, K, { rim: false }); r.box(P, 17, 17, 19, 19, 0, 4, K, { rim: false });
     r.box(P, 5, 5, 19, 19, 4, 36, K, { crease: true });
-    r.q(P, [[7, 19, 9], [17, 19, 9], [17, 19, 36], [7, 19, 36]], K.shade);         // door on the lit face
-    r.q(P, [[8, 19, 10], [16, 19, 10], [16, 19, 35], [8, 19, 35]], K.base);
-    const hd = P(15, 19, 22); r.rect(hd[0], hd[1] - 2, 1, 4, WM.hi);
-    const dl = P(10, 19, 31); r.ell(dl[0], dl[1], 2, 2, ST.dark); r.ell(dl[0] - 0.2, dl[1] - 0.2, 1.3, 1.3, PL.hi);
-    if (f >= 1) { const pts = []; for (let u = 9; u < 16; u++) { const p = P(u, 19, 6); pts.push([p[0], p[1]]); } glow(r, pts, f); }
+    if (!open) {
+      r.q(P, [[7, 19, 9], [17, 19, 9], [17, 19, 36], [7, 19, 36]], K.shade);         // door on the lit face
+      r.q(P, [[8, 19, 10], [16, 19, 10], [16, 19, 35], [8, 19, 35]], K.base);
+      const hd = P(15, 19, 22); r.rect(hd[0], hd[1] - 2, 1, 4, WM.hi);
+      const dl = P(10, 19, 31); r.ell(dl[0], dl[1], 2, 2, ST.dark); r.ell(dl[0] - 0.2, dl[1] - 0.2, 1.3, 1.3, PL.hi);
+    } else {
+      r.q(P, [[7, 19, 7], [17, 19, 7], [17, 19, 37], [7, 19, 37]], CH.dark);         // the open box, four racks
+      r.q(P, [[8, 19, 8], [16, 19, 8], [16, 19, 36], [8, 19, 36]], CH.base);
+      [9, 16, 23, 30].forEach(function (z) { r.seg(P, [8, 19, z], [16, 19, z], ST.base); r.seg(P, [8, 18, z + 1], [16, 18, z + 1], ST.shade); });
+      if (band > 0) [[10, 10], [13, 10], [15, 10]].forEach(function (q) { const p = P(q[0], 19, q[1]); r.px(p[0], p[1], band >= 2 ? EM.base : EM.shade); });
+    }
+    if (band >= 1) { const pts = []; for (let u = 9; u < 16; u++) { const p = P(u, 19, 6); pts.push([p[0], p[1]]); } glow(r, pts, band); }
+  });
+  if (open) r.obj(function () {   // the door swung out on its hinge at u 7
+    r.q(P, [[7, 19, 9], [7, 25, 9], [7, 25, 36], [7, 19, 36]], K.shade);
+    r.q(P, [[7, 20, 10], [7, 24, 10], [7, 24, 35], [7, 20, 35]], K.base);
+    const hd = P(7, 23, 22); r.rect(hd[0], hd[1] - 2, 1, 4, WM.hi);
   });
   r.obj(function () { const s = P(9, 9, 40); stackPipe(r, s[0] - 2, s[1] - 12, s[1] + 1, K); });
 }
 
+// Frames 0 to 3 closed by fire band; v4.1 frames 4 to 7 the same bands with the lid up on the grate.
 function stickBurner(r, f) {
-  const P = r.F(2, 1);
+  const P = r.F(2, 1), open = f >= 4;
+  f = f % 4;
   r.obj(function () { // legs
     [12, 34].forEach(function (u) { r.seg(P, [u, 5, 0], [u, 12, 7], K.base); r.seg(P, [u, 19, 0], [u, 12, 7], K.shade); });
   });
-  r.obj(function () {
+  if (open) openChamber(r, P, 8, 38, 12, 14, 9.5, K, f);
+  else r.obj(function () {
     r.log(P, 8, 38, 12, 14, 9.5, K, K, false);
     r.seg(P, [10, 21.5, 15], [36, 21.5, 15], K.dark);                              // lid seam on the lit side
     [16, 30].forEach(function (u) { const p = P(u, 22, 19); r.rect(p[0], p[1], 3, 1, WM.hi); });
@@ -306,11 +350,13 @@ function stickBurner(r, f) {
     const h = P(47, 12, 11); r.rect(h[0] - 1, h[1], 3, 1, WM.hi);
     if (f >= 1) { const pts = []; for (let v = 8; v < 17; v++) { const p = P(47, v, 7); pts.push([p[0], p[1]]); } glow(r, pts, f); }
   });
-  r.obj(function () { const s = P(10, 12, 22); const t = P(10, 12, 48); stackPipe(r, s[0] - 2, t[1], s[1], K); });
+  r.obj(function () { const s = P(open ? 7 : 10, open ? 4 : 12, open ? 12 : 22); const t = P(open ? 7 : 10, open ? 4 : 12, open ? 41 : 48); stackPipe(r, s[0] - 2, t[1], s[1], K); });
 }
 
+// Frames 0 to 3 closed by fire band; v4.1 frames 4 to 7 the same bands with the lid up on the grate.
 function trailerRig(r, f) {
-  const P = r.F(2, 1);
+  const P = r.F(2, 1), open = f >= 4;
+  f = f % 4;
   r.obj(function () {
     r.seg(P, [2, 12, 7], [-8, 12, 4], WD.base); r.seg(P, [2, 13, 7], [-8, 13, 4], WD.dark);
     r.box(P, 2, 3, 46, 21, 6, 3, IR, { rim: false });
@@ -318,7 +364,8 @@ function trailerRig(r, f) {
   r.obj(function () {
     [18, 31].forEach(function (u) { const w = P(u, 22, 5); r.ell(w[0], w[1], 4.5, 5, K.dark); r.ell(w[0] - 0.5, w[1] - 0.5, 3, 3.4, K.shade); r.ell(w[0], w[1], 1.5, 1.6, ST.base); });
   });
-  r.obj(function () {
+  if (open) openChamber(r, P, 6, 36, 12, 18, 8, IR, f);
+  else r.obj(function () {
     r.log(P, 6, 36, 12, 18, 8, IR, IR, false);
     r.seg(P, [8, 20.2, 19], [34, 20.2, 19], IR.dark);
     const d = P(22, 20, 13); r.ell(d[0], d[1], 2, 2, ST.dark); r.ell(d[0] - 0.2, d[1] - 0.2, 1.3, 1.3, PL.hi);
@@ -328,7 +375,7 @@ function trailerRig(r, f) {
     r.q(P, [[46, 8, 12], [46, 16, 12], [46, 16, 20], [46, 8, 20]], IR.dark);
     if (f >= 1) { const pts = []; for (let v = 9; v < 16; v++) { const p = P(46, v, 13); pts.push([p[0], p[1]]); } glow(r, pts, f); }
   });
-  r.obj(function () { const s = P(9, 12, 25); const t = P(9, 12, 52); stackPipe(r, s[0] - 2, t[1], s[1], K); });
+  r.obj(function () { const s = P(open ? 5 : 9, open ? 5 : 12, open ? 16 : 25); const t = P(open ? 5 : 9, open ? 5 : 12, open ? 46 : 52); stackPipe(r, s[0] - 2, t[1], s[1], K); });
 }
 
 /* ================================================================ fuel, cooler, board, counter */
@@ -855,9 +902,18 @@ function def(name, w, h, ax, ay, n, paint, meta) {
 // frame's grate at cy; drum: the rack on its lid top).
 def('kettle', 36, 40, 18, 33, 5, kettle, { footprint: [1, 1], shadow: [12, 5], grate: [0, -15, 9, 3] });
 def('drum', 32, 50, 16, 46, 4, drum, { footprint: [1, 2], shadow: [12, 5], grate: [0, -23, 8, 3] });
-def('cabinet', 36, 76, 18, 60, 4, cabinet, { footprint: [1, 1], shadow: [15, 6] });
-def('stick_burner', 84, 72, 40, 58, 4, stickBurner, { footprint: [2, 1], shadow: [30, 9] });
-def('trailer_rig', 96, 84, 46, 66, 4, trailerRig, { footprint: [2, 1], shadow: [34, 10] });
+// v4.1 the gear ladder: 8 frames (4 to 7 open), grateSpots [dx, dy] rp from the anchor, one a grate
+// slot in slot order (a 2 slot piece takes two neighbours), grateCell the cell width, vent the stack top.
+// Cabinet: four racks one over the other inside the open door (z 9 to 30 at v 18.5); a 2 slot piece
+// sits on the lower of its two racks. Long cookers: the open chamber's
+// grate (stick burner z 14, trailer z 18) in two rows along u, the front row first.
+function isoSpot(nx, ny, u, v, z) { return [-12 * nx + 12 * ny + u - v, -6 * nx - 6 * ny + (u + v) / 2 - z]; }
+def('cabinet', 36, 76, 18, 60, 8, cabinet, { footprint: [1, 1], shadow: [15, 6], open: 4,
+  grateSpots: [30, 23, 16, 9].map(function (z) { return isoSpot(1, 1, 12, 18.5, z); }), grateCell: 9, grateSpan: 'stack', vent: [0, -53] });
+def('stick_burner', 84, 72, 40, 58, 8, stickBurner, { footprint: [2, 1], shadow: [30, 9], open: 4,
+  grateSpots: [[14, 15], [22, 15], [30, 15], [30, 9], [22, 9], [14, 9]].map(function (q) { return isoSpot(2, 1, q[0], q[1], 14); }), grateCell: 7, vent: [-14, -53], ventOpen: [-9, -52] });
+def('trailer_rig', 96, 84, 46, 66, 8, trailerRig, { footprint: [2, 1], shadow: [34, 10], open: 4,
+  grateSpots: [[10, 15], [17, 15], [24, 15], [31, 15], [31, 9], [24, 9], [17, 9], [10, 9]].map(function (q) { return isoSpot(2, 1, q[0], q[1], 18); }), grateCell: 6, vent: [-15, -57], ventOpen: [-12, -57] });
 def('pile', 32, 38, 16, 24, 4, pile, { footprint: [1, 1], shadow: [12, 5] });
 def('woodpile', 44, 38, 22, 24, 3, woodpile, { footprint: [1, 1], shadow: [17, 7] });
 def('cooler', 32, 38, 16, 24, 6, cooler, { footprint: [1, 1], shadow: [13, 6] });

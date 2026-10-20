@@ -267,7 +267,7 @@ const SIM_SURFACE = ['C', 'MEATS', 'MEAT_IDS', 'MAP', 'CATALOG', 'STRINGS', 'cre
   'BOOKINGS', 'BOOKING_IDS', 'LOOK_KEYS', 'LOOK_COUNTS', 'DEFAULT_LOOK', 'genOffers', 'scoreEvent', 'cleanName', 'filterName',
   // v3.1 (X1): the six new top level names.
   'ROLE_IDS', 'genPool', 'genWalkins', 'cardStars', 'wageFor', 'skillValue'];
-const SURFACE_COUNTS = { tiles: 132, stations: 9, seats: 6, decor: 6, props: 19, catalog: 21 };
+const SURFACE_COUNTS = { tiles: 132, stations: 9, seats: 6, decor: 6, props: 19, catalog: 25 };   // v4.1: wood, cabinet, offset, trailer
 const MAP_SIZE = { w: 11, h: 12 };
 const TILE_PX = 16;
 const VIRTUAL = { w: MAP_SIZE.w * TILE_PX, h: MAP_SIZE.h * TILE_PX };   // 176 by 192
@@ -287,7 +287,7 @@ const DEVICE_SIZES = [
 ];
 
 // Contract D2 and D3.
-const C_EXPECT = { WALK_TILES_PER_S: 6, SAVE_VERSION: 12, PATIENCE_MID_FRAC: 0.5, GEAR_RESERVE: 30, QUEUE_SPOTS: 3, QUEUE_SPOTS_BIG: 5, TABLE_SPOTS: 3, TABLE_SPOTS_BIG: 5 };
+const C_EXPECT = { WALK_TILES_PER_S: 6, SAVE_VERSION: 13, PATIENCE_MID_FRAC: 0.5, GEAR_RESERVE: 30, QUEUE_SPOTS: 3, QUEUE_SPOTS_BIG: 5, TABLE_SPOTS: 3, TABLE_SPOTS_BIG: 5 };
 const C_NEW_KEYS = ['EAT_MIN', 'EAT_MAX', 'HEART_SECONDS', 'SEAT_BONUS_BASE', 'SEAT_BONUS_MAX', 'CHARM_STEP', 'CHARM_MAX', 'REP_TOGO_QUICK', 'SWEAT_FRAC', 'ZZZ_AFTER', 'FX', 'PATIENCE_MID_FRAC', 'GEAR_RESERVE'];
 const FX_KEYS = ['NUMBER_S', 'NUMBER_RISE_PX', 'NUMBER_FADE_AT', 'TIP_GAP_PX', 'SPARKLE_S', 'SPARKLE_FRAME_S', 'SPARKLE_STAGGER_S',
   'HEART_S', 'HEART_FRAME_S', 'HEART_RISE_PX', 'HEART_FADE_S', 'EAT_FRAME_S', 'PUFF_EVERY_LOW', 'PUFF_EVERY_GOOD', 'PUFF_EVERY_HOT',
@@ -414,7 +414,7 @@ const C_W2 = {
 };
 const C_W2_FIXED = ['SAVE_VERSION', 'SEASON_WEEKS', 'NAME_MAX', 'NAME_PUNCT', 'LENGTHS'];
 // W2 changed values and the v2.1 keys that stay (W2 last paragraph).
-const C_W2_EXACT = { SAVE_VERSION: 12, DRIVEWAY_PRICE: 400, GATE_OPENS: 30, LAST_CALL: 110, DAY_SECONDS: 125, STEPPER_MAX: 99, START_CASH: 80, START_REP: 20 };
+const C_W2_EXACT = { SAVE_VERSION: 13, DRIVEWAY_PRICE: 400, GATE_OPENS: 30, LAST_CALL: 110, DAY_SECONDS: 125, STEPPER_MAX: 99, START_CASH: 80, START_REP: 20 };
 // W22.18: the keys whose starting values the W19 literals assume.
 const LITERAL_KEYS = ['FEE_MULT', 'FEE_ROUND', 'DEPOSIT_FRAC', 'PAY_BASE', 'PAY_PER_STAR', 'STAR_FANS', 'REP_DAY_MIN', 'SPARE_FRAC', 'BAGS_PER_COOKER',
   'SCORE_FED', 'SCORE_WAIT', 'SCORE_QUALITY', 'STAR_EDGES', 'WAIT_FULL_S', 'WAIT_ZERO_S', 'BURNT_PENALTY', 'OFFMENU_PENALTY', 'COOLER_CAP', 'SEASON_CARRY_REP', 'SEASON_REP_FLOOR',
@@ -563,7 +563,7 @@ const ID3 = {
 };
 const SEASON_WEEKS = 7;   // v3.5: six weeks and the competition finale (was 9)
 const P_POOL = 24;        // v3.6: the Hiring Day pool (6 a role, 4 roles)
-const SAVE_V = 12;        // v3.5: save v9 (season.plan, pit); v3.6: v10 (the register, the TILL card); v3.7: v11 (pay, then sit)
+const SAVE_V = 13;        // v4.1: v13 (the gear ladder); v3.5: save v9 (season.plan, pit); v3.6: v10 (the register, the TILL card); v3.7: v11 (pay, then sit)
 // W19 step 51: the v2.1 (v3) save sample.
 const SAVE_V3_SAMPLE = {
   v: 3, day: 5, cash: 150, rep: 20,
@@ -1197,6 +1197,14 @@ const EDGE_OK = {
 };
 
 // Section 2.8 v1 sample and section 5.1 item 3 dirty sample.
+// v4.1: a migrated save gains the gear ladder keys, all false; the rest of the sample's gear is kept.
+const LADDER_IDS = ['cabinet', 'offset', 'trailer'];
+function v1Want(k, got) {
+  if (k !== 'gear') return SAVE_V1_SAMPLE[k];
+  const out = Object.assign({}, SAVE_V1_SAMPLE.gear);
+  for (const g of LADDER_IDS) if (got && typeof got === 'object' && g in got) out[g] = false;
+  return out;
+}
 const SAVE_V1_SAMPLE = {
   v: 1, day: 5, cash: 187, rep: 80,
   stock: { sausage: 0, chicken: 2, ribs: 0, butt: 1, brisket: 0 },
@@ -1207,7 +1215,7 @@ const SAVE_V1_SAMPLE = {
   drivewayShown: false
 };
 const SAVE_DIRTY = { v: 1, day: 'abc', cash: -50, rep: 400, stock: { sausage: 200, bogus: 1 }, gear: { drum: true, kettle2: false }, hires: { tender: true }, extra: 1 };
-const INVALID_SAVES = [null, 'x', [], {}, undefined, 42, { v: '5' }, { v: 0 }, { v: '3' }, { v: '4' }, { v: 13 }];   // v3.9: v 1 to 12 accepted
+const INVALID_SAVES = [null, 'x', [], {}, undefined, 42, { v: '5' }, { v: 0 }, { v: '3' }, { v: '4' }, { v: 14 }];   // v4.1: v 1 to 13 accepted
 
 // The shopping list for day 1 and later days. Two sausage units give four plates, so later
 // customers walk out and the walk out step has something to assert.
@@ -1454,7 +1462,7 @@ async function nodeChecks() {
     migratedDefaults(s, 'v1 sample');
     assert(s.tutorial && s.tutorial.done === true, 'v1 sample tutorial ' + describe(s.tutorial));
     for (const k of ['day', 'cash', 'rep', 'stock', 'charcoal', 'gear', 'drivewayShown']) {
-      assert(sameJSON(s[k], SAVE_V1_SAMPLE[k]), 'v1 sample ' + k + ' is ' + describe(s[k]) + ', wanted ' + describe(SAVE_V1_SAMPLE[k]));
+      assert(sameJSON(s[k], v1Want(k, s[k])), 'v1 sample ' + k + ' is ' + describe(s[k]) + ', wanted ' + describe(v1Want(k, s[k])));
     }
     for (const [k, n] of Object.entries(SAVE_V1_SAMPLE.stats)) assert(s.stats[k] === n, 'v1 sample stats.' + k + ' is ' + s.stats[k]);
     assert(s.stats.seated === 0, 'v1 sample stats.seated ' + s.stats.seated);
@@ -3122,6 +3130,7 @@ function validateV4(P) {
   want4.v = SAVE_V;
   want4.pit = { xp: 0, longDay: 0 };   // v3.5
   want4.layout = {};   // v3.9: the default yard
+  for (const g of LADDER_IDS) want4.gear[g] = false;   // v4.1: no rung of the gear ladder
   delete want4.hires;
   delete want4.settings;   // 2026-10-19: an old save's length setting is ignored
   Object.assign(want4, { crew: [], crewSeq: 1, hiring: null });
@@ -3173,6 +3182,7 @@ function validateV5(P) {
   want5.v = SAVE_V;
   want5.pit = { xp: 0, longDay: 0 };   // v3.5
   want5.layout = {};   // v3.9
+  for (const g of LADDER_IDS) want5.gear[g] = false;   // v4.1
   delete want5.settings;   // 2026-10-19: an old save's length setting is ignored
   Object.assign(want5.season, { day: 0, dayLog: [null, null, null, null, null, null, null], prepped: false, loadin: false, overnight: null, advance: 0, plan: null });
   // v3.3: the shelf, the ribbons and no open Offseason.
@@ -3289,7 +3299,7 @@ function settleWeek(h, stars, offerId) {
   return h.st().till;
 }
 const toReport = (h, extra = 10) => h.until(() => h.st().loop === LOOP.report, (h.st().today && h.st().today.endAt ? h.st().today.endAt : 160) + extra);
-const cartView = (st) => ({ meat: Object.assign({}, st.cart.meat), charcoal: st.cart.charcoal });
+const cartView = (st) => Object.assign({ meat: Object.assign({}, st.cart.meat), charcoal: st.cart.charcoal }, st.cart.wood !== undefined ? { wood: st.cart.wood } : {});   // v4.1: wood splits
 
 // Step 11 setup: kettle 1 lit, two sausages on it, a third in hand.
 function fullGrateSetup(P, seed) {
@@ -4309,6 +4319,14 @@ function offseasonHeadless(P) {
   hv.refs.forEach((r, i) => assert(r.from === refers[i].name && r.role === refers[i].role && r.stars >= refers[i].stars - 1 && r.status === 'open', 'referral ' + describe(r)));
   if (hv.refs.length > 0 && h2.st().crew.length < C.CREW_MAX) {
     const round = hv.round;
+    // v4.0 economy: a hire past the wages the yard can sign is refused with ui.hireCap; the fixture's
+    // eight card crew is over it, so the check reads the refusal, then cuts the fixture's wages.
+    const pr0 = h2.sim.payroll();
+    if (C.PAYROLL_START !== undefined && pr0.signed + hv.refs[0].wage > pr0.hire) {
+      const no = h2.sim.hireReferral(0);
+      assert(no.ok === false && no.message === fill(P.STRINGS.ui.hireCap, { b: pr0.hire, n: C.PAYROLL_PER_GEAR }), 'hireReferral over the cap ' + describe(no));
+      for (const c of h2.st().crew) c.wage = 1;   // fixture
+    }
     const r = h2.sim.hireReferral(0);
     h2.drain();
     assert(r.ok === true && h2.sim.hiringView().round === round && h2.sim.hiringView().refs[0].status === 'mine', 'hireReferral ' + describe(r));
@@ -4613,7 +4631,7 @@ function daysLoopHeadless(P) {
   assert(d3.season.day === 5 && d3.season.loadin === false && sameJSON(d3.season.dayLog, ['off', 'off', 'off', 'off', 'off', null, null]), 'no pick keeps the day, never the Load-in ' + describe(d3.season));
   const d4 = V(v6Save({ season: { week: 5, pick: 'birthday', day: 3 } }));
   assert(d4.season.week === 3 && d4.season.day === 0, 'a week that does not hold opens Monday ' + describe(d4.season));
-  assert(V({ v: 13 }) === null, '{ v: 13 } accepted');
+  assert(V({ v: 14 }) === null, '{ v: 14 } accepted');
   notes.push('morning shops cost ' + seen.join(', ') + ' Monday to Thursday');
   return notes.join('; ') + '; the report save reloads on Sunday, a Yard week writes { yard, 0 }, dirty v6 keys clamp';
 }
@@ -5938,7 +5956,12 @@ const tapNotes = [];
 let tileToClientSeen = null;   // true once the renderer answered, false once we fell back
 async function canvasPoint(tx, ty) {
   // The angle redo F: every tap goes through PitSim.game.tileToClient, which pans the camera first.
-  const live = await ev('(() => { const g = window.PitSim && window.PitSim.game; if (!g || typeof g.tileToClient !== "function") return null; const p = g.tileToClient(' + Number(tx) + ', ' + Number(ty) + '); if (!p) return null; const x = Array.isArray(p) ? p[0] : p.x, y = Array.isArray(p) ? p[1] : p.y; return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null; })()');
+  // v4.1: the point is asked again after a frame until two answers agree. The near view's follow
+  // eases over 250 ms of real frames, and the harness settles the sim faster than that, so a point
+  // read in the frame before the follow starts its ease slid by up to a tile under the tap (on the
+  // phone at the stick burner, 12 rp after the walk from it to the second kettle). A player taps what
+  // is on screen; the harness now taps once the view is at rest.
+  const live = await ev('(async () => { const g = window.PitSim && window.PitSim.game; if (!g || typeof g.tileToClient !== "function") return null; const ask = () => { const p = g.tileToClient(' + Number(tx) + ', ' + Number(ty) + '); if (!p) return null; const x = Array.isArray(p) ? p[0] : p.x, y = Array.isArray(p) ? p[1] : p.y; return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null; }; let a = ask(); for (let i = 0; a && i < 12; i++) { await new Promise((r) => { requestAnimationFrame(() => r()); setTimeout(r, 100); }); const b = ask(); if (b && Math.abs(b.x - a.x) < 0.5 && Math.abs(b.y - a.y) < 0.5) break; a = b; } return a; })()');
   assert(live, 'PitSim.game.tileToClient(' + tx + ', ' + ty + ') gave no client point');
   tileToClientSeen = true;
   return live;
@@ -8020,6 +8043,10 @@ async function browserChecks() {
 
   const before = await probeMetrics().catch(() => ({ bored: 0, boredPrep: 0, service: 0, events: 0 }));
   const eventsDay1 = await run('return globalThis.__smoke.events;').catch(() => []);
+  // v4.1: the tap count is frozen with the day 1 events, so tapsPerPlate is day 1 taps over day 1
+  // plates. The counter keeps running for later steps (runTaps); before this, every canvas tap a
+  // later step added (the ladder steps added 22) landed in the day 1 metric.
+  const tapsDay1 = taps;
 
   await step('reload persists', async () => {
     await reload();
@@ -8093,7 +8120,7 @@ async function browserChecks() {
     const s = await ev(read);
     assert(s.phase === PHASE.morning, 'phase ' + s.phase);
     assert(s.loop === LOOP.creator && (await visible(ID3.creator)), 'loop ' + describe(s.loop) + ', #creator visible ' + (await visible(ID3.creator)));
-    for (const k of keys) assert(sameJSON(s[k], SAVE_V1_SAMPLE[k]), k + ' is ' + describe(s[k]) + ', wanted ' + describe(SAVE_V1_SAMPLE[k]));
+    for (const k of keys) assert(sameJSON(s[k], v1Want(k, s[k])), k + ' is ' + describe(s[k]) + ', wanted ' + describe(v1Want(k, s[k])));
     // v3.1 (X11.3): the sample hired nobody, so no cards and no state.hires.
     assert(sameJSON(s.crew, []) && s.hires === undefined, 'crew ' + describe(s.crew) + ', hires ' + describe(s.hires));
     assert(s.decor && DECOR_IDS.every((d) => s.decor[d] === false), 'decor ' + describe(s.decor));
@@ -8109,7 +8136,7 @@ async function browserChecks() {
     await hireGo(4);
     const s2 = await ev(read);
     assert(s2.loop === LOOP.week && (await visible(ID3.week)), 'after hire-go four times loop ' + describe(s2.loop));
-    for (const k of keys) assert(sameJSON(s2[k], SAVE_V1_SAMPLE[k]), 'on the hub ' + k + ' is ' + describe(s2[k]) + ', wanted ' + describe(SAVE_V1_SAMPLE[k]));
+    for (const k of keys) assert(sameJSON(s2[k], v1Want(k, s2[k])), 'on the hub ' + k + ' is ' + describe(s2[k]) + ', wanted ' + describe(v1Want(k, s2[k])));
     return 'creator, Hiring Day, then the week 1 hub, day ' + s.day + ', cash ' + s.cash + ', rep ' + s.rep + ', stored v ' + raw.v + ', tutorial done, no cards';
   });
 
@@ -8587,7 +8614,9 @@ async function browserChecks() {
 
   await step('crew sheet, walk-in and training by real taps', async () => {
     const rosa = pageCard(1, 'Rosa', 'run', [2.5, 3], { xp: 20, mood: 1 });
-    await reload(saveV5({ season: { week: 2, results: resultsOf(1) }, cash: 300, crew: [rosa] }));
+    // v4.0 economy: the yard signs wages by its gear (C.PAYROLL_START plus C.PAYROLL_PER_GEAR a piece),
+    // so the fixture owns three pieces that leave the cook alone and the walk-in fits the full payroll.
+    await reload(saveV5({ season: { week: 2, results: resultsOf(1) }, cash: 300, crew: [rosa], gear: { cooler: true, canopy: true, tray: true } }));
     assert((await loop()) === LOOP.week && (await visible(ID3.week)), 'the fixture loaded as ' + describe(await loop()));
     const wk = await ev('JSON.parse(JSON.stringify(S().season.walkins))');
     assert(Array.isArray(wk) && wk.length >= 2 && wk.every((a) => a.hired === false) && (await ev('S().season.trained')) === null, 'season.walkins ' + describe(wk));
@@ -9652,10 +9681,10 @@ async function browserChecks() {
     await ev('(localStorage.removeItem("pit-sim-arrange-tip"), true)');
     await reload(arrFixture());
     const m = await ev('(() => { const o = sim.serialize(); const bad = Object.assign({}, o, { layout: { cooler: [0, -1] } }); const ok = Object.assign({}, o, { layout: { cooler: [0, -2] } }); return { lay: JSON.stringify(S().layout), v: o.v, sl: JSON.stringify(o.layout), cooler: MAP.station("cooler").tiles[0], bad: JSON.stringify(PitSim.validateSave(bad).layout), good: JSON.stringify(PitSim.validateSave(ok).layout), loop: S().loop, tip: $("arrange-tip") ? $("arrange-tip").textContent : null }; })()');
-    assert(m.lay === '{}' && m.v === 12 && m.sl === '{}' && m.cooler.x === 4 && m.cooler.y === 6, 'v11 migration ' + describe(m));
+    assert(m.lay === '{}' && m.v === SAVE_V && m.sl === '{}' && m.cooler.x === 4 && m.cooler.y === 6, 'v11 migration ' + describe(m));
     assert(m.bad === '{}' && m.good === '{"cooler":[0,-2]}', 'stored layout check ' + describe(m));
     assert(m.loop === LOOP.week && m.tip === 'Tip: Arrange yard lets you move your gear.', 'hub tip ' + describe(m.tip));
-    return 'v11 to v12 with layout {}; overlap falls back to {}; tip shown';
+    return 'v11 to v' + SAVE_V + ' with layout {}; overlap falls back to {}; tip shown';
   });
 
   await step('v3.9 arrange 2: real taps move the cooler beside the kettle, a gate path drop is refused with a reason, Done saves, reload keeps it', async () => {
@@ -9728,6 +9757,174 @@ async function browserChecks() {
     const def = await ev('({ lay: S().layout, ls: JSON.parse(localStorage.getItem(' + JSON.stringify(SAVE_KEY) + ')).layout, y: MAP.station("cooler").tiles[0].y })');
     assert(sameJSON(def.lay, {}) && sameJSON(def.ls, {}) && def.y === 6, 'Reset and Done ' + describe(def));
     return 'Cancel kept the moved yard; Reset and Done saved the default';
+  });
+
+  // ---- v4.1 the gear ladder (Joel 2026-10-20: an old kettle up to a full trailer; "as the facility
+  // grows so does the ability to hire staff"). Fixtures are v13 saves on a week 3 hub; every buy and
+  // every cook move is a real tap. Screenshots: the Gear sheet and each new cooker mid-cook, on the
+  // phone run at 375 by 812 and on the desktop run at 1427 by 890.
+  const LU = await ev('JSON.parse(JSON.stringify(globalThis.' + GLOBAL_NAME + '.STRINGS.ui))');
+  const LC = await ev('JSON.parse(JSON.stringify(C))');
+  const ladFixture = (gear, over) => {
+    const o = Object.assign({}, over || {});
+    const wood = o.wood | 0;
+    delete o.wood;
+    const s = saveV9(Object.assign({ cash: 400, season: { week: 3, results: resultsOf(2), pick: 'birthday' }, crew: [pageCard(1, 'Bo', 'run', [3, 3])] }, o));
+    s.v = SAVE_V;
+    s.gear = Object.assign({}, s.gear, gear || {});
+    s.wood = wood;
+    s.charcoal = Math.max(s.charcoal | 0, 12);
+    s.layout = {};
+    return s;
+  };
+  const ladShot = async (name) => {
+    if (DESKTOP_MODE) { await emulate(DESK_J, false); await sleep(TIMEOUT_MS.resize); await advance(0); }
+    try { return await screenshot(name + (DESKTOP_MODE ? '-desktop' : '') + '.png'); }
+    finally { if (DESKTOP_MODE) { await emulate(RUN_METRICS); await sleep(TIMEOUT_MS.resize); await advance(0); } }
+  };
+  const mainCk = () => ev('({ fire: S().stations.kettle1.fire, n: S().stations.kettle1.pieces.length, slots: S().stations.kettle1.slots, spr: MAP.station("kettle1").sprite, tiles: MAP.station("kettle1").tiles.map((t) => [t.x, t.y]), wood: S().wood, splits: S().today ? S().today.splits : null, hold: S().player.carrying })');
+  // The near view at a long cooker takes in the whole cooker (camFollow; the harness has no frames).
+  const longView = async () => {
+    await ev('g.camera.followStep(1)');
+    const o = await ev('[g.camera.get().x0, g.camera.get().mode]');
+    const left = await ev('(() => { const t = MAP.station("kettle1").tiles; return 300 + 24 * (Math.min(...t.map((q) => q.x - q.y))) - 14; })()');
+    assert(o && (o[1] !== 'near' || o[0] <= left), 'the near view cuts the long cooker: x0 ' + describe(o) + ', cooker left ' + left);
+    return o[0];
+  };
+  const buyTaps = async (id) => {
+    await click('buy-' + id); await advance(0);
+    await click('buy-' + id + '-ok'); await advance(0);
+  };
+  // Two pieces from the cooler onto the main cooker at (tx, ty), each by two taps.
+  const meatOn = async (tx, ty) => {
+    for (let i = 0; i < 2; i++) {
+      await canvasTap(4, 6); await settle();
+      await canvasTap(tx, ty); await settle();
+    }
+  };
+
+  await step('v4.1 ladder 1: the cabinet smoker bought on the Gear sheet by taps takes the kettle\'s place, crew slots 2 to 3', async () => {
+    await reload(ladFixture({ kettle2: true }));
+    assert((await loop()) === LOOP.week, 'the fixture loaded as ' + describe(await loop()));
+    const p0 = await ev('sim.payroll()');
+    await click(ID3.cardGear); await advance(0);
+    assert(await visible(ID3.sheet), '#sheet hidden after #card-gear');
+    const r0 = await ev('({ slots: $("slots-cabinet") ? $("slots-cabinet").textContent : null, line: $("gear-slots") ? $("gear-slots").textContent : null, offset: $("slots-offset") ? $("slots-offset").textContent : null, lockedT: !!$("buy-trailer") && $("buy-trailer").disabled })');
+    assert(r0.slots === fill(LU.tierSlots, { a: 2, b: 3, p: LC.TIER_PAYROLL[0], q: LC.TIER_PAYROLL[1] }) && r0.line === fill(LU.crewSlots, { n: 1, s: 2 }) && r0.lockedT === true,
+      'the Gear sheet before ' + describe(r0));
+    await buyTaps('cabinet');
+    const a = await mainCk();
+    const after = await ev('({ g: S().gear.cabinet, pr: sim.payroll(), line: $("gear-slots").textContent, owned: $("buy-cabinet").textContent, cash: S().cash, lay: checkL() })'.replace('checkL()', 'PitSim.checkLayout(S().layout, S().gear, S().decor).ok'));
+    assert(after.g === true && a.spr === 'cabinet' && a.slots === LC.CABINET_SLOTS && sameJSON(a.tiles, [[4, 5]]) && after.lay === true, 'the cabinet ' + describe([a, after]));
+    assert(p0.slots === 2 && after.pr.slots === 3 && after.pr.budget === LC.TIER_PAYROLL[1] && after.line === fill(LU.crewSlots, { n: 1, s: 3 }) && after.owned === 'Owned',
+      'crew slots ' + describe([p0, after]));
+    await ladShot('ladder-gear-sheet');
+    await click(ID3.sheetBack); await advance(0);
+    return 'cabinet for ' + (400 - after.cash) + ' on (4,5), 4 slots; crew slots ' + p0.slots + ' to ' + after.pr.slots + ', payroll ' + p0.budget + ' to ' + after.pr.budget + '; "' + after.line + '"';
+  });
+
+  await step('v4.1 ladder 2: a cook on the cabinet smoker by taps, the door open on its racks', async () => {
+    assert(await toService(), 'no service day');
+    await canvasTap(4, 8); await settle();
+    await canvasTap(4, 5); await settle();
+    await meatOn(4, 5);
+    await advance(3);
+    const c = await mainCk();
+    assert(c.spr === 'cabinet' && c.fire > 0 && c.n >= 2 && c.slots === 4, 'the cabinet cook ' + describe(c));
+    await ladShot('ladder-cabinet');
+    return 'lit from the pile, ' + c.n + ' pieces on 4 slots, fire ' + Math.round(c.fire);
+  });
+
+  await step('v4.1 ladder 3: the stick burner takes wood: a wood row in the shop, charcoal refused, a split from its rack lights it', async () => {
+    await reload(ladFixture({ kettle2: true, cabinet: true, offset: true }, { wood: 6 }));
+    const m = await mainCk();
+    assert(m.spr === 'stick_burner' && sameJSON(m.tiles, [[1, 8], [2, 8]]) && m.slots === LC.OFFSET_SLOTS, 'the stick burner ' + describe(m));
+    await click(ID3.cardShop); await advance(0);
+    const w0 = await ev('({ row: !!$("qty-wood"), have: $("have-wood") ? $("have-wood").textContent : null })');
+    assert(w0.row === true, 'no wood row in the shop ' + describe(w0));
+    await click('inc-wood'); await advance(0);
+    const cw = await ev('S().cart.wood');
+    assert(cw === 1, 'one tap on +wood put ' + describe(cw) + ' in the cart');
+    await click('dec-wood'); await advance(0);   // an empty cart lets the morning shop fill the Yard day
+    await click(ID3.sheetBack); await advance(0);
+    if (!(await toService())) {
+      const why = await ev('({ loop: S().loop, phase: S().phase, ids: [...document.querySelectorAll("#panels button")].filter((b) => b.offsetParent).map((b) => b.id + (b.disabled ? "(off)" : "")), load: sim.canLoadUp ? sim.canLoadUp() : null, cart: S().cart })');
+      assert(false, 'no service day ' + describe(why));
+    }
+    await canvasTap(4, 8); await settle();
+    await canvasTap(2, 8); await settle();
+    const v = await ev('({ label: sim.verbAt().label, reach: sim.reach(), hold: S().player.carrying, fire: S().stations.kettle1.fire })');
+    assert(v.reach === 'kettle1' && v.label === LU.burnsWood && v.hold && v.hold.kind === 'charcoal' && v.fire === 0, 'charcoal on the stick burner ' + describe(v));
+    await canvasTap(4, 7); await settle();   // the bag goes on the second kettle
+    const w1 = await ev('S().wood');
+    await canvasTap(2, 8); await settle();
+    const lit = await mainCk();
+    assert(lit.fire >= LC.FIRE_LIGHT - 2 && lit.wood === w1 - 1 && lit.splits === 1, 'a split did not light it ' + describe([w1, lit]));
+    await meatOn(2, 8);
+    await advance(3);
+    const c = await mainCk();
+    assert(c.n >= 2 && c.fire > 0, 'the stick burner cook ' + describe(c));
+    await longView();
+    await ladShot('ladder-stick');
+    return 'wood row in the shop, +1 split; charcoal refused ("' + v.label + '"); a split lit it to ' + Math.round(lit.fire) + '; ' + c.n + ' pieces on 6 slots';
+  });
+
+  await step('v4.1 ladder 4: the trailer rig bought by taps lands on the patio, crew slots 5, a cook on it', async () => {
+    await reload(ladFixture({ kettle2: true, cabinet: true, offset: true }, { wood: 10, cash: 1300 }));
+    await click(ID3.cardGear); await advance(0);
+    await buyTaps('trailer');
+    const t = await mainCk();
+    const pr = await ev('({ pr: sim.payroll(), ok: PitSim.checkLayout(S().layout, S().gear, S().decor).ok, line: $("gear-slots").textContent })');
+    assert(t.spr === 'trailer_rig' && t.slots === LC.TRAILER_SLOTS && sameJSON(t.tiles, [[1, 8], [2, 8]]) && pr.ok === true && pr.pr.slots === LC.TIER_SLOTS[3],
+      'the trailer ' + describe([t, pr]));
+    await click(ID3.sheetBack); await advance(0);
+    assert(await toService(), 'no service day');
+    await canvasTap(2, 8); await settle();
+    await meatOn(2, 8);
+    await advance(3);
+    const c = await mainCk();
+    assert(c.spr === 'trailer_rig' && c.n >= 2 && c.fire > 0 && c.splits >= 1, 'the trailer cook ' + describe(c));
+    const view = await longView();
+    await ladShot('ladder-trailer');
+    return 'trailer on (1,8) (2,8), 8 slots, view x0 ' + view + ', crew slots ' + pr.pr.slots + ', payroll ' + pr.pr.budget + '; lit by a split, ' + c.n + ' pieces on';
+  });
+
+  await step('v4.1 ladder 5: Arrange yard moves the trailer rig by taps, an overlap is refused, Done saves', async () => {
+    const f = ladFixture({ kettle2: true, cabinet: true, offset: true, trailer: true }, { wood: 4 });
+    await reload(f);
+    if (DESKTOP_MODE) { await emulate(DESK_J, false); await sleep(TIMEOUT_MS.resize); await advance(0); }
+    try {
+      await enterArrange();
+      await canvasTap(2, 8); await advance(0);
+      let a = await AR();
+      assert(a.lift === 'kettle1', 'tap on the trailer did not lift it: ' + describe(a));
+      await canvasTap(6, 9); await advance(0);
+      a = await AR();
+      assert(a.lift === 'kettle1' && a.aim && a.aim.ok === false && a.aim.reason === 'Cookers stay on the patio', 'a lawn drop was not refused: ' + describe(a));
+      await canvasTap(2, 6); await advance(0);
+      a = await AR();
+      assert(a.lift === null && sameJSON(a.draft, { kettle1: [0, -2] }), 'the trailer drop ' + describe(a));
+      await click('arr-done'); await advance(0);
+      const s = await ev('({ lay: S().layout, tiles: MAP.station("kettle1").tiles.map((t) => [t.x, t.y]), ls: JSON.parse(localStorage.getItem(' + JSON.stringify(SAVE_KEY) + ')).layout })');
+      assert(sameJSON(s.lay, { kettle1: [0, -2] }) && sameJSON(s.tiles, [[1, 6], [2, 6]]) && sameJSON(s.ls, s.lay), 'Done ' + describe(s));
+      return 'lifted from (2,8), "Cookers stay on the patio" refused on the lawn, set on (1,6) (2,6), saved';
+    } finally {
+      if (DESKTOP_MODE) { await emulate(RUN_METRICS); await sleep(TIMEOUT_MS.resize); await advance(0); }
+    }
+  });
+
+  await step('v4.1 ladder 6: a v12 save migrates to v13 with no ladder gear, a rung with no rung under it is dropped, a long cooker\'s layout keeps', async () => {
+    const m = await ev('(() => { const V = PitSim.validateSave, o = sim.serialize(); const g12 = { kettle2: true, cooler: true, bigtable: false, tray: false, canopy: false, drum: true }; const a = V(Object.assign({}, o, { v: 12, gear: g12, layout: { cooler: [0, -2] } })); const bad = V(Object.assign({}, o, { gear: Object.assign({}, o.gear, { cabinet: false, offset: true, trailer: true }) })); const keep = V(Object.assign({}, o, { gear: Object.assign({}, o.gear, { cabinet: true, offset: true, trailer: false }), layout: { kettle1: [0, -2] } })); return { v: a.v, g: a.gear, lay: a.layout, bad: bad.gear, keep: keep.layout }; })()');
+    assert(m.v === SAVE_V && m.g.kettle2 === true && m.g.drum === true && m.g.cooler === true && m.g.cabinet === false && m.g.offset === false && m.g.trailer === false && sameJSON(m.lay, { cooler: [0, -2] }),
+      'v12 to v13 ' + describe(m));
+    assert(m.bad.offset === false && m.bad.trailer === false && sameJSON(m.keep, { kettle1: [0, -2] }), 'ladder clamps ' + describe(m));
+    const f = ladFixture({ kettle2: true, drum: true });
+    f.v = 12;
+    delete f.gear.cabinet; delete f.gear.offset; delete f.gear.trailer;
+    await reload(f);
+    const s = await ev('({ loop: S().loop, g: S().gear, spr: MAP.station("kettle1").sprite, v: JSON.parse(localStorage.getItem(' + JSON.stringify(SAVE_KEY) + ')).v })');
+    assert(s.loop === LOOP.week && s.g.cabinet === false && s.g.drum === true && s.spr === 'kettle', 'the v12 save in the page ' + describe(s));
+    return 'v12 loads as v' + m.v + ' on the hub with the kettle; offset without the cabinet dropped; kettle1 [0,-2] kept with the stick burner';
   });
 
   // Joel 2026-10-20: "the controls for desktop no longer work". Real key events (CDP), real frames.
@@ -9821,8 +10018,9 @@ async function browserChecks() {
     platesServed: served,
     seated: eventsDay1.filter((e) => e.type === EVENT.seatDone).length,
     toGo: eventsDay1.filter((e) => e.type === EVENT.toGo).length,
-    taps,
-    tapsPerPlate: served ? Math.round((taps / served) * 100) / 100 : null,
+    taps: tapsDay1,
+    tapsPerPlate: served ? Math.round((tapsDay1 / served) * 100) / 100 : null,
+    runTaps: taps,
     tapFallbacks: tapNotes,
     tapPoints: tileToClientSeen === true ? 'PitSim.game.tileToClient' : 'no canvas taps',
     boredomSeconds: Math.round(before.bored * 100) / 100,

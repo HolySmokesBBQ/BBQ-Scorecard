@@ -1220,6 +1220,8 @@ function exposeGame() {
       set: function (mode) { camSet(mode); try { render(); } catch (e) { fail(e); } return cam.mode; },
       centerOn: function (tx, ty, instant) { const c = tileRp(tx, ty); cam.ease = null; camCenter(c[0], c[1]); },
       reveal: function (tx, ty) { camReveal(tx, ty); },
+      // v4.1 dev: one follow step of dt seconds (the harness advances without frames).
+      followStep: function (dt) { camFollow(dt || 1); camFollow(dt || 1); try { render(); } catch (e) { fail(e); } return camOrigin(); },
       pan: function (dx, dy) { camPan(dx, dy); },
       home: function () { camHome(); },
       follow: function (on) { cam.follow = on !== false; }
@@ -1382,6 +1384,23 @@ function fail(e) {
 
 // ---------------------------------------------------------------- events
 
+// v4.1 the gear ladder: what the main cooker is called now (a cabinet smoker, a stick burner, a trailer rig).
+function cookerSpoken(id) {
+  const st = MAP.station(id);
+  if (id === 'kettle1' && st && (st.tier | 0) > 0 && st.spoken) return st.spoken;
+  return STRINGS.cooker[id] || '';
+}
+function brisketOk(s) { return typeof PitSim.canBrisket === 'function' ? PitSim.canBrisket(s.gear) : s.gear.drum === true; }
+function pitTierOf(s) { return typeof PitSim.pitTier === 'function' ? PitSim.pitTier(s.gear) : 0; }
+// v4.1: "Crew slots 2 of 3" for the Gear sheet and Hiring Day.
+function crewSlotsLine(id) {
+  const p = payrollNow();
+  if (!p || !STRINGS.ui.crewSlots) return null;
+  const line = mk('p', { id: id, cls: 'crew-slots', text: U('crewSlots', { n: sim.state.crew.length, s: p.slots }) });
+  if (Array.isArray(rowSink)) rowSink.push(function () { const q = payrollNow(); if (q) line.textContent = U('crewSlots', { n: sim.state.crew.length, s: q.slots }); });
+  return line;
+}
+
 function pump() {
   const evs = sim.drainEvents();
   for (let i = 0; i < evs.length; i++) onEvent(evs[i]);
@@ -1389,7 +1408,7 @@ function pump() {
 
 function onEvent(ev) {
   const L = ev.meat && MEATS[ev.meat] ? MEATS[ev.meat].label : '';
-  const K = ev.cooker && STRINGS.cooker[ev.cooker] ? STRINGS.cooker[ev.cooker] : '';
+  const K = ev.cooker ? cookerSpoken(ev.cooker) : '';
   switch (ev.type) {
     case 'yard_open': {
       const s = sim.state;
@@ -2145,11 +2164,11 @@ function refreshClipboard() {
 
 function nameCell(item, withIcon) {
   // Q-2: the charcoal row carries the pile sprite (there is no charcoal icon), as the HUD chip does.
-  const icon = !withIcon ? null : (item.kind === 'fuel' ? pileIcon() : iconCanvas('icon_' + item.id));
+  const icon = !withIcon ? null : (item.kind === 'fuel' ? pileIcon(item.id === 'wood' ? 'woodpile' : 'pile') : iconCanvas('icon_' + item.id));
   return mk('span', { cls: 'name' }, [icon, item.label, mk('span', { cls: 'effect', text: item.effect })]);
 }
-function pileIcon() {
-  const c = sprEl('pile', 0, 1, null);
+function pileIcon(name) {
+  const c = sprEl(name || 'pile', 0, 1, null);
   if (c) { c.style.marginRight = '6px'; c.style.verticalAlign = 'middle'; }
   return c;
 }
@@ -2157,7 +2176,7 @@ function pileIcon() {
 function lockedBy(item, s) {
   const n = item.needs;
   if (!n) return false;
-  if (n.gear && s.gear[n.gear] !== true) return true;
+  if (n.gear && s.gear[n.gear] !== true && !(Array.isArray(n.orGear) && n.orGear.some(function (g) { return s.gear[g] === true; }))) return true;
   if (n.decor && s.decor[n.decor] !== true) return true;
   if (typeof n.rep === 'number' && s.rep < n.rep) return true;
   // W22.12: in loop 'week' the buddy has no day gate (deviation 36).
@@ -2231,13 +2250,14 @@ function cartRow(item, extras, rail) {
   const row = mk('div', { cls: 'row' }, [name, price, step]);
   rowSink.push(function () {
     const s = sim.state;
-    const q = isMeat ? (s.cart.meat[item.id] | 0) : (s.cart.charcoal | 0);
-    const owned = isMeat ? (s.stock[item.id] | 0) : (s.charcoal | 0);
+    const isWood = item.id === 'wood';   // v4.1: wood splits for the stick burner and the trailer
+    const q = isMeat ? (s.cart.meat[item.id] | 0) : (isWood ? s.cart.wood | 0 : s.cart.charcoal | 0);
+    const owned = isMeat ? (s.stock[item.id] | 0) : (isWood ? s.wood | 0 : s.charcoal | 0);
     const locked = lockedBy(item, s);
     const remaining = cartRoom(s);
     const up = unitPrice(item, s);
     const cap = isMeat ? q + owned >= C.STEPPER_MAX || meatRoomNow() <= 0
-      : q + owned >= (typeof C.CHARCOAL_MAX === 'number' ? C.CHARCOAL_MAX : C.STEPPER_MAX);
+      : q + owned >= (isWood ? C.WOOD_MAX : (typeof C.CHARCOAL_MAX === 'number' ? C.CHARCOAL_MAX : C.STEPPER_MAX));
     if (priceNum) {
       priceNum.textContent = locked ? item.needsText : String(up);
       if (priceCoin) priceCoin.hidden = locked;
@@ -2253,7 +2273,7 @@ function cartRow(item, extras, rail) {
     step.hidden = locked;
     if (have) {
       have.textContent = U('youHave', { n: owned });
-      after.textContent = isMeat ? U('afterUnits', { n: owned + q }) : U('afterBags', { n: owned + q });
+      after.textContent = isMeat ? U('afterUnits', { n: owned + q }) : (isWood ? U('afterSplits', { n: owned + q }) : U('afterBags', { n: owned + q }));
       have.hidden = locked;
       after.hidden = locked;
     }
@@ -2272,6 +2292,10 @@ function ownRow(item) {
   const price = mk('span', { cls: 'price' });
   const name = nameCell(item, false);
   const eff = name.querySelector('.effect');
+  // v4.1: a ladder row also says what it does for the crew.
+  if (item.tier > 0 && Array.isArray(C.TIER_SLOTS) && Array.isArray(C.TIER_PAYROLL) && STRINGS.ui.tierSlots) {
+    name.appendChild(mk('span', { id: 'slots-' + item.id, cls: 'effect tierslots', text: U('tierSlots', { a: C.TIER_SLOTS[item.tier - 1], b: C.TIER_SLOTS[item.tier], p: C.TIER_PAYROLL[item.tier - 1], q: C.TIER_PAYROLL[item.tier] }) }));
+  }
   const row = mk('div', { cls: 'row', attrs: { 'data-item': item.id } }, [name, price]);
   let ctl = null, ctlOwned = null, ctlArmed = null;
   rowSink.push(function () {
@@ -2723,7 +2747,7 @@ function compactBookingRows(box, t, stars) {
   box.appendChild(repRow(U1(stars, 'rowFeeOne', 'rowFee'), U('deposit', { d: t.deposit | 0 }), plus(feeAt)));
   const extras = (t.tips | 0) + (t.seatTips | 0) + (t.addon ? t.menuBonus | 0 : 0);
   box.appendChild(repRow(U('rowExtras'), '', plus(extras)));
-  const costs = (t.foodCost | 0) + (t.rawWaste | 0) + (t.bags | 0) * C.CHARCOAL_PRICE + (t.spoilCost | 0) + C.DAILY_COSTS;
+  const costs = (t.foodCost | 0) + (t.rawWaste | 0) + (t.bags | 0) * C.CHARCOAL_PRICE + woodCost(t) + (t.spoilCost | 0) + C.DAILY_COSTS;
   box.appendChild(repRow(U('rowCosts'), '', minus(costs)));
   if ((t.wages | 0) > 0) box.appendChild(repRow(U('rowWages'), t.wageNames && t.wageNames.length ? t.wageNames.join(', ') : '', minus(t.wages | 0)));
   box.appendChild(takeRow(t, U('rowTake'), ''));
@@ -2747,6 +2771,7 @@ function fullBookingRows(money, t, stars) {
   if ((t.seatTips | 0) > 0 || seated > 0) money.appendChild(repRow(U('rowSeatTips'), seated + ' sat down', plus(t.seatTips | 0)));
   money.appendChild(repRow(U('rowFood'), '', minus(food)));
   money.appendChild(repRow(U('rowCharcoal'), plural(t.bags | 0, 'bag', 'bags'), minus((t.bags | 0) * C.CHARCOAL_PRICE)));
+  if ((t.splits | 0) > 0) money.appendChild(repRow(U('rowWood'), plural(t.splits | 0, 'split', 'splits'), minus(woodCost(t))));
   if ((t.wages | 0) > 0) money.appendChild(repRow(U('rowWages'), t.wageNames && t.wageNames.length ? t.wageNames.join(', ') : '', minus(t.wages | 0)));
   money.appendChild(repRow(U('rowDaily'), 'ice and trash bags', minus(C.DAILY_COSTS)));
   if ((t.spoilCost | 0) > 0) money.appendChild(repRow(U('rowSpoiled'), meatList(t.spoiled), minus(t.spoilCost | 0)));
@@ -2856,6 +2881,10 @@ function stockMoved(t, dir) {
     const d = (t.charcoalAfter - t.charcoalStart) * dir;
     if (d > 0) parts.push(plural(d, 'bag', 'bags'));
   }
+  if (typeof t.woodStart === 'number' && typeof t.woodAfter === 'number') {   // v4.1
+    const d = (t.woodAfter - t.woodStart) * dir;
+    if (d > 0) parts.push(plural(d, 'split', 'splits'));
+  }
   const a = t.coolerAfter || {}, b = t.stockStart || null;
   if (b) {
     const moved = {};
@@ -2893,14 +2922,18 @@ function buildYardReport(t, head, body) {
   const cashDetail = start !== null ? U('cashFrom', { a: fmt(start) }) : '';
   // X13.6: Served, Tips and bonus, Take today, Gear bought and Signing and send-off when they apply,
   // Paid at the shop and Cash; every v2.1 row under Show every row (deviation 50).
+  // v4.0 economy: the take comes after the meat, charcoal, spoilage and daily costs the cook used and
+  // the wages (half on a weekday Yard day), as on a booking; the stock row makes the column reach Cash.
   money.appendChild(repRow('Served', plural(t.served | 0, 'plate', 'plates'), plus(t.revenue | 0)));
   money.appendChild(repRow(U('rowExtras'), '', plus((t.tips | 0) + (t.seatTips | 0))));
-  money.appendChild(takeRow(t, 'Take today', 'sales and tips after wages and daily costs'));
+  money.appendChild(repRow(U('rowCosts'), U('costsDetail'), minus(yardCosts(t))));
+  if ((t.wages | 0) > 0) money.appendChild(repRow(U('rowWages'), wagesDetail(t), minus(t.wages | 0)));
+  money.appendChild(takeRow(t, U('rowTake'), U('yardTake')));
   const gear = t.gearSpent | 0;
   if (gear > 0) money.appendChild(repRow(U('rowGear'), (t.gearBought || []).join(', '), minus(gear)));
   if (crewSpentOf(t) > 0) money.appendChild(crewPaidRow(t));
-  if (typeof t.cashStart === 'number') money.appendChild(repRow(U('rowShop'), '', minus(t.cashStart + (t.net | 0) - gear - crewSpentOf(t) - (t.cashAfter | 0))));
-  money.appendChild(repRow('Cash', cashDetail, fmt(t.cashAfter)));
+  if (start !== null) { const sr = stockRow(t, start, gear); if (sr) money.appendChild(sr); }
+  money.appendChild(repRow(U('rowCash'), cashDetail, fmt(t.cashAfter)));
   money.appendChild(moneyMoreButton());
   mf.appendChild(money);
   mf.appendChild(fansBox(t, false));
@@ -2922,10 +2955,23 @@ function buildYardReport(t, head, body) {
   body.appendChild(people);
 }
 
+// v4.0 economy: what a Yard day's cook used, besides wages: meat cooked or thrown out raw, charcoal
+// burnt, tonight's spoilage and the daily costs.
+function yardCosts(t) {
+  return (t.foodCost | 0) + (t.rawWaste | 0) + (t.bags | 0) * C.CHARCOAL_PRICE + woodCost(t) + (t.spoilCost | 0) + C.DAILY_COSTS;
+}
+// v4.1: the wood splits a cook burnt, at the list price.
+function woodCost(t) { return (t.splits | 0) * (C.WOOD_PRICE | 0); }
+function wagesDetail(t) {
+  const names = t.wageNames && t.wageNames.length ? t.wageNames.join(', ') : '';
+  return t.halfShift ? (names ? names + ', ' : '') + U('halfShift') : names;
+}
+
 // The v2.1 till rows (the tutorial day and the Yard day). R-4: the food, charcoal, spoiled, thrown
 // out and grate rows are information (the shop took that money before the gate), and Gear bought and
 // Paid at the shop sit above Cash, so cash at the start + Take - gear - shop = Cash.
 function tutorialRows(box, t, cashDetail) {
+  if (t.kind === 'yard') { yardDetailRows(box, t, cashDetail); return; }
   const wages = t.wageNames && t.wageNames.length ? t.wageNames.join(', ') : 'none';
   const spoiled = meatList(t.spoiled) || 'nothing';
   const grate = meatList(t.grateLeft) || 'nothing';
@@ -2947,6 +2993,30 @@ function tutorialRows(box, t, cashDetail) {
   if (crewSpentOf(t) > 0) box.appendChild(crewPaidRow(t));
   if (typeof t.cashStart === 'number') box.appendChild(repRow(U('rowShop'), '', minus(t.cashStart + (t.net | 0) - gear - crewSpentOf(t) - (t.cashAfter | 0))));
   box.appendChild(repRow('Cash', cashDetail || '', fmt(t.cashAfter)));
+}
+
+// v4.0 economy: every Yard day row under Show every row. The cook's costs count against the take,
+// and the stock row (bought for later, or bought earlier) makes the column reach Cash.
+function yardDetailRows(box, t, cashDetail) {
+  const seated = t.seated | 0;
+  box.appendChild(repRow('Served', plural(t.served, 'plate', 'plates'), plus(t.revenue)));
+  box.appendChild(repRow('Tips', '', plus(t.tips)));
+  box.appendChild(repRow('Seat tips', seated + ' sat down', plus(t.seatTips | 0)));
+  box.appendChild(repRow(U('rowFood'), '', minus((t.foodCost | 0) + (t.rawWaste | 0))));
+  box.appendChild(repRow(U('rowCharcoal'), plural(t.bags | 0, 'bag', 'bags'), minus((t.bags | 0) * C.CHARCOAL_PRICE)));
+  if ((t.splits | 0) > 0) box.appendChild(repRow(U('rowWood'), plural(t.splits | 0, 'split', 'splits'), minus(woodCost(t))));
+  if ((t.wages | 0) > 0) box.appendChild(repRow(U('rowWages'), wagesDetail(t), minus(t.wages | 0)));
+  box.appendChild(repRow(U('rowDaily'), 'ice and trash bags', minus(C.DAILY_COSTS)));
+  if ((t.spoilCost | 0) > 0) box.appendChild(repRow(U('rowSpoiled'), meatList(t.spoiled), minus(t.spoilCost | 0)));
+  if ((t.wasteCost | 0) > 0) box.appendChild(repRow('Thrown out', plural(t.wastePlates, 'plate', 'plates') + ', ' + (t.wasteBurnt | 0) + ' burnt, ' + U('counted'), String(t.wasteCost | 0), 'info'));
+  if ((t.grateCost | 0) > 0) box.appendChild(repRow('Left on the grate', (meatList(t.grateLeft) || 'nothing') + ', ' + U('counted'), String(t.grateCost | 0), 'info'));
+  box.appendChild(repRow(U('rowTake'), U('yardTake'), signed(t.net), 'net'));
+  const start = ledgerStart(t);
+  const gear = t.gearSpent | 0;
+  if (gear > 0) box.appendChild(repRow(U('rowGear'), (t.gearBought || []).join(', '), minus(gear)));
+  if (crewSpentOf(t) > 0) box.appendChild(crewPaidRow(t));
+  if (start !== null) { const sr = stockRow(t, start, gear); if (sr) box.appendChild(sr); }
+  box.appendChild(repRow(U('rowCash'), cashDetail || '', fmt(t.cashAfter)));
 }
 
 function peopleLine(t) {
@@ -3751,7 +3821,8 @@ function hubGrid(s, se) {
   }
   // P-14: the window shows the cooker you own (the drum once bought, else the kettles), as the mock
   // does; the next item to buy stays in the second line.
-  const gearPics = s.gear.drum ? ['drum'] : (s.gear.kettle2 ? ['kettle', 'kettle'] : ['kettle']);
+  const mainSpr = MAP.station('kettle1') ? MAP.station('kettle1').sprite : 'kettle';
+  const gearPics = pitTierOf(s) > 0 ? [mainSpr] : (s.gear.drum ? ['drum'] : (s.gear.kettle2 ? ['kettle', 'kettle'] : ['kettle']));
   g.appendChild(hubTile('card-gear', 't-gear', U('gear'), tileWin(gearPics, gearPics.map(function () { return 2; })),
     U('gearLine', { n: ownedN }), next ? U('gearNext', { label: next.label, price: next.price }) : U('gearAll')));
   // Menu.
@@ -3759,7 +3830,7 @@ function hubGrid(s, se) {
   let l1, l2 = '', plates = [];
   if (!o || o.type === 'yard') {
     l1 = U('menuYard');
-    for (let i = 0; i < MEAT_IDS.length; i++) if (MEAT_IDS[i] !== 'brisket' || s.gear.drum) plates.push('plate_' + MEAT_IDS[i]);
+    for (let i = 0; i < MEAT_IDS.length; i++) if (MEAT_IDS[i] !== 'brisket' || brisketOk(s)) plates.push('plate_' + MEAT_IDS[i]);
   } else {
     const rail = typeof sim.railFor === 'function' ? sim.railFor(o, se.addon || null) : o.rail;
     const ms = MEAT_IDS.filter(function (m) { return rail && (rail[m] | 0) > 0; });
@@ -3772,6 +3843,7 @@ function hubGrid(s, se) {
   let lines = 0;
   for (let i = 0; i < MEAT_IDS.length; i++) if ((s.cart.meat[MEAT_IDS[i]] | 0) > 0) lines++;
   if ((s.cart.charcoal | 0) > 0) lines++;
+  if ((s.cart.wood | 0) > 0) lines++;
   g.appendChild(hubTile('card-shop', 't-shop', U('shop'), tileWin(['cooler', 'pile'], [1, 0]), U('shopLine', { t: sim.cartTotal() }), U1(lines, 'shopOne', 'shopMany')));
   return g;
 }
@@ -4483,8 +4555,9 @@ function buildSheet() {
       card.appendChild(box);
     }
     // R-15: the fuel section's one row is named Charcoal already, so it takes no heading of its own.
-    const fuel = CATALOG.filter(function (r) { return r.kind === 'fuel'; });
-    if (!(fuel.length === 1 && fuel[0].label === 'Charcoal')) card.appendChild(h3('Charcoal'));
+    // v4.1: the wood row shows once a cooker burns wood; then the section is Fuel.
+    const fuel = CATALOG.filter(function (r) { return r.kind === 'fuel' && (r.id !== 'wood' || !lockedBy(r, s)); });
+    if (!(fuel.length === 1 && fuel[0].label === 'Charcoal')) card.appendChild(h3('Fuel'));
     for (let i = 0; i < fuel.length; i++) card.appendChild(cartRow(fuel[i], true));
     card.appendChild(mk('p', { id: 'shop-room', cls: 'muted' }));
     card.appendChild(mk('p', { id: 'shop-spare', cls: 'muted' }));
@@ -4496,8 +4569,16 @@ function buildSheet() {
     }
     card.appendChild(mk('p', { cls: 'muted', text: 'Game numbers. Not real prices and not a cooking guide.' }));
   } else if (sheetKind === 'gear') {
+    // v4.1: the gear ladder first (each cooker takes the kettle's place), with the crew slots it gives.
+    const ladder = CATALOG.filter(function (r) { return r.kind === 'gear' && r.tier > 0; });
+    if (ladder.length) {
+      card.appendChild(h3('Cookers'));
+      const cs = crewSlotsLine('gear-slots');
+      if (cs) card.appendChild(cs);
+      for (let i = 0; i < ladder.length; i++) card.appendChild(ownRow(ladder[i]));
+    }
     card.appendChild(h3('Gear'));
-    for (let i = 0; i < CATALOG.length; i++) if (CATALOG[i].kind === 'gear') card.appendChild(ownRow(CATALOG[i]));
+    for (let i = 0; i < CATALOG.length; i++) if (CATALOG[i].kind === 'gear' && !(CATALOG[i].tier > 0)) card.appendChild(ownRow(CATALOG[i]));
     for (let i = 0; i < CATALOG.length; i++) if (CATALOG[i].kind === 'goal') card.appendChild(goalRow(CATALOG[i]));
     card.appendChild(h3('Decor'));
     card.appendChild(mk('p', { cls: 'muted', text: 'Charm adds to the tip each seated customer leaves, up to 3 more, and lets word of mouth climb a little faster.' }));
@@ -4520,7 +4601,7 @@ function buildSheet() {
       row.appendChild(none);
       for (let i = 0; i < MEAT_IDS.length; i++) {
         const m = MEAT_IDS[i];
-        if (o.menu.indexOf(m) !== -1 || (m === 'brisket' && s.gear.drum !== true)) continue;
+        if (o.menu.indexOf(m) !== -1 || (m === 'brisket' && !brisketOk(s))) continue;
         const b = btn('addon-' + m, MEATS[m].label, 'alt', function () { sim.setAddon(m); afterAct(); });
         b.setAttribute('aria-pressed', se.addon === m ? 'true' : 'false');
         row.appendChild(b);
@@ -4540,6 +4621,8 @@ function buildCrewSheet(body) {
   const week = weekOnly();
   const pay = payrollNow();
   body.appendChild(payrollMeter('crew-payroll'));
+  const grow = payrollGrowLine('crew-payroll-grow');
+  if (grow) body.appendChild(grow);
   const views = crewViews();
   body.appendChild(mk('p', { id: 'crew-slots', cls: 'crew-slots', text: views.length ? U('slots', { n: views.length, s: pay.slots }) : U('crewEmpty') }));
   const tid = trainedId();
@@ -4640,6 +4723,13 @@ function onTrain(id) {
   const r = typeof sim.chooseDay === 'function' ? sim.chooseDay('train', { id: id }) : sim.train(id);
   crewMsg = r && r.ok === false && r.message ? String(r.message) : '';
   afterAct();
+}
+
+// v4.0 economy: while the wages the yard can sign are under the rung's payroll, one line says gear grows it.
+function payrollGrowLine(id) {
+  const p = payrollNow();
+  if (!p || !(p.hire > 0) || (p.hire | 0) >= (p.budget | 0) || !C.PAYROLL_PER_GEAR) return null;
+  return mk('p', { id: id, cls: 'muted pgrow', text: U('payrollGrows', { b: p.hire, n: C.PAYROLL_PER_GEAR, max: p.budget }) });
 }
 
 // The payroll box (X13.2): the words set into the top border, a near black bar with the yellow fill,
@@ -4837,6 +4927,10 @@ function buildHiring() {
   // The payroll box, then the last round's news and any refusal or confirm (review 1: above the bar,
   // next to the button they explain), then the bottom bar: Crew, Hires left, the arrow.
   foot.appendChild(payrollMeter('hire-payroll'));
+  const slotsH = crewSlotsLine('hire-slots');
+  if (slotsH) foot.appendChild(slotsH);
+  const growH = payrollGrowLine('hire-payroll-grow');
+  if (growH) foot.appendChild(growH);
   const news = mk('div', { id: 'hire-news', cls: 'hnews' });
   if (hireNews) {
     news.appendChild(mk('p', { text: hireNews.line }));
@@ -6730,7 +6824,7 @@ function updateFx(dt) {
         puffT[st.id] = (puffT[st.id] || 0) - dt;
         if (puffT[st.id] <= 0) {
           puffT[st.id] = every;
-          const vent = st.sprite === 'drum' ? { x: tx + 7, y: ty - 4 } : { x: tx + 11, y: ty - 10 };
+          const vent = ventSim(st);
           const life = FX.PUFF_LIFE_MIN + (FX.PUFF_LIFE_MAX - FX.PUFF_LIFE_MIN) * crng();
           spawnPuff(vent.x - SMOKE_HALF_W, vent.y, puffDrift(st) * FX.PUFF_DRIFT_PX_S, FX.PUFF_RISE_PX_S, life, cookerWarns(ck), false, st.id);
           if (!puffOn[st.id]) { puffOn[st.id] = true; log('puff', vent.x, vent.y); }
@@ -7161,10 +7255,10 @@ function stationArt(st, all) {
   if (!tiles.length) tiles = st.tiles.map(ptOf);
   let name = st.sprite;
   if (st.type === 'table') name = tiles.length >= 4 ? 'counter_long' : 'counter';
-  else if (st.type === 'cooker') name = st.sprite === 'drum' || st.id === 'drum' ? 'drum' : 'kettle';
+  else if (st.type === 'cooker') name = st.sprite && st.sprite !== 'kettle' && A3 && A3.has(st.sprite) ? st.sprite : (st.sprite === 'drum' || st.id === 'drum' ? 'drum' : 'kettle');
   else if (!name || !A3 || !A3.has(name)) name = st.type;
   const c = tilesRp(tiles);
-  return { name: name, tiles: tiles, X: c[0], Y: c[1] };
+  return { name: name, tiles: tiles, X: c[0], Y: c[1], id: st.id };
 }
 // The rp box of an art3 sprite's opaque pixels with its anchor on (X, Y).
 function boxRp(name, frame, X, Y) {
@@ -7432,6 +7526,15 @@ function camFollow(dt) {
   // pitmaster wins.
   cam.x0 = Math.max(X + 20 - cam.vw, Math.min(X - 20, cam.x0));
   cam.y0 = Math.max(Y + 30 - cam.vh, Math.min(Y - 40, cam.y0));
+  // v4.1: at a long cooker (the stick burner, the trailer rig) the view takes in the whole cooker.
+  const rid = typeof sim.reach === 'function' && !p.walking && p.path.length === 0 ? sim.reach() : null;
+  const rst = rid ? MAP.station(rid) : null;
+  if (rst && rst.type === 'cooker' && (rst.tier | 0) > 0 && rst.tiles.length > 1) {
+    const a = stationArt(rst), bx = boxRp(a.name, 0, a.X, a.Y);
+    if (bx.x0 - 6 < cam.x0) cam.x0 = Math.max(X + 20 - cam.vw, bx.x0 - 6);
+    if (bx.x1 + 6 > cam.x0 + cam.vw) cam.x0 = Math.min(X - 20, bx.x1 + 6 - cam.vw);
+    if (bx.y0 - 6 < cam.y0) cam.y0 = Math.max(Y + 30 - cam.vh, bx.y0 - 6);
+  }
   camClamp();
   const tx = cam.x0, ty = cam.y0;
   if (reduced) return;
@@ -7989,12 +8092,18 @@ function pushArt(push, name, frame, tiles, o) {
 // on draws its open frame (the grate showing, the lid hung on its side); the drum's sits on its lid
 // rack. Each piece's timer is a short bar over it, as wide as the piece.
 const GRATE_DEF = Object.freeze({ kettle: [0, -15, 9, 3], drum: [0, -23, 8, 3] });
+function artMeta(name) {
+  try { return A3 && A3.rule && A3.rule.has && A3.rule.has(name) ? A3.rule.meta(name) || {} : {}; } catch (e) { return {}; }
+}
 function grateOf(name) {
   let g = null;
   try { const m = A3 && A3.rule && A3.rule.has && A3.rule.has(name) ? A3.rule.meta(name) : null; g = m && m.grate; } catch (e) { g = null; }
   return Array.isArray(g) && g.length === 4 ? g : (GRATE_DEF[name] || GRATE_DEF.kettle);
 }
 function grateSpots(name, n) {
+  const mt = artMeta(name);
+  // v4.1: the ladder cookers list a spot a slot on their own grate or racks.
+  if (Array.isArray(mt.grateSpots) && mt.grateSpots.length >= n) return { spots: mt.grateSpots.slice(0, n), cell: mt.grateCell || 6, custom: true };
   const g = grateOf(name), cols = Math.max(1, Math.min(2, n)), rows = Math.max(1, Math.ceil(n / cols));
   const cw = 2 * g[2] / cols, out = [];
   for (let i = 0; i < n; i++) {
@@ -8015,12 +8124,15 @@ function drawPieces(st, ck, name, X, Y) {
       const pos = piecePos(st, p), f = pieceFrame(p), nm = 'piece_' + p.meat;
       // Feedback audit item 18: on the drum a piece that takes k slots (a 4 slot brisket) sits in
       // the middle of its k cells and is scaled to their width, so it fills the drum's mouth.
-      const span = name === 'drum' ? Math.max(1, Math.min(n - (p.slot | 0), p.size | 0)) : 1;
-      if (span > 1) {
+      const span = name === 'drum' || G.custom ? Math.max(1, Math.min(n - (p.slot | 0), p.size | 0)) : 1;
+      if (span > 1 && artMeta(name).grateSpan === 'stack') {
+        // v4.1: on the cabinet's racks a 2 slot piece lies on the lower of its racks.
+        q = spots[Math.min(n - 1, (p.slot | 0) + span - 1)] || q;
+      } else if (span > 1) {
         let sx = 0, sy = 0;
         for (let k = 0; k < span; k++) { const sp = spots[(p.slot | 0) + k] || q; sx += sp[0]; sy += sp[1]; }
         q = [sx / span, sy / span];
-        cell = G.cell * Math.min(span, 2) + 4;
+        cell = G.custom ? G.cell * 1.6 : G.cell * Math.min(span, 2) + 4;
       }
       const me = MEATS[p.meat];
       if (!A3 || !A3.has(nm)) { D(nm, pos.x, pos.y, f); continue; }
@@ -8038,7 +8150,7 @@ function drawPieces(st, ck, name, X, Y) {
       });
       recOnly(nm, pos.x, pos.y, f);
       if (!me) continue;
-      const bw = Math.max(10, Math.round((m.x1 >= m.x0 ? m.x1 - m.x0 + 1 : ow) * sc));   // v3.4: at least 10 rp
+      const bw = Math.max(G.custom ? 8 : 10, Math.round((m.x1 >= m.x0 ? m.x1 - m.x0 + 1 : ow) * sc));   // v3.4: at least 10 rp (v4.1: 8 on a ladder cooker)
       const bx = Math.round(PX + (m.x0 - m.ax) * sc + ((m.x1 - m.x0 + 1) * sc - bw) / 2), by = Math.round(PY + (top - m.ay) * sc) - 4;
       if (p.state === 'cooking') drawRing(bx, by, bw, Math.min(1, p.prog / me.cook), COLOR.O);
       else if (p.state === 'done') drawRing(bx, by, bw, Math.max(0, 1 - (p.prog - me.cook) / me.window), late ? COLOR.red : COLOR.lawnA);
@@ -8081,8 +8193,9 @@ function stationItems(st, s, push) {
   const ck = st.type === 'cooker' ? s.stations[st.id] : null;
   if (st.type === 'cooker') {
     const band = PitSim.fireBand(ck ? ck.fire : 0);
-    const open = a.name === 'kettle' && ck && ck.pieces.length > 0;
-    const frame = open ? 4 : (BAND_FRAME[band] || 0);
+    const open = ck && ck.pieces.length > 0 && (a.name === 'kettle' || artMeta(a.name).open > 0);
+    // v4.1: a ladder cooker with meat on opens its door or lid (frames 4 to 7, the fire band kept).
+    const frame = open ? (a.name === 'kettle' ? 4 : artMeta(a.name).open + (BAND_FRAME[band] || 0)) : (BAND_FRAME[band] || 0);
     pushArt(push, a.name, frame, a.tiles, { outline: true, rec: [st.sprite || a.name, d.x, d.y, BAND_FRAME[band] || 0], hit: hit, top: function (X, Y) {
       if (!ck) return;
       drawGauge(ck, X, Y);
@@ -8340,10 +8453,17 @@ function drawCanopy(s) {
   put3('canopy', 0, c[0], c[1]);
   recOnly('canopy', cp && typeof cp.x === 'number' ? cp.x : tiles[0].x * TILE, cp && typeof cp.y === 'number' ? cp.y : tiles[0].y * TILE, 0);
 }
-function ventRp(a) { return a.name === 'drum' ? [a.X + 5, a.Y - 38] : [a.X, a.Y - 21]; }
+function ventRp(a) {
+  const mt = artMeta(a.name), ck = a.id && sim && sim.state.stations ? sim.state.stations[a.id] : null;
+  const v = ck && ck.pieces && ck.pieces.length && mt.ventOpen ? mt.ventOpen : mt.vent;   // v4.1: the ladder cookers' stack tops (the lid up moves it)
+  if (Array.isArray(v) && a.name !== 'kettle' && a.name !== 'drum') return [a.X + v[0], a.Y + v[1]];
+  return a.name === 'drum' ? [a.X + 5, a.Y - 38] : [a.X, a.Y - 21];
+}
 // The v2 vent a cooker's puffs start from (sim px), as updateFx spawns them.
 function ventSim(st) {
   const t = st.tiles[0], tx = t.x * TILE, ty = t.y * TILE;
+  if (st.sprite === 'cabinet') return { x: tx + 8, y: ty - 18 };   // v4.1
+  if (st.sprite === 'stick_burner' || st.sprite === 'trailer_rig') return { x: tx + 4, y: ty - 18 };
   return st.sprite === 'drum' || st.id === 'drum' ? { x: tx + 7, y: ty - 4 } : { x: tx + 11, y: ty - 10 };
 }
 
