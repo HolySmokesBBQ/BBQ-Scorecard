@@ -1571,6 +1571,7 @@ async function nodeChecks() {
   await step('four plates set down land in four counter spots, headless', () => countersHeadless(globalThis[GLOBAL_NAME]));
   await step('v3.7 the register: guests order and pay first, a TILL card rings them up, to go spots, the crew idle by their work, save v11, headless', () => registerHeadless(globalThis[GLOBAL_NAME]));
   await step('v3.7 pay then sit: the RUN card and the pitmaster deliver to the table, eating starts on delivery, refunds, headless', () => deliveryHeadless(globalThis[GLOBAL_NAME]));
+  await step('v3.8 overtime: paid guests hold the day past the hard end, boxed to go at the cap, the unpaid line leaves uncharged, headless', () => overtimeHeadless(globalThis[GLOBAL_NAME]));
   // v3.2 (D10.1): the Node legs of steps 73 to 75, the day loop and save v6.
   await step('v3.2 days: the day loop, prices and save v6, headless', () => daysLoopHeadless(globalThis[GLOBAL_NAME]));
   await step('v3.4 days: the morning shop (Confirm, Back, the reserve warning), the start pick, automatic prep and training, the broke rescue, headless', () => daysStockHeadless(globalThis[GLOBAL_NAME]));
@@ -2021,6 +2022,41 @@ function clearYardFixture(h) {
   st.stations.board.stacks = [];
   const pl = st.player;
   pl.x = 1; pl.y = 4; pl.px = 16; pl.py = 64; pl.path = []; pl.next = null; pl.walking = false; pl.carrying = null; pl.busy = null; pl.target = null; pl.queued = null;
+}
+// v3.8 overtime (Joel 2026-10-20): at the hard end the gate closes and the unpaid line leaves
+// uncharged, but paid guests hold the day open (food in play) up to C.OVERTIME_SECONDS; anyone
+// still waiting at the cap gets the plate boxed to go, counted as served, the sale kept, no tip.
+function overtimeHeadless(P) {
+  const C = P.C, notes = [];
+  assert(C.OVERTIME_SECONDS === 45, 'C.OVERTIME_SECONDS ' + C.OVERTIME_SECONDS);
+  const h = feltRun(P, 'fire', 3, 61);
+  const st = h.st(), t = st.today;
+  h.fixture = (s) => { s.today.pending = 1; s.spawnAt = Infinity; };   // hold the booking open to the end
+  h.until(() => st.clock + 1e-9 >= t.endAt - 1, 600);
+  h.fixture = null;
+  assert(st.phase === 'service' && st.clock < t.endAt, 'not just before the hard end: ' + st.phase + ' ' + st.clock + ' / ' + t.endAt);
+  clearYardFixture(h);
+  t.pending = 0;
+  const seat = P.MAP.seats.find((x) => P.tileOwned(x, st.gear, st.decor)) || P.MAP.seats[0];
+  const g = seatedGuest(h, 9201, 'sausage', seat.id, { patience: 9999, patienceMax: 9999 });
+  st.customers.push(lineGuest(h, 9202, 'sausage', { patience: 9999, patienceMax: 9999 }));
+  st.player.carrying = { kind: 'plates', meat: 'sausage', times: [st.clock] };   // food in play, nowhere near the seat
+  const cash0 = st.cash, served0 = t.served, refunds0 = t.refunds, rev0 = t.revenue;
+  h.until(() => st.clock + 1e-9 >= t.endAt + 1, 3);
+  const line = st.customers.find((c) => c.id === 9202);
+  assert(st.phase === 'service' && t.overtime && t.overtime.cap === t.overtime.at + 45, 'no overtime at the hard end: ' + st.phase + ' ' + describe(t.overtime));
+  assert(h.has('overtime'), 'no overtime event');
+  assert(g.mode === 'seated' && g.paid === true && g.fed !== true, 'the paid guest left at the hard end: ' + g.mode);
+  assert(!line || (line.mode === 'leaving' && line.reason === 'close' && line.paid !== true), 'the unpaid line guest did not leave uncharged: ' + describe(line && { mode: line.mode, paid: line.paid }));
+  assert(st.cash === cash0, 'cash moved at the hard end: ' + (st.cash - cash0));
+  notes.push('overtime from ' + t.overtime.at + ' to ' + t.overtime.cap + ', the unpaid guest left uncharged');
+  h.until(() => st.phase !== 'service', 50);
+  assert(st.phase !== 'service', 'the day did not end at the overtime cap');
+  const box = h.of('boxed').filter((e) => e.id === 9201);
+  assert(box.length === 1 && t.boxed === 1 && t.served === served0 + 1, 'the paid guest was not boxed and counted: ' + describe({ box, boxed: t.boxed, served: t.served - served0 }));
+  assert(!h.log.some((e) => (e.type === 'left_at_close' || e.type === 'walk_out') && e.id === 9201 && e.refund > 0) && t.refunds === refunds0 && t.revenue === rev0, 'the boxed sale was refunded: ' + describe({ refunds: t.refunds - refunds0, revenue: t.revenue - rev0 }));
+  notes.push('ended at ' + st.clock.toFixed(1) + ' s, boxed 1, served counts it, no refund');
+  return notes.join('; ');
 }
 function registerHeadless(P) {
   const C = P.C, M = P.MAP, notes = [];
@@ -5652,6 +5688,7 @@ async function launch() {
     '--disable-extensions',
     '--allow-file-access-from-files',
     '--hide-scrollbars',
+    '--autoplay-policy=document-user-activation-required',   // v3.8: the real browser's gate, so the music click is a fair test
     'about:blank'
   ], { stdio: ['ignore', 'ignore', 'pipe'] });
   let stderr = '';
@@ -9277,9 +9314,10 @@ async function browserChecks() {
       assert(bl.length >= 3 && !bl.some((b) => b.kind === 'flame') && offStation.length === 0, 'badges ' + describe(bl));
       const onPeople = await ev('g.badgeLog.filter((b) => b.shown && g.people.some((p) => b.chip.x0 < p.x1 && p.x0 < b.chip.x1 && b.chip.y0 < p.y1 && p.y0 < b.chip.y1)).map((b) => b.kind)');
       assert(onPeople.length === 0, 'badges drawn on people ' + describe(onPeople));
-      // Order bubbles: small, tail on the head, never on a counter.
+      // Order bubbles: small, tail on the head, a line guest's never on a counter (Joel 2026-10-20: a
+      // seated guest's chip sits on its own head, over the counter if need be).
       const ob = await ev('g.orderBubbles');
-      const badB = ob.filter((b) => (b.rect.x1 - b.rect.x0) > 24 || b.rect.y1 > b.head.y0 || b.counters.some((c) => b.rect.x0 < c.x1 && c.x0 < b.rect.x1 && b.rect.y0 < c.y1 && c.y0 < b.rect.y1));
+      const badB = ob.filter((b) => (b.rect.x1 - b.rect.x0) > 24 || b.rect.y1 > b.head.y0 || ((b.mode === 'waiting' || b.mode === 'arriving') && b.counters.some((c) => b.rect.x0 < c.x1 && c.x0 < b.rect.x1 && b.rect.y0 < c.y1 && c.y0 < b.rect.y1)));
       assert(ob.length >= 1 && badB.length === 0, 'order bubbles ' + describe(ob) + ' guests ' + describe(await ev('S().customers.map((c) => [c.id, c.mode, c.paid, c.fed, c.x, c.y])')));
       // The near view centres the kitchen block vertically.
       const cm = await ev('g.camera.get()');
@@ -9428,6 +9466,146 @@ async function browserChecks() {
     const t1 = await ev('sim.cookTime()');
     assert((await ev('S().decor.lights')) === true && t1.total === t0 + C.LIGHTS_SECONDS && t1.lights === C.LIGHTS_SECONDS, 'lights ' + describe([t0, t1]));
     return 'row "' + want + '", cook ' + t0 + ' s to ' + t1.total + ' s';
+  });
+
+  // v3.8 (Joel 2026-10-20): the desktop side panel fits 1427 by 890 with no scrolling, the register's
+  // coin shows only while a guest waits to pay, overtime past the hard end, and the music button
+  // answers one real click inside an iframe (the artifact embeds the game in one).
+  const DESK_J = { width: 1427, height: 890, deviceScaleFactor: 1, mobile: false };
+  const deskTap = async (id) => {
+    const p = await ev('(() => { const e = $(' + JSON.stringify(id) + '); if (!e || e.disabled) return null; e.scrollIntoView({ block: "center" }); const r = e.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()');
+    assert(p, '#' + id + ' missing or disabled');
+    await mouseTap(p.x, p.y);
+    await sleep(60);
+    await advance(0);
+  };
+  const panelFit = () => ev('(() => { const p = $("panels"), pr = p.getBoundingClientRect(); const clipped = [...p.querySelectorAll("button, #pit-level, #hub-cooktime")].filter((e) => e.offsetParent && !e.closest("[hidden]")).filter((e) => { const r = e.getBoundingClientRect(); return r.bottom > pr.bottom + 1 || r.top < pr.top - 1 || r.right > pr.right + 1 || e.scrollWidth > e.clientWidth + 1; }).map((e) => e.id || e.className); return { sh: p.scrollHeight, ch: p.clientHeight, docH: document.documentElement.scrollHeight, ih: innerHeight, clipped, books: [...p.querySelectorAll(".book")].filter((b) => b.offsetParent).length }; })()');
+  await step('v3.8 desktop 1427 by 890: the hub side panel fits the window with no scrolling, compact offer rows, nothing clipped', async () => {
+    await emulate(DESK_J, false);
+    try {
+      await sleep(TIMEOUT_MS.resize);
+      await reload(saveV9({ cash: 300, season: { pick: 'birthday' } }));
+      await advance(0); await advance(0);
+      const a = await panelFit();
+      assert(a.sh <= a.ch + 1 && a.docH <= a.ih && a.clipped.length === 0, 'planner hub does not fit: ' + describe(a));
+      await screenshot('desktop-1427-hub.png');
+      // Joel's screenshot: Thursday, nothing booked yet, the offers on the This week tab.
+      await run('S().season.booking = null; S().season.day = 3; S().season.dayLog = ["yard", "off", "yard"]; g.refresh(); g.advance(0); return true;');
+      await advance(0); await advance(0);
+      const b = await panelFit();
+      assert(b.sh <= b.ch + 1 && b.docH <= b.ih && b.clipped.length === 0 && b.books >= 2, 'offer hub does not fit: ' + describe(b));
+      const lvl = await ev('$("pit-level") ? $("pit-level").textContent : ""');
+      assert(/Level 1, 0 of 150 XP/.test(lvl), 'pit level line ' + describe(lvl));
+      const rows = await ev('[...document.querySelectorAll("#offer-grid .offer:not(.yard)")].map((o) => Math.round(o.getBoundingClientRect().height))');
+      assert(rows.length >= 2 && rows.every((h) => h <= 110), 'offer rows are not compact: ' + describe(rows));
+      const badges = await ev('[...document.querySelectorAll("#day-strip .dy .badge")].map((bd) => { const r = bd.getBoundingClientRect(), t = bd.closest(".dy").getBoundingClientRect(); return Math.round(t.top - r.bottom); })');
+      assert(badges.length >= 1 && badges.every((gp) => gp >= 2), 'day checks crowd the tiles: gaps ' + describe(badges));
+      await screenshot('desktop-1427-offers.png');
+      return 'planner ' + a.sh + ' of ' + a.ch + ' px, offers ' + b.sh + ' of ' + b.ch + ' px, rows ' + rows.join('/') + ' px, check gaps ' + badges.join('/');
+    } finally {
+      await emulate(RUN_METRICS);
+      await sleep(TIMEOUT_MS.resize);
+      await advance(0);
+    }
+  });
+  await step('v3.8 desktop 1427 by 890: mid-service frame, the register coin only while a guest waits to pay, overtime past the hard end', async () => {
+    await emulate(DESK_J, false);
+    try {
+      await sleep(TIMEOUT_MS.resize);
+      await reload(saveV9({ cash: 300, season: { pick: 'birthday' } }));
+      for (let i = 0; i < 40 && (await ev('S().phase')) !== 'service'; i++) {
+        const ids = await ev('[...document.querySelectorAll("#panels button")].filter((b) => b.offsetParent && !b.disabled).map((b) => b.id)');
+        const nx = ['plan-start', 'shop-confirm', 'go', 'hub-start'].find((x) => ids.includes(x));
+        if (nx) await deskTap(nx); else await advance(1);
+      }
+      assert((await ev('S().phase')) === 'service', 'no service day');
+      await advance(60);
+      const cam = await ev('g.camera.get()');
+      assert(cam.mode === 'near' && cam.y0 <= 140, 'the desktop view cuts the pit sign: ' + describe(cam));
+      await screenshot('desktop-1427-service.png');
+      // The coin: none with nobody waiting to pay, one with a guest at the front of the line.
+      const coin = () => ev('g.badgeLog.filter((b) => b.kind === "coin").length');
+      await run('S().customers = S().customers.filter((c) => c.queueIndex < 0); S().spawnAt = Infinity; g.advance(0); return true;');
+      const c0 = await coin();
+      await run('const c = { x: 5, y: 1, px: 80, py: 16, face: "left", next: null, path: [], walking: false, anim: 0, id: 9301, body: 0, want: "sausage", patienceMax: 999, patience: 999, wait: 0, queueIndex: 0, mode: "waiting", mood: "neutral", reason: null, pause: 0, hop: 0, seat: null, eat: 0, eatMax: 0, bonusPaid: false, booked: false, runPlate: false, paid: false, fed: false, togo: false, spot: -1, price: 0, paidAt: 0, rungBy: null, incoming: null }; const p = S().player; p.x = 1; p.y = 4; p.px = 16; p.py = 64; p.path = []; p.next = null; S().customers.push(c); g.advance(0); return true;');
+      const c1 = await coin();
+      assert(c0 === 0 && c1 === 1, 'register coin with nobody waiting ' + c0 + ', with a guest waiting ' + c1);
+      // Overtime: a paid guest seated, a plate in hand, the clock past the hard end.
+      await run('const st = S(); st.customers = st.customers.filter((c) => c.mode === "leaving"); for (const k of Object.keys(st.seats)) st.seats[k] = null; st.spawnAt = Infinity; const seat = MAP.seats.find((x) => ' + GLOBAL_NAME + '.tileOwned(x, st.gear, st.decor)); st.seats[seat.id] = 9302; st.customers.push({ x: seat.x, y: seat.y, px: seat.x * 16, py: seat.y * 16, face: seat.face, next: null, path: [], walking: false, anim: 0, id: 9302, body: 1, want: "sausage", patienceMax: 999, patience: 999, wait: 0, queueIndex: -1, mode: "seated", mood: "neutral", reason: null, pause: 0, hop: 0, seat: seat.id, eat: 0, eatMax: 9, bonusPaid: false, booked: false, runPlate: false, paid: true, fed: false, togo: false, spot: -1, price: 6, paidAt: st.clock, rungBy: "you", incoming: null }); const p = st.player; p.x = 1; p.y = 4; p.px = 16; p.py = 64; p.path = []; p.next = null; g.advance(0); return true;');
+      await run('g.advance(Math.max(0, S().today.endAt - S().clock - 1)); const p = S().player; p.carrying = { kind: "plates", meat: "sausage", times: [S().clock] }; g.advance(0); return true;');
+      await advance(2);
+      const ot = await ev('({ phase: S().phase, clock: g.clockText, ot: S().today.overtime })');
+      assert(ot.phase === 'service' && ot.clock === 'OVERTIME' && ot.ot, 'no overtime: ' + describe(ot));
+      await screenshot('desktop-1427-overtime.png');
+      const served0 = await ev('S().today.served');
+      const tday = await ev('S().day');
+      await run('globalThis.__otDay = S().today; return true;');
+      await advance(50);
+      const end = await ev('({ phase: S().phase, boxed: globalThis.__otDay.boxed, served: globalThis.__otDay.served })');
+      assert(end.phase !== 'service' && end.boxed === 1 && end.served === served0 + 1, 'overtime did not end with the plate boxed (day ' + tday + '): ' + describe(end));
+      return 'view y0 ' + Math.round(cam.y0) + ' at ' + cam.z + 'x; coin ' + c0 + ' then ' + c1 + '; OVERTIME on the clock, boxed 1 at the cap';
+    } finally {
+      await emulate(RUN_METRICS);
+      await sleep(TIMEOUT_MS.resize);
+      await advance(0);
+    }
+  });
+  await step('v3.8 the music button in an iframe: one real click starts the track, a second stops it', async () => {
+    const frameFile = path.join(OUT_DIR, 'frame-host.html');
+    const src = pathToFileURL(FILES.index).href + '?seed=' + SEED;
+    fs.writeFileSync(frameFile, '<!doctype html><meta charset="utf-8"><body style="margin:0"><iframe id="f" src="' + src + '" style="border:0;width:100vw;height:100vh"></iframe></body>', 'utf8');
+    await emulate(DESK_J, false);
+    const ctxs = [];
+    const onCtx = (p) => ctxs.push(p.context);
+    cdp.on('Runtime.executionContextCreated', onCtx);
+    try {
+      await reload(undefined, { clear: true });
+      const loaded = cdp.once('Page.loadEventFired');
+      await cdp.send('Page.navigate', { url: pathToFileURL(frameFile).href });
+      await loaded;
+      const tree = await cdp.send('Page.getFrameTree');
+      const fid = tree.frameTree.childFrames && tree.frameTree.childFrames[0].frame.id;
+      assert(fid, 'no iframe');
+      let cid = null;
+      for (let i = 0; i < 100 && cid === null; i++) {
+        const c = ctxs.find((x) => x.auxData && x.auxData.frameId === fid && x.auxData.isDefault);
+        if (c) {
+          const r = await cdp.send('Runtime.evaluate', { contextId: c.id, expression: 'typeof ' + GLOBAL_NAME + ' !== "undefined" && !!' + GLOBAL_NAME + '.game && !!' + GLOBAL_NAME + '.music', returnByValue: true });
+          if (r.result && r.result.value === true) cid = c.id;
+        }
+        if (cid === null) await sleep(100);
+      }
+      assert(cid !== null, 'the game did not load in the iframe');
+      const fev = async (expr) => { const r = await cdp.send('Runtime.evaluate', { contextId: cid, expression: expr, returnByValue: true, awaitPromise: true }); if (r.exceptionDetails) throw new Error('frame: ' + r.exceptionDetails.text); return r.result.value; };
+      const ms = () => fev(GLOBAL_NAME + '.music.state()');
+      const off = await cdp.send('Runtime.evaluate', { expression: 'JSON.stringify(document.getElementById("f").getBoundingClientRect())', returnByValue: true });
+      const fr = JSON.parse(off.result.value);
+      const realClick = async () => {
+        const p = await fev('(() => { const r = document.getElementById("mute").getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()');
+        await mouseTap(Math.round(fr.left + p.x), Math.round(fr.top + p.y));
+      };
+      const m0 = await ms();
+      const panel = await fev('(() => { const p = document.getElementById("panels"); return !!p && !p.hidden; })()');
+      assert(m0.muted === true && m0.created === 0, 'before the click ' + describe(m0));
+      await realClick();
+      let m1 = await ms();
+      for (let i = 0; i < 80 && !(m1.running && m1.playing); i++) { await sleep(100); m1 = await ms(); }
+      assert(m1.muted === false && m1.running === true && m1.playing === true && m1.track === m1.wantTrack, 'one real click did not start the music: ' + describe(m1));
+      const pressed1 = await fev('document.getElementById("mute").getAttribute("aria-pressed")');
+      await realClick();
+      await sleep(200);
+      const m2 = await ms();
+      const pressed2 = await fev('document.getElementById("mute").getAttribute("aria-pressed")');
+      assert(m2.muted === true && m2.playing === false && pressed1 === 'false' && pressed2 === 'true', 'the second click did not stop it: ' + describe(m2) + ' pressed ' + pressed1 + '/' + pressed2);
+      return 'panel open ' + panel + '; click 1: context running, ' + m1.track + ' playing; click 2: muted';
+    } finally {
+      cdp.off('Runtime.executionContextCreated', onCtx);
+      await emulate(RUN_METRICS);
+      const back = cdp.once('Page.loadEventFired');
+      await cdp.send('Page.navigate', { url: pathToFileURL(FILES.index).href + '?seed=' + SEED });
+      await back;
+      await reload(undefined, { clear: true });
+    }
   });
 
   await step('zero console errors across the run', () => {

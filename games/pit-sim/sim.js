@@ -517,6 +517,7 @@ const C = Object.freeze({
   }),
   BASE_WINDOW: 80,                    // the Normal window every booking window is written in
   LAST_CALL_GUARD: 5,                 // last call is never later than the hard end minus this
+  OVERTIME_SECONDS: 45,               // v3.8: past the hard end the cook runs on until every paid guest has a plate, at most this long
   // fees and pay [S 3.2], [S 3.3], [S 5.4]
   FEE_MULT: 1.25, FEE_ROUND: 5,       // fee = round to 5 of headcount x average plate price of the asked meats x 1.25
   DEPOSIT_FRAC: 0.3,                  // deposit = Math.round(fee * 0.3), credited at loadUp()
@@ -2923,7 +2924,9 @@ function createSim(saved, seed) {
       // v3.3: the live competition (null on every other day) and boxes handed in
       comp: null, compIn: 0, entry: 0,
       // v3.6 the register: who rang guests up (v3.7: before the plate; rungLate stays 0)
-      rungYou: 0, rungTill: 0, rungLate: 0, refunds: 0
+      rungYou: 0, rungTill: 0, rungLate: 0, refunds: 0,
+      // v3.8 overtime: null, or { at, cap } once the clock passes the hard end with paid guests waiting
+      overtime: null, boxed: 0
     };
   }
 
@@ -4664,6 +4667,25 @@ function createSim(saved, seed) {
     }
   }
 
+  // v3.8: the overtime cap. Every paid guest still waiting takes the plate boxed to go: counted as
+  // served, the sale stays, no tip.
+  function boxOutWaiting() {
+    const t = state.today;
+    for (const c of state.customers.filter(awaitsPlate)) {
+      t.served += 1;
+      state.stats.served += 1;
+      t.sold[c.want] += 1;
+      t.boxed += 1;
+      if (c.booked === true) { t.fed += 1; t.waitSum += c.wait; }
+      else t.ok += 1;
+      c.fed = true;
+      c.incoming = null;
+      freeSeat(c);
+      sendOut(c, 'togo', 'neutral', true);
+      emit('boxed', { id: c.id, meat: c.want, price: c.price });
+    }
+  }
+
   function freeSeat(c) {
     if (c.seat && state.seats[c.seat] === c.id) state.seats[c.seat] = null;
   }
@@ -4673,7 +4695,9 @@ function createSim(saved, seed) {
     serveTogo();
     // [T 2.4] D: patience, wait and mood hold while the tutorial runs. v3.7: patience drains in
     // the line and again while a paid guest waits for the plate.
-    const waiters = tutRunning() ? [] : waitingCustomers().concat(state.customers.filter(awaitsPlate));
+    // v3.8: in overtime the paid guests keep counting their wait but do not walk out.
+    if (state.today.overtime) for (const c of state.customers) if (awaitsPlate(c)) c.wait += dt;
+    const waiters = tutRunning() ? [] : waitingCustomers().concat(state.today.overtime ? [] : state.customers.filter(awaitsPlate));
     for (const c of waiters) {
       c.wait += dt;
       c.patience -= dt;
@@ -5309,17 +5333,22 @@ function createSim(saved, seed) {
   // pieces are not sellable, so they do not hold the day open.
   function soldOut() {
     if (totalStock() > 0) return false;
+    return !foodInPlay();
+  }
+  // v3.8: food past the cooler that can still become a plate: on a grate, on the board, on the
+  // counter or in someone's hands.
+  function foodInPlay() {
     for (const id of COOKER_IDS) {
       if (!stationActive(STATION_BY_ID[id])) continue;
-      if (state.stations[id].pieces.some((pc) => pc.state !== 'burnt')) return false;
+      if (state.stations[id].pieces.some((pc) => pc.state !== 'burnt')) return true;
     }
     const board = state.stations.board;
-    if (board.stacks.length > 0 || board.slicing !== null || board.waiting.length > 0) return false;   // X5.3
-    for (const sp of state.stations.table.spots) if (sp !== null) return false;
+    if (board.stacks.length > 0 || board.slicing !== null || board.waiting.length > 0) return true;   // X5.3
+    for (const sp of state.stations.table.spots) if (sp !== null) return true;
     const pc = state.player.carrying;
-    if (pc !== null && pc.kind !== 'charcoal' && pc.kind !== 'burnt') return false;
-    if (state.buddy && state.buddy.carrying) return false;
-    return true;
+    if (pc !== null && pc.kind !== 'charcoal' && pc.kind !== 'burnt') return true;
+    if (state.buddy && state.buddy.carrying) return true;
+    return false;
   }
 
   // The early end ([V2.5] step 9): sold out, or after last call with nobody in line, and in both
@@ -5375,8 +5404,22 @@ function createSim(saved, seed) {
     customersStage(dt);
     tickRegister(dt);   // v3.6
     if (state.clock + 1e-9 >= t.endAt) {
-      if (t.kind === 'booking') missPending();   // Q-1: the guests still waiting give up at the hard end
-      closeOutLine();
+      // v3.8 overtime (Joel 2026-10-20): the gate closes and the unpaid line leaves uncharged, but
+      // the cook runs on until every guest who paid has a plate, at most OVERTIME_SECONDS. Anyone
+      // still waiting at the cap gets the plate boxed to go: the sale stays, no tip.
+      if (t.overtime === null) {
+        if (t.kind === 'booking') missPending();   // Q-1: the guests still waiting give up at the hard end
+        closeOutLine();
+        state.spawnAt = Infinity;
+        t.overtime = { at: t.endAt, cap: t.endAt + (t.comp ? 0 : C.OVERTIME_SECONDS) };
+        if (state.customers.some(awaitsPlate) && !t.comp && foodInPlay()) emit('overtime', { cap: t.overtime.cap });
+      }
+      // It runs only while food for them is still in play (on a grate, the board, the counter or in
+      // hands); with nothing in play there is nothing to wait for.
+      if (!t.comp && state.customers.some(awaitsPlate) && state.clock + 1e-9 < t.overtime.cap && foodInPlay()) return;
+      // At the cap with food still in play the plates go out boxed; with no food left there is no
+      // plate to box, and the waiting guests get their money back as before.
+      if (foodInPlay()) boxOutWaiting();
       closeOutSeats();
       endDay();
       return;

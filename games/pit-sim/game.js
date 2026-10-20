@@ -442,6 +442,7 @@ const FX_LOG_MAX = 500;
 const LAWN_FROM_ROW = 6;                                   // fence, hedge and bed tiles sit on lawn from this row down
 const OVERFLOW_OK = /^(shadow|hand_|player_|buddy_|tender_|prep_|cust[0-9]_)/;
 const CONTROLS_H = 24 + 48 + 52 + 8;                       // #status, #act, #chips with its margin, slack (D13 3x test)
+const CONTROLS_H_DESK = 40 + 52 + 8;                       // Joel 2026-10-20: desktop sets #status and #act on one slim row
 const CASH_ABOVE_PX = 26;                                  // the cash number sits at the served customer's py - 26
 const STAGGER_S = 0.3;                                     // a number or heart that would overlap a fresh one waits this long
 const STAGGER_WINDOW_S = 0.5;
@@ -501,6 +502,7 @@ let capturing = false;
 // with a 2x transform so every sim px position and step in this file scales with it.
 let B3 = null;
 const RS = 2;
+const DESK_SIGN_UP = 64;          // Joel 2026-10-20: rp from the sign tile's top vertex up to the sign's top
 const SIDE_W = 380;               // v3.4 playtest: the side column's width at 900 px and up (index.html)
 let recs = [];
 const SIZE = Object.create(null);
@@ -672,6 +674,8 @@ function sumCounts(counts) {
 function tGate(s) { return s.today && typeof s.today.gateAt === 'number' ? s.today.gateAt : C.GATE_OPENS; }
 function tLast(s) { return s.today && typeof s.today.lastCallAt === 'number' ? s.today.lastCallAt : C.LAST_CALL; }
 function tEnd(s) { return s.today && typeof s.today.endAt === 'number' ? s.today.endAt : C.DAY_SECONDS; }
+// v3.8: the clock box text, OVERTIME once the hard end passes with paid guests still waiting.
+function clockStr(s) { return s.today && s.today.overtime && !s.today.comp ? 'OVERTIME' : String(Math.max(0, Math.ceil(tEnd(s) - s.clock))); }
 function todayKind(s) { return s.today && s.today.kind ? s.today.kind : 'tutorial'; }
 function dpr() { return window.devicePixelRatio || 1; }
 
@@ -1224,6 +1228,7 @@ function exposeGame() {
     fxLog: fxLog,
     captureFrame: captureFrame,
     get banner() { return bannerNow(); },
+    get clockText() { return sim.state.phase === 'service' ? clockStr(sim.state) : null; },   // v3.8: the clock box, OVERTIME past the hard end
     get rail() { return railNow(); },
     get railBoxes() { return railBoxes ? JSON.parse(JSON.stringify(railBoxes)) : null; },
     get badgeLog() { return badgeLog.slice(); },
@@ -1417,6 +1422,8 @@ function onEvent(ev) {
     case 'rung': onRung(ev); break;
     case 'seat_taken': break;
     case 'to_go': announce('No free seat. They took it to go.'); break;
+    case 'overtime': announce('Overtime. The gate is closed. Finish the plates people paid for.'); break;
+    case 'boxed': announce('Out of time. Their plate went in a box to go.'); break;
     case 'seat_done': onSeatDone(ev); break;
     case 'walk_out': {
       announce(ev.refund > 0 ? 'A customer walked out. Refunded ' + ev.refund + '.' : 'A customer walked out.');
@@ -1763,7 +1770,10 @@ function saleTaps() { return saleShown() && !!(mqDesktop && mqDesktop.matches); 
 function setInert(on) {
   if (!('inert' in HTMLElement.prototype)) return;
   el.stage.inert = on && !saleTaps();
-  el.hdr.inert = on;
+  // Joel 2026-10-20: the music button stays live while a panel is open (the whole header was inert,
+  // so on the desktop hub a real click on it did nothing); the rest of the header is inert.
+  el.hdr.inert = false;
+  for (const ch of el.hdr.children) ch.inert = on && ch.id !== 'mute';
   el.foot.inert = on;
 }
 
@@ -3082,7 +3092,10 @@ function fitWeek() {
   if (sig === weekFitSig) return;
   const a = document.activeElement;
   const id = a && a.id && w.contains(a) ? a.id : null;
-  const lim = 2 * (window.innerHeight || 812);
+  // Joel 2026-10-20: on desktop the side panel fits the window itself (no scrolling), so the shrink
+  // steps run until #week fits one window height, not two.
+  const desk = !!(mqDesktop && mqDesktop.matches);
+  const lim = desk ? (window.innerHeight || 820) - 12 : 2 * (window.innerHeight || 812);
   let lvl = 0;
   if (weekFit !== 0) buildWeekAt(0);
   // D8.2 with the v3.2 playtest: steps 6 and 7 (index.html) come first; step 8 swaps each plain day
@@ -3258,7 +3271,9 @@ function signWords(sign, pit, share, host) {
   const vw = document.documentElement.clientWidth || 375;
   const panel = host && host.clientWidth > 0 ? host.clientWidth - 24 : (vw >= 900 ? 296 : Math.min(480, vw) - 24);
   const room = Math.floor(panel * share) - 32;
-  const big = fitSign(pit, room, [3, 2], UI.signText, { bold: true, shadow: UI.woodX });
+  // Joel 2026-10-20: the hub's pit sign is the compact 2x one on desktop, so the side panel fits the window.
+  const desk = host === el.week && !!(mqDesktop && mqDesktop.matches);
+  const big = fitSign(pit, room, desk ? [2] : [3, 2], UI.signText, { bold: true, shadow: UI.woodX });
   if (big) {
     sign.appendChild(big);
     sign.appendChild(mk('span', { cls: 'sr', text: pit }));
@@ -3413,10 +3428,10 @@ function offerCard(o, pickedId, level, idx) {
   const lines = mk('div', { cls: 'olines' });
   // On one row (W22.25 step 2) the Yard day keeps every W15 line, set as wrapping inline items.
   const pad = row1 ? '' : 'pad';
-  if (!o.comp) lines.appendChild(iconLine(peopleIcon(), isYard ? U('walkIns') : U('guests', { n: o.headcount | 0 })));   // a competition has no guests
+  if (!o.comp) lines.appendChild(iconLine(peopleIcon(), isYard ? U('walkIns') : U('guests', { n: o.headcount | 0 }), 'ogst'));   // a competition has no guests
   if (isYard) lines.appendChild(iconLine(null, U('yourPick'), pad));
-  else for (let i = 0; i < o.menu.length; i++) lines.appendChild(iconLine(sprEl('icon_' + o.menu[i], 0, 2, null), MEATS[o.menu[i]].plateLabel));
-  lines.appendChild(iconLine(pinIcon(), (STRINGS.venue && STRINGS.venue[o.venue]) || 'Backyard'));
+  else for (let i = 0; i < o.menu.length; i++) lines.appendChild(iconLine(sprEl('icon_' + o.menu[i], 0, 2, null), MEATS[o.menu[i]].plateLabel, 'omenu'));
+  lines.appendChild(iconLine(pinIcon(), (STRINGS.venue && STRINGS.venue[o.venue]) || 'Backyard', 'ovenue'));
   const fl = mk('p', { cls: 'oline flames' });
   const fx = mk('span', { cls: 'ficons', attrs: { 'aria-hidden': 'true' } });
   for (let i = 0; i < 3; i++) { const f = flameEl(i < (o.difficulty | 0), row1 ? 1 : 2); if (f) fx.appendChild(f); }
@@ -3448,7 +3463,8 @@ function offerCard(o, pickedId, level, idx) {
     if (big && big.headcount > (o.headcount | 0)) info.appendChild(mk('p', { id: 'offer-finale-drum', cls: 'ohint', text: U('finaleDrum', { n: big.headcount, fee: big.pay }) }));
   }
   card.appendChild(info);
-  card.appendChild(bookButton(o, picked, row1));
+  // Joel 2026-10-20: on desktop every booking is one compact row, so its Pick button is the small one.
+  card.appendChild(bookButton(o, picked, row1 || !!(mqDesktop && mqDesktop.matches)));
   const shut = picked ? '' : bookShut(o);
   if (shut) { card.classList.add('shut'); card.appendChild(mk('p', { id: 'offer-' + o.id + '-why', cls: 'ohint owhy', text: shut })); }
   return card;
@@ -7015,6 +7031,22 @@ function homeBox() {
   if (!(x1 > x0)) return null;
   return { x0: x0, x1: x1, y0: y0, y1: y1 };
 }
+// Joel 2026-10-20: the desktop near view frames the kitchen, the counter, the owned seats and the
+// pit sign on the barn (its top not cut), with no wide lawn band under the seats.
+function deskFrame() {
+  const hb = homeBox();
+  if (!hb) return null;
+  const b = { x0: hb.x0, x1: hb.x1, y0: hb.y0, y1: hb.y1 };
+  const st = sim ? sim.state : null;
+  (MAP.seats || []).forEach(function (se) {
+    if (st && !PitSim.tileOwned(se, st.gear, st.decor)) return;
+    const c = tileRp(se.x, se.y);
+    b.x0 = Math.min(b.x0, c[0] - 26); b.x1 = Math.max(b.x1, c[0] + 26); b.y0 = Math.min(b.y0, c[1] - 30); b.y1 = Math.max(b.y1, c[1] + 10);
+  });
+  const sign = MAP.props.find(function (p) { return p.id === 'sign'; });
+  if (sign) { const t = ptOf(sign.tile), c = vtxRp(t.x, t.y); b.y0 = Math.min(b.y0, c[1] - DESK_SIGN_UP); }
+  return b;
+}
 // The kitchen block: every owned station's drawn box (world rp), the counter included.
 function kitchenBox() {
   let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
@@ -7032,7 +7064,9 @@ function camHome() {
   cam.homed = true;
   cam.moved = false;
   if (cam.mode === 'near' && b) {
-    camCenter((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2);
+    const f = cam.phone ? null : deskFrame();
+    if (f) camCenter((f.x0 + f.x1) / 2, (f.y0 + f.y1) / 2);
+    else camCenter((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2);
     // Feedback audit item 19: on a narrow phone (375 CSS px: 250 rp for a 240 rp home box) centring,
     // then keeping 12 rp right of the line, cut the drum and the charcoal pile at the left edge. When
     // the box has under 16 rp to spare, the kitchen side (left) gets the margin, up to 12 rp, and the
@@ -7432,7 +7466,7 @@ function drawClockBox(clock) {
   return 1 + bw + 2;
 }
 function drawRail(r, s) {
-  const clock = String(Math.max(0, Math.ceil(tEnd(s) - s.clock)));
+  const clock = clockStr(s);
   const booking = r.kind === 'booking';
   const strs = [];
   const x0 = drawClockBox(clock);
@@ -7787,7 +7821,8 @@ function stationItems(st, s, push) {
     const tk = s.customers.some(function (c) { return c.queueIndex === 0 && c.mode === 'waiting'; }) ? 1 : 0;
     const nm = A3 && A3.has('register') ? 'register' : a.name, f = tk > 0 ? 1 : 0;
     try { const rb = boxRp(nm, 0, a.X, a.Y); regClear = { x0: rb.x0 - 1, x1: rb.x1 + 1, y0: rb.y0 - 1, y1: rb.y1 }; } catch (e) { regClear = null; }
-    pushArt(push, nm, f, a.tiles, { outline: true, badge: 'coin', rec: ['register', d.x, d.y, f], hit: hit });
+    // Joel 2026-10-20: the coin badge only while a guest waits to pay.
+    pushArt(push, nm, f, a.tiles, { outline: true, badge: tk ? 'coin' : null, rec: ['register', d.x, d.y, f], hit: hit });
   } else if (st.type === 'pile') {
     const n = s.charcoal | 0, f = n >= 5 ? 0 : n >= 3 ? 1 : n >= 1 ? 2 : 3;
     pushArt(push, 'pile', f, a.tiles, { outline: true, badge: 'bag', rec: ['pile', d.x, d.y, f], hit: hit });
@@ -7810,7 +7845,8 @@ function inWork(tiles) {
   const PV = MAP.T && MAP.T.PAVER !== undefined ? MAP.T.PAVER : null;
   return tiles.some(function (t) { return WORK[t.x + ',' + t.y] || (PV !== null && typeof MAP.at === 'function' && MAP.at(t.x, t.y) === PV); });
 }
-const CLUTTER = Object.freeze({ pot: 1, planter: 1, mailbox: 1, woodpile: 1, tree: 1, shelf: 1 });
+// Joel 2026-10-20: the hose reel too (the stray green thing on the lawn right of the picnic table).
+const CLUTTER = Object.freeze({ pot: 1, planter: 1, mailbox: 1, woodpile: 1, tree: 1, shelf: 1, hose: 1 });
 function propItems(p, push) {
   if (p.id === 'shed' || p.id === 'sign' || p.sprite === 'shed' || p.sprite === 'sign' || p.sprite === 'picnic_bench') return;
   const tiles = tilesOf(p), d = drawOf(p);
@@ -8192,18 +8228,25 @@ function smallOrderBubble(c, showMark, s) {
   if (!head || !A3) return false;
   const W = ORDER_BUB.w, H = ORDER_BUB.h, hx = Math.round((head.x0 + head.x1) / 2), hy = Math.round(head.y0);
   const counters = counterBoxes();
+  // Joel 2026-10-20: a guest in line keeps the chip off the counter, but a seated (or to go) guest's
+  // chip sits right on its own head, over the counter if need be, so it never slides off toward the
+  // kettle; it only steps aside for another guest's chip.
+  const line = c.mode === 'arriving' || c.mode === 'waiting';
+  const avoid = (line ? counters : []).concat(orderBubbles.map(function (b) { return b.rect; }));
   let best = null;
   for (let up = 0; up <= 24 && !best; up += 4) {
     for (let k = 0; k <= 64; k += 2) {   // v3.7: 64, a guest seated in front of the counter slides past its end
       for (const dx of k ? [k, -k] : [0]) {
         const r = { x0: hx - W / 2 + dx, x1: hx + W / 2 + dx, y0: hy - ORDER_BUB.tail - H - up, y1: hy - ORDER_BUB.tail - up };
-        if (!counters.some(function (b) { return overlaps(r, b); })) { best = r; break; }
+        if (!avoid.some(function (b) { return overlaps(r, b); })) { best = r; break; }
       }
       if (best) break;
     }
   }
   if (!best) return false;
   const r = best;
+  const tailX = Math.max(Math.round(r.x0) + 3, Math.min(Math.round(r.x0) + W - 5, hx - 1));
+  const lead = Math.abs(tailX + 1 - hx) > 2 || hy - ORDER_BUB.tail - r.y1 > 2;
   const frac = c.patienceMax > 0 ? Math.max(0, Math.min(1, c.patience / c.patienceMax)) : 1;
   const blink = !showMark && frac <= C.PATIENCE_WARN_FRAC && !reduced && Math.floor(tAnim * 4) % 2 === 1;
   const mid = typeof C.PATIENCE_MID_FRAC === 'number' ? C.PATIENCE_MID_FRAC : 0.5;
@@ -8219,6 +8262,21 @@ function smallOrderBubble(c, showMark, s) {
     octx.fillRect(tx - 1, ty - 1, 4, 1); octx.fillRect(tx, ty, 2, ORDER_BUB.tail);
     octx.fillStyle = '#ffffff';
     octx.fillRect(tx, ty - 1, 2, 1);
+    // Joel 2026-10-20: a chip slid off the counter gets a leader from its tail down to its own guest's
+    // head (ink with a white edge) and a small arrow head there, so it never reads as the kettle's.
+    if (lead) {
+      const ax = tx + 1, ay = ty + ORDER_BUB.tail, bx = hx, by = hy - 2;
+      const n = Math.max(Math.abs(bx - ax), Math.abs(by - ay), 1);
+      for (const pass of [0, 1]) {
+        octx.fillStyle = pass ? '#1b1410' : '#ffffff';
+        for (let i = 0; i <= n; i++) {
+          const lx = Math.round(ax + (bx - ax) * i / n), ly = Math.round(ay + (by - ay) * i / n);
+          if (pass) octx.fillRect(lx, ly, 1, 1); else octx.fillRect(lx - 1, ly - 1, 3, 3);
+        }
+      }
+      octx.fillStyle = '#ffffff'; octx.fillRect(bx - 3, by - 3, 7, 2); octx.fillRect(bx - 2, by - 1, 5, 2);
+      octx.fillStyle = '#1b1410'; octx.fillRect(bx - 2, by - 2, 5, 1); octx.fillRect(bx - 1, by - 1, 3, 1); octx.fillRect(bx, by, 1, 1);
+    }
     if (showMark) A3.drawAt(octx, 'mark_x', x0 + W / 2, y0 + 14, 0, false);
     else if (!blink) (A3.drawAtOutlined || A3.drawAt)(octx, 'plate_' + c.want, x0 + W / 2, y0 + 10, 0, false);
     if (!showMark) {
@@ -8229,7 +8287,7 @@ function smallOrderBubble(c, showMark, s) {
       if (bw > 0) octx.fillRect(x0 + 2, y0 + H - 4, bw, 2);
     }
   });
-  orderBubbles.push({ id: c.id, rect: r, head: head, counters: counters, day: s.day });
+  orderBubbles.push({ id: c.id, mode: c.mode, rect: r, head: head, counters: counters, day: s.day, lead: lead, tip: lead ? { x: hx, y: hy - 2 } : { x: tailX + 1, y: Math.round(r.y1) + ORDER_BUB.tail } });
   return true;
 }
 function drawCues(s, custs) {
@@ -8546,10 +8604,11 @@ function render() {
       const rail = cv ? null : railNow();
       if (cv) drawCompRail(cv, s);
       else if (rail) drawRail(rail, s);
-      else boxText(String(Math.max(0, Math.ceil(tEnd(s) - s.clock))), 2, 2, null);
+      else boxText(clockStr(s), 2, 2, null);
       // v3.3 integration: no gate and no last call at the competition, which has no guests.
       if (cv) { /* the turn-in rail says it */ }
       else if (s.clock < tGate(s)) boxText('GATE OPENS IN ' + Math.ceil(tGate(s) - s.clock), 2, SH - 9, 'yellow');
+      else if (s.today && s.today.overtime) boxText('GATE CLOSED', 2, SH - 9, 'yellow');   // v3.8 overtime
       else if (lastCallUntil > nowMs) boxText('LAST CALL', 2, SH - 9, 'yellow');
     }
   } else {
@@ -8621,9 +8680,9 @@ function resize() {
     // largest whole k that frames the kitchen, and never so small a k that the world leaves a band.
     const side = el.panels.hidden ? 0 : SIDE_W + 16;
     const cssW = Math.max(320, vw - 32 - side);
-    const cssH = Math.max(240, (vh || 820) - 44 - CONTROLS_H - 28);   // 28: #foot under the controls
-    const hb = homeBox();
-    const kHome = hb ? Math.floor(Math.min(cssW * d / (hb.x1 - hb.x0 + 48), cssH * d / (hb.y1 - hb.y0 + 48)) + 1e-6) : 1;
+    const cssH = Math.max(240, (vh || 820) - 44 - CONTROLS_H_DESK - 28);   // 28: #foot under the controls
+    const hb = deskFrame() || homeBox();   // Joel 2026-10-20: the kitchen, the seats and the sign
+    const kHome = hb ? Math.floor(Math.min(cssW * d / (hb.x1 - hb.x0 + 32), cssH * d / (hb.y1 - hb.y0 + 8)) + 1e-6) : 1;
     const kFill = Math.ceil(Math.max(cssW * d / WORLD.W, cssH * d / WORLD.H) - 1e-6);
     cam.nearK = Math.max(1, kHome, kFill);
     el.cv.width = Math.floor(cssW * d);

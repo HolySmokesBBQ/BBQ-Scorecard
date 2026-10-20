@@ -299,8 +299,11 @@
       if (muted) {
         if (cur) { fadeOut(cur); cur = null; }
         sleep();
-      } else if (started) {
-        makeContext();   // the toggle itself is a tap
+      } else {
+        // The toggle itself is a user gesture (a click, Enter or Space, or assistive tech that sends
+        // no pointerdown), so the context is made and resumed right here, inside it.
+        started = true;
+        makeContext();
         wake();
       }
     } catch (e) { /* ignore */ }
@@ -338,7 +341,7 @@
     const p = pick || choose(want);
     return {
       supported: !!AC, started, muted, sfxMuted, context: !!ctx, created,
-      running: !!ctx && ctx.state === 'running', theme: cur ? cur.theme : null, mode: cur ? cur.mode : null,
+      running: !!ctx && ctx.state === 'running', playing: !!cur && !!ctx && ctx.state === 'running' && !!cur.src.buffer, theme: cur ? cur.theme : null, mode: cur ? cur.mode : null,
       // bpm is kept as a tempo index: 100 is the track's own speed, up to 106 with a long line.
       bpm: cur ? Math.round(cur.rate * 1000) / 10 : null,
       track: cur ? cur.track : null, rate: cur ? Math.round(cur.rate * 1000) / 1000 : null,

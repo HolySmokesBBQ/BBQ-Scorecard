@@ -747,6 +747,58 @@
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { transition: none !important; animation: none !important; }
     }
+
+    /* Joel 2026-10-20: on desktop the hub's side panel fits the window with no scrolling (a compact
+       pit sign, slim pills, the offers as one row each), the day checks sit on the tile's corner, and
+       the holding line and the action bar share one slim row under the yard. */
+    @media (min-width: 900px) {
+      #stage { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); column-gap: 8px; align-items: center; }
+      #wrap, #chips, #stage > :not(#status):not(#act) { grid-column: 1 / -1; }
+      #status { height: 40px; line-height: 40px; }
+      #act { height: 40px; min-height: 40px; font-size: 15px; }
+      #panels { padding: 6px 0 6px; }
+      #panels .hub #week-top { gap: 6px; margin-bottom: 6px; }
+      #panels .hub .sign { min-height: 36px; padding: 4px 10px 7px; }
+      #panels .hub .pills { gap: 6px; }
+      #panels .hub .pill { min-height: 0; padding: 3px 8px 4px; row-gap: 3px; }
+      #panels .hub .pill .pl.ui { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 4px 5px; }
+      #panels .hub #day-strip { padding-top: 20px; margin-bottom: 8px; }
+      #panels .hub #day-strip .dy { min-height: 30px; }
+      #panels .hub #day-strip .dy .badge { top: -20px; }
+      #panels .hub #hub-startsec { margin-bottom: 6px; }
+      #panels .hub .hub-start { min-height: 60px; padding: 6px 12px; }
+      #panels .hub #planner { gap: 6px; margin-bottom: 8px; }
+      #panels .hub #hub-pit { margin-bottom: 6px; }
+      #panels .hub .hp-row { flex-wrap: nowrap; font-size: 13px; }
+      #panels .hub .hp-row p { white-space: nowrap; }
+      #panels .hub .hub-tabs { margin-bottom: 6px; }
+      #panels .hub .htab { min-height: 36px; }
+      #panels .hub .offers-head { margin-bottom: 4px; }
+      #panels .hub #offers { margin-bottom: 8px; }
+      #panels .hub .offer-grid { grid-template-columns: 1fr; gap: 14px; }
+      #panels .hub .offer:not(.yard) { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: 8px; padding: 13px 8px 6px; }
+      #panels .hub .offer:not(.yard) .band, #panels .hub .offer:not(.yard) .ohost, #panels .hub .offer:not(.yard) .ovenue, #panels .hub .offer:not(.yard) .dep { display: none; }
+      #panels .hub .offer:not(.yard) .oinfo { padding: 2px 0 0; }
+      #panels .hub .offer:not(.yard) .olabel { margin: 0 0 3px; }
+      #panels .hub .offer:not(.yard) .olines { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; }
+      #panels .hub .offer:not(.yard) .oline { margin: 0; font-size: 13px; min-height: 0; gap: 4px; }
+      #panels .hub .offer:not(.yard) .omenu { font-size: 0; gap: 0; margin-right: -6px; }
+      #panels .hub .offer:not(.yard) .flames .fw { display: none; }
+      #panels .hub .offer:not(.yard) .fee { font-size: 15px; }
+      #panels .hub .offer:not(.yard) .book { width: auto; min-width: 72px; margin: 0; padding: 0 10px; }
+      #panels .hub .offer:not(.yard) .needs, #panels .hub .offer:not(.yard) .ohint { grid-column: 1 / -1; }
+      #panels .hub .hub-tabs ~ .hub-pane #offers-h { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+      #panels .hub .offers-head { justify-content: flex-end; }
+      #panels .hub #planner .hub-start { min-height: 52px; }
+      #panels .hub #planner .plan-skip, #panels .hub .foot-row button { min-height: 36px; }
+      #panels .hub #planner-hint { font-size: 12px; line-height: 1.25; }
+      #panels .hub .next-pic { display: none; }
+      #panels .hub .next-head { padding: 4px 8px; }
+      #panels .hub .next-body { padding: 6px 8px; }
+      #panels .hub .next-card { margin-bottom: 8px; }
+      #panels .hub .next-card p { font-size: 12px; line-height: 1.3; }
+      #panels .hub .foot-row { margin-top: 6px; }
+    }
   </style>
   <script src="./sprites.js" defer></script>
   <script src="./sim.js" defer></script>
