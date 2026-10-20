@@ -184,6 +184,8 @@ function decide(sim) {
 // REACT: seconds a human takes to look, decide and tap between actions (0 is a perfect bot).
 const REACT0 = Number(arg('--react', 1.5));
 let REACT = REACT0;
+// v4.2: taps the bot spends in a cook (each walkTo the sim takes, each trash tap), for taps per plate.
+let TAPS = 0;
 function playCook(sim, evs) {
   const s = sim.state;
   let g = 0;
@@ -200,8 +202,8 @@ function playCook(sim, evs) {
       if (process.env.ECON_TRACE && process.env.ECON_TRACE === s.season.week + '.' + s.season.day && g % 3 === 0) console.log('T', s.clock.toFixed(1), JSON.stringify(t), JSON.stringify(s.player.carrying), 'wood', s.wood, 'coal', s.charcoal, COOKERS.map((id) => owned(s, id) ? id + ':' + s.stations[id].fire.toFixed(0) + ':' + s.stations[id].pieces.map((p) => p.meat + '/' + p.state).join('|') : '').join(' '), JSON.stringify(s.stock), sim.verbAt ? sim.verbAt().label : '');
       // The trash never acts on arrival (auto false): once there, tap it.
       const tr = MAP.station('trash').tiles[0];
-      if (t && t.x === tr.x && t.y === tr.y && sim.reach() === 'trash' && sim.verbAt().enabled) { sim.interact(); }
-      else if (t) { const ok = sim.walkTo(t.x, t.y); if (!ok && process.env.ECON_DEBUG) console.log('walk refused', JSON.stringify(t), JSON.stringify(s.player.carrying)); }
+      if (t && t.x === tr.x && t.y === tr.y && sim.reach() === 'trash' && sim.verbAt().enabled) { sim.interact(); TAPS += 1; }
+      else if (t) { const ok = sim.walkTo(t.x, t.y); if (ok) TAPS += 1; if (!ok && process.env.ECON_DEBUG) console.log('walk refused', JSON.stringify(t), JSON.stringify(s.player.carrying)); }
       else if (process.env.ECON_DEBUG && (g % 200 === 0)) console.log('idle', s.clock.toFixed(1), JSON.stringify(s.player.carrying), JSON.stringify(s.stock), s.charcoal, COOKERS.map((id) => owned(s, id) ? id + ':' + s.stations[id].fire.toFixed(0) + ':' + s.stations[id].pieces.map((p) => p.meat + '/' + p.state).join('|') : '').join(' '), 'line', s.customers.filter((o) => o.queueIndex >= 0).length);
     }
     sim.tick();
@@ -352,7 +354,7 @@ function playSeason(seed, stName) {
     r.meatBuy = cs.meat; r.coalBuy = cs.coal;
     const evs = [];
     if (s.today && s.today.comp) { sim.settle(3); for (const e of sim.drainEvents()) evs.push(e); }
-    else playCook(sim, evs);
+    else { TAPS = 0; playCook(sim, evs); r.taps = TAPS; }
     const t = s.till;
     for (const e of evs) {
       if ((e.type === 'walk_out' || e.type === 'left_at_close') && e.refund > 0) { r.refunds += e.refund; r.refundN += 1; }
@@ -409,7 +411,8 @@ if (LEDGER) {
       if (x.kind !== 'rest' && x.kind !== 'hub' && x.kind !== 'rescue') {
         daily += x.daily; cooks += 1;
         const k = x.kind;
-        const b = byKind[k] || (byKind[k] = { n: 0, net: 0, wages: 0, meat: 0, coal: 0, in: 0 });
+        const b = byKind[k] || (byKind[k] = { n: 0, net: 0, wages: 0, meat: 0, coal: 0, in: 0, taps: 0, served: 0 });
+        b.taps += x.taps || 0; b.served += x.served || 0;
         b.n += 1; b.wages += x.wages; b.meat += x.meatBuy; b.coal += x.coalBuy;
         b.in += x.revenue - x.refunds + x.tips + x.pay;
         b.net += x.revenue - x.refunds + x.tips + x.pay - x.wages - x.daily - x.meatBuy - x.coalBuy - (x.entry || 0);
@@ -423,7 +426,7 @@ if (LEDGER) {
     console.log('median gear owned: ' + med(runs.map((r) => r.gear.length)) + '; by season end: ' + ['drum', 'cabinet', 'offset', 'trailer'].filter((g) => GEAR_ORDER.includes(g)).map((g) => g + ' ' + runs.filter((r) => r.gear.includes(g)).length + '/' + n).join(', '));
     console.log('per seed season totals: ' + keys.map((k) => k + ' ' + Math.round(sum[k] / n)).join(', ') + ', daily ' + Math.round(daily / n));
     for (const [k, b] of Object.entries(byKind)) {
-      console.log('  ' + k.padEnd(11) + ' cooks ' + pad((b.n / n).toFixed(1), 4) + '/season  avg take ' + pad(Math.round(b.in / b.n), 4) + '  wages ' + pad(Math.round(b.wages / b.n), 3) + '  meat ' + pad(Math.round(b.meat / b.n), 3) + '  coal ' + pad(Math.round(b.coal / b.n), 3) + '  avg cash net ' + pad(Math.round(b.net / b.n), 4));
+      console.log('  ' + k.padEnd(11) + ' cooks ' + pad((b.n / n).toFixed(1), 4) + '/season  avg take ' + pad(Math.round(b.in / b.n), 4) + '  wages ' + pad(Math.round(b.wages / b.n), 3) + '  meat ' + pad(Math.round(b.meat / b.n), 3) + '  coal ' + pad(Math.round(b.coal / b.n), 3) + '  avg cash net ' + pad(Math.round(b.net / b.n), 4) + '  taps/plate ' + (b.served ? (b.taps / b.served).toFixed(2) : '-'));
     }
   }
 }

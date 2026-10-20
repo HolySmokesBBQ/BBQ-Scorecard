@@ -1142,7 +1142,7 @@ function syncMuteBtn() {
   const b = document.getElementById('mute');
   if (!b) return;
   b.setAttribute('aria-pressed', musicOn ? 'false' : 'true');
-  b.setAttribute('aria-label', musicOn ? 'Music on' : 'Music off');
+  b.setAttribute('aria-label', musicOn ? 'Sound on' : 'Sound off');
 }
 function setupMusic() {
   const M = musicApi();
@@ -1153,6 +1153,7 @@ function setupMusic() {
     musicOn = !musicOn;
     try { if (M) M.setMuted(!musicOn); } catch (e) { /* ignore */ }
     syncMuteBtn();
+    if (!musicOn) sfxStopLoops();
     writeSave();
   });
 }
@@ -1171,6 +1172,78 @@ function syncMusic(s) {
   if (sig === musicSig) return;
   musicSig = sig;
   try { M.update({ day, week, comp, cook, waiting }); } catch (e) { /* ignore */ }
+}
+
+// v4.2 pit sounds (music.js PitSim.sfx). The one speaker button runs music and sounds together: off
+// by default, the first real click turns both on. Sounds play only in a live cook (service, not
+// paused, no panel up). The fire loop follows the hottest lit cooker (silent when every one is cold,
+// wood cookers share it), the crowd loop the guests in the yard. One shots come from what changed
+// since the last frame: a new piece on a grate (sizzle), a piece off a grate (pull), a slice starting
+// (knife); the register's ding and the burn warning ride their sim events. The buffers live in
+// music.js and are built once per context, so nothing is decoded per sound.
+const SFX_LOOP_STEP = 0.05;   // loop levels move in steps, so a level change is a rare call
+let sfxLoopSig = '';
+let sfxSeen = null;           // { pieces: Set of piece ids on grates, slicing: bool } from the last frame
+function sfxApi() { return PitSim.sfx && typeof PitSim.sfx.play === 'function' ? PitSim.sfx : null; }
+function sfxLive(s) {
+  return musicOn && s.phase === 'service' && !s.paused && currentPanel === null && !(typeof document !== 'undefined' && document.hidden);
+}
+function sfxOne(name) {
+  const X = sfxApi();
+  if (!X || !sfxLive(sim.state)) return;
+  try { X.play(name); } catch (e) { /* sound is optional */ }
+}
+function sfxStopLoops() {
+  const X = sfxApi();
+  if (sfxLoopSig === 'off') return;
+  sfxLoopSig = 'off';
+  try { if (X) X.stopAll(); } catch (e) { /* ignore */ }
+}
+function syncSfx(s) {
+  const X = sfxApi();
+  if (!X) return;
+  const live = sfxLive(s);
+  // What is on the grates and the board now, kept every frame so a sound never fires for old news.
+  const pieces = new Set();
+  let added = false, removed = false;
+  if (s.phase === 'service') {
+    for (let i = 0; i < MAP.stations.length; i++) {
+      const st = MAP.stations[i];
+      if (st.type !== 'cooker' || !s.stations[st.id]) continue;
+      const pcs = s.stations[st.id].pieces || [];
+      for (let j = 0; j < pcs.length; j++) pieces.add(pcs[j].id);
+    }
+  }
+  const slicing = s.phase === 'service' && !!(s.stations.board && s.stations.board.slicing);
+  if (sfxSeen && s.phase === 'service') {
+    pieces.forEach(function (id) { if (!sfxSeen.pieces.has(id)) added = true; });
+    sfxSeen.pieces.forEach(function (id) { if (!pieces.has(id)) removed = true; });
+  }
+  const sliceStart = !!sfxSeen && slicing && !sfxSeen.slicing;
+  sfxSeen = { pieces: pieces, slicing: slicing };
+  if (!live) { sfxStopLoops(); return; }
+  try {
+    if (added) X.play('sizzle');
+    if (removed) X.play('pull');
+    if (sliceStart) X.play('knife');
+  } catch (e) { /* sound is optional */ }
+  let hot = 0;
+  for (let i = 0; i < MAP.stations.length; i++) {
+    const st = MAP.stations[i];
+    if (st.type !== 'cooker' || !owned(st) || !s.stations[st.id]) continue;
+    const f = Number(s.stations[st.id].fire) || 0;
+    if (f >= C.COLD_UNDER && f > hot) hot = f;
+  }
+  const near = hot > 0 ? Math.round(Math.min(1, 0.35 + 0.65 * hot / (C.FIRE_MAX || 100)) / SFX_LOOP_STEP) * SFX_LOOP_STEP : 0;
+  let guests = 0;
+  for (let i = 0; i < s.customers.length; i++) if (s.customers[i].mode !== 'passing') guests++;
+  const sig = near.toFixed(2) + ':' + guests;
+  if (sig === sfxLoopSig) return;
+  sfxLoopSig = sig;
+  try {
+    X.play('fire', { near: near });
+    X.play('crowd', { waiting: guests });
+  } catch (e) { /* ignore */ }
 }
 
 function readSave() {
@@ -1472,6 +1545,7 @@ function onEvent(ev) {
       lastCallUntil = nowMs + 3000;
       break;
     case 'day_over':
+      sfxStopLoops();
       announce(todayKind(sim.state) === 'booking' ? SAY('reportOpen') : 'Day over. Opening the till.');
       moneyMore = false;
       openTill();
@@ -1585,6 +1659,7 @@ function onEvent(ev) {
     case 'day_start': announce(SAY('dayStart', { day: dayNameOf(ev.day | 0) })); break;
     case 'overnight_on': announce(SAY('overnight', { meat: ev.meat && MEATS[ev.meat] ? MEATS[ev.meat].label : '' })); break;
     case 'burn_warning': {
+      sfxOne('burnwarn');   // once a piece: the sim sets pc.warn the first time
       const W = STRINGS.burnWarn && STRINGS.burnWarn[ev.meat];
       announce(W || ('The ' + (L ? L.toLowerCase() : 'meat') + ' is about to burn.'));
       if (ev.station) puffT[ev.station] = 0;
@@ -1621,7 +1696,7 @@ function onServed(ev, L) {
 // v3.6: a guest paid at the register: the ding, then the cash and the tip rise over the register.
 function onRung(ev) {
   if (ev.by === 'late') announce(ev.tip > 0 ? 'A guest paid on the way out, ' + ev.tip + ' tip.' : 'A guest paid on the way out.');
-  try { if (PitSim.sfx && typeof PitSim.sfx.play === 'function') PitSim.sfx.play('ding'); } catch (e) { /* sound is optional */ }
+  sfxOne('ding');
   const x = Math.round(Number(ev.x) || 0), y = Math.round(Number(ev.y) || 0);
   const cashStr = '+' + ev.price;
   const nx = x + 1, ny = y - 18;
@@ -9233,6 +9308,7 @@ function updateDom() {
   }
 
   syncMusic(s);
+  syncSfx(s);
   flushLive();
 }
 

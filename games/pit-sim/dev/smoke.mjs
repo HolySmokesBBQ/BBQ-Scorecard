@@ -302,6 +302,8 @@ const FX_V21 = { ARROW_BOB_S: 0.3, WARN_BLINK_S: 0.25 };
 const MEAT_WINDOW = { sausage: 14, chicken: 16, ribs: 18, butt: 22, brisket: 26 };
 // Contract K1 and K8.
 const TUTORIAL_ORDER = ['open', 'charcoal', 'light', 'meat', 'puton', 'cook', 'slice', 'customer', 'register', 'plate', 'deliver', 'seated', 'end'];   // v3.7
+// v4.2 taps: the slice puts the plate in hand, so the walk goes register to deliver (no counter detour).
+const TUTORIAL_WALK = TUTORIAL_ORDER.filter((id) => id !== 'plate');
 const TUTORIAL_TEXT = {
   open: 'This is your morning. The cart is already filled. Tap Open the yard.',
   charcoal: 'Grab charcoal from the pile.',
@@ -310,7 +312,7 @@ const TUTORIAL_TEXT = {
   puton: 'Put it on the kettle.',
   cook: 'Watch the box fill. Pull it when it turns green.',
   slice: 'Slice it at the board.',
-  plate: 'Set the plate on the counter.',
+  plate: 'Take the plate from the board.',   // v4.2: only when the plate is not already in hand
   customer: 'Here comes your first customer.',
   register: 'Ring up the guest at the register.',   // v3.7
   deliver: 'Carry the plate to their table.',
@@ -2398,11 +2400,13 @@ function tutorialHeadless(P) {
   for (const t of [EVENT.gateSoon, EVENT.gateOpen, EVENT.customerArrived]) assert(!h.has(t), t + ' fired with the clock held');
   assert(k1().fire === 0, 'kettle1.fire ' + k1().fire + ' with no input');
 
+  // v4.2 taps: with one cold cooker the bag walks on and lights it, so the pile tap gives step meat.
   assert(h.goSettled('pile', () => h.stepIs('light')), 'pile did not give step light: ' + describe(h.step()) + ', carrying ' + describe(st().player.carrying));
-  assert(h.goSettled('kettle1', () => h.stepIs('meat')), 'kettle 1 did not give step meat: ' + describe(h.step()) + ', fire ' + k1().fire);
+  assert(h.until(() => h.stepIs('meat'), WAIT_S.headlessStep), 'the bag did not walk on and light kettle 1 (step meat): ' + describe(h.step()) + ', fire ' + k1().fire);
   assert(nearly(k1().fire, C.FIRE_LIGHT, 1), 'fire after the light ' + k1().fire + ', wanted ' + C.FIRE_LIGHT + ' (deviation 6)');
+  // v4.2 taps: and the piece from the cooler walks on to the lit kettle with room.
   assert(h.goSettled('cooler', () => h.stepIs('puton')), 'cooler did not give step puton: ' + describe(h.step()));
-  assert(h.goSettled('kettle1', () => h.stepIs('cook', null)), 'kettle 1 did not give step cook with target null: ' + describe(h.step()));
+  assert(h.until(() => h.stepIs('cook', null), WAIT_S.headlessStep), 'the piece did not walk on to kettle 1 (step cook, target null): ' + describe(h.step()));
   const putIdx = h.log.length;
   assert(h.until(() => h.has(EVENT.pieceDone, putIdx), WAIT_S.headlessDone), 'no piece_done within ' + WAIT_S.headlessDone + ' s; pieces ' + describe(k1().pieces));
   const doneIdx = h.idx(EVENT.pieceDone, putIdx);
@@ -2421,10 +2425,11 @@ function tutorialHeadless(P) {
   assert(k1().fire === C.TUTORIAL_FIRE_FLOOR, 'kettle1.fire ' + k1().fire + ' after the hold, wanted the floor ' + C.TUTORIAL_FIRE_FLOOR);
 
   assert(h.goSettled('kettle1', () => h.stepIs('slice') && carryIs(h, CARRY_KIND.cooked, MEAT)), 'the pull did not give step slice with cooked sausage: ' + describe(h.step()) + ', carrying ' + describe(st().player.carrying));
+  // v4.2 taps: the pulled piece walks on to the board and the slice starts with no board tap.
   // v3.7: the first plate off the board brings the guest; they pay at the register, the plate goes
   // on the counter, then the pitmaster carries it to their table (no RUN card on the tutorial day).
   const sliceIdx = h.log.length;
-  assert(h.go('board', () => h.has(EVENT.sliceDone, sliceIdx) && h.stepIs('customer'), 10), 'board: no slice_done and step customer; step ' + describe(h.step()));
+  assert(h.until(() => h.has(EVENT.sliceDone, sliceIdx) && h.stepIs('customer'), 10), 'board: no slice_done and step customer; step ' + describe(h.step()));
   const sliceEv = h.log[h.idx(EVENT.sliceDone, sliceIdx)];
   const batch = h.log.filter((e) => e._b === sliceEv._b);
   const order = [EVENT.sliceDone, EVENT.tutorialStep, EVENT.gateOpen, EVENT.customerArrived];
@@ -2440,13 +2445,11 @@ function tutorialHeadless(P) {
   assert(h.go('register', () => h.has('rung', ringIdx)), 'register: no rung; step ' + describe(h.step()));
   const rung = h.log[h.idx('rung', ringIdx)];
   assert(rung.id === 1 && rung.by === 'you' && g1().paid === true && g1().queueIndex === -1, 'rung ' + describe(strip(rung)) + ', guest ' + describe({ paid: g1().paid, q: g1().queueIndex }));
-  assert(h.until(() => g1().mode === 'seated' && h.stepIs('plate', 'table'), WAIT_S.headlessSeat), 'the paid guest did not sit with step plate: ' + describe({ mode: g1().mode, step: h.step() }));
+  // v4.2 taps: the plate from the slice is still in hand, so the step after paying is deliver.
+  assert(h.until(() => g1().mode === 'seated' && h.stepIs('deliver', null) && carryIs(h, CARRY_KIND.plates, MEAT), WAIT_S.headlessSeat), 'the paid guest did not sit with step deliver and the plate in hand: ' + describe({ mode: g1().mode, step: h.step(), carrying: st().player.carrying }));
   assert(!h.has(EVENT.served) && g1().eat === 0, 'eating before the plate arrived');
-  const tableIdx = h.log.length;
-  assert(h.go('table', () => h.has(EVENT.setDown, tableIdx) && h.stepIs('deliver', 'table')), 'table: no set_down and step deliver; step ' + describe(h.step()));
   for (let i = 0; i < 20; i++) h.tick();
-  assert(!h.has(EVENT.served, tableIdx) && g1().mode === 'seated', 'the seated guest got a plate nobody carried');
-  assert(h.go('table', () => carryIs(h, CARRY_KIND.plates, MEAT) && h.stepIs('deliver', null)), 'table: did not take the plate back up; step ' + describe(h.step()) + ', carrying ' + describe(st().player.carrying));
+  assert(!h.has(EVENT.served) && g1().mode === 'seated', 'the seated guest got a plate nobody carried');
   const seat1 = P.MAP.seats.find((x) => x.id === g1().seat);
   const servedIdx0 = h.log.length;
   assert(h.sim.walkTo(seat1.x, seat1.y + 1) === true, 'walkTo the guest\'s table refused');
@@ -2495,7 +2498,7 @@ function tutorialHeadless(P) {
   const w2 = st().customers.find((c) => c.id === w.id);
   assert(w2 && w2.patience < pBefore, 'customer ' + w.id + ' patience ' + pBefore + ' did not drop on the next tick (' + (w2 && w2.patience) + ')');
   const ids = distinctRuns(h.log.filter((e) => e.type === EVENT.tutorialStep).map((e) => e.id));
-  assert(sameJSON(ids, TUTORIAL_ORDER) || sameJSON(ids, TUTORIAL_ORDER.slice(1)), 'tutorial_step ids ' + describe(ids));
+  assert(sameJSON(ids, TUTORIAL_WALK) || sameJSON(ids, TUTORIAL_WALK.slice(1)), 'tutorial_step ids ' + describe(ids));
   for (const e of h.log.filter((x) => x.type === EVENT.tutorialStep)) assert(e.text === TUTORIAL_TEXT[e.id], 'tutorial_step ' + e.id + ' text ' + describe(e.text));
   assert(!h.has(EVENT.gateSoon), 'gate_soon fired on the tutorial day');
   // v3.0 (W19 step 8): the loop stays tutorial to the till, then finishReport() opens the creator.
@@ -5949,6 +5952,7 @@ async function probeMetrics() {
 
 let taps = 0;        // canvas taps, action button clicks and walkTo fallbacks during service
 const tapNotes = [];
+const tapTrail = [];   // v4.2: every counted tap in order, as a station name or a seat, for the day 1 tap list
 
 // [S 19.6] Every canvas tap asks the renderer where a tile sits on screen,
 // PitSim.game.tileToClient(tx, ty) -> { x, y } in client px (the oblique v3 yard is not a flat
@@ -5980,6 +5984,11 @@ async function canvasTap(tx, ty) {
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   }
   taps += 1;
+  tapTrail.push(tileName(tx, ty));
+}
+function tileName(tx, ty) {
+  for (const k of Object.keys(TILE)) if (TILE[k] && TILE[k].x === tx && TILE[k].y === ty) return k;
+  return 'tile ' + tx + ',' + ty;
 }
 // v3.7: guests pay first. Ring up anyone waiting in line with a register tap.
 const lineWaitingExpr = F.customers + '.some((c) => c.queueIndex >= 0 && c.mode === "waiting")';
@@ -6038,6 +6047,17 @@ async function goto(name, expectExpr) {
   return { ok, how };
 }
 const hasKind = (kind) => F.carrying + ' !== null && ' + F.carrying + '.kind === ' + JSON.stringify(kind);
+// v4.2 taps: what a tap picks up can walk on by itself (a pulled piece to the board, with one cooker a
+// piece onto it or a bag into it when cold), so the follow up tap is only made when it is still needed.
+// A real player does not tap a station whose job is already done.
+async function tapUnless(name, doneExpr) {
+  // A walk on still under way (a target set, even with no tiles left to walk) finishes first.
+  await until('(' + doneExpr + ') || (' + F.target + ' === null && ' + F.pathLen + ' === 0 && ' + F.nextTile + ' === null)', WAIT_S.walk);
+  if (await ev(doneExpr)) return { ok: true, how: 'chain' };
+  return goto(name, doneExpr);
+}
+const or = (...xs) => xs.map((x) => '(' + x + ')').join(' || ');
+const pulledExpr = (more) => or(hasKind(CARRY_KIND.cooked) + (more || ''), F.busy + ' !== null', hasKind(CARRY_KIND.plates));
 const anyPiece = (state) => F.pieces('kettle1') + '.some((p) => p.state === ' + JSON.stringify(state) + ')';
 const boardHasPlates = F.boardStacks + '.some((st) => st.times.length > 0)';
 const tableHas = (meat) => F.tableSpots + '.some((sp) => sp && sp.meat === ' + JSON.stringify(meat) + ' && sp.times.length > 0)';
@@ -6047,9 +6067,10 @@ async function feedFireIfLow() {
   const low = await ev(F.fire('kettle1') + ' < C.' + C_NAMES.fireGood + ' && ' + F.carrying + ' === null && ' + F.charcoal + ' > 0');
   if (!low) return false;
   const before = await ev(F.fire('kettle1'));
-  const a = await goto('pile', hasKind(CARRY_KIND.charcoal));
+  const fed = F.fire('kettle1') + ' > ' + before;
+  const a = await goto('pile', or(hasKind(CARRY_KIND.charcoal), fed));
   if (!a.ok) return false;
-  const b = await goto('kettle1', F.fire('kettle1') + ' > ' + before);
+  const b = await tapUnless('kettle1', fed);
   return b.ok;
 }
 async function waitForDone() {
@@ -7060,20 +7081,22 @@ async function v3BrowserSteps(captures) {
     // Cook one piece of the quickest rail meat by canvas taps (v3.0 cooked chicken; the menu rotates now).
     const cookMeat = railMeats[0];
     const via = [];
-    const a1 = await goto('pile', hasKind(CARRY_KIND.charcoal)); via.push(a1.how);
+    const litW = F.fire('kettle1') + ' >= C.' + C_NAMES.fireLight + ' - 1';
+    const a1 = await goto('pile', or(hasKind(CARRY_KIND.charcoal), litW)); via.push(a1.how);
     assert(a1.ok, 'pile: carrying ' + describe(await ev(F.carrying)));
-    const a2 = await goto('kettle1', F.fire('kettle1') + ' >= C.' + C_NAMES.fireLight + ' - 1'); via.push(a2.how);
+    const a2 = await tapUnless('kettle1', litW); via.push(a2.how);
     assert(a2.ok, 'kettle 1 fire ' + (await ev(F.fire('kettle1'))));
     await click(ID.chip(cookMeat));
     await advance(0);
-    const a3 = await goto('cooler', hasKind(CARRY_KIND.raw) + ' && ' + F.carrying + '.meat === ' + JSON.stringify(cookMeat)); via.push(a3.how);
+    const onW = F.pieces('kettle1') + '.length >= 1';
+    const a3 = await goto('cooler', or(hasKind(CARRY_KIND.raw) + ' && ' + F.carrying + '.meat === ' + JSON.stringify(cookMeat), onW)); via.push(a3.how);
     assert(a3.ok, 'cooler: carrying ' + describe(await ev(F.carrying)) + ', selected ' + describe(await ev('S().selected')));
-    const a4 = await goto('kettle1', F.pieces('kettle1') + '.length >= 1'); via.push(a4.how);
+    const a4 = await tapUnless('kettle1', onW); via.push(a4.how);
     assert(a4.ok, 'kettle 1 has no piece');
     assert(await waitForDone(), 'no piece_done; pieces ' + describe(await ev(F.pieces('kettle1'))));
-    const a5 = await goto('kettle1', hasKind(CARRY_KIND.cooked)); via.push(a5.how);
+    const a5 = await goto('kettle1', pulledExpr()); via.push(a5.how);
     assert(a5.ok, 'the pull gave ' + describe(await ev(F.carrying)));
-    const a6 = await goto('board', F.busy + ' !== null || ' + boardHasPlates + ' || ' + hasKind(CARRY_KIND.plates)); via.push(a6.how);
+    const a6 = await tapUnless('board', F.busy + ' !== null || ' + boardHasPlates + ' || ' + hasKind(CARRY_KIND.plates)); via.push(a6.how);
     assert(a6.ok, 'the slice did not start');
     await until('(' + boardHasPlates + ' || ' + hasKind(CARRY_KIND.plates) + ') && ' + F.busy + ' === null', WAIT_S.slice);
     if (!(await ev(hasKind(CARRY_KIND.plates)))) { const a7 = await goto('board', hasKind(CARRY_KIND.plates)); via.push(a7.how); }
@@ -7649,12 +7672,19 @@ async function browserChecks() {
 
   await step('fire raised', async () => {
     await expectStep('charcoal', 'pile', 'before the pile');
-    const a = await goto('pile', hasKind(CARRY_KIND.charcoal));
-    assert(a.ok, 'not carrying charcoal after the pile; carrying ' + describe(await ev(F.carrying)));
+    // v4.2 taps: with the one cold kettle the bag walks on and lights it; step light shows on the way.
+    const lit = F.fire('kettle1') + ' >= C.' + C_NAMES.fireLight + ' - 1';
+    const a = await goto('pile', or(hasKind(CARRY_KIND.charcoal), lit));
+    assert(a.ok, 'not carrying charcoal after the pile and the kettle is not lit; carrying ' + describe(await ev(F.carrying)));
     await advance(0);
-    await expectStep('light', 'kettle1', 'before the light');
-    await liveBreath();
-    const b = await goto('kettle1', F.fire('kettle1') + ' >= C.' + C_NAMES.fireLight + ' - 1');
+    if (await ev(hasKind(CARRY_KIND.charcoal))) {
+      await expectStep('light', 'kettle1', 'before the light');
+      await liveBreath();
+    } else {
+      const lt = (await eventsOfType(EVENT.tutorialStep)).filter((e) => e.id === 'light');
+      assert(lt.length >= 1 && lt[0].target === 'kettle1', 'no tutorial_step light on the way to the kettle: ' + describe(lt));
+    }
+    const b = await tapUnless('kettle1', lit);
     const fire = await ev(F.fire('kettle1'));
     assert(b.ok, 'kettle 1 fire is ' + fire);
     await advance(0);
@@ -7665,18 +7695,26 @@ async function browserChecks() {
 
   await step('meat on', async () => {
     await expectStep('meat', 'cooler', 'before the cooler');
-    const a = await goto('cooler', hasKind(CARRY_KIND.raw) + ' && ' + F.carrying + '.meat === ' + JSON.stringify(MEAT));
-    assert(a.ok, 'not carrying raw ' + MEAT + '; carrying ' + describe(await ev(F.carrying)));
+    // v4.2 taps: the piece walks on to the lit kettle with room; step puton shows on the way.
+    const on1 = F.pieces('kettle1') + '.length >= 1';
+    const a = await goto('cooler', or(hasKind(CARRY_KIND.raw) + ' && ' + F.carrying + '.meat === ' + JSON.stringify(MEAT), on1));
+    assert(a.ok, 'not carrying raw ' + MEAT + ' and nothing on kettle 1; carrying ' + describe(await ev(F.carrying)));
     await advance(0);
-    await expectStep('puton', 'kettle1', 'before the put on');
-    await liveBreath();
-    const b = await goto('kettle1', F.pieces('kettle1') + '.length >= 1');
+    if (await ev(hasKind(CARRY_KIND.raw))) {
+      await expectStep('puton', 'kettle1', 'before the put on');
+      await liveBreath();
+    } else {
+      const pt = (await eventsOfType(EVENT.tutorialStep)).filter((e) => e.id === 'puton');
+      assert(pt.length >= 1 && pt[0].target === 'kettle1', 'no tutorial_step puton on the way to the kettle: ' + describe(pt));
+    }
+    const b = await tapUnless('kettle1', on1);
     assert(b.ok, 'kettle 1 has no piece');
     await advance(0);
     // v2.1: one unit only while the tutorial runs; the second goes on in step 29.
     if ((await tut()) === null && (await ev(F.stock + '.' + MEAT + ' > 0'))) {
-      const c = await goto('cooler', hasKind(CARRY_KIND.raw));
-      if (c.ok) await goto('kettle1', F.pieces('kettle1') + '.length >= 2');
+      const on2 = F.pieces('kettle1') + '.length >= 2';
+      const c = await goto('cooler', or(hasKind(CARRY_KIND.raw), on2));
+      if (c.ok) await tapUnless('kettle1', on2);
     } else {
       await expectStep('cook', null, 'after the put on');
     }
@@ -7714,12 +7752,13 @@ async function browserChecks() {
   await step('sliced', async () => {
     const t0 = await tut();
     if (t0) assert(t0.target === 'kettle1', 'the pull target is ' + describe(t0.target));
-    const a = await goto('kettle1', hasKind(CARRY_KIND.cooked));
+    // v4.2 taps: the pulled piece walks on to the board and the slice starts there by itself.
+    const a = await goto('kettle1', pulledExpr());
     assert(a.ok, 'did not pull the done piece; carrying ' + describe(await ev(F.carrying)));
     await advance(0);
     if (t0) await expectStep('slice', 'board', 'after the pull');
     await liveBreath();
-    const b = await goto('board', F.busy + ' !== null || ' + boardHasPlates + ' || ' + hasKind(CARRY_KIND.plates));
+    const b = await tapUnless('board', F.busy + ' !== null || ' + boardHasPlates + ' || ' + hasKind(CARRY_KIND.plates));
     assert(b.ok, 'slice did not start at the board');
     const r = await until('(' + boardHasPlates + ' || ' + hasKind(CARRY_KIND.plates) + ') && ' + F.busy + ' === null', WAIT_S.slice);
     assert(r.ok, 'slice did not finish within ' + WAIT_S.slice + 's');
@@ -7732,9 +7771,10 @@ async function browserChecks() {
   }, { fatal: true });
 
   await step('carried', async () => {
-    const a = await goto('board', hasKind(CARRY_KIND.plates));
+    // The slice already put the first plate in hand (no board tap needed).
+    const a = await tapUnless('board', hasKind(CARRY_KIND.plates));
     assert(a.ok, 'did not pick up plates; carrying ' + describe(await ev(F.carrying)));
-    return (await ev(F.carrying + '.times.length')) + ' plate(s) in hand';
+    return (await ev(F.carrying + '.times.length')) + ' plate(s) in hand (' + a.how + ')';
   }, { fatal: true });
 
   await step('served with cash up and a served event', async () => {
@@ -7782,16 +7822,12 @@ async function browserChecks() {
     clk.push('C' + Math.round(await ev(F.clock)));
     const seated = await until(F.customers + '.some((c) => c.id === ' + cid + ' && c.mode === "seated")', WAIT_S.serve);
     assert(seated.ok && (await eventsOfType(EVENT.served)).length === 0, 'the paid guest did not sit and wait: ' + describe(await ev(F.customers + '.map((c) => c.id + ":" + c.mode)')));
-    if (t0) await expectStep('plate', 'table', 'after paying');
-    // Then the plate: on the counter, back up, and to the guest's table.
+    // v4.2 taps: the plate from the slice is still in hand, so it goes straight to the guest's table
+    // (step deliver right after paying; no set down on the counter and pick back up).
+    if (t0) await expectStep('deliver', null, 'after paying, the plate in hand');
     clk.push('D' + Math.round(await ev(F.clock)));
-    const a = await goto('table', tableHas(MEAT));
-    assert(a.ok, 'plate did not land on the counter');
-    assert((await eventsOfType(EVENT.setDown)).length >= 1, 'no ' + EVENT.setDown + ' event');
-    if (t0) await expectStep('deliver', 'table', 'with the plate on the counter');
-    clk.push('E' + Math.round(await ev(F.clock)));
-    const b2 = await goto('table', hasKind(CARRY_KIND.plates));
-    assert(b2.ok, 'did not take the plate back off the counter');
+    const b2 = await tapUnless('table', hasKind(CARRY_KIND.plates));
+    assert(b2.ok, 'no plate in hand for the guest');
     const seatId = await ev(F.customers + '.find((c) => c.id === ' + cid + ').seat');
     const seat = await ev('MAP.seats.find((x) => x.id === ' + JSON.stringify(seatId) + ')');
     clk.push('F' + Math.round(await ev(F.clock)));
@@ -7868,7 +7904,7 @@ async function browserChecks() {
     assert(all[iDone].skipped === false, 'tutorial_done skipped ' + describe(all[iDone].skipped));
     const steps = all.filter((e) => e.type === EVENT.tutorialStep);
     const ids = distinctRuns(steps.map((e) => e.id));
-    assert(sameJSON(ids, TUTORIAL_ORDER) || sameJSON(ids, TUTORIAL_ORDER.slice(1)), 'tutorial_step ids ' + describe(ids));
+    assert(sameJSON(ids, TUTORIAL_WALK) || sameJSON(ids, TUTORIAL_WALK.slice(1)), 'tutorial_step ids ' + describe(ids));
     const cookTargets = steps.filter((e) => e.id === 'cook').map((e) => e.target);
     assert(sameJSON(cookTargets, [null, 'kettle1']), 'cook targets ' + describe(cookTargets));
     for (const e of steps) assert(e.text === TUTORIAL_TEXT[e.id], 'tutorial_step ' + e.id + ' text ' + describe(e.text));
@@ -7879,7 +7915,7 @@ async function browserChecks() {
     const before = all.slice(0, iDone).filter((e) => e.day === 1 && [EVENT.burnWarning, EVENT.walkOut, EVENT.fireLow].includes(e.type));
     assert(before.length === 0, 'during the tutorial: ' + describe(before.map((e) => e.type)));
     // #live spoke every step from charcoal on (deviation 8: poll real time for the queue).
-    const want = TUTORIAL_ORDER.slice(1).map((id) => TUTORIAL_TEXT[id]);
+    const want = TUTORIAL_WALK.slice(1).map((id) => TUTORIAL_TEXT[id]);
     let missing = want;
     const deadline = Date.now() + LIVE_POLL_MS;
     while (Date.now() < deadline) {
@@ -7899,7 +7935,7 @@ async function browserChecks() {
     const why = await ev('({ clock: ' + F.clock + ', stock: ' + F.stock + '.' + MEAT + ', carrying: ' + F.carrying + ', board: ' + boardHasPlates + ', phase: ' + F.phase + ' })');
     // v3.7: the plate still on the board goes to whoever paid for it, or onto the counter.
     for (let i = 0; i < 3 && (await ev(boardHasPlates)) && (await ev(inService)); i++) {
-      const p = await goto('board', hasKind(CARRY_KIND.plates));
+      const p = await tapUnless('board', hasKind(CARRY_KIND.plates));
       if (!p.ok) break;
       await ringLine();
       await deliverOrSet();
@@ -7907,9 +7943,11 @@ async function browserChecks() {
     // v2.1: the tutorial put one unit on (step 22); the second goes on here.
     if ((await ev(inService)) && (await ev(F.stock + '.' + MEAT + ' > 0')) && (await ev(F.carrying + ' === null'))) {
       await feedFireIfLow();
-      const c = await goto('cooler', hasKind(CARRY_KIND.raw));
+      const n0 = await ev(F.pieces('kettle1') + '.length');
+      const onN = F.pieces('kettle1') + '.length > ' + n0;
+      const c = await goto('cooler', or(hasKind(CARRY_KIND.raw), onN));
       if (c.ok) {
-        const k = await goto('kettle1', F.carrying + ' === null');
+        const k = await tapUnless('kettle1', F.carrying + ' === null');
         if (k.ok) loaded += 1;
       }
     }
@@ -7918,14 +7956,14 @@ async function browserChecks() {
       const hasDone = await ev(anyPiece(PIECE_STATE.done));
       const hasCooking = await ev(anyPiece(PIECE_STATE.cooking));
       if (hasDone && (await ev(F.carrying + ' === null'))) {
-        const a = await goto('kettle1', hasKind(CARRY_KIND.cooked));
+        const a = await goto('kettle1', pulledExpr());
         if (!a.ok) break;
-        await goto('board', F.busy + ' !== null || ' + boardHasPlates);
+        await tapUnless('board', F.busy + ' !== null || ' + boardHasPlates + ' || ' + hasKind(CARRY_KIND.plates));
         await until('(' + boardHasPlates + ' || ' + hasKind(CARRY_KIND.plates) + ') && ' + F.busy + ' === null', WAIT_S.slice);
         await ringLine();
         if (await ev(hasKind(CARRY_KIND.plates))) await deliverOrSet();
         for (let j = 0; j < 3 && (await ev(boardHasPlates)); j++) {
-          const p = await goto('board', hasKind(CARRY_KIND.plates));
+          const p = await tapUnless('board', hasKind(CARRY_KIND.plates));
           if (!p.ok) break;
           await ringLine();
           await deliverOrSet();
@@ -8047,6 +8085,7 @@ async function browserChecks() {
   // plates. The counter keeps running for later steps (runTaps); before this, every canvas tap a
   // later step added (the ladder steps added 22) landed in the day 1 metric.
   const tapsDay1 = taps;
+  const trailDay1 = tapTrail.slice();
 
   await step('reload persists', async () => {
     await reload();
@@ -8231,21 +8270,23 @@ async function browserChecks() {
   await step('burn warning in the page', async () => {
     assert(await ev(inService), 'not in service; phase ' + (await ev(F.phase)));
     assert((await tut()) === null, 'the tutorial is running on the skipped day');
-    const a = await goto('pile', hasKind(CARRY_KIND.charcoal));
+    const litB = F.fire('kettle1') + ' >= C.' + C_NAMES.fireLight + ' - 1';
+    const a = await goto('pile', or(hasKind(CARRY_KIND.charcoal), litB));
     assert(a.ok, 'pile: carrying ' + describe(await ev(F.carrying)));
-    const b = await goto('kettle1', F.fire('kettle1') + ' >= C.' + C_NAMES.fireLight + ' - 1');
+    const b = await tapUnless('kettle1', litB);
     assert(b.ok, 'kettle 1 fire ' + (await ev(F.fire('kettle1'))));
     assert(await ev(F.stock + '.' + MEAT + ' > 0'), 'no ' + MEAT + ' in stock on the skipped day: ' + describe(await ev(F.stock)));
-    const c = await goto('cooler', hasKind(CARRY_KIND.raw) + ' && ' + F.carrying + '.meat === ' + JSON.stringify(MEAT));
+    const onB = F.pieces('kettle1') + '.length >= 1';
+    const c = await goto('cooler', or(hasKind(CARRY_KIND.raw) + ' && ' + F.carrying + '.meat === ' + JSON.stringify(MEAT), onB));
     assert(c.ok, 'cooler: carrying ' + describe(await ev(F.carrying)));
-    const d = await goto('kettle1', F.pieces('kettle1') + '.length >= 1');
+    const d = await tapUnless('kettle1', onB);
     assert(d.ok, 'kettle 1 has no piece');
     const nDone = await eventCount();
     assert(await waitForDone(), 'no piece_done; pieces ' + describe(await ev(F.pieces('kettle1'))));
     const good = await ev('C.' + C_NAMES.fireGood);
     if ((await ev(F.fire('kettle1'))) < good + 15 && (await ev(F.carrying + ' === null && ' + F.charcoal + ' > 0'))) {   // deviation 11
       await goto('pile', hasKind(CARRY_KIND.charcoal));
-      await goto('kettle1', F.carrying + ' === null');
+      await tapUnless('kettle1', F.carrying + ' === null');
     }
     const w = await until('globalThis.__smoke.events.slice(' + nDone + ').some((e) => e.type === ' + JSON.stringify(EVENT.burnWarning) + ')', WAIT_S.burnPage);
     assert(w.ok, 'no ' + EVENT.burnWarning + ' within ' + WAIT_S.burnPage + ' s; pieces ' + describe(await ev(F.pieces('kettle1'))) + ', fire ' + (await ev(F.fire('kettle1'))));
@@ -8270,7 +8311,7 @@ async function browserChecks() {
     assert(fx.some((f) => f.kind === FX_KIND.warn && f.x === WARN_DRAW.bubble.x && f.y === WARN_DRAW.bubble.y), 'fxLog has no warn at (' + WARN_DRAW.bubble.x + ',' + WARN_DRAW.bubble.y + '); warn entries ' + describe(fx.filter((f) => f.kind === FX_KIND.warn)));
     await screenshot(SCREENSHOTS.warning);
     const nPull = await eventCount();
-    const p = await goto('kettle1', hasKind(CARRY_KIND.cooked) + ' && ' + F.carrying + '.meat === ' + JSON.stringify(MEAT));
+    const p = await goto('kettle1', pulledExpr(' && ' + F.carrying + '.meat === ' + JSON.stringify(MEAT)));
     assert(p.ok, 'the pull in the warning stage gave ' + describe(await ev(F.carrying)));
     const burnt = await eventsSince(nDone, EVENT.pieceBurnt);
     assert(burnt.length === 0, 'a piece burnt: ' + describe(burnt));
@@ -9928,6 +9969,84 @@ async function browserChecks() {
   });
 
   // Joel 2026-10-20: "the controls for desktop no longer work". Real key events (CDP), real frames.
+  // v4.2 pit sounds (music.js PitSim.sfx, wired in game.js). Nobody can listen headless, so the run
+  // reads the AudioContext graph: every source node start is logged (a buffer source with its buffer
+  // length, an oscillator with its frequency), and music.state().gains reads the live loop gains.
+  // Sizzle is the 1.6 s one shot buffer, the ding the 1318.5 Hz oscillator.
+  await step('v4.2 pit sounds: muted plays nothing, one speaker click turns sound on, a sizzle on the grate, the ding at the register, the fire loop follows the fire', async () => {
+    await reload(ladFixture({}, { crew: [] }));
+    assert(await toService(), 'no service day');
+    await ev('(() => { if (window.__aud) return true; window.__aud = []; const AP = AudioParam.prototype, sv = AP.setValueAtTime; AP.setValueAtTime = function (v, t) { this.__v = v; return sv.call(this, v, t); }; const wrap = (Pr, kind) => { const st = Pr.start; Pr.start = function () { try { window.__aud.push({ kind: kind, dur: this.buffer ? Math.round(this.buffer.duration * 100) / 100 : null, loop: !!this.loop, f: this.frequency ? (this.frequency.__v !== undefined ? this.frequency.__v : this.frequency.value) : null }); } catch (e) { /* ignore */ } return st.apply(this, arguments); }; }; wrap(AudioBufferSourceNode.prototype, "buf"); wrap(OscillatorNode.prototype, "osc"); return true; })()');
+    const aud = (from) => ev('window.__aud.slice(' + (from | 0) + ')');
+    const ms = () => ev('globalThis.' + GLOBAL_NAME + '.music.state()');
+    const isSizzle = (a) => a.kind === 'buf' && !a.loop && a.dur >= 1.55 && a.dur <= 1.65;
+    const isDing = (a) => a.kind === 'osc' && Math.abs(a.f - 1318.5) < 0.5;
+    const lit = F.fire('kettle1') + ' >= C.' + C_NAMES.fireLight + ' - 1';
+    // (a) Off by default: light the kettle and put a piece on, and nothing starts (no context at all).
+    const m0 = await ms();
+    assert(m0.muted === true, 'sound is not off by default ' + describe(m0));
+    await goto('pile', or(hasKind(CARRY_KIND.charcoal), lit));
+    await tapUnless('kettle1', lit);
+    const p0 = await ev(F.pieces('kettle1') + '.length');
+    await goto('cooler', or(hasKind(CARRY_KIND.raw), F.pieces('kettle1') + '.length > ' + p0));
+    await tapUnless('kettle1', F.pieces('kettle1') + '.length > ' + p0);
+    await advance(0);
+    const quiet = await aud(0);
+    const m1 = await ms();
+    assert(quiet.length === 0 && m1.loops.fire === 0 && m1.loops.crowd === 0, 'sound while muted: ' + describe({ starts: quiet, loops: m1.loops }));
+    // (b) One real click on the speaker: music and sounds on, the fire loop rises with the lit kettle.
+    await realTap('mute');
+    let m2 = await ms();
+    for (let i = 0; i < 60 && !(m2.running && m2.gains.fire > 0.05); i++) { await sleep(100); await advance(0); m2 = await ms(); }
+    assert(m2.muted === false && m2.running === true && m2.loops.fire > 0 && m2.gains.fire > 0.05, 'the fire loop did not rise after the click: ' + describe(m2));
+    const fireUp = Math.round(m2.gains.fire * 1000) / 1000;
+    const fireLoop = (await aud(0)).some((a) => a.kind === 'buf' && a.loop && a.dur > 8);
+    assert(fireLoop, 'no looping fire buffer started: ' + describe(await aud(0)));
+    // (c) A piece on the grate starts a sizzle.
+    await ev('S().stations.kettle1.pieces.length = 0');
+    await advance(0);
+    const n1 = (await aud(0)).length;
+    await goto('cooler', or(hasKind(CARRY_KIND.raw), F.pieces('kettle1') + '.length >= 1'));
+    await tapUnless('kettle1', F.pieces('kettle1') + '.length >= 1');
+    await advance(0);
+    const onStarts = await aud(n1);
+    assert(onStarts.some(isSizzle), 'no sizzle source when the meat went on: ' + describe(onStarts));
+    // (d) A guest pays at the register: the ding.
+    const lineUp = await until(F.customers + '.some((c) => c.queueIndex >= 0 && c.mode === "waiting")', 90);
+    assert(lineUp.ok, 'no guest in line to ring up');
+    if (await ev(F.carrying + ' !== null')) await ev('S().player.carrying = null');
+    const n2 = (await aud(0)).length;
+    const r0 = await ev(F.today + '.revenue');
+    const rg = await goto('register', F.today + '.revenue > ' + r0);
+    assert(rg.ok, 'the register tap rang nobody up');
+    await advance(0);
+    const payStarts = await aud(n2);
+    assert(payStarts.some(isDing), 'no ding when the guest paid: ' + describe(payStarts));
+    // (e) Every cooker cold: the fire loop gain falls to 0.
+    await ev('(() => { for (const id of ["kettle1", "kettle2", "drum"]) if (S().stations[id]) S().stations[id].fire = 0; return true; })()');
+    await advance(0);
+    let m3 = await ms();
+    for (let i = 0; i < 40 && !(m3.loops.fire === 0 && m3.gains.fire < 0.005); i++) { await sleep(100); await advance(0); m3 = await ms(); }
+    assert(m3.loops.fire === 0 && m3.gains.fire < 0.005, 'the fire loop did not fall to 0 with every cooker cold: ' + describe(m3));
+    // (f) Muted again: a piece on and off the grate starts nothing, and the loops are stopped.
+    await realTap('mute');
+    await advance(0);
+    await ev('S().stations.kettle1.fire = 60');
+    await ev('S().stations.kettle1.pieces.length = 0');
+    await advance(0);
+    const n3 = (await aud(0)).length;
+    if (await ev(F.carrying + ' !== null')) await ev('S().player.carrying = null');
+    await goto('cooler', or(hasKind(CARRY_KIND.raw), F.pieces('kettle1') + '.length >= 1'));
+    await tapUnless('kettle1', F.pieces('kettle1') + '.length >= 1');
+    await advance(2);
+    const mutedStarts = await aud(n3);
+    const m4 = await ms();
+    assert(m4.muted === true && mutedStarts.length === 0 && m4.loops.fire === 0 && m4.loops.crowd === 0, 'sound after muting again: ' + describe({ starts: mutedStarts, loops: m4.loops, muted: m4.muted }));
+    const saved = await ev('JSON.parse(localStorage.getItem(' + JSON.stringify(SAVE_KEY) + ')).music');
+    assert(saved === false, 'the save keeps music ' + describe(saved));
+    return 'muted: 0 starts; click: fire gain ' + fireUp + '; sizzle on the grate; ding at the register; cold: fire gain ' + Math.round(m3.gains.fire * 1000) / 1000 + '; muted again: 0 starts';
+  });
+
   await step('desktop keys: the hub walks beside its panel, each arrow on its screen diagonal, a press mid-step is kept, service walks and Space acts', async () => {
     if (!DESKTOP_MODE) return 'desktop run only';
     await reload(arrFixture());
@@ -9989,7 +10108,9 @@ async function browserChecks() {
     await keyPress(KEYS[sd]); await sleep(450);
     const s1 = await pos();
     assert(s1.x - s0.x === DV[sd][0] && s1.y - s0.y === DV[sd][1], 'service ' + sd + ' did not walk: ' + describe(s0) + ' to ' + describe(s1));
-    await goto('pile', hasKind(CARRY_KIND.charcoal));
+    // v4.2 taps: a bag for a cold kettle walks on and lights it; the next bag stays in hand.
+    await goto('pile', or(hasKind(CARRY_KIND.charcoal), F.fire('kettle1') + ' >= C.' + C_NAMES.fireLight + ' - 1'));
+    if (!(await ev(hasKind(CARRY_KIND.charcoal)))) await goto('pile', hasKind(CARRY_KIND.charcoal));
     const use = await ev('MAP.station("kettle1").use[0]');
     await ev('sim.' + SIM_METHODS.walkTo + '(' + use.x + ', ' + use.y + ')');
     await settle();
@@ -10022,6 +10143,7 @@ async function browserChecks() {
     tapsPerPlate: served ? Math.round((tapsDay1 / served) * 100) / 100 : null,
     runTaps: taps,
     tapFallbacks: tapNotes,
+    day1TapTrail: trailDay1,
     tapPoints: tileToClientSeen === true ? 'PitSim.game.tileToClient' : 'no canvas taps',
     boredomSeconds: Math.round(before.bored * 100) / 100,
     boredomPrepSeconds: Math.round(before.boredPrep * 100) / 100,

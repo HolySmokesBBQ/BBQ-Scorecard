@@ -346,7 +346,9 @@
       bpm: cur ? Math.round(cur.rate * 1000) / 10 : null,
       track: cur ? cur.track : null, rate: cur ? Math.round(cur.rate * 1000) / 1000 : null,
       wantTrack: p.track, decoding, decoded: order.slice(), error: lastError,
-      loops: { fire: loopWant.fire, crowd: loopWant.crowd }
+      loops: { fire: loopWant.fire, crowd: loopWant.crowd },
+      // The live loop gains on the context (0 when the loop is stopped), for the harness.
+      gains: { fire: loops.fire ? loops.fire.g.gain.value : 0, crowd: loops.crowd ? loops.crowd.g.gain.value : 0 }
     };
   }
 

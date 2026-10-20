@@ -1475,7 +1475,7 @@ const STRINGS = Object.freeze({
     puton: 'Put it on the kettle.',
     cook: 'Watch the box fill. Pull it when it turns green.',
     slice: 'Slice it at the board.',
-    plate: 'Set the plate on the counter.',
+    plate: 'Take the plate from the board.',
     customer: 'Here comes your first customer.',
     register: 'Ring up the guest at the register.',
     deliver: 'Carry the plate to their table.',
@@ -5752,9 +5752,52 @@ function createSim(saved, seed) {
       p.target = null;
       if (st && stationActive(st)) {
         faceTarget(st);
-        performAction(autoOnly);
+        const r = performAction(autoOnly);
+        if (r.ok) chainAfter(st);
       }
     }
+  }
+
+  // v4.2 taps (Joel 2026-10-20, "8.33 taps per plate"): what a tap picks up walks on by itself when
+  // there is only one place it can go, so those moves are one tap, not two.
+  //   A pulled piece: cooked meat to the board when the board would take it (slice it, or leave it for
+  //     the PREP card), a burnt piece to the trash.
+  //   With one cooker in the yard: raw meat onto it when it is lit with room for the piece, and a bag
+  //     of charcoal into it when it is cold (lighting it). A bag for a lit fire stays in hand, since when
+  //     to feed is the player's call.
+  // Not at the competition (a whole piece can go to the window there), and only after a tap: a key
+  // press or the action button acts and stays put. Any tap or key on the way takes over.
+  function soleCooker() {
+    let one = null;
+    for (const id of COOKER_IDS) {
+      const st = STATION_BY_ID[id];
+      if (!st || !stationActive(st)) continue;
+      if (one !== null) return null;
+      one = st;
+    }
+    return one;
+  }
+  function chainAfter(from) {
+    const p = state.player;
+    const c = p.carrying;
+    if (c === null || compOn() || p.busy !== null) return;
+    let dest = null;
+    if (from.type === 'cooker' && c.kind === 'cooked') {
+      const board = state.stations.board;
+      const m = MEATS[c.meat];
+      const prepOk = state.prep && board.waiting.length < C.PREP_WAIT && boardFits(c.meat, m.plates + waitingPlates(c.meat));
+      if (prepOk || (board.slicing === null && boardFits(c.meat, m.plates))) dest = STATION_BY_ID.board;
+    } else if (from.type === 'cooker' && c.kind === 'burnt') dest = STATION_BY_ID.trash;
+    else if (from.type === 'cooler' && c.kind === 'raw') {
+      const st = soleCooker();
+      const m = MEATS[c.meat];
+      if (st && (!m.drumOnly || st.brisket === true) && state.stations[st.id].fire >= C.COLD_UNDER && freeSlotFor(state.stations[st.id], m.slots) >= 0) dest = st;
+    } else if (from.type === 'pile' && c.kind === 'charcoal') {
+      const st = soleCooker();
+      if (st && st.fuel !== 'wood' && state.stations[st.id].fire < C.COLD_UNDER) dest = st;
+    }
+    if (!dest || !stationActive(dest)) return;
+    walkTo(dest.tiles[0].x, dest.tiles[0].y);
   }
 
   function tickFire(dt) {
@@ -8021,7 +8064,7 @@ function createSim(saved, seed) {
       case 'cook':
         return h === null && state.stations.kettle1.pieces.some((pc) => pc.state === 'done') ? 'kettle1' : null;
       case 'slice': return 'board';
-      case 'plate': return h !== null && h.kind === 'plates' ? 'table' : 'board';
+      case 'plate': return 'board';   // v4.2: with the plate in hand the step is deliver
       case 'register': return 'register';
       case 'deliver': return h !== null && h.kind === 'plates' ? null : 'table';
       case 'full': return 'cooler';   // P-6: put it back, nothing wasted (the #act verb there)
@@ -8168,7 +8211,10 @@ function createSim(saved, seed) {
     const onCounter = state.stations.table.spots.some((sp) => sp !== null);
     const bh = state.buddy ? state.buddy.carrying : null;
     if (state.buddy && (onCounter || (bh !== null && bh.kind === 'plates'))) return 'runner';
-    return onCounter || state.player.target !== null && state.player.target.deliver !== undefined ? 'deliver' : 'plate';
+    // v4.2 taps: a plate already in hand goes straight to their table (no set down and pick back up).
+    const ph = state.player.carrying;
+    const inHand = ph !== null && ph.kind === 'plates';
+    return onCounter || inHand || state.player.target !== null && state.player.target.deliver !== undefined ? 'deliver' : 'plate';
   }
 
   // [T 2.5] and contract K4.
