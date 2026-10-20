@@ -46,6 +46,11 @@
     #title { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 16px; letter-spacing: 0.08em; font-weight: 700; }
     #hud { flex: none; display: flex; gap: 12px; font-size: 13px; color: var(--m); }
     #hud .stars { color: var(--y); letter-spacing: 0.04em; }
+    #hud { margin-left: auto; }
+    #mute { flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: var(--m); }
+    #mute .off { display: none; }
+    #mute[aria-pressed="true"] .on { display: none; }
+    #mute[aria-pressed="true"] .off { display: inline; }
     #hud .stars.fans { color: #f27aa8; letter-spacing: 0; }
 
     #stage { display: flex; flex-direction: column; gap: 0; }
@@ -735,6 +740,7 @@
   <script src="./art3/rule.js" defer></script>
   <script src="./art3/index.js" defer></script>
   <script src="./art3/bridge.js" defer></script>
+  <script src="./music.js" defer></script>
   <script src="./game.js" defer></script>
 </head>
 <body>
@@ -746,6 +752,9 @@
         <span id="hud-cash"></span>
         <span id="hud-rep" class="stars"></span>
       </div>
+      <button id="mute" type="button" aria-pressed="false" aria-label="Music on" title="Music">
+        <svg viewBox="0 0 16 16" width="20" height="20" aria-hidden="true" shape-rendering="crispEdges"><path fill="currentColor" d="M2 6h3l4-3v10l-4-3H2z"/><path class="on" fill="currentColor" d="M11 6h1v4h-1zM13 4h1v8h-1z"/><path class="off" fill="currentColor" d="M11 5h1v1h-1zM12 6h1v1h-1zM13 7h1v2h-1zM12 9h1v1h-1zM11 10h1v1h-1zM14 6h1v1h-1zM14 9h1v1h-1z"/></svg>
+      </button>
     </header>
 
     <div id="stage">

@@ -1118,8 +1118,47 @@ function boot() {
     writeSave();
   }
   exposeGame();
+  setupMusic();
   observe();
   rafId = requestAnimationFrame(frame);
+}
+
+// Background music (music.js): the mute button in the header, the saved flag, and what to play.
+let musicOn = true;
+function musicApi() { return PitSim.music && typeof PitSim.music.update === 'function' ? PitSim.music : null; }
+function syncMuteBtn() {
+  const b = document.getElementById('mute');
+  if (!b) return;
+  b.setAttribute('aria-pressed', musicOn ? 'false' : 'true');
+  b.setAttribute('aria-label', musicOn ? 'Music on' : 'Music off');
+}
+function setupMusic() {
+  const M = musicApi();
+  try { if (M) M.init({ muted: !musicOn }); } catch (e) { /* music is optional */ }
+  syncMuteBtn();
+  const b = document.getElementById('mute');
+  if (b) b.addEventListener('click', function () {
+    musicOn = !musicOn;
+    try { if (M) M.setMuted(!musicOn); } catch (e) { /* ignore */ }
+    syncMuteBtn();
+    writeSave();
+  });
+}
+let musicSig = '';
+function syncMusic(s) {
+  const M = musicApi();
+  if (!M) return;
+  const se = inSeason(s) ? s.season : null;
+  const week = se ? se.week | 0 : 1;
+  const comp = !!se && week >= (C.SEASON_WEEKS || 9);
+  const cook = s.phase === 'service';
+  let waiting = 0;
+  if (cook && Array.isArray(s.customers)) for (const c of s.customers) if (c.mode === 'waiting' || c.mode === 'arriving') waiting++;
+  const day = se ? se.day | 0 : 0;
+  const sig = day + ':' + week + ':' + comp + ':' + cook + ':' + waiting;
+  if (sig === musicSig) return;
+  musicSig = sig;
+  try { M.update({ day, week, comp, cook, waiting }); } catch (e) { /* ignore */ }
 }
 
 function readSave() {
@@ -1129,6 +1168,8 @@ function readSave() {
   if (!raw) return null;
   let parsed = null;
   try { parsed = JSON.parse(raw); } catch (e) { return null; }
+  // Music: one boolean in the save, on unless it is exactly false.
+  musicOn = !(parsed && typeof parsed === 'object' && parsed.music === false);
   // W13.3, X11.3: any valid save with a raw v from 1 to one under C.SAVE_VERSION shows the notice once
   // (ui.noticeCrew when the migrated crew is not empty, else ui.notice); a current save loads silently.
   const cur = typeof C.SAVE_VERSION === 'number' ? C.SAVE_VERSION : 5;
@@ -1654,7 +1695,9 @@ function flushLive() {
 
 function writeSave() {
   try {
-    localStorage.setItem(PitSim.SAVE_KEY, JSON.stringify(sim.serialize()));
+    const o = sim.serialize();
+    if (o && typeof o === 'object') o.music = musicOn;
+    localStorage.setItem(PitSim.SAVE_KEY, JSON.stringify(o));
   } catch (e) {
     noteSaveOff();
   }
@@ -8386,6 +8429,7 @@ function updateDom() {
     ch.b.hidden = hide;
   }
 
+  syncMusic(s);
   flushLive();
 }
 

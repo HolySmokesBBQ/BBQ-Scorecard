@@ -251,9 +251,10 @@ const FILES = {
   index: path.join(GAME_DIR, 'index.html'),
   sprites: path.join(GAME_DIR, 'sprites.js'),
   sim: path.join(GAME_DIR, 'sim.js'),
-  game: path.join(GAME_DIR, 'game.js')
+  game: path.join(GAME_DIR, 'game.js'),
+  music: path.join(GAME_DIR, 'music.js')
 };
-const EXPECTED_REQUEST_FILES = ['index.html', 'sprites.js', 'sim.js', 'game.js',
+const EXPECTED_REQUEST_FILES = ['index.html', 'sprites.js', 'sim.js', 'game.js', 'music.js',
   // v3.4 (design 12): the art3 library and its adapter.
   'art3/palette.js', 'art3/proj.js', 'art3/people.js', 'art3/kit.js', 'art3/yard.js', 'art3/fx.js', 'art3/rule.js', 'art3/index.js', 'art3/bridge.js'];
 
@@ -1352,7 +1353,7 @@ async function nodeChecks() {
     return 'index, sprites, sim, game';
   }, { fatal: true });
 
-  for (const key of ['sprites', 'sim', 'game']) {
+  for (const key of ['sprites', 'sim', 'game', 'music']) {
     await step('node --check ' + key + '.js', () => {
       const r = spawnSync(process.execPath, ['--check', FILES[key]], { encoding: 'utf8' });
       assert(r.status === 0, (r.stderr || r.stdout || '').trim().split('\n')[0] || 'exit ' + r.status);
@@ -6812,6 +6813,30 @@ async function browserChecks() {
     const bad = report.requests.filter((u) => !(u.startsWith('file:') && EXPECTED_REQUEST_FILES.some((f) => u.includes('/' + f))));
     assert(bad.length === 0, 'unexpected: ' + bad.slice(0, 3).join(', '));
     return report.requests.length + ' requests';
+  });
+
+  // Background music: the module is present, no AudioContext before the first tap, one after it,
+  // and the header button flips the music flag in the save (default on), then flips it back.
+  await step('music: module, first tap, mute saved', async () => {
+    const m0 = await ev('globalThis.' + GLOBAL_NAME + '.music && globalThis.' + GLOBAL_NAME + '.music.state()');
+    assert(m0 && typeof m0 === 'object', 'PitSim.music missing');
+    assert(m0.context === false && m0.created === 0, 'AudioContext before any tap ' + describe(m0));
+    const b = await ev('(() => { const r = document.getElementById("title").getBoundingClientRect(); return { x: r.left + 4, y: r.top + r.height / 2 }; })()');
+    await mouseTap(Math.round(b.x), Math.round(b.y));
+    await sleep(100);
+    const m1 = await ev('globalThis.' + GLOBAL_NAME + '.music.state()');
+    assert(m1.started === true && m1.context === m1.supported && m1.created === (m1.supported ? 1 : 0), 'after a tap ' + describe(m1));
+    const btn = await ev('(() => { const e = document.getElementById("mute"); const r = e.getBoundingClientRect(); return { w: r.width, h: r.height, p: e.getAttribute("aria-pressed") }; })()');
+    assert(btn.w >= 44 && btn.h >= 44 && btn.p === 'false', 'mute button ' + describe(btn));
+    await ev('document.getElementById("mute").click()');
+    const s1 = await storedSave();
+    const muted = await ev('globalThis.' + GLOBAL_NAME + '.music.state().muted');
+    assert(s1 && s1.music === false && muted === true, 'after mute: save music ' + describe(s1 && s1.music) + ', muted ' + muted);
+    await ev('document.getElementById("mute").click()');
+    const s2 = await storedSave();
+    const m2 = await ev('globalThis.' + GLOBAL_NAME + '.music.state()');
+    assert(s2 && s2.music === true && m2.muted === false, 'after unmute: save music ' + describe(s2 && s2.music) + ', ' + describe(m2));
+    return 'supported ' + m1.supported + ', theme ' + m2.theme + ' ' + m2.mode + ' at ' + m2.bpm + ' bpm; save flag false then true';
   });
 
   await step('sprite list and palette', async () => {
