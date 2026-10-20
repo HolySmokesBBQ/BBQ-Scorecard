@@ -92,10 +92,18 @@ function person(id, holding) { who = id === null || id === undefined ? null : id
 
 function wrap(name, f) { const n = art3.frames(name) || 1; return ((f | 0) % n + n) % n; }
 
+// The last person drawn, as a box in the canvas's own px (the identity transform), for game.js to keep
+// station badges off people (Joel's phone playtest, 2026-10-19). Body only: 10 px each side of the feet.
+let lastPerson = null;
 function drawPerson(ctx, look, pose, frame, fx, fy, flip) {
   const p3 = POSE3[pose] || 'down';
   const n = art3.people && art3.people.POSES ? (art3.people.POSES[p3] || 1) : 1;
   const f = ((frame | 0) % n + n) % n;
+  try {
+    const m = ctx.getTransform(), cv = art3.person ? art3.person(look, p3, f, flip === true) : null;
+    const h = cv && cv.height > 0 ? cv.height : 40;
+    lastPerson = { x0: m.e + m.a * (Math.round(fx) - 10), x1: m.e + m.a * (Math.round(fx) + 10), y0: m.f + m.d * (Math.round(fy) - h), y1: m.f + m.d * Math.round(fy) };
+  } catch (e) { lastPerson = null; }
   // v3.4 playtest: guests carry the dark ring so they read on the ground.
   if (typeof look === 'string' && look.charAt(0) === 'g' && art3.outlined && art3.person) {
     const cv = art3.person(look, p3, f, flip === true);
@@ -249,44 +257,61 @@ function fillDiamond(g, cx, cy, hw, h, col) {
   }
 }
 
-// The pit name on the wall sign's board (meta('sign').text): bold caps on one line when they fit,
-// else two lines split at the space that best balances them, else plain caps, else (feedback audit
-// item 14) two plain lines split at the letter that best balances them. The board fits 11 plain
-// caps a line, so every name up to the creator's 20 characters fits; cut is only a guard.
+// The pit name on the wall sign's board (meta('sign').text). Joel's phone playtest (2026-10-19): the
+// font's space is a 2 px gap, so "HOLY SMOKES" read as one word. Words on the sign now sit a wide
+// gap apart (SIGN_GAP, against 1 px between letters), a line splits only at a space, every word is
+// kept, and a line keeps its spaces. In order: bold caps on one line, two bold lines split at the
+// space that best balances them, the same in plain caps, then (one word longer than a line) a
+// plain split inside that word with a hyphen. cut is only a guard.
+const SIGN_GAP = { bold: 5, plain: 4 };
+function signLineW(t, bold) {
+  const ws = String(t).split(' ').filter(Boolean);
+  let w = 0;
+  for (let i = 0; i < ws.length; i++) w += art3.textWidth(ws[i], { bold: bold }) + (i ? SIGN_GAP[bold ? 'bold' : 'plain'] : 0);
+  return w;
+}
 function signLines(str) {
-  const s = String(str || '').toUpperCase().trim();
+  const s = String(str || '').toUpperCase().trim().split(/\s+/).filter(Boolean).join(' ');
   const box = art3.rule && art3.rule.meta ? art3.rule.meta('sign').text : { w: 54, h: 16 };
-  const wOf = function (t, bold) { return art3.textWidth(t, { bold: bold }); };
   for (let pass = 0; pass < 2; pass++) {
     const bold = pass === 0;
-    if (wOf(s, bold) <= box.w) return { lines: [s], bold: bold };
+    if (signLineW(s, bold) <= box.w) return { lines: [s], bold: bold };
     let best = null;
     for (let i = 1; i < s.length - 1; i++) {
       if (s[i] !== ' ') continue;
-      const a = s.slice(0, i).trim(), b = s.slice(i + 1).trim();
-      const w = Math.max(wOf(a, bold), wOf(b, bold));
+      const a = s.slice(0, i), b = s.slice(i + 1);
+      const w = Math.max(signLineW(a, bold), signLineW(b, bold));
       if (w <= box.w && (!best || w < best.w)) best = { w: w, lines: [a, b] };
     }
     if (best) return { lines: best.lines, bold: bold };
   }
   let split = null;
   for (let i = 1; i < s.length; i++) {
-    const a = s.slice(0, i).trim(), b = s.slice(i).trim();
-    if (!a || !b) continue;
-    const w = Math.max(wOf(a, false), wOf(b, false));
+    if (s[i] === ' ' || s[i - 1] === ' ') continue;
+    const a = s.slice(0, i) + '-', b = s.slice(i);
+    const w = Math.max(signLineW(a, false), signLineW(b, false));
     if (w <= box.w && (!split || w < split.w)) split = { w: w, lines: [a, b] };
   }
-  if (split) return { lines: split.lines, bold: false };
+  if (split) return { lines: split.lines, bold: false, hyphen: true };
   let t = s;
-  while (t.length > 1 && wOf(t, false) > box.w) t = t.slice(0, -1);
+  while (t.length > 1 && signLineW(t, false) > box.w) t = t.slice(0, -1);
   return { lines: [t], bold: false, cut: true };
+}
+// One sign line centred on cx, word by word with the SIGN_GAP between words.
+function signLine(g, t, cx, y, o) {
+  const ws = String(t).split(' ').filter(Boolean), gap = SIGN_GAP[o.bold ? 'bold' : 'plain'];
+  let x = Math.round(cx - signLineW(t, o.bold) / 2);
+  for (let i = 0; i < ws.length; i++) {
+    art3.textTinted(g, ws[i], x, y, '#fff3d6', { bold: o.bold, shadow: o.shadow });
+    x += art3.textWidth(ws[i], { bold: o.bold }) + gap;
+  }
 }
 function signText(g, x, y, name) {
   const a = art3.anchor('sign'), tb = art3.rule.meta('sign').text;
   const L = signLines(name), cx = x - a.ax + tb.x + tb.w / 2, top = y - a.ay + tb.y;
-  const o = { bold: L.bold, align: 'center', shadow: '#5a3412' };
-  if (L.lines.length === 1) art3.textTinted(g, L.lines[0], cx, top + 4, '#fff3d6', o);
-  else { art3.textTinted(g, L.lines[0], cx, top, '#fff3d6', o); art3.textTinted(g, L.lines[1], cx, top + 8, '#fff3d6', o); }
+  const o = { bold: L.bold, shadow: '#5a3412' };
+  if (L.lines.length === 1) signLine(g, L.lines[0], cx, top + 4, o);
+  else { signLine(g, L.lines[0], cx, top, o); signLine(g, L.lines[1], cx, top + 8, o); }
   return L;
 }
 
@@ -406,7 +431,7 @@ PitSim.bridge3 = {
   boot: boot, get ready() { return ready; },
   toParts: toParts, setPlayer: setPlayer, setCrew: setCrew, person: person,
   draw: draw, ground: ground, portrait: portrait, figure: figure,
-  text: text, textWidth: textWidth, floatNum: floatNum, floatBox: floatBox, signText: function () { return !!signAt; }, signLines: signLines, bounds: bounds,
+  text: text, textWidth: textWidth, floatNum: floatNum, floatBox: floatBox, signText: function () { return !!signAt; }, signLines: signLines, signLineW: signLineW, lastPerson: function () { const p = lastPerson; lastPerson = null; return p; }, bounds: bounds,
   stage: stage, plus: plus, preview: preview, PREVIEW: PREVIEW, get previewLook() { return previewLook; }, anchorOf: anchorOf,
   misses: function () { return Object.assign({}, misses); }
 };

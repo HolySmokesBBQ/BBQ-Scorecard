@@ -1223,6 +1223,11 @@ function exposeGame() {
     captureFrame: captureFrame,
     get banner() { return bannerNow(); },
     get rail() { return railNow(); },
+    get railBoxes() { return railBoxes ? JSON.parse(JSON.stringify(railBoxes)) : null; },
+    get badgeLog() { return badgeLog.slice(); },
+    get orderBubbles() { return orderBubbles.slice(); },
+    get people() { return peopleBoxes.slice(); },
+    get kitchenBox() { return kitchenBox(); },
     get sign() { return signInfo(); },
     get panel() { return howtoOpen ? 'howto' : currentPanel; },
     // X13.8: the crew movers in the yard with art.crewKey(role), and the Hiring Day page on screen.
@@ -5556,20 +5561,19 @@ function compRailStrs(v, s) {
 function drawCompRail(v, s) {
   const rs = compRailStrs(v, s);
   const clock = rs.clock, strs = rs.rows;
-  let w = 6 + art.textWidth(clock);
+  const x0 = drawClockBox(clock);
+  let w = 0;
   for (let i = 0; i < strs.length; i++) w += 2 + 8 + 1 + art.textWidth(strs[i]) + 2;
-  const bw = Math.min(174, w + 4);
-  octx.fillStyle = COLOR.U;
-  octx.fillRect(1, 1, bw, 11);
-  octx.fillStyle = COLOR.C;
-  for (let gy = 0; gy < CLOCK_GLYPH.length; gy++) {
-    for (let gx = 0; gx < CLOCK_GLYPH[gy].length; gx++) if (CLOCK_GLYPH[gy][gx] === 'c') octx.fillRect(3 + gx, 3 + gy, 1, 1);
+  const bw = Math.min(176 - x0, w + 2);
+  if (strs.length && bw > 12) {
+    octx.fillStyle = COLOR.U;
+    octx.fillRect(x0, 1, bw, 11);
+    railBoxes.items = [x0, bw];
   }
-  T(clock, 9, 3, null);
-  let x = 9 + art.textWidth(clock);
+  let x = x0 - 1;
   for (let i = 0; i < v.rows.length; i++) {
     const r = v.rows[i], tw = art.textWidth(strs[i]);
-    if (x + 2 + 8 + 1 + tw + 2 > 1 + bw) break;
+    if (x + 2 + 8 + 1 + tw + 2 > x0 + bw) break;
     x += 2;
     D('icon_' + r.meat, x, 2);
     x += 9;
@@ -6561,6 +6565,19 @@ function opaqueBox(name, frame) {
   opaqueBoxes.set(key, box);
   return box;
 }
+// Joel's phone playtest (2026-10-19): a badge drew over the pitmaster when its station stood in front
+// of him. Now a badge whose chip would touch a person (the bodies drawn last frame, peopleBoxes) is
+// not drawn while they stand there; badgeLog keeps this frame's badges for the harness, each with its
+// chip and its station's opaque box (world rp). The kettle has no badge (its fire shows it).
+let peopleBoxes = [], peopleNext = [], badgeLog = [];
+const custBoxes = new Map();
+function keepPerson(id) {
+  const p = B3 && typeof B3.lastPerson === 'function' ? B3.lastPerson() : null;
+  if (!p) return;
+  peopleNext.push(p);
+  if (id !== null && id !== undefined) custBoxes.set(id, p);
+}
+function overlaps(a, b) { return a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1; }
 function drawBadge(kind, name, frame, X, Y) {
   const m = BADGE[kind];
   if (!m || !A3) return;
@@ -6569,6 +6586,10 @@ function drawBadge(kind, name, frame, X, Y) {
   const cx = ob ? Math.round(X) - an.ax + ob.cx : Math.round(X);
   const top = ob ? Math.round(Y) - an.ay + ob.top : Math.round(Y) - an.ay;
   const x0 = Math.round(cx - 8), y0 = top - 18;
+  const chip = { x0: x0, x1: x0 + 16, y0: y0, y1: y0 + 17 };
+  const by = peopleBoxes.some(function (p) { return overlaps(chip, p); });
+  badgeLog.push({ kind: kind, chip: chip, station: boxRp(name, frame, X, Y), shown: !by });
+  if (by) return;
   onWorld(function () {
     octx.fillStyle = '#1b1410';
     octx.fillRect(x0 + 1, y0, 14, 16); octx.fillRect(x0, y0 + 1, 16, 14);
@@ -6830,6 +6851,16 @@ function homeBox() {
   if (!(x1 > x0)) return null;
   return { x0: x0, x1: x1, y0: y0, y1: y1 };
 }
+// The kitchen block: every owned station's drawn box (world rp), the counter included.
+function kitchenBox() {
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  MAP.stations.forEach(function (st) {
+    if (!owned(st)) return;
+    const a = stationArt(st), b = boxRp(a.name, 0, a.X, a.Y);
+    x0 = Math.min(x0, b.x0); x1 = Math.max(x1, b.x1); y0 = Math.min(y0, b.y0); y1 = Math.max(y1, b.y1);
+  });
+  return x1 > x0 ? { x0: x0, x1: x1, y0: y0, y1: y1 } : null;
+}
 function camHome() {
   const b = homeBox();
   cam.ease = null;
@@ -6950,6 +6981,11 @@ function camKeepWork() {
   };
   cam.x0 = fit(cam.x0, b.x0, b.x1, cam.vw, xMax);
   cam.y0 = fit(cam.y0, b.y0, b.y1, cam.vh, 12);
+  // Joel's phone playtest (2026-10-19): on a phone the near view holds the kitchen block centred top
+  // to bottom (resize keeps the canvas short enough that the world never clamps it), so the lawn in
+  // front no longer fills the bottom half.
+  const kb = cam.phone ? kitchenBox() : null;
+  if (kb && kb.y1 - kb.y0 + 24 <= cam.vh) cam.y0 = (kb.y0 + kb.y1) / 2 - cam.vh / 2;
   camClamp();
 }
 // The corner button: four brackets out (to far) or in (back to near). Phones only.
@@ -7204,18 +7240,12 @@ function railNow() {
 // clock glyph before the seconds, and on a booking each count of plates left sits on a cream ticket
 // (dark digits, green once that meat's tickets are done), so it never reads as the chips' stock.
 const CLOCK_GLYPH = ['.ccc.', 'c.c.c', 'c.cc.', 'c...c', '.ccc.'];   // 5 by 5, cream
-function drawRail(r, s) {
-  const clock = String(Math.max(0, Math.ceil(tEnd(s) - s.clock)));
-  const booking = r.kind === 'booking';
-  const strs = [];
-  let w = 6 + art.textWidth(clock);
-  for (let i = 0; i < r.items.length; i++) {
-    const it = r.items[i];
-    const str = String(booking ? it.left : it.sold);
-    strs.push(str);
-    w += 2 + 8 + 1 + art.textWidth(str) + (booking ? 2 : 0);
-  }
-  const bw = Math.min(174, w + 4);
+// Joel's phone playtest (2026-10-19): the clock gets its own box and the meat tickets start in a second
+// box 2 px to its right, so "17" never runs into a sausage icon and a count. railBoxes keeps the last
+// layout for the harness: { clock: [x, w], items: [x, w] or null }, in overlay sim px.
+let railBoxes = null;
+function drawClockBox(clock) {
+  const bw = 6 + art.textWidth(clock) + 4;
   octx.fillStyle = COLOR.U;
   octx.fillRect(1, 1, bw, 11);
   octx.fillStyle = COLOR.C;
@@ -7223,11 +7253,32 @@ function drawRail(r, s) {
     for (let gx = 0; gx < CLOCK_GLYPH[gy].length; gx++) if (CLOCK_GLYPH[gy][gx] === 'c') octx.fillRect(3 + gx, 3 + gy, 1, 1);
   }
   T(clock, 9, 3, null);
-  let x = 9 + art.textWidth(clock);
+  railBoxes = { clock: [1, bw], items: null };
+  return 1 + bw + 2;
+}
+function drawRail(r, s) {
+  const clock = String(Math.max(0, Math.ceil(tEnd(s) - s.clock)));
+  const booking = r.kind === 'booking';
+  const strs = [];
+  const x0 = drawClockBox(clock);
+  let w = 0;
+  for (let i = 0; i < r.items.length; i++) {
+    const it = r.items[i];
+    const str = String(booking ? it.left : it.sold);
+    strs.push(str);
+    w += 2 + 8 + 1 + art.textWidth(str) + (booking ? 2 : 0);
+  }
+  const bw = Math.min(176 - x0, w + 2);
+  if (r.items.length && bw > 12) {
+    octx.fillStyle = COLOR.U;
+    octx.fillRect(x0, 1, bw, 11);
+    railBoxes.items = [x0, bw];
+  }
+  let x = x0 - 1;
   for (let i = 0; i < r.items.length; i++) {
     const it = r.items[i];
     const tw = art.textWidth(strs[i]);
-    if (x + 2 + 8 + 1 + tw + (booking ? 2 : 0) > 1 + bw) break;
+    if (x + 2 + 8 + 1 + tw + (booking ? 2 : 0) > x0 + bw) break;
     x += 2;
     D('icon_' + it.meat, x, 2);
     x += 9;
@@ -7510,7 +7561,7 @@ function stationItems(st, s, push) {
     const band = PitSim.fireBand(ck ? ck.fire : 0);
     const open = a.name === 'kettle' && ck && ck.pieces.length > 0;
     const frame = open ? 4 : (BAND_FRAME[band] || 0);
-    pushArt(push, a.name, frame, a.tiles, { outline: true, badge: 'flame', rec: [st.sprite || a.name, d.x, d.y, BAND_FRAME[band] || 0], hit: hit, top: function (X, Y) {
+    pushArt(push, a.name, frame, a.tiles, { outline: true, rec: [st.sprite || a.name, d.x, d.y, BAND_FRAME[band] || 0], hit: hit, top: function (X, Y) {
       if (!ck) return;
       drawGauge(ck, X, Y);
       drawPieces(st, ck, a.name, X, Y);
@@ -7626,6 +7677,7 @@ function drawSorted(s) {
   const items = [];
   let order = 0;
   const push = function (d, l, X, fn) { items.push({ d: d, l: l, x: X, o: order++, f: fn }); };
+  peopleBoxes = peopleNext; peopleNext = []; badgeLog = []; custBoxes.clear();
   const T_ = MAP.T;
   const open = gateOpen(s);
 
@@ -7665,7 +7717,7 @@ function drawSorted(s) {
       if (kind === 'prep' && !art.has('prep_down')) kind = 'buddy';
     }
     const mx = Math.round(m.px), my = Math.round(m.py);
-    push((mx + my) / TILE, 2, isoX(mx + 8, my + 8) * RS, function () { withShift(moverShift(mx, my), function () { drawMover(kind, m, s); }); });
+    push((mx + my) / TILE, 2, isoX(mx + 8, my + 8) * RS, function () { withShift(moverShift(mx, my), function () { drawMover(kind, m, s); }); keepPerson(null); });
   }
   const custs = s.customers.slice().sort(byId);
   for (let i = 0; i < custs.length; i++) {
@@ -7673,7 +7725,7 @@ function drawSorted(s) {
     const seat = c.mode === 'eating' ? seatOf(c) : null;
     if (seat) {
       const q = seatRp(seat);
-      push(seat.x + seat.y, 2, q[0], function () { drawSeated(c, seat); });
+      push(seat.x + seat.y, 2, q[0], function () { drawSeated(c, seat); keepPerson(c.id); });
       // The eater's plate: on the table top in front of the seat, or in the lap on a chair.
       const tb = seatTable(seat), sx = seat.x * TILE, sy = seat.y * TILE;
       const px = sx + 4, py = tb ? sy + 17 : sy + 9;
@@ -7681,7 +7733,7 @@ function drawSorted(s) {
       else push(seat.x + seat.y, 2.5, q[0], function () { drawRp('plate_' + c.want, 0, q[0] + 1, q[1] - 9, px, py); });
     } else {
       const cx = Math.round(c.px), cy = Math.round(c.py);
-      push((cx + cy) / TILE, 2, isoX(cx + 8, cy + 8) * RS, function () { withShift(moverShift(cx, cy), function () { drawMover('cust', c, s); }); });
+      push((cx + cy) / TILE, 2, isoX(cx + 8, cy + 8) * RS, function () { withShift(moverShift(cx, cy), function () { drawMover('cust', c, s); }); keepPerson(c.id); });
     }
   }
   const dx = Math.round(dog.px), dy = Math.round(dog.py);
@@ -7931,7 +7983,70 @@ function bigBubble(x, y, fn) {
   octx.translate(-x, -ty);
   try { fn(); } finally { octx.restore(); }
 }
+// Joel's phone playtest (2026-10-19): the order bubble was counter sized (the 34 by 33 art3 bubble at
+// 1.5x) and sat on the counter top. Now it is a small chip (ORDER_BUB, about a third as wide) with the
+// plate, or the walk out X, and the patience bar along its foot, its tail on the guest's head (the body
+// box drawn this frame, custBoxes), slid sideways or up the least it takes to stay off every counter's
+// drawn box. orderBubbles keeps this frame's chips for the harness (world rp).
+const ORDER_BUB = Object.freeze({ w: 22, h: 19, tail: 3 });
+let orderBubbles = [];
+function counterBoxes() {
+  const out = [];
+  for (let i = 0; i < MAP.stations.length; i++) {
+    const st = MAP.stations[i];
+    if (st.type !== 'table' || !owned(st)) continue;
+    const a = stationArt(st);
+    out.push(boxRp(a.name, 0, a.X, a.Y));
+  }
+  return out;
+}
+function smallOrderBubble(c, showMark, s) {
+  const head = custBoxes.get(c.id);
+  if (!head || !A3) return false;
+  const W = ORDER_BUB.w, H = ORDER_BUB.h, hx = Math.round((head.x0 + head.x1) / 2), hy = Math.round(head.y0);
+  const counters = counterBoxes();
+  let best = null;
+  for (let up = 0; up <= 24 && !best; up += 4) {
+    for (let k = 0; k <= 40; k += 2) {
+      for (const dx of k ? [k, -k] : [0]) {
+        const r = { x0: hx - W / 2 + dx, x1: hx + W / 2 + dx, y0: hy - ORDER_BUB.tail - H - up, y1: hy - ORDER_BUB.tail - up };
+        if (!counters.some(function (b) { return overlaps(r, b); })) { best = r; break; }
+      }
+      if (best) break;
+    }
+  }
+  if (!best) return false;
+  const r = best;
+  const frac = c.patienceMax > 0 ? Math.max(0, Math.min(1, c.patience / c.patienceMax)) : 1;
+  const blink = !showMark && frac <= C.PATIENCE_WARN_FRAC && !reduced && Math.floor(tAnim * 4) % 2 === 1;
+  const mid = typeof C.PATIENCE_MID_FRAC === 'number' ? C.PATIENCE_MID_FRAC : 0.5;
+  onWorld(function () {
+    const x0 = Math.round(r.x0), y0 = Math.round(r.y0);
+    octx.fillStyle = '#1b1410';
+    octx.fillRect(x0 + 1, y0, W - 2, H); octx.fillRect(x0, y0 + 1, W, H - 2);
+    octx.fillStyle = '#ffffff';
+    octx.fillRect(x0 + 1, y0 + 1, W - 2, H - 2);
+    // The tail from the chip's foot toward the head, kept inside the chip's width.
+    const tx = Math.max(x0 + 3, Math.min(x0 + W - 5, hx - 1)), ty = y0 + H;
+    octx.fillStyle = '#1b1410';
+    octx.fillRect(tx - 1, ty - 1, 4, 1); octx.fillRect(tx, ty, 2, ORDER_BUB.tail);
+    octx.fillStyle = '#ffffff';
+    octx.fillRect(tx, ty - 1, 2, 1);
+    if (showMark) A3.drawAt(octx, 'mark_x', x0 + W / 2, y0 + 14, 0, false);
+    else if (!blink) (A3.drawAtOutlined || A3.drawAt)(octx, 'plate_' + c.want, x0 + W / 2, y0 + 10, 0, false);
+    if (!showMark) {
+      octx.fillStyle = COLOR.K;
+      octx.fillRect(x0 + 2, y0 + H - 4, W - 4, 2);
+      octx.fillStyle = frac <= C.PATIENCE_WARN_FRAC ? COLOR.red : (frac <= mid ? COLOR.yellow : COLOR.lawnA);
+      const bw = Math.max(frac > 0 ? 1 : 0, Math.round((W - 4) * frac));
+      if (bw > 0) octx.fillRect(x0 + 2, y0 + H - 4, bw, 2);
+    }
+  });
+  orderBubbles.push({ id: c.id, rect: r, head: head, counters: counters, day: s.day });
+  return true;
+}
 function drawCues(s, custs) {
+  orderBubbles = [];
   // Bubbles: order icon or walk out mark, then food bubbles.
   for (let i = 0; i < custs.length; i++) {
     const c = custs[i];
@@ -7943,7 +8058,9 @@ function drawCues(s, custs) {
     octx.save();
     const csh = seatC ? seatShift(seatC) : moverShift(Math.round(c.px), Math.round(c.py));
     octx.translate(csh.dx, csh.dy);
-    if (inLine || showMark) {
+    if ((inLine || showMark) && smallOrderBubble(c, showMark, s)) {
+      recOnly('bubble', px + 14, py - 22, 0);
+    } else if (inLine || showMark) {
       bigBubble(px + 14, py - 22, function () {
         D('bubble', px + 14, py - 22);
         if (showMark) {
@@ -7984,6 +8101,7 @@ function drawCues(s, custs) {
   for (let i = 0; i < custs.length; i++) {
     const c = custs[i];
     if (c.mode !== 'arriving' && c.mode !== 'waiting') continue;
+    if (orderBubbles.some(function (b) { return b.id === c.id; })) continue;
     const px = Math.round(c.px), py = Math.round(c.py) + hopOffset(c);
     const frac = c.patienceMax > 0 ? Math.max(0, Math.min(1, c.patience / c.patienceMax)) : 1;
     const bx = px + 15, by = py - 26;
@@ -8302,7 +8420,10 @@ function resize() {
     const cssW = (el.wrap && el.wrap.clientWidth) || vw;
     const cssH = Math.max(240, (vh || 812) - 44 - CONTROLS_H);
     const rw = Math.max(64, Math.floor(Math.floor(cssW * d) / cam.nearK));
-    const rh = Math.max(96, Math.min(WORLD.H + 24, Math.floor(Math.floor(cssH * d) / cam.nearK)));
+    let kb = null;
+    try { kb = sim ? kitchenBox() : null; } catch (e) { kb = null; }
+    const rhMax = kb ? Math.floor(2 * Math.min((kb.y0 + kb.y1) / 2, WORLD.H - (kb.y0 + kb.y1) / 2)) : WORLD.H + 24;
+    const rh = Math.max(96, Math.min(WORLD.H + 24, rhMax, Math.floor(Math.floor(cssH * d) / cam.nearK)));
     el.cv.width = rw * cam.nearK;
     el.cv.height = rh * cam.nearK;
     if (cam.mode === 'fit') cam.mode = 'near';

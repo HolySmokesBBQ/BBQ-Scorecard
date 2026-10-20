@@ -6378,7 +6378,7 @@ async function v3BrowserSteps(captures) {
     // Feedback audit item 14: the yard wall sign never cuts a name the creator allows (20 characters):
     // each comes back on one or two lines that rebuild the whole name, inside the board's text box.
     const maxPit = await ev('$("cr-pit") ? $("cr-pit").maxLength : 20');
-    const longFit = await ev('(() => { const B = PitSim.bridge3, tw = PitSim.art3.textWidth, box = PitSim.art3.rule.meta("sign").text, n = ' + maxPit + '; const names = ["Holy Smokes BBQ Co", "Holy Smokes BBQ", "ABCDEFGHIJKLMNO", "Smokehouse 12345", "W".repeat(n), "M".repeat(n), "A " + "W".repeat(n - 2), "W".repeat(n - 2) + " A", "WWWWW WWWWW WWWWW W".slice(0, n)]; return names.map((nm) => { const L = B.signLines(nm), up = nm.toUpperCase(); const w = Math.max.apply(null, L.lines.map((t) => tw(t, { bold: L.bold }))); const ok = !L.cut && L.lines.length <= 2 && w <= box.w && L.lines.join("").replace(/ /g, "") === up.replace(/ /g, ""); return ok ? null : nm + " " + JSON.stringify(L) + " w " + w + " of " + box.w; }).filter(Boolean); })()');
+    const longFit = await ev('(() => { const B = PitSim.bridge3, tw = PitSim.art3.textWidth, box = PitSim.art3.rule.meta("sign").text, n = ' + maxPit + '; const names = ["Holy Smokes BBQ Co", "Holy Smokes BBQ", "ABCDEFGHIJKLMNO", "Smokehouse 12345", "W".repeat(n), "M".repeat(n), "A " + "W".repeat(n - 2), "W".repeat(n - 2) + " A", "WWWWW WWWWW WWWWW W".slice(0, n)]; return names.map((nm) => { const L = B.signLines(nm), up = nm.toUpperCase(); const w = Math.max.apply(null, L.lines.map((t) => B.signLineW(t, L.bold))); const ok = !L.cut && L.lines.length <= 2 && w <= box.w && (L.hyphen ? L.lines[0].slice(0, -1) + L.lines[1] : L.lines.join(" ")) === up; return ok ? null : nm + " " + JSON.stringify(L) + " w " + w + " of " + box.w; }).filter(Boolean); })()');
     assert(maxPit >= 15 && longFit.length === 0, 'the yard sign cuts or overflows (max ' + maxPit + '): ' + describe(longFit));
     return describe(sign.text) + ' in ' + sign.font + ' at x ' + sign.x + ', ' + glyphs.length + ' glyphs; header ' + describe(wh) + '; yard sign fits ' + maxPit + ' character names';
   });
@@ -8748,6 +8748,56 @@ async function browserChecks() {
     assert(r1 && r1.rows.every((x, i) => x === String(Math.max(0, Math.ceil(at[i] - clk)))), 'rail strings ' + describe({ r1, at, clk }));
     await screenshotYard('comp-rail-countdown.png');
     return 'card: entry 20, prizes 200/120/80, judges ' + judges.join(', ') + '; hub ' + head + '; rail ' + r1.clock + ' | ' + r1.rows.join(' ') + '; favorite boxes ' + cp.fav.join('/');
+  });
+
+  // Joel's phone playtest (2026-10-19): the yard sign kept no space ("HOLYSMOKES BBQ"), the clock box
+  // ran into a sausage icon and a count, station badges drew over the pitmaster, the order bubble
+  // was counter sized and sat on the counter, and the near view left the bottom half as lawn.
+  await step('phone playtest 2026-10-19: sign spacing, clock box, badges, order bubble, near view', async () => {
+    // The sign: a two line split only at a space, every word kept, spaces kept within a line, and a
+    // word gap at least 4 px (the letters sit 1 px apart).
+    const signs = await ev('(() => { const B = PitSim.bridge3, tw = PitSim.art3.textWidth, box = PitSim.art3.rule.meta("sign").text; const names = ["Holy Smokes BBQ Co", "Holy Smokes BBQ", "YOUR PIT", "MARTY\'S PIT", "ABCDEFGHIJKLMNOPQRST"]; return names.map((nm) => { const L = B.signLines(nm), up = nm.toUpperCase(); const w = Math.max.apply(null, L.lines.map((t) => B.signLineW(t, L.bold))); const joined = L.hyphen ? L.lines[0].slice(0, -1) + L.lines[1] : L.lines.join(" "); const spaced = !/ /.test(up) || L.lines.every((t) => !/ /.test(t) || B.signLineW(t, L.bold) - t.split(" ").reduce((a, x) => a + tw(x, { bold: L.bold }), 0) >= 4 * (t.split(" ").length - 1)); return { nm, L, w, ok: !L.cut && L.lines.length <= 2 && w <= box.w && joined === up && spaced && (!L.hyphen || !/ /.test(up)) }; }); })()');
+    const badSigns = signs.filter((x) => !x.ok);
+    assert(badSigns.length === 0, 'sign lines ' + describe(badSigns));
+    const holy = signs[0].L;
+    assert(sameJSON(holy.lines, ['HOLY SMOKES', 'BBQ CO']), 'Holy Smokes BBQ Co reads ' + describe(holy));
+    await reload(saveV6({ pitName: 'Holy Smokes BBQ Co', gear: { cooler: true }, stock: Object.assign({}, ZERO_STOCK, { sausage: 8, chicken: 4 }), charcoal: 20, season: { pick: 'birthday' } }));
+    await quickTap('off');
+    await nextDayTap();
+    await quickTap('yard');
+    for (let i = 0; i < 20 && (await ev('S().phase')) !== 'service'; i++) await advance(1);
+    for (let i = 0; i < 120 && !(await ev('S().customers.some((c) => c.mode === "waiting")')); i++) await advance(0.5);
+    assert(await ev('S().customers.some((c) => c.mode === "waiting")'), 'no waiting guest ' + describe(await ev('S().customers.map((c) => c.mode)')));
+    await emulate({ width: 390, height: 844, deviceScaleFactor: 3, mobile: true });
+    try {
+      await sleep(TIMEOUT_MS.resize);
+      await ev('(g.camera.set("near"), g.camera.home(), true)');
+      await advance(0); await advance(0);
+      // The clock has its own box; anything else on the rail starts right of it.
+      const rb = await ev('g.railBoxes');
+      assert(rb && rb.clock && rb.clock[0] === 1 && (!rb.items || rb.items[0] >= rb.clock[0] + rb.clock[1] + 1), 'rail boxes ' + describe(rb));
+      // Badges: no kettle flame; each chip centred over its own station; a shown chip never on a person.
+      const bl = await ev('g.badgeLog');
+      const offStation = bl.filter((b) => { const c = (b.chip.x0 + b.chip.x1) / 2; return c < b.station.x0 || c > b.station.x1 || b.chip.y1 > b.station.y0 + 4; });
+      assert(bl.length >= 3 && !bl.some((b) => b.kind === 'flame') && offStation.length === 0, 'badges ' + describe(bl));
+      const onPeople = await ev('g.badgeLog.filter((b) => b.shown && g.people.some((p) => b.chip.x0 < p.x1 && p.x0 < b.chip.x1 && b.chip.y0 < p.y1 && p.y0 < b.chip.y1)).map((b) => b.kind)');
+      assert(onPeople.length === 0, 'badges drawn on people ' + describe(onPeople));
+      // Order bubbles: small, tail on the head, never on a counter.
+      const ob = await ev('g.orderBubbles');
+      const badB = ob.filter((b) => (b.rect.x1 - b.rect.x0) > 24 || b.rect.y1 > b.head.y0 || b.counters.some((c) => b.rect.x0 < c.x1 && c.x0 < b.rect.x1 && b.rect.y0 < c.y1 && c.y0 < b.rect.y1));
+      assert(ob.length >= 1 && badB.length === 0, 'order bubbles ' + describe(ob));
+      // The near view centres the kitchen block vertically.
+      const cm = await ev('g.camera.get()');
+      const kc = await ev('g.kitchenBox');
+      const off = Math.abs((cm.y0 + cm.vh / 2) - (kc.y0 + kc.y1) / 2);
+      assert(off <= 12, 'kitchen centre off the view centre by ' + off + ' rp ' + describe({ cm, kc }));
+      await screenshot('phone-390-service.png');
+      return 'sign ' + holy.lines.join(' / ') + '; clock ' + describe(rb) + '; ' + bl.filter((b) => b.shown).length + ' of ' + bl.length + ' badges shown; bubble ' + Math.round(ob[0].rect.x1 - ob[0].rect.x0) + ' rp wide; kitchen off centre ' + Math.round(off) + ' rp';
+    } finally {
+      await emulate(DESKTOP_MODE ? DESKTOP : PHONE);
+      await sleep(TIMEOUT_MS.resize);
+      await advance(0);
+    }
   });
 
   await step('zero console errors across the run', () => {
