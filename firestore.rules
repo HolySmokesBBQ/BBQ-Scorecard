@@ -121,7 +121,11 @@ service cloud.firestore {
                       'displayName', 'email', 'photoURL', 'friendCode', 'createdAt'
                     ]);
 
-      allow delete: if false;
+      // In-app account deletion (register #1, Apple 5.1.1(v)): the owner
+      // can delete their own profile. The client deletes it last, after the
+      // reviews, friends, friend requests and friend code it points at.
+      // Published to holy-smokes-bbq-scorecard 2026-10-21 08:54.
+      allow delete: if isOwner(userId);
 
       // ── FRIENDS SUBCOLLECTION ─────────────────────────────
       // Created ONLY as part of an accept-request flow. See header comment.
@@ -184,7 +188,11 @@ service cloud.firestore {
                     && code.matches('^BBQ-[A-Z0-9]{4,6}$')
                     && request.resource.data.keys().hasOnly(['userId']);
 
-      allow update, delete: if false;
+      allow update: if false;
+      // In-app account deletion: the code's owner can release it. Only the
+      // doc whose stored userId is the caller, so nobody can free someone
+      // else's code.
+      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
     }
 
     // ── REVIEWS ──────────────────────────────────────────────
