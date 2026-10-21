@@ -13,7 +13,7 @@
 // Run after `npm run build && npm run build:notebook` via the build:all
 // npm script.
 
-import { mkdirSync, copyFileSync, cpSync, existsSync, readdirSync, statSync, unlinkSync } from 'node:fs';
+import { mkdirSync, copyFileSync, cpSync, existsSync, readdirSync, statSync, unlinkSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { resolve, join, dirname, basename } from 'node:path';
 
 const ROOT = resolve(import.meta.dirname, '..');
@@ -38,9 +38,40 @@ console.log(landed ? '  + brand landing' : '  ! website/public-landing/index.htm
 // 1b. Inner brand pages (served at /pit, /episodes, /about via Netlify
 //     pretty URLs). Same allowlist trap as everything else here: a page not
 //     named below never deploys.
-for (const page of ['pit.html', 'episodes.html', 'about.html']) {
+for (const page of ['pit.html', 'episodes.html', 'about.html', 'door.js']) {
   const ok = copyIfExists(join(ROOT, 'website', 'public-landing', page), join(DIST, page));
   console.log(ok ? `  + ${page}` : `  ! website/public-landing/${page} missing`);
+}
+// 1c. Your Pit (/yourpit/), the hidden game. Never in the nav, never in the
+//     sitemap (Joel's standing ruling); the only way in is door.js above
+//     (the code by keys, or swipes then two taps). Source is games/pit-sim/;
+//     exactly the files named here ship, never dev/ or door/. Gated on
+//     SHIP_PIT=1 so an unrelated deploy cannot drop the page by accident.
+//     At copy time the game's own script tags get ?v=N (*.js is immutable
+//     at the CDN; bump PIT_V on every game update) and the page gets the
+//     standard gtm-init tag (the game itself sends nothing).
+const SHIP_PIT = process.env.SHIP_PIT === '1';
+const PIT_V = '1';
+if (SHIP_PIT) {
+  const pitSrc = join(ROOT, 'games', 'pit-sim');
+  const pitDst = join(DIST, 'yourpit');
+  const PIT_FILES = ['index.html', 'sprites.js', 'sim.js', 'music.js', 'game.js',
+    ...['palette', 'proj', 'people', 'kit', 'yard', 'fx', 'rule', 'index', 'bridge'].map(f => `art3/${f}.js`)];
+  mkdirSync(join(pitDst, 'art3'), { recursive: true });
+  let n = 0;
+  for (const f of PIT_FILES) if (copyIfExists(join(pitSrc, f), join(pitDst, f))) n++;
+  const page = join(pitDst, 'index.html');
+  let html = readFileSync(page, 'utf8');
+  html = html.replace(/<script src="(\.\/[^"?]+\.js)" defer><\/script>/g, `<script src="$1?v=${PIT_V}" defer></script>`);
+  const gtm = '  <script src="/gtm-init.js?v=8" defer data-ga-title="Your Pit | Holy Smokes BBQ Co" data-ga-group="landing"></script>\n';
+  html = html.replace('  <script src="./sprites.js', gtm + '  <script src="./sprites.js');
+  writeFileSync(page, html);
+  const tagged = html.split('?v=' + PIT_V + '" defer').length - 1;
+  console.log(`  + yourpit/ (${n}/${PIT_FILES.length} files, ${tagged} script tags at v${PIT_V}, gtm-init ${html.includes('data-ga-title="Your Pit') ? 'in' : 'MISSING'})`);
+  if (n !== PIT_FILES.length || tagged !== 13) throw new Error('yourpit copy incomplete');
+} else if (existsSync(join(DIST, 'yourpit'))) {
+  rmSync(join(DIST, 'yourpit'), { recursive: true, force: true });
+  console.log('  - yourpit/ removed (SHIP_PIT not set)');
 }
 
 // 2. Shared assets at dist/ root. These get served at both /favicon.ico
