@@ -1,0 +1,26 @@
+Your Pit, music tracks
+
+The music is eight licensed Pixabay tracks, given a heavy 8-bit treatment (mono, crushed and
+band limited) and stored in this folder as MP3 files:
+
+  highway-heat           Highway Heat, by danydory
+                         https://pixabay.com/music/rock-highway-heat-rock-sudiste-country-rock-507751/
+  burning-road           The Burning Road, by danydory
+                         https://pixabay.com/music/hard-rock-the-burning-road-rock-sudiste-southern-rock-473867/
+  rock-drive             Rock Drive, by Alex_Again
+                         https://pixabay.com/music/hard-rock-rock-drive-422405/
+  country-southern-rock  Country Southern Rock, by Echobrainz
+                         https://pixabay.com/music/american-roots-rock-country-southern-rock-553718/
+  freewheeling           Freewheeling, by danydory
+                         https://pixabay.com/music/rock-freewheeling-rock-sudiste-southern-rock-474674/
+  southern-sin           Southern Sin (Instrumental), by alanajordan
+                         https://pixabay.com/music/rock-southern-sin-instrumental-version-360833/
+  blues-rock-energetic   Blues Rock Energetic, by Emmraan
+                         https://pixabay.com/music/rock-blues-rock-energetic-203364/
+  cold-one               Modern Country Rock Instrumental: Cold One (artist as listed on the page)
+                         https://pixabay.com/music/rock-modern-country-rock-instrumental-cold-one-271175/
+
+License: Pixabay Content License (https://pixabay.com/service/license-summary/). Use inside a game
+or website is allowed, commercial use is allowed, no attribution is required. The tracks must
+never be distributed on their own (as standalone audio files or a sound pack); they ship only as
+part of this game.
