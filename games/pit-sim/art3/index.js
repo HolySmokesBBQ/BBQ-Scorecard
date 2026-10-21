@@ -195,7 +195,12 @@ const RULE_MANIFEST = Object.freeze([
   ['lights_post', 'rule', 24, 84, 1, 12, 78, 0], ['picnic', 'rule', 76, 56, 2, 38, 36, 0], ['picnic_bench', 'rule', 76, 56, 2, 38, 36, 0],
   ['flower_box', 'rule', 52, 38, 1, 26, 24, 0], ['chair', 'rule', 32, 42, 2, 16, 28, 0], ['canopy', 'rule', 152, 144, 3, 76, 106, 0],
   ['birdbath', 'rule', 24, 30, 2, 12, 26, 0], ['mailbox', 'rule', 28, 38, 2, 14, 32, 0], ['tools', 'rule', 32, 34, 1, 16, 30, 0],
-  ['shelf', 'rule', 32, 54, 1, 16, 40, 0], ['hose', 'rule', 36, 30, 1, 16, 22, 0], ['plus', 'rule', 32, 18, 1, 16, 9, 0]
+  ['shelf', 'rule', 32, 54, 1, 16, 40, 0], ['hose', 'rule', 36, 30, 1, 16, 22, 0], ['plus', 'rule', 32, 18, 1, 16, 9, 0],
+  // v4.4 yard dressing
+  ['barrel_planter', 'rule', 24, 30, 3, 12, 24, 0], ['hay_bale', 'rule', 32, 30, 2, 16, 24, 0], ['pumpkins', 'rule', 24, 18, 1, 12, 14, 0],
+  ['drink_tub', 'rule', 28, 26, 1, 14, 20, 0], ['cornhole', 'rule', 32, 26, 2, 16, 20, 0], ['aframe', 'rule', 24, 32, 1, 12, 30, 0],
+  ['menu_wall', 'rule', 40, 52, 1, 20, 50, 0], ['barn_quilt', 'rule', 32, 48, 1, 16, 84, 0], ['bush', 'rule', 30, 22, 3, 15, 18, 0],
+  ['tree_apple', 'rule', 92, 140, 1, 46, 134, 0]
 ].map(function (r) { return Object.freeze(r); }));
 
 const CELL = people.CELL;

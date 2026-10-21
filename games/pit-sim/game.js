@@ -7044,7 +7044,7 @@ function dogPick() {
   const cands = [];
   for (let i = 0; i < MAP.dogRoam.length; i++) {
     const t = MAP.dogRoam[i];
-    if ((t.x !== dog.x || t.y !== dog.y) && !seatTakenBelow(t.x, t.y)) cands.push(t);
+    if ((t.x !== dog.x || t.y !== dog.y) && !seatTakenBelow(t.x, t.y) && !nearStation(t.x, t.y)) cands.push(t);
   }
   const goal = cands.length ? cands[Math.min(cands.length - 1, Math.floor(crng() * cands.length))] : null;
   const path = goal ? dogPath(dog.x, dog.y, goal.x, goal.y) : null;
@@ -7354,6 +7354,40 @@ function boxRp(name, frame, X, Y) {
   return { x0: Math.round(X) - m.ax + m.x0, x1: Math.round(X) - m.ax + m.x1 + 1, y0: Math.round(Y) - m.ay + m.y0, y1: Math.round(Y) - m.ay + m.y1 + 1 };
 }
 // MAP.walk (the stone path) as tiles; v3.5 MAPs fall back on the customer route.
+// v4.4: the worn path the stage draws (dirt and stepping stones): the guests' route from the gate to
+// the nearest line spot by the sim's own customer walk rule (4 directions), plus the line spots. Only
+// the layout and owned seats change it, so the cached stage rebuilds only then.
+let wornKey = null, wornList = [];
+function wornTiles() {
+  const g0 = MAP.gate, Q = MAP.queue || [];
+  if (!g0 || !sim || typeof sim.custWalkable !== 'function') return [];
+  const W = MAP.W, H = MAP.H, open = new Uint8Array(W * H);
+  let key = '';
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const o = sim.custWalkable(x, y, -1, -1) === true ? 1 : 0; open[y * W + x] = o; key += o; }
+  key += '|' + Q.map(function (q) { return q.x + ',' + q.y; }).join(';');
+  if (key === wornKey) return wornList;
+  const isQ = function (x, y) { return Q.some(function (q) { return q.x === x && q.y === y; }); };
+  const prev = new Int16Array(W * H).fill(-1), start = g0.y * W + g0.x;
+  prev[start] = start;
+  const q = [start];
+  let goal = -1;
+  for (let i = 0; i < q.length && goal < 0; i++) {
+    const c = q[i], cx = c % W, cy = (c - cx) / W;
+    if (isQ(cx, cy)) { goal = c; break; }
+    [[0, -1], [-1, 0], [1, 0], [0, 1]].forEach(function (d) {
+      const nx = cx + d[0], ny = cy + d[1];
+      if (nx < 0 || ny < 0 || nx >= W || ny >= H) return;
+      const n = ny * W + nx;
+      if (prev[n] !== -1 || !open[n]) return;
+      prev[n] = c; q.push(n);
+    });
+  }
+  const out = [];
+  if (goal >= 0) for (let c = goal; c !== start; c = prev[c]) out.push({ x: c % W, y: (c / W) | 0 });
+  Q.forEach(function (t) { if (!out.some(function (o) { return o.x === t.x && o.y === t.y; })) out.push({ x: t.x, y: t.y }); });
+  wornKey = key; wornList = out;
+  return out;
+}
 function walkTiles() {
   if (Array.isArray(MAP.walk)) return MAP.walk.map(ptOf);
   const out = [];
@@ -7733,6 +7767,8 @@ function hitWorld(X, Y) {
     if (!hitOne(h, X, Y)) continue;
     if (h.st) return { st: h.st };
     if (standable) return { tile: { x: tx, y: ty } };
+    const dvh = deliverNear(tx, ty);
+    if (dvh) return { tile: dvh };
     return { tile: nearestWalkable(h.at[0], h.at[1]) };
   }
   const sale = saleShown() ? forSale() : [];
@@ -7744,7 +7780,28 @@ function hitWorld(X, Y) {
     }
   }
   if (standable) return { tile: { x: tx, y: ty } };
+  const dv = deliverNear(tx, ty);
+  if (dv) return { tile: dv };
   return { tile: nearestWalkable(g.x, g.y) };
+}
+// Joel 2026-10-20 ("I can't leave the pit area to deliver food"): with a plate in hand, a tap off the
+// patio (the guest's body or head, the picnic table, a bench, the lawn) meant the patio tile nearest
+// it, so the pitmaster walked to the patio edge and stopped. Only the exact ground diamond of the
+// seat, the table in front of it or the tile behind it delivered. Now any tap that is not on the
+// patio or a station carries the plate to the waiting guest of that meat whose seat is nearest the
+// tap. Returns that guest's seat tile (sim.walkTo on it delivers), or null.
+function deliverNear(tx, ty) {
+  const s = sim.state, h = s.player && s.player.carrying;
+  if (!h || h.kind !== 'plates' || !Array.isArray(s.customers)) return null;
+  let best = null, bd = Infinity, bp = Infinity;
+  for (let i = 0; i < s.customers.length; i++) {
+    const c = s.customers[i];
+    const st = waitsPlate(c) && !c.togo && c.want === h.meat ? seatOf(c) : null;
+    if (!st) continue;
+    const d = Math.pow(st.x - tx, 2) + Math.pow(st.y - ty, 2), pa = Number(c.paidAt) || 0;
+    if (d < bd || (d === bd && pa < bp)) { bd = d; bp = pa; best = { x: st.x, y: st.y }; }
+  }
+  return best;
 }
 function deliverTile(tx, ty) {
   const s = sim.state, h = s.player && s.player.carrying;
@@ -8125,7 +8182,7 @@ function drawGround(s) {
     const sign = MAP.props.find(function (p) { return p.id === 'sign'; });
     let sg = null;
     if (sign) { const ts = tilesOf(sign).concat(sign.tiles ? sign.tiles.map(ptOf) : []), b = spanOf(ts); sg = [b.x0, b.x1 > b.x0 ? b.x1 : b.x0 + 1]; }
-    B3.stage(octx, MAP, { walk: [], door: door ? ptOf(door.tile).x : null, sign: sg, name: pitName(s) });
+    B3.stage(octx, MAP, { walk: wornTiles(), door: door ? ptOf(door.tile).x : null, sign: sg, name: pitName(s) });
     if (sign && MAP.signText) { const info = signInfo(); if (info) recordGlyphs(info.font, info.text, info.x, info.font === 'font_s' ? MAP.signText.y + 1 : MAP.signText.y); }
   }
   const sale = saleShown() ? forSale() : [];
@@ -8140,6 +8197,7 @@ function drawGround(s) {
     if (B3) B3.plus(octx, c[0], c[1]);
     if (capturing) { const t = e.tiles[0]; recs.push({ name: 'plus', id: e.id, frame: 0, x: t.x * TILE, y: t.y * TILE, w: TILE, h: TILE }); }
   }
+  dressBarn();
   drawActRings(s);
 }
 
@@ -8346,6 +8404,59 @@ function stationItems(st, s, push) {
   }
 }
 
+// v4.4 (Joel 2026-10-20: "this just looks too blah. The 8 bit had all sorts of cool stuff"): set
+// dressing on the fringe tiles (the barn apron row 0, the fence aprons column 0, row 11 and column
+// 10, none of which a guest, the crew or Arrange can use) and on the street past the gate. Drawn in
+// the depth pass with no tap box and no capture record, so taps still land on stations and seats.
+// [art name, frame, tile x, tile y]. Column 0 row 7 stays clear for the light post.
+const DRESS = Object.freeze([
+  ['barrel_planter', 0, 6, 0], ['drink_tub', 0, 9, 0], ['barrel_planter', 1, 10, 0], ['barrel_planter', 2, 1, 0],
+  ['pot', 1, 0, 2], ['hay_bale', 0, 0, 3], ['pumpkins', 0, 0, 4], ['pot', 0, 0, 5], ['woodpile', 0, 0, 8], ['woodpile', 1, 0, 9], ['barrel_planter', 1, 0, 10],
+  ['hay_bale', 1, 1, 11], ['pumpkins', 0, 2, 11], ['pot', 1, 4, 11], ['barrel_planter', 0, 7, 11], ['barrel_planter', 2, 9, 11],
+  ['pot', 1, 10, 1], ['pot', 0, 10, 5], ['hay_bale', 0, 10, 8], ['pot', 0, 10, 10],
+  // art review 2026-10-20: the cornhole pair moved out to the side lawn past the front-right fence (x 11),
+  // where the low boards read whole; on column 10 the picket hid all but their top edge.
+  ['cornhole', 0, 11, 4], ['cornhole', 1, 11, 7],
+  ['aframe', 0, 7, 12], ['mailbox', 1, 5, 12], ['bush', 1, 11, 3], ['bush', 2, 11, 8], ['bush', 0, 4, 13], ['bush', 2, 1, 13]
+]);
+// Row 0 pieces stand against the barn, behind everything else, so they draw with the ground (before
+// the canopy, whose roof covers that stretch of wall); the rest go in the depth pass.
+function dressItems(push) {
+  if (!A3) return;
+  for (let i = 0; i < DRESS.length; i++) {
+    const d = DRESS[i];
+    if (d[3] === 0 || !A3.has(d[0])) continue;
+    pushArt(push, d[0], d[1], [{ x: d[2], y: d[3] }], {});
+  }
+}
+function dressBarn() {
+  if (!A3) return;
+  for (let i = 0; i < DRESS.length; i++) {
+    const d = DRESS[i];
+    if (d[3] !== 0 || !A3.has(d[0])) continue;
+    const c = tileRp(d[2], d[3]);
+    put3(d[0], d[1], c[0], c[1]);
+  }
+}
+// The dog (art3 yard 'dog', side view facing left): walk frames 0 to 3, sit 4, nap 5 and 6.
+function drawDog(dx, dy) {
+  if (!A3 || !A3.has('dog') || MAP.at(Math.round(dx / TILE), Math.round(dy / TILE)) === MAP.T.PAVER) return;
+  let f;
+  if (dog.frame === 3) f = reduced ? 5 : 5 + (Math.floor(tAnim / 1.2) % 2);
+  else if (dog.frame === 2) f = 4;
+  else f = reduced ? 0 : Math.floor(tAnim * 8) % 4;
+  put3('dog', f, isoX(dx + 8, dy + 8) * RS, isoY(dx + 8, dy + 8) * RS + 4, dog.flip === true);
+}
+// A lawn tile next to (or on) an owned station tile.
+function nearStation(x, y) {
+  for (let i = 0; i < MAP.stations.length; i++) {
+    const st = MAP.stations[i];
+    if (!owned(st)) continue;
+    for (let j = 0; j < st.tiles.length; j++) if (Math.abs(st.tiles[j].x - x) <= 1 && Math.abs(st.tiles[j].y - y) <= 1) return true;
+  }
+  return false;
+}
+
 // What each prop draws (rule art names), by its v2 sprite. Wall pieces (door, sign) are in the stage.
 const PROP_FRAME = { pot1: 0, pot2: 1, pot3: 0, pot4: 0, planter: 2, planter2: 1, woodpile: 0, woodpile2: 1, woodpile3: 1, woodpile4: 0 };
 // v3.4 playtest: no decorative props in the work area (on the pavers or next to a station tile).
@@ -8434,6 +8545,7 @@ function drawSorted(s) {
   }
 
   for (let i = 0; i < MAP.props.length; i++) propItems(MAP.props[i], push);
+  dressItems(push);
   for (let i = 0; i < MAP.stations.length; i++) if (owned(MAP.stations[i])) stationItems(MAP.stations[i], s, push);
   for (let i = 0; i < MAP.decor.length; i++) if (s.decor[MAP.decor[i].id] === true) decorItems(MAP.decor[i], s, push);
 
@@ -8473,7 +8585,9 @@ function drawSorted(s) {
   }
   const dx = Math.round(dog.px), dy = Math.round(dog.py);
   // v3.4 review: the dog no longer draws in the work area (its record stays for the harness).
-  push((dx + dy) / TILE, 2, isoX(dx + 8, dy + 8) * RS, function () { recOnly('dog', dx, dy, dog.frame); });
+  // v4.4 (Joel 2026-10-20, the 8-bit yard's dog): the dog draws again on the lawn, and only roams
+  // the lawn away from the stations (dogPick), so it never stands in front of one.
+  push((dx + dy) / TILE, 2, isoX(dx + 8, dy + 8) * RS, function () { recOnly('dog', dx, dy, dog.frame); drawDog(dx, dy); });
 
   items.sort(function (a, b) { return (a.d - b.d) || (a.l - b.l) || (a.x - b.x) || (a.o - b.o); });
   for (let i = 0; i < items.length; i++) items[i].f();
@@ -8505,13 +8619,17 @@ function drawOverhead(s) {
         for (let i = 0; i <= n; i++) {
           const u = i / n, x = Math.round(a[0] + (z[0] - a[0]) * u), y = Math.round(a[1] + (z[1] - a[1]) * u + seg[2] * 4 * u * (1 - u));
           octx.fillStyle = '#3a2a20'; octx.fillRect(x, y, 1, 1);
-          if (i % 14 === 7) { octx.fillStyle = BULBS[((i / 14 | 0) + si + fr) % 4]; octx.fillRect(x - 1, y + 1, 3, 3); }
+          if (i % 14 === 7) {
+            octx.fillStyle = 'rgba(255, 226, 140, 0.28)'; octx.fillRect(x - 3, y, 7, 5); octx.fillRect(x - 2, y - 1, 5, 7);   // v4.4: the glow
+            octx.fillStyle = BULBS[((i / 14 | 0) + si + fr) % 4]; octx.fillRect(x - 1, y + 1, 3, 3);
+          }
         }
       });
     });
     const L = MAP.overhead && MAP.overhead.lights;
     recOnly('lights_string', L && typeof L.x === 'number' ? L.x : h.post.x * TILE, L && typeof L.y === 'number' ? L.y : h.post.y * TILE, fr);
   }
+  drawBirds();
   if (A3 && A3.fx && typeof A3.fx.drawAt === 'function') {
     const fr = reduced ? 0 : Math.floor(tAnim * 3) % 3;
     for (let i = 0; i < MAP.stations.length; i++) {
@@ -8533,6 +8651,30 @@ function drawOverhead(s) {
       octx.restore();
     }
   }
+}
+// v4.4: life in the sky. Two birds sit on the barn ridge (one hops now and then) and a small flock
+// crosses the sky, high over the yard (never over a station). Reduced motion keeps the sitters only.
+const BIRD_UP = ['o...o', '.o.o.', '..o..'], BIRD_DN = ['.....', '.ooo.', 'o.o.o'];
+function birdAt(x, y, rows, col) {
+  octx.fillStyle = col;
+  for (let j = 0; j < rows.length; j++) for (let i = 0; i < rows[j].length; i++) if (rows[j][i] === 'o') octx.fillRect(Math.round(x) + i - 1, Math.round(y) + j, 1, 1);
+}
+function drawBirds() {
+  onWorld(function () {
+    // the ridge (wall_barn: P(u, -40, 120) from the back corner)
+    const r0 = vtxRp(0, 0);
+    [[64, 0], [150, 1.7]].forEach(function (b) {
+      const hop = !reduced && (Math.floor(tAnim / 0.25 + b[1] * 7) % 23) === 0 ? 1 : 0;
+      const x = r0[0] + 40 + b[0], y = r0[1] + (b[0] - 40) / 2 - 120 - 3 - hop;
+      octx.fillStyle = '#2a2a33'; octx.fillRect(x - 2, y, 4, 2); octx.fillRect(x + 1, y - 1, 2, 1); octx.fillStyle = '#f2a33a'; octx.fillRect(x + 3, y - 1, 1, 1);
+    });
+    if (reduced) return;
+    for (let k = 0; k < 3; k++) {
+      const per = 26 + k * 3, t = ((tAnim + k * 2.1) % per) / per, x = -20 + t * (WORLD.W + 40), y = 30 + k * 9 + Math.sin(t * 9 + k) * 4;
+      if (t > 0.98) continue;
+      birdAt(x, y, Math.floor(tAnim * 5 + k) % 2 ? BIRD_UP : BIRD_DN, '#3a3a44');
+    }
+  });
 }
 // The canopy over the line (fix pass: nothing tall in front of the work area): drawn right after the
 // ground, behind the depth pass, so the counter, the plates and everyone in the line draw over its

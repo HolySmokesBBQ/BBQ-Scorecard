@@ -890,6 +890,169 @@ function plusMark(r) {
   r.rect(cx - 1, cy - 6, 3, 13, AN.C); r.rect(cx - 6, cy - 1, 13, 3, AN.C);
 }
 
+/* ================================================================ v4.4 yard dressing (Joel 2026-10-20: "too blah") */
+// Set dressing for the fringe tiles (the barn apron, the fence aprons) and the street past the gate,
+// at the size rule with the person (47 rp) as the yardstick. None of it is a station or a unit.
+const HAY = { hi: '#f6e39a', base: '#e6c86a', shade: '#c9a448', dark: '#9a7a30' };
+const PUMP = { hi: '#ffb45a', base: '#f08a2c', shade: '#c8661c', dark: '#8e4612' };
+const SLATE = { hi: '#4c5a52', base: '#36423c', shade: '#2a332e', dark: '#1e2622' };
+const CHALK = ['#fbf3e2', '#ffd84f', '#ff8fb0', '#8fe0ff', '#b6f08a'];
+const GLYPH3 = { B: ['##.', '#.#', '##.', '#.#', '##.'], Q: ['.#.', '#.#', '#.#', '#.#', '.##'], M: ['#.#', '###', '###', '#.#', '#.#'],
+  E: ['###', '#..', '##.', '#..', '###'], N: ['#.#', '###', '###', '###', '#.#'], U: ['#.#', '#.#', '#.#', '#.#', '###'],
+  O: ['###', '#.#', '#.#', '#.#', '###'], P: ['###', '#.#', '###', '#..', '#..'] };
+function chalkWord(r, word, x, y, c) {
+  for (let i = 0; i < word.length; i++) {
+    const g = GLYPH3[word[i]];
+    if (!g) continue;
+    for (let j = 0; j < 5; j++) for (let k = 0; k < 3; k++) if (g[j][k] === '#') r.px(x + i * 4 + k, y + j, c);
+  }
+}
+function blooms(r, pts, f) {
+  pts.forEach(function (p, i) { r.rect(p[0] - 1, p[1] - 1, 3, 2, FLW[(i + f) % FLW.length]); r.px(p[0], p[1] - 1, RP.bloom.base); });
+}
+// A half whiskey barrel planted with flowers: staves to 11, blooms to 20. Frame = the bloom mix.
+function barrelPlanter(r, f) {
+  const cx = r.ax, g = r.ay;
+  r.obj(function () {
+    r.cyl(cx, g - 3, 9, 0, 9, WM, null);
+    for (let X = cx - 6; X <= cx + 6; X += 4) r.rect(X, g - 12, 1, 9 + Math.round(4.5 * Math.sqrt(Math.max(0, 1 - ((X - cx) / 9) * ((X - cx) / 9)))), WD.shade);
+    r.band(cx, g - 3, 9, 2, ST); r.band(cx, g - 3, 9, 7, ST);
+    r.ell(cx, g - 12, 9, 4.5, WD.base); r.ell(cx, g - 12, 7.5, 3.6, SO.base);
+    r.ell(cx, g - 14, 8, 4, LF.shade); r.ell(cx - 1, g - 15, 6.5, 3, LF.base); r.ell(cx - 3, g - 16, 2.5, 1.2, LF.hi);
+    blooms(r, [[cx - 5, g - 15], [cx - 1, g - 18], [cx + 4, g - 16], [cx + 1, g - 14], [cx - 3, g - 19], [cx + 6, g - 13]], f);
+  });
+}
+// A straw bale on its side with two strings.
+function hayBale(r, f) {
+  const P = r.F(1, 1);
+  r.obj(function () {
+    r.box(P, 3, 6, 21, 18, 0, 10, HAY, { rim: false });
+    const rnd = r.rnd;
+    for (let i = 0; i < 46; i++) {
+      const u = 4 + rnd() * 16, z = 1 + rnd() * 8, p = P(u, 18, z); r.px(p[0], p[1], i % 3 ? HAY.shade : HAY.hi);
+      const v = 7 + rnd() * 10, q = P(21, v, 1 + rnd() * 8); r.px(q[0], q[1], i % 2 ? HAY.dark : HAY.base);
+      const t = P(4 + rnd() * 16, 7 + rnd() * 10, 10); r.px(t[0], t[1], i % 2 ? HAY.base : '#fff1b8');
+    }
+    [8, 16].forEach(function (u) { r.seg(P, [u, 18, 0], [u, 18, 10], WD.base); r.seg(P, [u, 6, 10], [u, 18, 10], WD.base); });
+    if (f === 1) { const p = P(21, 12, 10); r.px(p[0], p[1], HAY.hi); }
+  });
+}
+// Two pumpkins and a gourd on the ground.
+function pumpkins(r) {
+  const cx = r.ax, g = r.ay;
+  r.obj(function () {
+    [[-4, 0, 5.5, 4], [5, 1, 4, 3]].forEach(function (p) {
+      r.ell(cx + p[0], g - p[3] + p[1], p[2], p[3], PUMP.shade); r.ell(cx + p[0] - 0.8, g - p[3] + p[1] - 0.6, p[2] - 1.4, p[3] - 1, PUMP.base);
+      r.rect(cx + p[0], g - p[3] * 2 + p[1], 1, p[3] * 2 - 1, PUMP.shade); r.px(cx + p[0] - 2, g - p[3] - 1 + p[1], PUMP.hi);
+      r.rect(cx + p[0], g - p[3] * 2 + p[1] - 2, 1, 2, STM.dark);
+    });
+    r.ell(cx + 1, g + 2, 2.5, 1.6, '#f2e38a'); r.px(cx + 1, g, STM.base);
+  });
+}
+// A galvanized tub of ice with bottles poking out (the drinks).
+function drinkTub(r) {
+  const cx = r.ax, g = r.ay;
+  r.obj(function () {
+    r.cyl(cx, g - 2, 10, 0, 8, ST, null);
+    r.band(cx, g - 2, 10, 4, ST);
+    r.ell(cx, g - 10, 10, 5, ST.hi); r.ell(cx, g - 10, 8.6, 4.2, '#dff4ff');
+    [[-5, -1, CR], [-1, 1, GL], [3, -1, OR], [6, 1, LF], [-3, 2, BD], [1, -2, CR]].forEach(function (b) {
+      const x = cx + b[0], y = g - 10 + b[1];
+      r.rect(x, y - 5, 2, 5, b[2].base); r.px(x, y - 5, b[2].hi); r.rect(x, y - 7, 1, 2, b[2].shade);
+    });
+    for (let i = 0; i < 9; i++) r.px(cx - 7 + i * 1.7, g - 10 + ((i * 5) % 3) - 1, '#ffffff');
+    r.rect(cx - 12, g - 7, 2, 2, ST.shade); r.rect(cx + 10, g - 7, 2, 2, ST.dark);
+  });
+}
+// A cornhole board on its legs, the hole near its raised end, two bags. Frame 0 red (raised at the
+// back), frame 1 blue turned to face it (raised at the front), so the pair reads as one game.
+function cornhole(r, f) {
+  const P0 = r.F(1, 1), deck = f === 0 ? CR : CL;
+  const P = f === 0 ? P0 : function (u, v, z) { return P0(u, 24 - v, z); };
+  r.obj(function () {
+    r.seg(P, [7, 5, 0], [7, 5, 7], WD.base); r.seg(P, [17, 5, 0], [17, 5, 7], WD.dark);
+    if (f === 1) r.q(P, [[6, 3, 0], [18, 3, 0], [18, 3, 8], [6, 3, 8]], WD.base);
+    r.q(P, [[6, 3, 8], [18, 3, 8], [18, 21, 2], [6, 21, 2]], WL.shade);
+    r.q(P, [[7, 4, 8], [17, 4, 8], [17, 20, 2.5], [7, 20, 2.5]], deck.base);
+    r.q(P, [[11, 4, 8], [13, 4, 8], [13, 20, 2.5], [11, 20, 2.5]], CW.base);
+    const h = P(12, 8, 6.6); r.ell(h[0], h[1], 2.6, 1.6, OL);
+    if (f === 0) r.q(P, [[6, 21, 0], [18, 21, 0], [18, 21, 2], [6, 21, 2]], WD.base);
+  });
+  r.obj(function () {
+    const a = P(9, 14, 4.5); r.rect(a[0] - 1, a[1] - 1, 3, 2, f === 0 ? CL.base : CR.base);
+    const b = P(19, f === 0 ? 22 : 1, 0); r.rect(b[0] - 1, b[1] - 1, 3, 2, f === 0 ? CL.base : CR.base);
+  });
+}
+// The sidewalk A-frame chalkboard by the gate: BBQ and three chalk lines.
+function aframe(r) {
+  const cx = r.ax, g = r.ay, x0 = cx - 9, top = g - 27;
+  r.obj(function () {
+    r.line(x0, g - 1, x0 + 3, top, WM.base); r.line(cx + 9, g - 1, cx + 6, top, WM.shade);
+    r.rect(x0 + 1, top, 17, 22, WM.base); r.rect(x0 + 1, top, 17, 1, WM.hi);
+    r.rect(x0 + 2, top + 2, 15, 18, SLATE.base); r.rect(x0 + 2, top + 2, 15, 1, SLATE.hi);
+    chalkWord(r, 'BBQ', x0 + 4, top + 4, CHALK[1]);
+    r.rect(x0 + 4, top + 11, 9, 1, CHALK[0]); r.rect(x0 + 4, top + 14, 7, 1, CHALK[2]); r.rect(x0 + 4, top + 17, 10, 1, CHALK[3]);
+    r.px(x0 + 15, top + 11, CHALK[1]); r.px(x0 + 15, top + 14, CHALK[1]);
+  });
+}
+// The menu chalkboard hung on the barn wall (anchor: the wall foot under its centre). Faces the camera
+// like the pit sign; bottom at 20, top at 46.
+function menuWall(r) {
+  const x0 = r.ax - 18, yb = r.ay - 20, yt = yb - 26;
+  r.obj(function () {
+    r.rect(x0, yt, 36, 26, WM.base); r.rect(x0, yt, 36, 1, WM.hi); r.rect(x0 + 35, yt, 1, 26, WM.shade); r.rect(x0, yb - 1, 36, 1, WM.dark);
+    r.rect(x0 + 2, yt + 2, 32, 22, SLATE.base); r.rect(x0 + 2, yt + 2, 32, 1, SLATE.hi);
+    chalkWord(r, 'MENU', x0 + 10, yt + 4, CHALK[0]);
+    [[CHALK[1], 18], [CHALK[2], 15], [CHALK[3], 20], [CHALK[4], 14]].forEach(function (l, i) {
+      const y = yt + 11 + i * 3;
+      r.rect(x0 + 5, y, l[1], 1, l[0]);
+      r.rect(x0 + 28, y, 3, 1, CHALK[0]);
+    });
+  });
+}
+// A barn quilt painted on the wall (Wisconsin barns): an eight point star block, 24 by 24 along the
+// wall, z 48 to 72.
+function barnQuilt(r) {
+  const P = r.W(), S0 = -12, Z0 = 48, n = 6, c = 4;
+  const RED = '#c63d2c', NAVY = '#2c4a7a', GOLD = '#f3cf6d', CREAM = '#fbf3e2';
+  const PAT = ['CGGGGC', 'GRNNRG', 'GNRRNG', 'GNRRNG', 'GRNNRG', 'CGGGGC'];
+  const COL = { C: CREAM, G: GOLD, R: RED, N: NAVY };
+  r.obj(function () {
+    r.q(P, [[S0 - 1, 0, Z0 - 1], [S0 + n * c + 1, 0, Z0 - 1], [S0 + n * c + 1, 0, Z0 + n * c + 1], [S0 - 1, 0, Z0 + n * c + 1]], CREAM);
+    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+      const z = Z0 + (n - 1 - j) * c, u = S0 + i * c;
+      r.q(P, [[u, 0, z], [u + c, 0, z], [u + c, 0, z + c], [u, 0, z + c]], COL[PAT[j][i]]);
+    }
+  });
+}
+// A low leafy bush, frame 1 with berries, frame 2 with white blossoms.
+function bush(r, f) {
+  const cx = r.ax, g = r.ay, rnd = r.rnd;
+  r.obj(function () {
+    [[-6, -5, 7, 5], [5, -5, 7, 5], [0, -9, 8, 6]].forEach(function (b) { r.ell(cx + b[0], g + b[1], b[2], b[3], LF.dark); });
+    [[-6, -5, 7, 5], [5, -5, 7, 5], [0, -9, 8, 6]].forEach(function (b) { r.ell(cx + b[0] - 1, g + b[1] - 1, b[2] - 1.5, b[3] - 1.5, LF.shade); });
+    [[-6, -5, 7, 5], [5, -5, 7, 5], [0, -9, 8, 6]].forEach(function (b) { r.ell(cx + b[0] - 2.5, g + b[1] - 2.5, b[2] * 0.55, b[3] * 0.5, LF.base); });
+    for (let i = 0; i < 9; i++) {
+      const x = cx - 9 + rnd() * 18, y = g - 12 + rnd() * 9;
+      if (f === 1) r.px(x, y, i % 2 ? '#e8364a' : '#ff6b7c');
+      else if (f === 2) { r.px(x, y, '#ffffff'); r.px(x + 1, y, RP.bloom.base); }
+      else r.px(x, y, LF.hi);
+    }
+  });
+}
+// The tree with ripe apples (the 8-bit yard's apple tree).
+function appleTree(r) {
+  tree(r, 'all');
+  const cx = r.ax, g = r.ay, rnd = mulberry(seedOf('rule:apples'));
+  r.obj(function () {
+    for (let i = 0; i < 16; i++) {
+      const a = rnd() * Math.PI * 2, d = 0.25 + rnd() * 0.65;
+      const x = Math.round(cx + Math.cos(a) * 34 * d), y = Math.round(g - 80 + Math.sin(a) * 26 * d);
+      r.rect(x, y, 2, 2, '#e8364a'); r.px(x, y, '#ff8a8a');
+    }
+  }, null);
+}
+
 /* ================================================================ the set */
 const DEFS = Object.create(null), ORDER = [];
 function def(name, w, h, ax, ay, n, paint, meta) {
@@ -966,6 +1129,17 @@ def('shelf', 32, 54, 16, 40, 1, shelf, { footprint: [1, 1], shadow: [12, 5] });
 def('hose', 36, 30, 16, 22, 1, hose, { footprint: [1, 1] });
 // new
 def('plus', 32, 18, 16, 9, 1, plusMark, { ground: true, tap: 'tiles' });
+// v4.4 yard dressing (fringe tiles and the street only; never a station or a unit)
+def('barrel_planter', 24, 30, 12, 24, 3, barrelPlanter, { footprint: [1, 1], shadow: [10, 4] });
+def('hay_bale', 32, 30, 16, 24, 2, hayBale, { footprint: [1, 1], shadow: [13, 6] });
+def('pumpkins', 24, 18, 12, 14, 1, pumpkins, { footprint: [1, 1] });
+def('drink_tub', 28, 26, 14, 20, 1, drinkTub, { footprint: [1, 1], shadow: [11, 5] });
+def('cornhole', 32, 26, 16, 20, 2, cornhole, { footprint: [1, 1] });
+def('aframe', 24, 32, 12, 30, 1, aframe, { footprint: [1, 1], shadow: [8, 3] });
+def('menu_wall', 40, 52, 20, 50, 1, menuWall, { wall: true });
+def('barn_quilt', 32, 48, 16, 84, 1, barnQuilt, { wall: true });
+def('bush', 30, 22, 15, 18, 3, bush, { footprint: [1, 1] });
+def('tree_apple', 92, 140, 46, 134, 1, appleTree, { footprint: [1, 1], shadow: [26, 9] });
 
 /* ================================================================ the size rule (spec B) */
 // h: the rule height (rp above the ground at the sprite's foot); extra: what the 2:1 view adds on
@@ -1020,6 +1194,16 @@ const SIZE = Object.freeze({
   shelf: { h: 30, extra: 6, w: 26, rule: 'shelf 30 by 26' },
   hose: { h: 14, extra: 3, w: null, rule: 'hose reel 14 (added to B)' },
   plus: { h: 15, total: true, w: 15, rule: '15 by 15 cream plus on a 28 by 14 diamond' },
+  barrel_planter: { h: 20, extra: 0, w: null, rule: 'v4.4: half barrel 12, blooms to 20 (the hip)' },
+  hay_bale: { h: 10, extra: 8, w: null, rule: 'v4.4: straw bale 10, to the knee' },
+  pumpkins: { h: 11, extra: 0, w: null, rule: 'v4.4: pumpkins 8, stems to 11' },
+  drink_tub: { h: 20, extra: 0, w: null, rule: 'v4.4: tub 8, its rim, bottle necks to 20' },
+  cornhole: { h: 8, extra: 6, w: null, rule: 'v4.4: cornhole board, back edge 8' },
+  aframe: { h: 27, extra: 0, w: 21, rule: 'v4.4: sidewalk chalkboard 27, to the chest' },
+  menu_wall: { h: 46, extra: 0, w: 36, rule: 'v4.4: wall chalkboard, bottom 20, top 46' },
+  barn_quilt: { h: 80, extra: 0, w: null, rule: 'v4.4: barn quilt z 47 to 73 on the wall (its far corner rises 80 on screen), under the eave' },
+  bush: { h: 15, extra: 0, w: null, rule: 'v4.4: low bush 15' },
+  tree_apple: { h: 128, extra: 0, w: 84, rule: 'trunk 36, canopy top 128, canopy 84 wide' },
   smoke_column: { h: 98, extra: 0, w: null, fx: true, max: true, rule: 'drum smoke 98 above the vent' },
   smoke_column_short: { h: 82, extra: 0, w: null, fx: true, max: true, rule: 'kettle smoke 82 above the vent' }
 });

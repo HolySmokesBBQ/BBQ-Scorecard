@@ -306,16 +306,16 @@ const TUTORIAL_ORDER = ['open', 'charcoal', 'light', 'meat', 'puton', 'cook', 's
 const TUTORIAL_WALK = TUTORIAL_ORDER.filter((id) => id !== 'plate');
 const TUTORIAL_TEXT = {
   open: 'This is your morning. The cart is already filled. Tap Open the yard.',
-  charcoal: 'Grab charcoal from the pile.',
+  charcoal: 'Tap the pile to grab charcoal.',
   light: 'Tap the kettle to light it.',
-  meat: 'Grab meat from the cooler.',
-  puton: 'Put it on the kettle.',
+  meat: 'Tap the cooler to grab meat.',
+  puton: 'Tap the kettle to put it on.',
   cook: 'Watch the box fill. Pull it when it turns green.',
-  slice: 'Slice it at the board.',
-  plate: 'Take the plate from the board.',   // v4.2: only when the plate is not already in hand
+  slice: 'Tap the board to slice it.',
+  plate: 'Tap the board to take the plate.',   // v4.2: only when the plate is not already in hand
   customer: 'Here comes your first customer.',
   register: 'Ring up the guest at the register.',   // v3.7
-  deliver: 'Carry the plate to their table.',
+  deliver: 'Tap the guest to carry the plate over.',
   runner: 'Your runner carries it to their table.',
   seated: 'Served. They eat, then tip a little more.',
   end: 'You have the hang of it. Keep the fire fed and keep them happy.'
@@ -329,7 +329,7 @@ const BURN_WARN = {
   brisket: 'The brisket is about to burn.'
 };
 // [T 2.6] and K10: banner lines, arrow and bubble positions on this map.
-const BANNER_CHARCOAL = ['GRAB CHARCOAL FROM THE PILE.'];
+const BANNER_CHARCOAL = ['TAP THE PILE TO GRAB CHARCOAL.'];
 const ARROW_AT = {
   // The angle redo: the arrow always points down from above its station: draw.x + w / 2 - 4, draw.y - 12, frames 0 and 1.
   pile: { x: 68, y: 116, frames: [0, 1] }, kettle1: { x: 68, y: 68, frames: [0, 1] }, cooler: { x: 68, y: 84, frames: [0, 1] },
@@ -1595,6 +1595,7 @@ async function nodeChecks() {
   await step('v4.3 the PIT card: locked on the kettle, open with the cabinet, hired, a cook it runs alone, Timing and Care by stars, never on its cooker with you, save v14, headless', () => pitHeadless(globalThis[GLOBAL_NAME]));
   await step('v3.7 pay then sit: the RUN card and the pitmaster deliver to the table, eating starts on delivery, refunds, headless', () => deliveryHeadless(globalThis[GLOBAL_NAME]));
   await step('v3.8 overtime: paid guests hold the day past the hard end, boxed to go at the cap, the unpaid line leaves uncharged, headless', () => overtimeHeadless(globalThis[GLOBAL_NAME]));
+  await step('overtime delivery (Joel 2026-10-20): past the hard end the RUN card still carries a counter plate to the seated guest, headless', () => overtimeRunHeadless(globalThis[GLOBAL_NAME]));
   // v3.2 (D10.1): the Node legs of steps 73 to 75, the day loop and save v6.
   await step('v3.2 days: the day loop, prices and save v6, headless', () => daysLoopHeadless(globalThis[GLOBAL_NAME]));
   await step('v3.4 days: the morning shop (Confirm, Back, the reserve warning), the start pick, automatic prep and training, the broke rescue, headless', () => daysStockHeadless(globalThis[GLOBAL_NAME]));
@@ -2080,6 +2081,33 @@ function overtimeHeadless(P) {
   assert(!h.log.some((e) => (e.type === 'left_at_close' || e.type === 'walk_out') && e.id === 9201 && e.refund > 0) && t.refunds === refunds0 && t.revenue === rev0, 'the boxed sale was refunded: ' + describe({ refunds: t.refunds - refunds0, revenue: t.revenue - rev0 }));
   notes.push('ended at ' + st.clock.toFixed(1) + ' s, boxed 1, served counts it, no refund');
   return notes.join('; ');
+}
+// Joel 2026-10-20 ("in overtime I can't leave the pit area to deliver food"): delivery in overtime
+// works as in normal service. Headless, the RUN card's leg: a plate on the counter for a seated paid
+// guest after the hard end goes to their table by the card, not boxed at the cap.
+function overtimeRunHeadless(P) {
+  const h = feltRun(P, 'run', 3, 62);
+  const st = h.st(), t = st.today;
+  h.fixture = (s) => { s.today.pending = 1; s.spawnAt = Infinity; };
+  h.until(() => st.clock + 1e-9 >= t.endAt - 1, 600);
+  h.fixture = null;
+  assert(st.phase === 'service' && st.clock < t.endAt, 'not just before the hard end: ' + st.phase + ' ' + st.clock + ' / ' + t.endAt);
+  clearYardFixture(h);
+  t.pending = 0;
+  const b = st.buddy;
+  b.task = 'idle'; b.path = []; b.next = null; b.carrying = null;
+  const seat = P.MAP.seats.find((x) => P.tileOwned(x, st.gear, st.decor)) || P.MAP.seats[0];
+  const g = seatedGuest(h, 9211, 'sausage', seat.id, { patience: 9999, patienceMax: 9999 });
+  st.player.carrying = { kind: 'plates', meat: 'sausage', times: [st.clock] };   // food in play past the end
+  h.until(() => st.clock + 1e-9 >= t.endAt + 0.5, 3);
+  assert(st.phase === 'service' && t.overtime && g.fed !== true, 'no overtime with the guest waiting: ' + describe({ phase: st.phase, ot: t.overtime, fed: g.fed }));
+  const served0 = t.served;
+  st.stations.table.spots[0] = { meat: 'sausage', times: [st.clock], run: [] };
+  st.player.carrying = null;
+  h.until(() => g.fed === true || st.phase !== 'service', 30);
+  const del = h.log.filter((e) => e.type === 'delivered' && e.id === 9211);
+  assert(g.fed === true && del.length === 1 && del[0].by === 'run' && t.boxed === 0 && t.served === served0 + 1, 'the RUN card did not carry the plate in overtime: ' + describe({ fed: g.fed, del: del.map(strip), boxed: t.boxed, phase: st.phase, task: b.task }));
+  return 'the RUN card carried it ' + (st.clock - t.overtime.at).toFixed(1) + ' s into overtime, boxed 0';
 }
 // v4.3 the PIT card (Joel: "Or even another pitmaster."): a second pitmaster who runs one cooker end
 // to end. Headless: locked on the kettle, open from the cabinet smoker, hired from the pool and as a
@@ -2597,13 +2625,17 @@ function tutorialHeadless(P) {
   for (const t of [EVENT.gateSoon, EVENT.gateOpen, EVENT.customerArrived]) assert(!h.has(t), t + ' fired with the clock held');
   assert(k1().fire === 0, 'kettle1.fire ' + k1().fire + ' with no input');
 
-  // v4.2 taps: with one cold cooker the bag walks on and lights it, so the pile tap gives step meat.
+  // Joel 2026-10-20: no walk ons. The bag stays in hand at the pile until the kettle is tapped.
   assert(h.goSettled('pile', () => h.stepIs('light')), 'pile did not give step light: ' + describe(h.step()) + ', carrying ' + describe(st().player.carrying));
-  assert(h.until(() => h.stepIs('meat'), WAIT_S.headlessStep), 'the bag did not walk on and light kettle 1 (step meat): ' + describe(h.step()) + ', fire ' + k1().fire);
+  for (let i = 0; i < 60; i++) h.tick();
+  assert(h.stepIs('light') && carryIs(h, CARRY_KIND.charcoal) && k1().fire === 0 && st().player.target === null, 'the bag walked on by itself: ' + describe(h.step()) + ', carrying ' + describe(st().player.carrying) + ', fire ' + k1().fire);
+  assert(h.goSettled('kettle1', () => h.stepIs('meat')), 'kettle 1 did not give step meat: ' + describe(h.step()) + ', fire ' + k1().fire);
   assert(nearly(k1().fire, C.FIRE_LIGHT, 1), 'fire after the light ' + k1().fire + ', wanted ' + C.FIRE_LIGHT + ' (deviation 6)');
-  // v4.2 taps: and the piece from the cooler walks on to the lit kettle with room.
+  // And the raw piece stays in hand at the cooler until the kettle is tapped.
   assert(h.goSettled('cooler', () => h.stepIs('puton')), 'cooler did not give step puton: ' + describe(h.step()));
-  assert(h.until(() => h.stepIs('cook', null), WAIT_S.headlessStep), 'the piece did not walk on to kettle 1 (step cook, target null): ' + describe(h.step()));
+  for (let i = 0; i < 60; i++) h.tick();
+  assert(h.stepIs('puton') && carryIs(h, CARRY_KIND.raw, MEAT) && k1().pieces.length === 0 && st().player.target === null, 'the piece walked on by itself: ' + describe(h.step()) + ', pieces ' + k1().pieces.length);
+  assert(h.goSettled('kettle1', () => h.stepIs('cook', null)), 'kettle 1 did not give step cook with target null: ' + describe(h.step()));
   const putIdx = h.log.length;
   assert(h.until(() => h.has(EVENT.pieceDone, putIdx), WAIT_S.headlessDone), 'no piece_done within ' + WAIT_S.headlessDone + ' s; pieces ' + describe(k1().pieces));
   const doneIdx = h.idx(EVENT.pieceDone, putIdx);
@@ -2622,11 +2654,13 @@ function tutorialHeadless(P) {
   assert(k1().fire === C.TUTORIAL_FIRE_FLOOR, 'kettle1.fire ' + k1().fire + ' after the hold, wanted the floor ' + C.TUTORIAL_FIRE_FLOOR);
 
   assert(h.goSettled('kettle1', () => h.stepIs('slice') && carryIs(h, CARRY_KIND.cooked, MEAT)), 'the pull did not give step slice with cooked sausage: ' + describe(h.step()) + ', carrying ' + describe(st().player.carrying));
-  // v4.2 taps: the pulled piece walks on to the board and the slice starts with no board tap.
+  // The pulled piece stays in hand until the board is tapped; the slice starts there.
+  for (let i = 0; i < 60; i++) h.tick();
+  assert(h.stepIs('slice') && carryIs(h, CARRY_KIND.cooked, MEAT) && st().player.busy === null && st().player.target === null, 'the pulled piece walked on by itself: ' + describe(h.step()) + ', busy ' + describe(st().player.busy));
   // v3.7: the first plate off the board brings the guest; they pay at the register, the plate goes
   // on the counter, then the pitmaster carries it to their table (no RUN card on the tutorial day).
   const sliceIdx = h.log.length;
-  assert(h.until(() => h.has(EVENT.sliceDone, sliceIdx) && h.stepIs('customer'), 10), 'board: no slice_done and step customer; step ' + describe(h.step()));
+  assert(h.go('board', () => h.has(EVENT.sliceDone, sliceIdx) && h.stepIs('customer'), 10), 'board: no slice_done and step customer; step ' + describe(h.step()));
   const sliceEv = h.log[h.idx(EVENT.sliceDone, sliceIdx)];
   const batch = h.log.filter((e) => e._b === sliceEv._b);
   const order = [EVENT.sliceDone, EVENT.tutorialStep, EVENT.gateOpen, EVENT.customerArrived];
@@ -6245,9 +6279,8 @@ async function goto(name, expectExpr) {
   return { ok, how };
 }
 const hasKind = (kind) => F.carrying + ' !== null && ' + F.carrying + '.kind === ' + JSON.stringify(kind);
-// v4.2 taps: what a tap picks up can walk on by itself (a pulled piece to the board, with one cooker a
-// piece onto it or a bag into it when cold), so the follow up tap is only made when it is still needed.
-// A real player does not tap a station whose job is already done.
+// v4.2 taps: the follow up tap is only made when it is still needed (a real player does not tap a
+// station whose job is already done). Joel 2026-10-20 removed the walk ons, so today it always taps.
 async function tapUnless(name, doneExpr) {
   // A walk on still under way (a target set, even with no tiles left to walk) finishes first.
   await until('(' + doneExpr + ') || (' + F.target + ' === null && ' + F.pathLen + ' === 0 && ' + F.nextTile + ' === null)', WAIT_S.walk);
@@ -10240,6 +10273,57 @@ async function browserChecks() {
     assert(pitDraw.length >= 1, 'no pit_ record in the frame: ' + describe([...new Set(frame.map((d) => d.name))].filter((n) => /^(buddy|tender|prep|till|pit|player)_/.test(n))));
     await ladShot('pit-cook');
     return 'Runs Kettle 2, Cabinet smoker, Kettle 2 by taps; with no tap the PIT card lit kettle 2, put ' + on + ' pieces on, pulled ' + pulls.map((e) => e.over).join('/') + ' s past done by ' + r.clock.toFixed(0) + ' s, holding ' + (r.hold ? r.hold.kind + ' ' + r.hold.meat : 'nothing') + ' (' + pitDraw[0] + ')';
+  });
+
+  // Joel 2026-10-20 ("in overtime I can't leave the pit area to deliver food", phone screenshot:
+  // OVERTIME, GATE CLOSED, a plate of chicken in hand, the guest at the picnic table). A tap on the
+  // guest, the bench in front, or the lawn hit no seat tile, so it meant the patio tile nearest it and
+  // the pitmaster stopped at the patio edge. Real taps (touch on the phone run, mouse on desktop), each
+  // in overtime with a paid guest seated and the plate in hand: the guest's body, the table, the seat,
+  // and an open lawn tile. A second guest (another meat) keeps overtime open between rounds.
+  await step('overtime delivery by real taps: the guest, the table, the seat and the lawn each carry the plate off the patio to the seated guest', async () => {
+    await reload(ladFixture({}, { crew: [] }));
+    assert(await toService(), 'no service day');
+    await advance(5);
+    const seats = await ev('MAP.seats.filter((x) => ' + GLOBAL_NAME + '.tileOwned(x, S().gear, S().decor)).map((x) => ({ id: x.id, x: x.x, y: x.y, face: x.face }))');
+    assert(seats.length >= 2, 'fewer than two owned seats: ' + describe(seats));
+    const [hold, seat] = seats;
+    const guest = (id, sx, meat) => '{ x: ' + sx.x + ', y: ' + sx.y + ', px: ' + sx.x * 16 + ', py: ' + sx.y * 16 + ', face: "' + sx.face + '", next: null, path: [], walking: false, anim: 0, id: ' + id + ', body: 1, want: "' + meat + '", patienceMax: 999, patience: 999, wait: 0, queueIndex: -1, mode: "seated", mood: "neutral", reason: null, pause: 0, hop: 0, seat: "' + sx.id + '", eat: 0, eatMax: 9, bonusPaid: false, booked: false, runPlate: false, paid: true, fed: false, togo: false, spot: -1, price: 6, paidAt: S().clock, rungBy: "you", incoming: null }';
+    // The yard cleared, the holder seated (brisket, never served) with brisket on the board, the
+    // pitmaster on the patio, then the clock to the hard end with food in play.
+    await run('const st = S(); st.customers = []; for (const k of Object.keys(st.seats)) st.seats[k] = null; st.spawnAt = Infinity; if (st.today.pending !== undefined) st.today.pending = 0; st.stations.table.spots = st.stations.table.spots.map(() => null); st.stations.board.stacks = [{ meat: "brisket", times: [st.clock] }]; st.seats["' + hold.id + '"] = 9400; st.customers.push(' + guest(9400, hold, 'brisket') + '); const p = st.player; p.x = 1; p.y = 4; p.px = 16; p.py = 64; p.path = []; p.next = null; p.target = null; p.carrying = null; g.advance(Math.max(0, st.today.endAt - st.clock + 0.5)); return true;');
+    const ot = await ev('({ phase: S().phase, clock: g.clockText, ot: S().today.overtime })');
+    assert(ot.phase === 'service' && ot.clock === 'OVERTIME' && ot.ot, 'no overtime: ' + describe(ot));
+    const lawn = await ev('(() => { const st = S(); let best = null; for (let y = 0; y < MAP.H; y++) for (let x = 0; x < MAP.W; x++) { if (MAP.tiles[y * MAP.W + x] !== MAP.T.LAWN || sim.walkable(x, y)) continue; if (MAP.seats.some((q) => q.x === x && q.y === y) || MAP.props.some((p) => (p.blocks || []).some((b) => b.x === x && b.y === y))) continue; const d = Math.abs(x - ' + seat.x + ') + Math.abs(y - ' + seat.y + '); if (d >= 3 && (!best || d < best.d)) best = { x, y, d }; } return best; })()');
+    assert(lawn, 'no open lawn tile');
+    const out = [];
+    let id = 9401;
+    for (const how of ['guest', 'table', 'seat', 'lawn']) {
+      // A fresh paid guest in the seat and a plate of their meat in hand, the pitmaster back on the patio.
+      await run('const st = S(); st.seats["' + seat.id + '"] = ' + id + '; st.customers = st.customers.filter((c) => c.id === 9400); st.customers.push(' + guest(id, seat, 'sausage') + '); const p = st.player; p.x = 1; p.y = 4; p.px = 16; p.py = 64; p.path = []; p.next = null; p.target = null; p.walking = false; p.carrying = { kind: "plates", meat: "sausage", times: [st.clock] }; g.advance(0); return true;');
+      assert(await ev('S().phase === "service" && !!S().today.overtime'), how + ': overtime closed before the tap: ' + describe(await ev('({ phase: S().phase, clock: S().clock })')));
+      const t0 = taps;
+      if (how === 'guest') {
+        // The seated guest's body: 0.6 of the way from the seat diamond to the tile behind it on screen.
+        const a = await canvasPoint(seat.x, seat.y), b = await canvasPoint(seat.x - 1, seat.y - 1);
+        const x = a.x + (b.x - a.x) * 0.6, y = a.y + (b.y - a.y) * 0.6;
+        if (DESKTOP_MODE) await mouseTap(x, y);
+        else { await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y, radiusX: 4, radiusY: 4, force: 1 }] }); await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }); }
+        taps += 1;
+      } else if (how === 'table') await canvasTap(seat.x, seat.y + 1);
+      else if (how === 'seat') await canvasTap(seat.x, seat.y);
+      else await canvasTap(lawn.x, lawn.y);
+      await advance(0);
+      const aim = await ev('S().player.target');
+      assert(aim && aim.deliver === id, how + ': the tap did not head for the guest (target ' + describe(aim) + ', player at ' + describe(await ev('[S().player.x, S().player.y, S().player.path.length]')) + ')');
+      const done = await until('S().customers.some((c) => c.id === ' + id + ' && c.fed === true)', WAIT_S.walk);
+      const far = await ev('[S().player.x, S().player.y]');
+      const del = await ev('globalThis.__smoke.events.filter((e) => e.type === "delivered" && e.id === ' + id + ').map((e) => e.by)');
+      assert(done.ok && sameJSON(del, ['you']) && !(await ev('sim.walkable(' + far[0] + ', ' + far[1] + ')')), how + ': not delivered off the patio: ' + describe({ fed: done.ok, del, at: far }));
+      out.push(how + ' ' + (taps - t0) + ' tap to ' + far.join(','));
+      id += 1;
+    }
+    return 'overtime, ' + out.join('; ') + '; lawn tap at ' + lawn.x + ',' + lawn.y;
   });
 
   await step('v4.2 pit sounds: muted plays nothing, one speaker click turns sound on, a sizzle on the grate, the ding at the register, the fire loop follows the fire', async () => {

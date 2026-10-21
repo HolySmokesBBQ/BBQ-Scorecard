@@ -318,6 +318,130 @@ function signText(g, x, y, name) {
   return L;
 }
 
+/* ---------------------------------------------------------------- v4.4 yard dressing (baked) */
+// Joel 2026-10-20: "this just looks too blah. The 8 bit had all sorts of cool stuff." Flat ground
+// detail baked into the cached stage: lawn tufts, dandelions, daisies and clover, a worn dirt path
+// with stepping stones where guests walk (opts.walk), pebbles along the patio edge, flower beds at
+// the fence feet and the barn foundation, wildflowers on the verge, and a farm on the far hills.
+// Nothing here stands up, so nothing hides a station, a guest or a tap.
+function hsh(a, b, k) { let h = (a * 374761393 + b * 668265263 + k * 2246822519) >>> 0; h = Math.imul(h ^ (h >>> 13), 1274126177) >>> 0; return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
+function dot(g, x, y, w, h, c) { g.fillStyle = c; g.fillRect(Math.round(x), Math.round(y), w, h); }
+// A point inside tile (tx, ty)'s diamond, from two unit randoms (kept off the edges).
+function inTile(tx, ty, a, b) {
+  const c = ctr(tx, ty), u = (a - 0.5) * 0.7, v = (b - 0.5) * 0.7;
+  return [c[0] + (u - v) * 24, c[1] + (u + v) * 12];
+}
+const LAWN_DOT = { tuftD: '#3f7f2a', tuftL: '#9bd468', dand: '#ffd84f', dandL: '#fff3a0', daisy: '#ffffff', clover: '#86cc5c', cloverL: '#a6e07a' };
+function tuft(g, x, y) { dot(g, x, y - 2, 1, 2, LAWN_DOT.tuftD); dot(g, x - 1, y - 1, 1, 1, LAWN_DOT.tuftD); dot(g, x + 1, y - 1, 1, 1, LAWN_DOT.tuftD); dot(g, x, y - 3, 1, 1, LAWN_DOT.tuftL); }
+function dandelion(g, x, y) { dot(g, x, y - 1, 1, 2, LAWN_DOT.tuftD); dot(g, x - 1, y - 3, 2, 2, LAWN_DOT.dand); dot(g, x - 1, y - 3, 1, 1, LAWN_DOT.dandL); }
+function daisy(g, x, y) { dot(g, x - 1, y - 2, 3, 1, LAWN_DOT.daisy); dot(g, x, y - 3, 1, 3, LAWN_DOT.daisy); dot(g, x, y - 2, 1, 1, '#f2c84a'); }
+function clover(g, x, y) { dot(g, x - 2, y - 1, 3, 2, LAWN_DOT.clover); dot(g, x + 1, y - 2, 3, 2, LAWN_DOT.clover); dot(g, x, y - 3, 2, 1, LAWN_DOT.cloverL); }
+const DIRT = { base: '#b88c56', hi: '#d4ae74', dark: '#946a3c' };
+// One stretch of the worn trail, centre to centre of two neighbouring tiles: a run of soft dirt
+// diamonds with a little wobble, then speckles.
+function wornEdge(g, a, b, seed) {
+  const pa = ctr(a.x, a.y), pb = ctr(b.x, b.y), n = 14;
+  for (let i = 0; i <= n; i++) {
+    const t = i / n, wob = (hsh(seed, i, 41) - 0.5) * 4;
+    const x = pa[0] + (pb[0] - pa[0]) * t + wob, y = pa[1] + (pb[1] - pa[1]) * t + wob / 3;
+    fillDiamond(g, Math.round(x), Math.round(y - 3), 9 + Math.round(hsh(seed, i, 43) * 3), 6, DIRT.base);
+  }
+  for (let i = 0; i < 8; i++) {
+    const t = hsh(seed, i, 47), x = pa[0] + (pb[0] - pa[0]) * t + (hsh(seed, i, 49) - 0.5) * 14, y = pa[1] + (pb[1] - pa[1]) * t + (hsh(seed, i, 51) - 0.5) * 4;
+    dot(g, x, y, 1, 1, i % 3 ? DIRT.dark : DIRT.hi);
+  }
+}
+const PEB = ['#d8d0bc', '#a89e88', '#8e8572'];
+// Pebbles just inside the edge from a to b of the tile centred at c.
+function edgePebbles(g, a, b, c, seed) {
+  for (let i = 0; i < 6; i++) {
+    const t = 0.1 + 0.8 * hsh(seed, i, 7);
+    const x = a[0] + (b[0] - a[0]) * t, y = a[1] + (b[1] - a[1]) * t;
+    const k = 0.1 + hsh(seed, i, 9) * 0.25, px = x + (c[0] - x) * k, py = y + (c[1] - y) * k;
+    dot(g, px, py, 2, 1, PEB[1 + (i % 2)]); dot(g, px, py - 1, 1, 1, PEB[0]);
+  }
+}
+function groundDressing(g, map, walk) {
+  const T_ = map.T, MW = map.W, MH = map.H;
+  const isLawn = function (x, y) { return x >= 0 && y >= 0 && x < MW && y < MH && map.at(x, y) === T_.LAWN; };
+  const isPaver = function (x, y) { return x >= 0 && y >= 0 && x < MW && y < MH && map.at(x, y) === T_.PAVER; };
+  for (let ty = 0; ty < MH; ty++) for (let tx = 0; tx < MW; tx++) {
+    if (!isLawn(tx, ty)) continue;
+    if (walk[tx + ',' + ty]) continue;
+    const n = 3 + Math.floor(hsh(tx, ty, 1) * 4);
+    for (let i = 0; i < n; i++) {
+      const p = inTile(tx, ty, hsh(tx, ty, 10 + i), hsh(tx, ty, 20 + i)), k = hsh(tx, ty, 30 + i);
+      if (k < 0.42) tuft(g, p[0], p[1]); else if (k < 0.62) dandelion(g, p[0], p[1]); else if (k < 0.8) daisy(g, p[0], p[1]); else clover(g, p[0], p[1]);
+    }
+  }
+  // the worn path: dirt along every pair of neighbouring path tiles, then a stepping stone on every other tile
+  const keys = Object.keys(walk).map(function (k) { const q = k.split(','); return { x: +q[0], y: +q[1] }; });
+  keys.forEach(function (a) {
+    keys.forEach(function (b) {
+      if ((b.x === a.x + 1 && b.y === a.y) || (b.y === a.y + 1 && b.x === a.x)) wornEdge(g, a, b, a.x * 13 + a.y * 7 + b.x + b.y);
+    });
+  });
+  Object.keys(walk).forEach(function (k) {
+    const q = k.split(','), tx = +q[0], ty = +q[1];
+    if (isLawn(tx, ty) && ((tx + ty) & 1) === 0) { const c = ctr(tx, ty); put(g, 'stone_step', 1, c[0], c[1]); }
+  });
+  // pebbles where the lawn meets the patio
+  for (let ty = 0; ty < MH; ty++) for (let tx = 0; tx < MW; tx++) {
+    if (!isLawn(tx, ty) || walk[tx + ',' + ty]) continue;
+    const c = ctr(tx, ty);
+    if (isPaver(tx - 1, ty)) edgePebbles(g, vtx(tx, ty), vtx(tx, ty + 1), c, tx * 31 + ty);
+    if (isPaver(tx, ty - 1)) edgePebbles(g, vtx(tx, ty), vtx(tx + 1, ty), c, tx * 17 + ty * 5);
+  }
+  // the verge: wildflowers and tall tufts past the front fences
+  for (let ty = 0; ty < MH + 4; ty++) for (let tx = 0; tx < MW + 4; tx++) {
+    if (tx < MW && ty < MH) continue;
+    const c = ctr(tx, ty);
+    if (c[1] > W3.H + 4 || c[0] < -20 || c[0] > W3.W + 20) continue;
+    const n = 2 + Math.floor(hsh(tx, ty, 2) * 4);
+    for (let i = 0; i < n; i++) {
+      const p = inTile(tx, ty, hsh(tx, ty, 11 + i), hsh(tx, ty, 21 + i)), k = hsh(tx, ty, 31 + i);
+      if (k < 0.5) tuft(g, p[0], p[1]); else if (k < 0.75) daisy(g, p[0], p[1]); else dandelion(g, p[0], p[1]);
+    }
+  }
+}
+// Flower beds: a soil strip with blooms along an edge (a to b) of a fringe tile, toward its centre c.
+const BED_SOIL = ['#6e4a2e', '#56391f', '#8a6040'];
+const BED_BLOOM = ['#ff7aa8', '#ffd84f', '#ffffff', '#ff8a4f', '#c792ff', '#ff5a6a'];
+function bedEdge(g, a, b, c, seed) {
+  const n = 16;
+  for (let i = 0; i <= n; i++) {
+    const t = 0.04 + 0.92 * i / n, x = a[0] + (b[0] - a[0]) * t, y = a[1] + (b[1] - a[1]) * t;
+    for (let d = 0; d < 5; d++) { const k = 0.05 + d * 0.035; dot(g, x + (c[0] - x) * k, y + (c[1] - y) * k, 2, 1, BED_SOIL[(i + d) % 3]); }
+  }
+  for (let i = 0; i < 7; i++) {
+    const t = 0.1 + 0.8 * (i + hsh(seed, i, 3) * 0.5) / 7, x = a[0] + (b[0] - a[0]) * t, y = a[1] + (b[1] - a[1]) * t;
+    const px = x + (c[0] - x) * 0.12, py = y + (c[1] - y) * 0.12;
+    dot(g, px - 1, py - 3, 3, 3, '#3d8f3f'); dot(g, px - 2, py - 2, 1, 1, '#58ad4f'); dot(g, px + 2, py - 2, 1, 1, '#58ad4f');
+    const col = BED_BLOOM[Math.floor(hsh(seed, i, 5) * BED_BLOOM.length)];
+    dot(g, px - 1, py - 5, 3, 2, col); dot(g, px, py - 5, 1, 1, '#fff6d0');
+  }
+}
+function bedDressing(g, map) {
+  const MW = map.W, MH = map.H, gate = map.gate ? map.gate.x : -1;
+  // along the front-left fence (row MH - 1), the front-right fence (column MW - 1) and the barn foot
+  for (let tx = 1; tx < MW - 1; tx++) { if (tx === gate) continue; bedEdge(g, vtx(tx, MH), vtx(tx + 1, MH), ctr(tx, MH - 1), 500 + tx); }
+  for (let ty = 1; ty < MH - 1; ty++) bedEdge(g, vtx(MW, ty), vtx(MW, ty + 1), ctr(MW - 1, ty), 700 + ty);
+  for (let tx = 6; tx < MW; tx++) bedEdge(g, vtx(tx, 0), vtx(tx + 1, 0), ctr(tx, 0), 900 + tx);
+}
+// The far hills: round tree crowns on the crest and a red barn and silo far off.
+function farDressing(g) {
+  const crown = function (x, y, r, c1, c2) { g.fillStyle = c1; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill(); g.fillStyle = c2; g.beginPath(); g.arc(x - r * 0.3, y - r * 0.3, r * 0.55, 0, Math.PI * 2); g.fill(); };
+  const sx = 262, sy = W3.OY + (W3.OX - sx) / 2 - 44;
+  g.fillStyle = '#a8432f'; g.fillRect(sx - 30, sy + 10, 26, 14); g.fillStyle = '#c9553d'; g.fillRect(sx - 30, sy + 10, 26, 2);
+  g.fillStyle = '#5b6b8a'; g.beginPath(); g.moveTo(sx - 33, sy + 11); g.lineTo(sx - 17, sy + 2); g.lineTo(sx - 1, sy + 11); g.closePath(); g.fill();
+  g.fillStyle = '#d8d2c4'; g.fillRect(sx, sy - 8, 10, 32); g.fillStyle = '#b9b2a2'; g.fillRect(sx + 7, sy - 8, 3, 32);
+  g.fillStyle = '#8a8e9a'; g.beginPath(); g.arc(sx + 5, sy - 8, 5, Math.PI, 0); g.fill();
+  [[8, 0, 9], [70, 6, 8], [110, 10, 10], [205, 30, 11], [286, 52, 9]].forEach(function (t, i) {
+    const x = t[0], y = W3.OY + (W3.OX - x) / 2 - 40 + (i % 2) * 3;
+    crown(x, y, t[2], i % 2 ? '#2f7a35' : '#357f38', '#4c9a44');
+  });
+}
+
 // The world behind every object, cached: sky, hills, the lawn verge past the front edges, the ground
 // tiles (pavers, lawn, stones on opts.walk and the gate), the back fence on column 0's outer edge,
 // and the barn along row 0 with its windows, window boxes, door (opts.door: its tile x) and the
@@ -344,6 +468,7 @@ function stage(ctx, map, opts) {
       g.fillStyle = (x / 2) % 7 < 3 ? '#3f8a3a' : '#357a33';
       g.fillRect(x, by - h, 2, h + 34);
     }
+    farDressing(g);
     // the verge outside the two front edges, to the world's edge
     const L0 = vtx(0, MH), B0 = vtx(MW, MH), R0 = vtx(MW, 0);
     g.fillStyle = VERGE[0];
@@ -364,17 +489,31 @@ function stage(ctx, map, opts) {
       if (t === T_.PAVER) put(g, 'paver', (tx * 3 + ty) % 4, c0[0], c0[1]);
       else {
         put(g, (tx + ty) & 1 ? 'lawn_a' : 'lawn_b', (tx + 2 * ty) % 3, c0[0], c0[1]);
-        if (walk[tx + ',' + ty] || t === T_.GATE) put(g, 'stone_step', (tx + ty) & 1, c0[0], c0[1]);
       }
     }
     // v3.4 playtest: a calmer, slightly darker ground under everything, so stations and guests pop.
+    // v4.4 (Joel 2026-10-20, "too blah"): half as dark (0.26 read muddy) and warm, not grey.
     const G0 = vtx(0, 0), G1 = vtx(MW, 0), G2 = vtx(MW, MH), G3 = vtx(0, MH);
-    g.fillStyle = 'rgba(22, 30, 14, 0.26)';
+    g.fillStyle = 'rgba(40, 34, 8, 0.12)';
     g.beginPath(); g.moveTo(G0[0], G0[1]); g.lineTo(G1[0], G1[1]); g.lineTo(G2[0], G2[1]); g.lineTo(G3[0], G3[1]); g.closePath(); g.fill();
+    if (map.gate) walk[map.gate.x + ',' + map.gate.y] = true;
+    groundDressing(g, map, walk);
+    for (let ty = 0; ty < MH; ty++) for (let tx = 0; tx < MW; tx++) if (map.at(tx, ty) === T_.GATE) { const c0 = ctr(tx, ty); put(g, 'stone_step', (tx + ty) & 1, c0[0], c0[1]); }
     const T0 = vtx(0, 0);
+    // v4.4: two trees past the back fence (the 8-bit yard's apple tree), behind the fence line.
+    if (art3.has('tree_apple')) {
+      const t1 = ctr(-1, 9), t2 = ctr(-3, 3);
+      put(g, 'tree', 0, t2[0], t2[1]);
+      if (art3.rule && art3.rule.drawShadow) art3.rule.drawShadow(g, 'tree_apple', t1[0], t1[1]);
+      put(g, 'tree_apple', 0, t1[0], t1[1]);
+    }
     put(g, 'fence_diag', 0, T0[0], T0[1]);
     put(g, 'wall_barn', 0, T0[0], T0[1]);
     (o.windows || [48, 168]).forEach(function (u) { const w = wallAt(u); put(g, 'barn_window', 0, w[0], w[1]); put(g, 'window_box', 0, w[0], w[1]); });
+    // v4.4: a barn quilt by the back corner and the menu chalkboard over the line.
+    if (art3.has('barn_quilt')) { const q = wallAt(16); put(g, 'barn_quilt', 0, q[0], q[1]); }
+    if (art3.has('menu_wall')) { const m = wallAt(226); put(g, 'menu_wall', 0, m[0], m[1]); }
+    bedDressing(g, map);
     if (typeof o.door === 'number') { const d = wallAt(24 * o.door + 12); put(g, 'shed', 0, d[0], d[1]); }
     if (o.sign) {
       // Feedback audit item 14: the wider board sits 8 along the wall (level, not lower), clear of

@@ -1497,16 +1497,16 @@ const STRINGS = Object.freeze({
   // v2.1 ([T 2.2], [T 3.3], contract K8)
   tutorial: Object.freeze({
     open: 'This is your morning. The cart is already filled. Tap Open the yard.',
-    charcoal: 'Grab charcoal from the pile.',
+    charcoal: 'Tap the pile to grab charcoal.',
     light: 'Tap the kettle to light it.',
-    meat: 'Grab meat from the cooler.',
-    puton: 'Put it on the kettle.',
+    meat: 'Tap the cooler to grab meat.',
+    puton: 'Tap the kettle to put it on.',
     cook: 'Watch the box fill. Pull it when it turns green.',
-    slice: 'Slice it at the board.',
-    plate: 'Take the plate from the board.',
+    slice: 'Tap the board to slice it.',
+    plate: 'Tap the board to take the plate.',
     customer: 'Here comes your first customer.',
     register: 'Ring up the guest at the register.',
-    deliver: 'Carry the plate to their table.',
+    deliver: 'Tap the guest to carry the plate over.',
     runner: 'Your runner carries it to their table.',
     seated: 'Served. They eat, then tip a little more.',
     end: 'You have the hang of it. Keep the fire fed and keep them happy.',
@@ -6221,52 +6221,12 @@ function createSim(saved, seed) {
       p.target = null;
       if (st && stationActive(st)) {
         faceTarget(st);
-        const r = performAction(autoOnly);
-        if (r.ok) chainAfter(st);
+        // Joel 2026-10-20 ("the auto pilot to take stuff places is hard to navigate"): the pitmaster
+        // goes only where the player taps. v4.2's walk ons (raw meat onto the only lit cooker, a bag
+        // into a cold one, a pulled piece to the board, a burnt one to the trash) are gone.
+        performAction(autoOnly);
       }
     }
-  }
-
-  // v4.2 taps (Joel 2026-10-20, "8.33 taps per plate"): what a tap picks up walks on by itself when
-  // there is only one place it can go, so those moves are one tap, not two.
-  //   A pulled piece: cooked meat to the board when the board would take it (slice it, or leave it for
-  //     the PREP card), a burnt piece to the trash.
-  //   With one cooker in the yard: raw meat onto it when it is lit with room for the piece, and a bag
-  //     of charcoal into it when it is cold (lighting it). A bag for a lit fire stays in hand, since when
-  //     to feed is the player's call.
-  // Not at the competition (a whole piece can go to the window there), and only after a tap: a key
-  // press or the action button acts and stays put. Any tap or key on the way takes over.
-  function soleCooker() {
-    let one = null;
-    for (const id of COOKER_IDS) {
-      const st = STATION_BY_ID[id];
-      if (!st || !stationActive(st)) continue;
-      if (one !== null) return null;
-      one = st;
-    }
-    return one;
-  }
-  function chainAfter(from) {
-    const p = state.player;
-    const c = p.carrying;
-    if (c === null || compOn() || p.busy !== null) return;
-    let dest = null;
-    if (from.type === 'cooker' && c.kind === 'cooked') {
-      const board = state.stations.board;
-      const m = MEATS[c.meat];
-      const prepOk = state.prep && board.waiting.length < C.PREP_WAIT && boardFits(c.meat, m.plates + waitingPlates(c.meat));
-      if (prepOk || (board.slicing === null && boardFits(c.meat, m.plates))) dest = STATION_BY_ID.board;
-    } else if (from.type === 'cooker' && c.kind === 'burnt') dest = STATION_BY_ID.trash;
-    else if (from.type === 'cooler' && c.kind === 'raw') {
-      const st = soleCooker();
-      const m = MEATS[c.meat];
-      if (st && (!m.drumOnly || st.brisket === true) && state.stations[st.id].fire >= C.COLD_UNDER && freeSlotFor(state.stations[st.id], m.slots) >= 0) dest = st;
-    } else if (from.type === 'pile' && c.kind === 'charcoal') {
-      const st = soleCooker();
-      if (st && st.fuel !== 'wood' && state.stations[st.id].fire < C.COLD_UNDER) dest = st;
-    }
-    if (!dest || !stationActive(dest)) return;
-    walkTo(dest.tiles[0].x, dest.tiles[0].y);
   }
 
   function tickFire(dt) {
