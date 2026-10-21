@@ -86,14 +86,30 @@ function renderStoreTypesBlock() {
 }
 
 function replaceBlock(source, marker, newBlock) {
+  // \r?\n, not \n: core.autocrlf is true in this repo and there is no
+  // .gitattributes, so a checkout can leave a rules file entirely CRLF.
+  // firestore.rules was 360 CRLF / 0 LF on 2026-10-21 while
+  // firestore.board.rules was 0 CRLF / 104 LF, which is why Board's deploy
+  // worked and the shared one threw "Marker /* @sync:cuts */ not found" with
+  // the marker plainly sitting in the file. This hook is a firebase.json
+  // predeploy step, so that failure blocked every rules deploy against the
+  // shared file, for all three apps.
   const re = new RegExp(
-    `(// /\\* @sync:${marker} \\*/\\n)([\\s\\S]*?)(\\n\\s*// /\\* @endsync \\*/)`,
+    `(// /\\* @sync:${marker} \\*/\\r?\\n)([\\s\\S]*?)(\\r?\\n\\s*// /\\* @endsync \\*/)`,
     'm',
   );
   if (!re.test(source)) {
     throw new Error(`Marker /* @sync:${marker} */ … /* @endsync */ not found in firestore.rules`);
   }
-  return source.replace(re, `$1${newBlock}$3`);
+  // Emit the block with the line ending the file already uses. The render
+  // helpers join with \n, so on a CRLF file the rewritten block differed from
+  // identical existing content by its endings alone -- `updated === original`
+  // was then false, the --check mode reported OUT OF SYNC on content that
+  // matched schema.js perfectly, and "fixing" it wrote a mixed-ending file.
+  // Confirmed 2026-10-21: firestore.rules normalised to byte-identical content
+  // once endings were accounted for, having been declared stale.
+  const eol = source.includes('\r\n') ? '\r\n' : '\n';
+  return source.replace(re, `$1${newBlock.replace(/\n/g, eol)}$3`);
 }
 
 // Both rules files carry the same generated enum blocks:
