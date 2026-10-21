@@ -126,3 +126,19 @@ as soon as he's done that.
   - iOS 4.4.3 (16): branch `scorecard-ios-4.4.3` pushed, Codemagic build
     #26 running. It's the first iOS update since 4.3.0.
 - **Android 4.4.2 is live in Production** (approved about 2026-10-19).
+
+## Update 2026-10-21 late morning: 4.4.3 on both stores
+
+- **iOS 4.4.3 (16) is submitted to App Review** (10:22, Waiting for Review),
+  manual release. It's the first iOS build with in-app account deletion
+  (Apple 5.1.1(v)). The review notes walk through Settings > Delete Account.
+  No platform names appear in What's New. TestFlight's beta review of build
+  16 is queued separately.
+- **Android 4.4.3 (4403):** Closed (Alpha) was approved today, and Internal
+  and Closed are live. Open is saved as a draft from Closed. The
+  Production promote was blocked by the auto-mode classifier
+  ("[Production Deploy]"). Joel does that click, and both go to review in
+  one submission. Production is still 4.4.2.
+- **Still waiting on Joel:** a device test of Delete Account with a
+  throwaway account, and the old-phone restart for the photo proof.
+
