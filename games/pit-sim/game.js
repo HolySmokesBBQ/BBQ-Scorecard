@@ -437,7 +437,7 @@ const KEY_HELP = [
   ['Q, Shift+Q', 'Next or previous meat.'],
   ['Escape, P', 'Pause and resume.'],
   ['Tap the yard', 'Walk there. Tap a station to walk over and use it.'],
-  ['Arrange yard', 'Tap a piece to pick it up. Arrow keys move it, Enter or Space sets it down, Escape leaves.']
+  ['Arrange yard', 'Tap a piece to pick it up. Arrow keys move it, R turns a long piece, Enter or Space sets it down, Escape leaves.']
 ];
 const BOARD_OFFS = [[1, 3], [8, 3], [1, 9], [8, 9], [4, 6]];   // board stacks, from the board's draw px (R-2: a fifth)
 const BOARD_DRAW_MAX = 8;                                  // R-2: plates drawn a stack, whatever C.BOARD_STACK holds
@@ -1121,6 +1121,7 @@ function boot() {
   setupCanvas();
   setupInput();
   buildArrangeBar();
+  testerSetup();   // v4.7: only with window.PitSimTester
   showLoop();
   pump();
   if (saveOff) noteSaveOff();
@@ -1283,7 +1284,7 @@ function readSeed() {
 function exposeGame() {
   PitSim.game = {
     // v3.9: arrange mode state for the harness (read only).
-    arrange: function () { return arr ? { draft: JSON.parse(JSON.stringify(arr.draft)), lift: arr.lift, aim: arr.aim ? { x: arr.aim.x, y: arr.aim.y, ok: arr.aim.ok, reason: arr.aim.reason, tiles: arr.aim.tiles } : null, msg: (document.getElementById('arr-msg') || {}).textContent || '' } : null; },
+    arrange: function () { return arr ? { draft: JSON.parse(JSON.stringify(arr.draft)), lift: arr.lift, turn: arr.turn === true, aim: arr.aim ? { x: arr.aim.x, y: arr.aim.y, ok: arr.aim.ok, reason: arr.aim.reason, tiles: arr.aim.tiles } : null, msg: (document.getElementById('arr-msg') || {}).textContent || '' } : null; },
     // v3.6: the client x, y a tap on tile (tx, ty) acts on, after panning it into view (spec F).
     tileToClient: tileToClient,
     playerClient: playerClient,
@@ -2100,6 +2101,129 @@ function buildPauseBody() {
   b.appendChild(btn('pause-look', U('pauseLook'), 'alt', function () { openCreator(true); }));
   if (tutRunning()) b.appendChild(btn('pause-skip', 'Skip tutorial', 'alt', onPauseSkip));
   b.appendChild(btn('pause-new', 'New game', 'alt', function () { openConfirm('pause'); }));
+  if (TESTER) b.appendChild(btn('pause-tester', 'Tester', 'alt', function () { openTester('pause'); }));   // v4.7, preview only
+}
+
+// ---------------------------------------------------------------- v4.7 the tester panel (preview only)
+
+// Joel 2026-10-21: "There also needs to be a way for me to test the advanced levels as well." The
+// panel exists only when window.PitSimTester === true: the private preview packager sets that flag in
+// a script before the game's; games/pit-sim/index.html (the website copy) never does. Entry: a Tester
+// button at the bottom of the Pause panel, and (Pause only opens in service, from the keyboard) a
+// Tester tools link on the week hub. Every change goes through sim.testerApply between days.
+const TESTER = typeof window !== 'undefined' && window.PitSimTester === true;
+let testerFrom = null, testerMsg = '', testerRole = 'pit', testerStars = 4;
+const TESTER_CASH = [100, 500, 2000, 10000];
+const TESTER_REP = [10, 40, 70, 100];
+const TESTER_ROLES = ['run', 'fire', 'prep', 'till', 'pit'];
+const TESTER_LABEL = { cooler: 'Cooler', bigtable: 'Big table', tray: 'Tray', canopy: 'Canopy', lights: 'String lights', kettle2: 'Kettle 2',
+  drum: 'Drum', cabinet: 'Cabinet', offset: 'Stick burner', trailer: 'Trailer' };
+function testerSetup() {
+  if (!TESTER || el.tester) return;
+  const sec = mk('section', { id: 'tester', attrs: { role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'tester-h' } });
+  sec.hidden = true;
+  sec.appendChild(mk('h2', { id: 'tester-h', text: 'Tester tools', attrs: { tabindex: '-1' } }));
+  sec.appendChild(mk('div', { id: 'tester-body' }));
+  el.panels.appendChild(sec);
+  el.tester = sec; el['tester-h'] = sec.firstChild; el['tester-body'] = sec.lastChild;
+  PANEL_IDS.push('tester');
+  const css = mk('style', { id: 'tester-css' });
+  css.textContent = '#tester .tst-note { color: var(--y); font-size: 13px; }'
+    + ' #tester .tst-msg { min-height: 20px; font-size: 14px; }'
+    + ' #tester h3 { margin: 10px 0 4px; }'
+    + ' #tester .tst-row { display: flex; flex-wrap: wrap; gap: 6px; }'
+    + ' #panels #tester .tst-row button { flex: 1 1 0; width: auto; min-width: 40px; min-height: 44px; margin-top: 0; padding: 0 6px; }'
+    + ' #tester .tst-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }'
+    + ' #panels #tester .tst-grid button { width: 100%; min-height: 44px; margin-top: 0; padding: 0 6px; }'
+    + ' #tester button[aria-pressed="true"] { border-color: var(--y); background: #4a3a1c; color: #fff4dc; }'
+    + ' #tester .tst-now { font-size: 13px; color: var(--m); }';
+  document.head.appendChild(css);
+}
+function testerBtn(id, text, on, pressed) {
+  const b = btn(id, text, 'alt', on);
+  if (pressed !== undefined) b.setAttribute('aria-pressed', pressed ? 'true' : 'false');
+  return b;
+}
+function openTester(from) {
+  if (!TESTER) return;
+  testerSetup();
+  testerFrom = from || null;
+  testerMsg = '';
+  buildTester();
+  openPanel('tester', 'tester-h');
+}
+function closeTester() {
+  const from = testerFrom;
+  testerFrom = null;
+  pump();
+  if (from === 'pause') { openPanel('pause', 'pause-tester'); updateDom(); return; }
+  showLoop();
+  pump();
+  updateDom();
+}
+// One change through the sim; the screen behind it rebuilds when the panel closes.
+function testerDo(op) {
+  const r = sim.testerApply(op);
+  if (r && r.ok) {
+    held.clear();
+    clearFx();
+    dropSheet();
+    cardCtx = null; crewMsg = ''; hireMsg = ''; moneyMore = false; hirePage = 1; hireHelpOpen = false; hireNews = null; hirePassSure = false;
+    lookCache.clear(); nameCache.clear();
+    migrated = false;
+    applyLook(lookNow());
+    dogReset(2);
+  }
+  pump();
+  testerMsg = r ? (r.message || (r.ok ? 'Done.' : 'That did not work.')) : '';
+  rebuildKeepFocus(buildTester, 'tester');
+  updateDom();
+}
+function buildTester() {
+  const b = el['tester-body'];
+  if (!b) return;
+  clear(b);
+  const v = sim.testerView();
+  b.appendChild(mk('p', { cls: 'tst-note', text: 'Tester tool, for trying the later weeks and gear. It rewrites this save.' }));
+  b.appendChild(mk('p', { id: 'tester-msg', cls: 'tst-msg', attrs: { 'aria-live': 'polite' }, text: v.open ? testerMsg : v.reason }));
+  const off = !v.open;
+  const row = function (kids) { const r = mk('div', { cls: 'tst-row' }, kids); return r; };
+  const dis = function (e) { if (off) e.disabled = true; return e; };
+  b.appendChild(h3('Week'));
+  const wk = [];
+  for (let i = 1; i <= v.weeks; i++) (function (n) { wk.push(dis(testerBtn('tester-week-' + n, String(n), function () { testerDo({ week: n }); }, v.week === n))); })(i);
+  b.appendChild(row(wk));
+  b.appendChild(mk('p', { cls: 'tst-now', text: 'Week ' + v.weeks + ' is the competition.' }));
+  b.appendChild(h3('Cash'));
+  b.appendChild(row(TESTER_CASH.map(function (c) { return dis(testerBtn('tester-cash-' + c, fmt(c), function () { testerDo({ cash: c }); }, v.cash === c)); })));
+  b.appendChild(h3('Word of mouth'));
+  b.appendChild(row(TESTER_REP.map(function (r) { return dis(testerBtn('tester-rep-' + r, String(r), function () { testerDo({ rep: r }); }, v.rep === r)); })));
+  b.appendChild(mk('p', { cls: 'tst-now', text: 'Now ' + v.rep + ' of 100.' }));
+  b.appendChild(h3('Gear'));
+  const gg = mk('div', { cls: 'tst-grid' });
+  Object.keys(TESTER_LABEL).forEach(function (g) {
+    const on = v.gear[g] === true;
+    gg.appendChild(dis(testerBtn('tester-gear-' + g, TESTER_LABEL[g], function () { const o = {}; o[g] = !on; testerDo({ gear: o }); }, on)));
+  });
+  b.appendChild(gg);
+  b.appendChild(mk('p', { cls: 'tst-now', text: 'A rung brings the ones under it: the trailer needs the stick burner, which needs the cabinet.' }));
+  b.appendChild(h3('Crew card'));
+  b.appendChild(row(TESTER_ROLES.map(function (r) { return dis(testerBtn('tester-role-' + r, r.toUpperCase(), function () { testerRole = r; rebuildKeepFocus(buildTester, 'tester'); }, testerRole === r)); })));
+  const st = [];
+  for (let i = 1; i <= 5; i++) (function (n) { st.push(dis(testerBtn('tester-stars-' + n, n + '★', function () { testerStars = n; rebuildKeepFocus(buildTester, 'tester'); }, testerStars === n))); })(i);
+  const sr = row(st);
+  sr.style.marginTop = '6px';
+  b.appendChild(sr);
+  const add = dis(btn('tester-crew-add', 'Add ' + testerRole.toUpperCase() + ' ' + testerStars + '★', 'alt', function () { testerDo({ crew: { role: testerRole, stars: testerStars } }); }));
+  b.appendChild(add);
+  b.appendChild(mk('p', { cls: 'tst-now', text: 'Crew ' + v.crew.length + ' of ' + v.slots + (v.crew.length ? ': ' + v.crew.map(function (c) { return c.name + ' ' + c.role.toUpperCase() + ' ' + c.stars + '★'; }).join(', ') : '') }));
+  b.appendChild(h3('Stock'));
+  b.appendChild(dis(btn('tester-fill', 'Fill meat, charcoal and wood', 'alt', function () { testerDo({ fill: true }); })));
+  b.appendChild(h3('Next booking'));
+  b.appendChild(row(v.bookings.map(function (k) { return dis(testerBtn('tester-book-' + k.id, k.label, function () { testerDo({ booking: k.id }); }, v.booking === k.id)); })));
+  b.appendChild(h3('Season'));
+  b.appendChild(dis(btn('tester-reset', 'Reset season', 'alt', function () { testerDo({ reset: true }); })));
+  b.appendChild(btn('tester-back', 'Back', 'primary', closeTester));
 }
 
 function onPauseSkip() {
@@ -3436,6 +3560,7 @@ function buildWeekAt(level) {
   tPit.appendChild(hubGrid(s, se));
   // v3.9: Arrange yard, between days only.
   if (typeof sim.canArrange === 'function' && sim.canArrange()) tPit.appendChild(mk('div', { cls: 'foot-row' }, [btn('pit-arrange', 'Arrange yard', 'alt', enterArrange)]));
+  if (TESTER) tPit.appendChild(mk('div', { cls: 'foot-row' }, [btn('pit-tester', 'Tester tools', 'alt', function () { openTester('hub'); })]));   // v4.7, preview only
   const shelf = trophyShelf(s, 'hub-shelf', false);   // deviation 77
   if (shelf) tPit.appendChild(shelf);
 
@@ -4263,6 +4388,7 @@ function startCard(se, rv) {
   if (typeof sim.canArrange === 'function' && sim.canArrange()) {
     sec.appendChild(mk('button', { id: 'hub-arrange', cls: 'linkish', type: 'button', text: 'Move your gear', on: enterArrange }));
   }
+  if (TESTER) sec.appendChild(mk('button', { id: 'hub-tester', cls: 'linkish', type: 'button', text: 'Tester tools', on: function () { openTester('hub'); } }));   // v4.7, preview only
   const alt = Array.isArray(rv.alt) ? rv.alt : [];
   if (alt.length) {
     const ch = mk('button', { id: 'hub-change', cls: 'linkish', type: 'button', text: U('changePlan') });
@@ -6359,12 +6485,49 @@ function layoutSync() {
 function arrMsg(text) {
   const m = document.getElementById('arr-msg');
   if (m && m.textContent !== text) m.textContent = text;
+  arrTurnSync();
+}
+// v4.7: the Turn button shows only while a piece that turns (a 2 tile cooker) is lifted.
+function arrTurnSync() {
+  const b = document.getElementById('arr-turn');
+  if (!b) return;
+  const on = !!(arr && arr.lift && typeof sim.canTurnUnit === 'function' && sim.canTurnUnit(arr.lift));
+  if (b.hidden === on) b.hidden = !on;
+}
+function arrLabel(id) {
+  const v = sim.arrangeView().units.find(function (q) { return q.id === id; });
+  if (v && v.label) return v.label;
+  const u = arrUnit(id);
+  return u ? u.label : 'It';
 }
 function arrIdle() { return 'Tap a piece of gear to pick it up.'; }
-function arrLifted() { const u = arrUnit(arr.lift); return (u ? u.label : 'It') + ' picked up. Tap a spot to set it down.'; }
+function arrLifted() {
+  const t = typeof sim.canTurnUnit === 'function' && sim.canTurnUnit(arr.lift) ? ' Turn swaps which way it runs.' : '';
+  return arrLabel(arr.lift) + ' picked up. Tap a spot to set it down.' + t;
+}
+function arrLift(id, x, y) {
+  arr.lift = id; arr.grab = { x: x, y: y }; arr.aim = null;
+  arr.turn = !!(arr.draft[id] && arr.draft[id][2] === 1);
+}
+// v4.7: Turn the lifted piece where it stands; when it does not fit there the red footprint shows
+// it turned and the next tap places it turned.
+function arrTurn() {
+  if (!arr || !arr.lift || typeof sim.canTurnUnit !== 'function' || !sim.canTurnUnit(arr.lift)) return false;
+  arr.turn = !arr.turn;
+  const off = arrOff(arr.draft, arr.lift), s = sim.state;
+  const r = sim.checkMove(arr.draft, arr.lift, [off[0], off[1], arr.turn ? 1 : 0]);
+  if (r.ok) {
+    arr.draft = r.layout; arr.aim = null;
+    arrMsg(arrLabel(arr.lift) + ' turned. Tap a spot to set it down, or tap it to leave it here.');
+  } else {
+    arr.aim = { layout: r.layout, ok: false, reason: r.reason, x: arr.grab.x, y: arr.grab.y, tiles: PitSim.unitTiles(r.layout, arr.lift, s.gear, s.decor) };
+    arrMsg('Turned, but it does not fit here: ' + (r.reason || 'no room') + '. Tap a spot to set it down.');
+  }
+  return true;
+}
 function enterArrange() {
   if (!sim.canArrange()) return;
-  arr = { draft: sim.arrangeView().layout, lift: null, grab: null, aim: null };
+  arr = { draft: sim.arrangeView().layout, lift: null, grab: null, aim: null, turn: false };
   dropSheet();
   closePanel();
   el.root.classList.add('arranging');
@@ -6410,7 +6573,7 @@ function arrPick(clientX, clientY) {
 // Where the lifted piece would go with its grabbed tile on (tx, ty).
 function arrAim(tx, ty) {
   const off = arrOff(arr.draft, arr.lift);
-  const want = [off[0] + tx - arr.grab.x, off[1] + ty - arr.grab.y];
+  const want = [off[0] + tx - arr.grab.x, off[1] + ty - arr.grab.y, arr.turn ? 1 : 0];
   const r = sim.checkMove(arr.draft, arr.lift, want);
   const s = sim.state;
   return { layout: r.layout, ok: r.ok, reason: r.reason, x: tx, y: ty, tiles: PitSim.unitTiles(r.layout, arr.lift, s.gear, s.decor) };
@@ -6420,14 +6583,14 @@ function arrTap(clientX, clientY) {
   if (!p) return;
   if (!arr.lift) {
     if (!p.unit) { arrMsg(arrIdle()); return; }
-    arr.lift = p.unit; arr.grab = { x: p.x, y: p.y }; arr.aim = null;
+    arrLift(p.unit, p.x, p.y);
     arrMsg(arrLifted());
     return;
   }
   const own = PitSim.unitTiles(arr.draft, arr.lift, sim.state.gear, sim.state.decor);
   if (hasTile(own, p.x, p.y)) { arr.lift = null; arr.aim = null; arrMsg(arrIdle()); return; }
   if (p.unit && p.unit !== arr.lift) {
-    arr.lift = p.unit; arr.grab = { x: p.x, y: p.y }; arr.aim = null;
+    arrLift(p.unit, p.x, p.y);
     arrMsg(arrLifted());
     return;
   }
@@ -6436,9 +6599,9 @@ function arrTap(clientX, clientY) {
 function arrDrop(tx, ty) {
   const a = arrAim(tx, ty);
   if (a.ok) {
-    const u = arrUnit(arr.lift);
+    const nm = arrLabel(arr.lift);
     arr.draft = a.layout; arr.lift = null; arr.aim = null;
-    arrMsg((u ? u.label : 'It') + ' moved. ' + arrIdle());
+    arrMsg(nm + ' moved. ' + arrIdle());
     return true;
   }
   arr.aim = a;
@@ -6469,7 +6632,7 @@ function arrPtrMove(e) {
   if (!d || d.id !== e.pointerId) return false;
   if (!d.moved && Math.hypot(e.clientX - d.x0, e.clientY - d.y0) > 8) {
     d.moved = true;
-    arr.lift = d.unit; arr.grab = d.grab;
+    if (arr.lift !== d.unit) arrLift(d.unit, d.grab.x, d.grab.y); else arr.grab = d.grab;
     arrMsg(arrLifted());
   }
   if (d.moved) {
@@ -6538,10 +6701,12 @@ function buildArrangeBar() {
   bar.appendChild(mk('div', { cls: 'arr-row' }, [
     btn('arr-cancel', 'Cancel', 'alt', function () { leaveArrange(false); }),
     btn('arr-reset', 'Reset to default', 'alt', arrReset),
+    btn('arr-turn', 'Turn', 'alt', function () { arrTurn(); }),
     btn('arr-done', 'Done', 'primary', function () { leaveArrange(true); })
   ]));
   el.stage.appendChild(bar);
   el.arrange = bar;
+  document.getElementById('arr-turn').hidden = true;
   el.cv.addEventListener('pointermove', arrHover);
 }
 // The hint line, once, the first hub after week 1 (a per browser note; the save is unchanged).
@@ -6767,6 +6932,7 @@ function arrKey(e, key, dir) {
     return true;
   }
   if ((key === 'Enter' || key === ' ') && arr.aim) { arrDrop(arr.aim.x, arr.aim.y); return true; }
+  if (key === 'r' || key === 'R') return arrTurn();   // v4.7
   return false;
 }
 
@@ -6797,6 +6963,9 @@ function onKeyDown(e) {
     if (currentPanel === 'pause' && (key === 'Escape' || lower === 'p')) {
       e.preventDefault();
       if (!e.repeat) resumeFromPause();
+    } else if (currentPanel === 'tester' && key === 'Escape') {
+      e.preventDefault();
+      closeTester();
     } else if (currentPanel === 'newgame' && key === 'Escape') {
       e.preventDefault();
       confirmNo();
@@ -7444,11 +7613,13 @@ function stationArt(st, all) {
   else if (st.type === 'cooker') name = st.sprite && st.sprite !== 'kettle' && A3 && A3.has(st.sprite) ? st.sprite : (st.sprite === 'drum' || st.id === 'drum' ? 'drum' : 'kettle');
   else if (!name || !A3 || !A3.has(name)) name = st.type;
   const c = tilesRp(tiles);
-  return { name: name, tiles: tiles, X: c[0], Y: c[1], id: st.id };
+  // v4.7: a turned 2 tile unit (MAP station turned) draws mirrored left to right: in this projection
+  // the flip swaps the ground axes, so the art lies along the turned footprint.
+  return { name: name, tiles: tiles, X: c[0], Y: c[1], id: st.id, flip: st.turned === true };
 }
-// The rp box of an art3 sprite's opaque pixels with its anchor on (X, Y).
-function boxRp(name, frame, X, Y) {
-  const m = maskOf(name, frame | 0, false);
+// The rp box of an art3 sprite's opaque pixels with its anchor on (X, Y) (flip: mirrored).
+function boxRp(name, frame, X, Y, flip) {
+  const m = maskOf(name, frame | 0, flip === true);
   return { x0: Math.round(X) - m.ax + m.x0, x1: Math.round(X) - m.ax + m.x1 + 1, y0: Math.round(Y) - m.ay + m.y0, y1: Math.round(Y) - m.ay + m.y1 + 1 };
 }
 // MAP.walk (the stone path) as tiles; v3.5 MAPs fall back on the customer route.
@@ -7626,7 +7797,7 @@ function homeBox() {
     const st = MAP.station(id);
     if (!st) return;
     const a = stationArt(st, true);
-    grow(boxRp(a.name, 0, a.X, a.Y));
+    grow(boxRp(a.name, 0, a.X, a.Y, a.flip));
   });
   if (!(x1 > x0)) return null;
   return { x0: x0, x1: x1, y0: y0, y1: y1 };
@@ -7652,7 +7823,7 @@ function kitchenBox() {
   let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
   MAP.stations.forEach(function (st) {
     if (!owned(st)) return;
-    const a = stationArt(st), b = boxRp(a.name, 0, a.X, a.Y);
+    const a = stationArt(st), b = boxRp(a.name, 0, a.X, a.Y, a.flip);
     x0 = Math.min(x0, b.x0); x1 = Math.max(x1, b.x1); y0 = Math.min(y0, b.y0); y1 = Math.max(y1, b.y1);
   });
   return x1 > x0 ? { x0: x0, x1: x1, y0: y0, y1: y1 } : null;
@@ -7750,7 +7921,7 @@ function camFollow(dt) {
   const rid = typeof sim.reach === 'function' && !p.walking && p.path.length === 0 ? sim.reach() : null;
   const rst = rid ? MAP.station(rid) : null;
   if (rst && rst.type === 'cooker' && (rst.tier | 0) > 0 && rst.tiles.length > 1) {
-    const a = stationArt(rst), bx = boxRp(a.name, 0, a.X, a.Y);
+    const a = stationArt(rst), bx = boxRp(a.name, 0, a.X, a.Y, a.flip);
     if (bx.x0 - 6 < cam.x0) cam.x0 = Math.max(X + 20 - cam.vw, bx.x0 - 6);
     if (bx.x1 + 6 > cam.x0 + cam.vw) cam.x0 = Math.min(X - 20, bx.x1 + 6 - cam.vw);
     if (bx.y0 - 6 < cam.y0) cam.y0 = Math.max(Y + 30 - cam.vh, bx.y0 - 6);
@@ -7770,7 +7941,7 @@ function workBox() {
   MAP.stations.forEach(function (st) {
     if (st.type !== 'table') return;
     const a = stationArt(st);
-    grow(boxRp(a.name, 0, a.X, a.Y));
+    grow(boxRp(a.name, 0, a.X, a.Y, a.flip));
   });
   const H = MAP.home, qs = H && Array.isArray(H.queue) ? H.queue : [0];
   qs.forEach(function (i) { const t = MAP.queue[i]; if (t) { const c = tileRp(t.x, t.y); grow({ x0: c[0] - 12, x1: c[0] + 12, y0: c[1] - 47, y1: c[1] + 4 }); } });
@@ -8427,7 +8598,8 @@ function grateSpots(name, n) {
   }
   return { spots: out, cell: cw };
 }
-function drawPieces(st, ck, name, X, Y) {
+function drawPieces(st, ck, name, X, Y, flip) {
+  const sx = flip ? -1 : 1;   // v4.7: a turned cooker's grate spots mirror with its art
   const n = Math.max(1, st.slotPx ? st.slotPx.length : 2), G = grateSpots(name, n), spots = G.spots;
   const list = ck.pieces.slice().sort(function (a, b) { return (spots[a.slot] ? spots[a.slot][1] : 0) - (spots[b.slot] ? spots[b.slot][1] : 0); });
   for (let pass = 0; pass < 2; pass++) {
@@ -8455,7 +8627,7 @@ function drawPieces(st, ck, name, X, Y) {
       const ow = m0.x1 >= m0.x0 ? m0.x1 - m0.x0 + 1 : m0.w;
       const sc = Math.max(0.25, Math.min(1, Math.floor(cell * 4 / ow) / 4));
       const foot = m.y1 >= 0 ? m.y1 + 1 : m.ay, top = m.y1 >= 0 ? m.y0 : 0;
-      const PX = Math.round(X + q[0]), PY = Math.round(Y + q[1] + 1 + (m.ay - foot) * sc);
+      const PX = Math.round(X + sx * q[0]), PY = Math.round(Y + q[1] + 1 + (m.ay - foot) * sc);
       onWorld(function () {
         octx.save();
         octx.translate(PX, PY);
@@ -8476,10 +8648,10 @@ function drawPieces(st, ck, name, X, Y) {
 
 // The fire gauge beside a lit cooker: a 2 rp bar, 16 tall, right of the sprite (an out fire shows
 // on the cooker itself).
-function drawGauge(ck, X, Y) {
+function drawGauge(ck, X, Y, flip) {
   if (!(ck.fire > 0)) return;
   onWorld(function () {
-    const gx = Math.round(X) + 14, top = Math.round(Y) - 20, h = 16;
+    const gx = flip ? Math.round(X) - 16 : Math.round(X) + 14, top = Math.round(Y) - 20, h = 16;
     octx.fillStyle = COLOR.outline;
     octx.fillRect(gx - 1, top - 1, 4, h + 2);
     const inner = h;
@@ -8511,10 +8683,10 @@ function stationItems(st, s, push) {
     const open = ck && ck.pieces.length > 0 && (a.name === 'kettle' || artMeta(a.name).open > 0);
     // v4.1: a ladder cooker with meat on opens its door or lid (frames 4 to 7, the fire band kept).
     const frame = open ? (a.name === 'kettle' ? 4 : artMeta(a.name).open + (BAND_FRAME[band] || 0)) : (BAND_FRAME[band] || 0);
-    pushArt(push, a.name, frame, a.tiles, { outline: true, rec: [st.sprite || a.name, d.x, d.y, BAND_FRAME[band] || 0], hit: hit, top: function (X, Y) {
+    pushArt(push, a.name, frame, a.tiles, { outline: true, flip: a.flip, rec: [st.sprite || a.name, d.x, d.y, BAND_FRAME[band] || 0], hit: hit, top: function (X, Y) {
       if (!ck) return;
-      drawGauge(ck, X, Y);
-      drawPieces(st, ck, a.name, X, Y);
+      drawGauge(ck, X, Y, a.flip);
+      drawPieces(st, ck, a.name, X, Y, a.flip);
     } });
   } else if (st.type === 'board') {
     const b = s.stations.board;
@@ -8871,8 +9043,9 @@ function drawCanopy(s) {
 function ventRp(a) {
   const mt = artMeta(a.name), ck = a.id && sim && sim.state.stations ? sim.state.stations[a.id] : null;
   const v = ck && ck.pieces && ck.pieces.length && mt.ventOpen ? mt.ventOpen : mt.vent;   // v4.1: the ladder cookers' stack tops (the lid up moves it)
-  if (Array.isArray(v) && a.name !== 'kettle' && a.name !== 'drum') return [a.X + v[0], a.Y + v[1]];
-  return a.name === 'drum' ? [a.X + 5, a.Y - 38] : [a.X, a.Y - 21];
+  const sx = a.flip ? -1 : 1;   // v4.7: the stack mirrors with a turned cooker
+  if (Array.isArray(v) && a.name !== 'kettle' && a.name !== 'drum') return [a.X + sx * v[0], a.Y + v[1]];
+  return a.name === 'drum' ? [a.X + sx * 5, a.Y - 38] : [a.X, a.Y - 21];
 }
 // The v2 vent a cooker's puffs start from (sim px), as updateFx spawns them.
 function ventSim(st) {
@@ -9090,7 +9263,7 @@ function counterBoxes() {
     const st = MAP.stations[i];
     if (st.type !== 'table' || !owned(st)) continue;
     const a = stationArt(st);
-    out.push(boxRp(a.name, 0, a.X, a.Y));
+    out.push(boxRp(a.name, 0, a.X, a.Y, a.flip));
   }
   return out;
 }
@@ -9204,7 +9377,7 @@ function drawCues(s, custs) {
       const st = MAP.stations[i];
       if (st.type !== 'cooker' || !owned(st) || !cookerWarns(s.stations[st.id])) continue;
       const bp = warnBubblePos(st);
-      const a3 = stationArt(st), bx = boxRp(a3.name, 0, a3.X, a3.Y);
+      const a3 = stationArt(st), bx = boxRp(a3.name, 0, a3.X, a3.Y, a3.flip);
       // v3.4 playtest: the burn "!" at twice the size, so it is easy to spot.
       const wz = size('bubble_warn'), wf = reduced ? 0 : Math.floor(tAnim / blink) % 2;
       withShift(rpShift(bx.x0 - 2, bx.y0 - 2, bp.x + wz[0] / 2, bp.y + wz[1]), function () {
@@ -9300,7 +9473,7 @@ function drawTop(s) {
   // Slice bar over the board.
   const b = s.stations.board;
   if (b && b.slicing && b.slicing.total > 0) {
-    const a3 = stationArt(MAP.station('board')), bx = boxRp(a3.name, 0, a3.X, a3.Y);
+    const a3 = stationArt(MAP.station('board')), bx = boxRp(a3.name, 0, a3.X, a3.Y, a3.flip);
     const frac = Math.max(0, Math.min(1, b.slicing.t / b.slicing.total));
     onWorld(function () {
       const x = Math.round(a3.X) - 16, y = bx.y0 - 9;
@@ -9373,7 +9546,7 @@ function arrowBox() {
   const t = tutStep();
   const st = t ? targetStation(t.target) : null;
   if (!st) return null;
-  const a = stationArt(st), b = boxRp(a.name, 0, a.X, a.Y), d = drawOf(st), sz = size(st.sprite || 'kettle');
+  const a = stationArt(st), b = boxRp(a.name, 0, a.X, a.Y, a.flip), d = drawOf(st), sz = size(st.sprite || 'kettle');
   const X = Math.round((b.x0 + b.x1) / 2), Y = b.y0 - 2;
   if (sim.state.phase === 'service') {
     const p = sim.state.player, px = isoX(p.px + 8, p.py + 8) * RS, py = isoY(p.px + 8, p.py + 8) * RS + 4;
@@ -9394,7 +9567,7 @@ function drawArrow() {
 // The tutorial banner, last before the blit so nothing covers it ([T 2.6], deviation 19).
 function drawBanner(b) {
   const st = targetStation(b.target);
-  if (st && A3) { const a3 = stationArt(st), bx = boxRp(a3.name, 0, a3.X, a3.Y); bannerBottom = bx.y0 - camOrigin()[1] < cam.vh / 3; }
+  if (st && A3) { const a3 = stationArt(st), bx = boxRp(a3.name, 0, a3.X, a3.Y, a3.flip); bannerBottom = bx.y0 - camOrigin()[1] < cam.vh / 3; }
   const h = b.lines.length > 1 ? 21 : 11;
   const y = bannerBottom ? SH - 2 - h : 2;
   // The art3 font at 2x when every line fits the yard's width; the box grows to the widest line.

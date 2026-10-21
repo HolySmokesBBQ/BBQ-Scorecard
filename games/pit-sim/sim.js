@@ -571,7 +571,7 @@ const C = Object.freeze({
   // weather
   RAIN_FROM_DAY: 4, RAIN_CHANCE: 0.15, RAIN_ARRIVALS: 0.6,
   // save clamps
-  SAVE_VERSION: 14, MAX_DAY: 999, MAX_CASH: 999999, MAX_STAT: 9999999,   // v3.4: 8 (season.advance); v3.5: 9 (season.plan, pit); v3.6: 10 (the register, the TILL card)
+  SAVE_VERSION: 15, MAX_DAY: 999, MAX_CASH: 999999, MAX_STAT: 9999999,   // v3.4: 8 (season.advance); v3.5: 9 (season.plan, pit); v3.6: 10 (the register, the TILL card)
   // v3.0 season and week [S 3], contract W2
   SEASON_WEEKS: 7,                    // v3.5: six weeks and the competition finale as week 7 (was 9)
   YEAR_MAX: 99,
@@ -1114,14 +1114,42 @@ function cleanLayout(lay) {
   for (const u of UNITS) {
     if (!Object.prototype.hasOwnProperty.call(lay, u.id)) continue;
     const o = lay[u.id];
-    if (!Array.isArray(o) || o.length !== 2) continue;
+    if (!Array.isArray(o) || (o.length !== 2 && o.length !== 3)) continue;
     const dx = Number(o[0]), dy = Number(o[1]);
     if (!Number.isInteger(dx) || !Number.isInteger(dy) || Math.abs(dx) > LAYOUT_MAX || Math.abs(dy) > LAYOUT_MAX) continue;
-    if (dx !== 0 || dy !== 0) out[u.id] = [dx, dy];
+    // v4.7: a third entry 1 turns a 2 tile unit (TURN_UNITS); anything else is unturned.
+    const turned = o.length === 3 && (o[2] === 1 || o[2] === true) && TURN_UNITS[u.id] === true;
+    if (turned) out[u.id] = [dx, dy, 1];
+    else if (dx !== 0 || dy !== 0) out[u.id] = [dx, dy];
   }
   return out;
 }
 function offOf(lay, uid) { const o = lay[uid]; return o ? o : [0, 0]; }
+function turnOf(lay, uid) { const o = lay[uid]; return !!(o && o[2] === 1); }
+// v4.7 (Joel 2026-10-21, "technically the long cookers should do that as well"): a 2 tile unit turns
+// a quarter. Its footprint swaps axes around its first tile (a mirror on the x = y diagonal through
+// that tile), which on screen is the sprite flipped left to right, since a horizontal flip in this iso
+// projection swaps the two ground axes. Use tiles follow with their faces; game.js draws it mirrored.
+// The drum always has two tiles; the main cooker only as the stick burner or the trailer rig.
+const TURN_UNITS = Object.freeze({ kettle1: true, drum: true });
+const FACE_TURN = Object.freeze({ left: 'up', up: 'left', right: 'down', down: 'right' });
+function canTurn(uid, gear) {
+  if (uid === 'drum') return true;
+  return uid === 'kettle1' && pitTier(gear) >= 2;
+}
+function turnStation(st) {
+  if (!st.tiles || st.tiles.length < 2) return st;
+  const a = st.tiles[0];
+  const T2 = (p) => Object.freeze(Object.assign({}, p, { x: a.x + (p.y - a.y), y: a.y + (p.x - a.x) }));
+  const o = Object.assign({}, st);
+  o.tiles = list(st.tiles.map(T2));
+  o.use = list(st.use.map((u) => Object.freeze(Object.assign({}, T2(u), { face: FACE_TURN[u.face] || u.face }))));
+  const ax = a.x * TILE, ay = a.y * TILE;
+  if (st.draw) o.draw = px(ax + (st.draw.y - ay), ay + (st.draw.x - ax));
+  o.sortRow = Math.max.apply(null, o.tiles.map((t) => t.y));
+  o.turned = true;
+  return Object.freeze(o);
+}
 function shXY(o, d) { return (d[0] || d[1]) ? Object.freeze(Object.assign({}, o, { x: o.x + d[0], y: o.y + d[1] })) : o; }
 function shPx(o, d) { return (d[0] || d[1]) ? Object.freeze(Object.assign({}, o, { x: o.x + d[0] * TILE, y: o.y + d[1] * TILE })) : o; }
 
@@ -1155,8 +1183,10 @@ function flexUse(tiles, declared) {
 
 // The shifted copies of every positioned record for a clean layout.
 function buildGeom(lay, tier) {
-  const stations = list(stationsFor(tier).map((st) => {
-    const d = offOf(lay, UNIT_OF.station[st.id]);
+  const stations = list(stationsFor(tier).map((st0) => {
+    const uid = UNIT_OF.station[st0.id];
+    const d = offOf(lay, uid);
+    const st = turnOf(lay, uid) ? turnStation(st0) : st0;
     const o = Object.assign({}, st);
     o.tiles = (d[0] || d[1]) ? list(st.tiles.map((t) => shXY(t, d))) : st.tiles;
     o.use = (d[0] || d[1]) ? list(st.use.map((u) => shXY(u, d))) : st.use;
@@ -1189,7 +1219,9 @@ function buildGeom(lay, tier) {
   for (const k of Object.keys(FORSALE0)) {
     const u = FORSALE_UNIT[k];
     const d = u ? offOf(lay, u) : [0, 0];
-    forSale[k] = list(FORSALE0[k].map((t) => shXY(t, d)));
+    const f0 = FORSALE0[k], a = f0[0];
+    const ft = u && turnOf(lay, u) && f0.length > 1 ? f0.map((t) => px(a.x + (t.y - a.y), a.y + (t.x - a.x))) : f0;   // v4.7
+    forSale[k] = list(ft.map((t) => shXY(t, d)));
   }
   const reg = byId.register, table = byId.table, board = byId.board;
   // v4.6: the crew posts sit on a free tile of their station: the default one while it stands free
@@ -1372,7 +1404,7 @@ function placeUnit(layIn, uid, gear, decor) {
   const o = withOwn(u, gear, decor);
   if (checkLayout(lay, o.g, o.d, uid).ok) return lay;
   for (const off of nearOffsets(offOf(lay, uid))) {
-    const t = Object.assign({}, lay, { [uid]: off });
+    const t = Object.assign({}, lay, { [uid]: turnOf(lay, uid) ? off.concat([1]) : off });   // v4.7: keeps its turn
     if (checkLayout(t, o.g, o.d, uid).ok) return cleanLayout(t);
   }
   return null;
@@ -3328,7 +3360,7 @@ function validateSave(obj) {
   try {
     if (!isPlainObject(obj)) return null;
     const v = readKey(obj, 'v');
-    if (v !== 1 && v !== 2 && v !== 3 && v !== 4 && v !== 5 && v !== 6 && v !== 7 && v !== 8 && v !== 9 && v !== 10 && v !== 11 && v !== 12 && v !== 13 && v !== 14) return null;
+    if (v !== 1 && v !== 2 && v !== 3 && v !== 4 && v !== 5 && v !== 6 && v !== 7 && v !== 8 && v !== 9 && v !== 10 && v !== 11 && v !== 12 && v !== 13 && v !== 14 && v !== 15) return null;
     const day = toInt(readKey(obj, 'day'), 1, 1, C.MAX_DAY);
     const cash = toInt(readKey(obj, 'cash'), C.START_CASH, 0, C.MAX_CASH);
     const rep = toInt(readKey(obj, 'rep'), C.START_REP, 0, 100);
@@ -3461,7 +3493,10 @@ function validateSave(obj) {
     for (let i = 1; i < C.PIT_LEVEL_XP.length; i++) if (pitXp >= C.PIT_LEVEL_XP[i]) lvl = i + 1;
     const pit = { xp: pitXp, longDay: Math.min(toInt(readKey(pitIn, 'longDay'), 0, 0, C.LONG_DAY_MAX), lvl - 1) };
     // v3.9: the yard layout (v11 and older: the default). An invalid layout falls back to the default.
-    const layout = v >= 12 ? fitLayout(readKey(obj, 'layout'), gear, decor) : {};
+    // v4.7 (save v15): a value may carry a third entry, the turn; a v14 or older layout has none.
+    const layIn = readKey(obj, 'layout');
+    const layV = v >= 15 || !isPlainObject(layIn) ? layIn : Object.keys(layIn).reduce((acc, k) => { const o = layIn[k]; acc[k] = Array.isArray(o) ? o.slice(0, 2) : o; return acc; }, {});
+    const layout = v >= 12 ? fitLayout(layV, gear, decor) : {};
     // v4.4: the plates of the last Yard day of each kind (an older save has none: the starting cart).
     const paceIn = readKey(obj, 'pace');
     const pace = paceIn === undefined ? undefined : [0, 1].map((i) => { let x; try { x = Array.isArray(paceIn) ? paceIn[i] : undefined; } catch (e) { x = undefined; } return typeof x === 'number' && Number.isFinite(x) ? toInt(x, 0, 0, 999) : null; });
@@ -7277,17 +7312,23 @@ function createSim(saved, seed) {
   function arrangeView() {
     const tier = pitTier(state.gear);
     const units = UNITS.filter((u) => unitOwned(u, state.gear, state.decor)).map((u) => ({ id: u.id, label: u.id === 'kettle1' && tier > 0 ? PIT_TIERS[tier].label : u.label, kind: u.kind,
-      tiles: unitTiles(state.layout, u.id, state.gear, state.decor) }));
+      tiles: unitTiles(state.layout, u.id, state.gear, state.decor), turn: canTurn(u.id, state.gear), turned: turnOf(state.layout, u.id) }));
     return { ok: canArrange(), layout: cleanLayout(state.layout), units };
   }
   // Would unit `uid` fit at offset `off` on top of the draft layout? { ok, reason, layout }.
   function checkMove(draft, uid, off) {
     const lay = cleanLayout(draft);
     if (!UNIT_BY_ID[uid] || !Array.isArray(off)) return { ok: false, reason: '', layout: lay };
-    const next = cleanLayout(Object.assign({}, lay, { [uid]: [Math.trunc(off[0]), Math.trunc(off[1])] }));
+    // v4.7: off[2] (1 or 0) sets the turn; without it the piece keeps the turn it has in the draft.
+    const turned = off.length >= 3 ? (off[2] === 1 || off[2] === true) : turnOf(lay, uid);
+    const v = [Math.trunc(off[0]), Math.trunc(off[1])];
+    if (turned && canTurn(uid, state.gear)) v.push(1);
+    const next = cleanLayout(Object.assign({}, lay, { [uid]: v }));
     const r = checkLayout(next, state.gear, state.decor, uid);
     return { ok: r.ok, reason: r.reason, layout: next };
   }
+  // v4.7: can the piece turn (a 2 tile unit the yard owns)?
+  function canTurnUnit(uid) { return canArrange() && unitOwned(UNIT_BY_ID[uid] || { decorOwn: [], stations: [] }, state.gear, state.decor) && canTurn(uid, state.gear); }
   function previewLayout(draft) { applyLayout(draft === null || draft === undefined ? state.layout : draft, pitTier(state.gear)); }
   // Done: the draft becomes the layout (refused when invalid or outside the hub).
   function setLayout(draft) {
@@ -9838,64 +9879,228 @@ function createSim(saved, seed) {
 
   // W13.3 and X8: the loop comes from the validated save (deviation 37). The morning roll runs for
   // the tutorial, the creator, Hiring Day and the week; the season end card opens with no roll.
-  const save = saved !== null && typeof saved === 'object' ? validateSave(saved) : null;
-  fillState(save);
-  if (state.tutorial.done === false) {
-    state.loop = 'tutorial';
-    beginMorning('tutorial');
-    checkTutorial();
-  } else if (state.profile === null) {
-    state.loop = 'creator';
-    beginMorning('creator');
-  } else if ((save !== null && save.hiring !== null) || hiringOwed()) {
-    // X8: a saved Hiring Day reopens with its pool; an owed one opens fresh. A load emits nothing.
+  function loadSave(saved) {
+    const save = saved !== null && typeof saved === 'object' ? validateSave(saved) : null;
+    fillState(save);
+    if (state.tutorial.done === false) {
+      state.loop = 'tutorial';
+      beginMorning('tutorial');
+      checkTutorial();
+    } else if (state.profile === null) {
+      state.loop = 'creator';
+      beginMorning('creator');
+    } else if ((save !== null && save.hiring !== null) || hiringOwed()) {
+      // X8: a saved Hiring Day reopens with its pool; an owed one opens fresh. A load emits nothing.
+      const mark = events.length;
+      beginMorning('hiring');
+      openHiring(true, save !== null && save.hiring !== null ? save.hiring : null);
+      events.length = mark;
+    } else if (state.season.results.length >= C.SEASON_WEEKS && !(save !== null && save.season.pick !== null)) {
+      state.loop = 'seasonEnd';
+      state.phase = 'morning';
+      state.offseason = buildOffseason(save !== null && save.offseason !== null ? save.offseason.decide : null);   // v3.3
+    } else {
+      state.loop = 'week';
+      beginMorning('week');
+      startWeek(state.season.weekCash);
+      // W22.3: the saved pick and add-on come back silently when still legal.
+      const s = state.season;
+      const pick = save.season.pick;
+      const offer = pick !== null ? (s.offers.find((o) => o.id === pick) || null) : null;
+      if (offer !== null) {
+        s.booking = offer;
+        s.addon = save.season.addon !== null && addonLegal(offer, save.season.addon) ? save.season.addon : null;
+        state.cart = prefill();
+      }
+      // X6.3 and X18.1 item 31: the saved walk-ins (hired flags kept) and the training pick come back
+      // silently, so a reload never offers a hired walk-in again or reopens the pick.
+      const savedWalkins = save.season.walkins;
+      if (Array.isArray(savedWalkins) && savedWalkins.length > 0) {
+        s.walkins = savedWalkins.map((w) => {
+          const stars = cardStars(w.skills);
+          return { name: w.name, role: w.role, skills: w.skills.slice(), potential: w.potential, mood: w.mood, look: cleanLook(w.look),
+            stars, wage: wageFor(stars, w.role), hired: w.hired === true };
+        });
+      }
+      s.trained = save.season.trained;
+      // D9: the saved day of the week (a v5 or older save opens Monday).
+      s.day = save.season.day;
+      s.dayLog = save.season.dayLog.slice();
+      s.money = Array.isArray(save.season.money) ? save.season.money.map((x) => Object.assign({}, x)) : [];   // v4.4
+      s.moneyPrev = typeof save.season.moneyPrev === 'number' ? save.season.moneyPrev : null;
+      s.prepped = save.season.prepped === true;
+      s.loadin = save.season.loadin === true;
+      s.overnight = save.season.overnight !== null && s.loadin && s.day === 5 && bookedDay() === 5
+        ? { meat: save.season.overnight.meat, n: save.season.overnight.n } : null;
+      if (eventPlayed()) s.offers = [];
+      // v3.4: the advance stays with the booking it came from (never more than its deposit).
+      const bk = s.booking;
+      s.advance = bk !== null && bk.type !== 'yard' && !bk.comp && !eventPlayed() ? Math.min(save.season.advance | 0, bk.deposit) : 0;
+      s.plan = save.season.plan !== null && save.season.plan !== undefined ? save.season.plan.slice() : null;   // v3.5
+      state.cart = morningCart();
+    }
+  }
+  loadSave(saved);
+
+  // ---- v4.7 the tester panel ------------------------------------------------------------------
+  // Joel 2026-10-21: "There also needs to be a way for me to test the advanced levels as well."
+  // game.js shows the panel only when window.PitSimTester === true (the preview packager sets it;
+  // the website copy never does). Between days only: every change serializes the game, edits that
+  // save, then loads it back through validateSave (loadSave), so what it leaves is a save the game
+  // itself could have written. The booking pick is the one change made on the live week: an offer of
+  // that type joins this week's cards and is booked with bookOffer.
+  const TESTER_GEAR = Object.freeze(['cooler', 'bigtable', 'tray', 'canopy', 'lights', 'kettle2', 'drum', 'cabinet', 'offset', 'trailer']);
+  // A rung needs the ones below it (each list: what turning the key on also turns on).
+  const TESTER_NEEDS = Object.freeze({ drum: ['kettle2'], offset: ['cabinet'], trailer: ['cabinet', 'offset'] });
+  function testerOpen() {
+    if (state.phase === 'service') return 'Not during service. Finish the day, then use the tester.';
+    if (state.loop === 'prep' || state.loop === 'cook' || state.loop === 'report') return 'Finish the day first, then use the tester.';
+    return '';
+  }
+  function testerView() {
+    const tier = pitTier(state.gear);
+    const has = {};
+    for (const g of TESTER_GEAR) has[g] = g === 'lights' ? state.decor.lights === true : state.gear[g] === true;
+    return { open: testerOpen() === '', reason: testerOpen(), week: state.season.week, weeks: C.SEASON_WEEKS, cash: state.cash, rep: state.rep, gear: has,
+      crew: state.crew.map((c) => ({ id: c.id, name: c.name, role: c.role, stars: cardStars(c.skills) })), slots: C.TIER_SLOTS[pitTier(state.gear)], tier,
+      bookings: BOOKING_IDS.filter((b) => b !== 'finale' && b !== 'yard').map((b) => ({ id: b, label: BOOKINGS[b].label })),
+      booking: state.season.booking ? state.season.booking.type : null,
+      stock: Object.assign({}, state.stock), charcoal: state.charcoal, wood: state.wood };
+  }
+  function testerLoad(save) {
+    const valid = validateSave(save);
+    if (valid === null) return false;
     const mark = events.length;
-    beginMorning('hiring');
-    openHiring(true, save !== null && save.hiring !== null ? save.hiring : null);
+    loadSave(valid);
     events.length = mark;
-  } else if (state.season.results.length >= C.SEASON_WEEKS && !(save !== null && save.season.pick !== null)) {
-    state.loop = 'seasonEnd';
-    state.phase = 'morning';
-    state.offseason = buildOffseason(save !== null && save.offseason !== null ? save.offseason.decide : null);   // v3.3
-  } else {
-    state.loop = 'week';
-    beginMorning('week');
-    startWeek(state.season.weekCash);
-    // W22.3: the saved pick and add-on come back silently when still legal.
+    emit('tester', {});
+    emit('save_wanted', { reason: 'tester' });
+    return true;
+  }
+  function testerApply(op) {
+    const no = (m) => ({ ok: false, message: m });
+    const why = testerOpen();
+    if (why) return no(why);
+    if (!isPlainObject(op)) return no('');
+    const sv = serialize();
+    // Any change leaves the tutorial and the creator behind.
+    sv.tutorial = { done: true };
+    if (!isPlainObject(sv.player)) sv.player = { name: STRINGS.defaultName, look: Object.assign({}, DEFAULT_LOOK) };
+    const ss = sv.season;
+    let msg = '';
+    const toWeek = (n, cashKeep) => {
+      ss.results = [];
+      for (let i = 1; i < n; i++) ss.results.push({ type: i % 2 ? 'birthday' : 'picnic', stars: 3 });
+      ss.week = n; ss.pick = null; ss.addon = null; ss.day = 0; ss.dayLog = new Array(C.WEEK_DAYS).fill(null);
+      ss.plan = null; ss.advance = 0; ss.prepped = false; ss.loadin = false; ss.overnight = null; ss.money = [];
+      ss.weekCash = cashKeep; ss.drafted = true; ss.walkins = []; ss.trained = null;
+      sv.hiring = null; sv.offseason = null;
+    };
+    if (op.reset === true) {
+      sv.cash = C.START_CASH; sv.rep = C.START_REP; sv.charcoal = 0; sv.wood = 0;
+      for (const m of MEAT_IDS) sv.stock[m] = 0;
+      for (const g of GEAR_IDS) sv.gear[g] = false;
+      for (const d of DECOR_IDS) sv.decor[d] = false;
+      sv.crew = []; sv.layout = {};
+      toWeek(1, C.START_CASH);
+      msg = 'Season reset: week 1, starting cash, no gear or crew.';
+    }
+    if (op.week !== undefined) {
+      const n = Math.trunc(Number(op.week));
+      if (!(n >= 1 && n <= C.SEASON_WEEKS)) return no('Pick a week from 1 to ' + C.SEASON_WEEKS + '.');
+      toWeek(n, sv.cash);
+      msg = 'Now week ' + n + (n === C.SEASON_WEEKS ? ', the competition.' : '.');
+    }
+    if (op.cash !== undefined) {
+      const c = Math.trunc(Number(op.cash));
+      if (!(c >= 0 && c <= C.MAX_CASH)) return no('');
+      sv.cash = c; ss.weekCash = c;
+      msg = 'Cash set to ' + c + '.';
+    }
+    if (op.rep !== undefined) {
+      const r = Math.trunc(Number(op.rep));
+      if (!(r >= 0 && r <= 100)) return no('');
+      sv.rep = r;
+      msg = 'Word of mouth set to ' + r + '.';
+    }
+    if (isPlainObject(op.gear)) {
+      const want = {};
+      for (const g of TESTER_GEAR) want[g] = g === 'lights' ? sv.decor.lights === true : sv.gear[g] === true;
+      for (const g of Object.keys(op.gear)) {
+        if (!TESTER_GEAR.includes(g)) continue;
+        const on = op.gear[g] === true;
+        want[g] = on;
+        if (on) for (const k of TESTER_NEEDS[g] || []) want[k] = true;
+        else for (const k of Object.keys(TESTER_NEEDS)) if (TESTER_NEEDS[k].includes(g)) want[k] = false;
+      }
+      const tier0 = pitTier(sv.gear);
+      for (const g of TESTER_GEAR) { if (g === 'lights') sv.decor.lights = want[g]; else sv.gear[g] = want[g]; }
+      // The layout as a purchase or a sale leaves it: the main cooker starts from its own spot when
+      // it changes length, a piece that no longer fits takes the nearest free spot, else the default.
+      let lay = cleanLayout(sv.layout);
+      const tier1 = pitTier(sv.gear);
+      if ((tier0 >= 2) !== (tier1 >= 2)) delete lay.kettle1;
+      if (!checkLayout(lay, sv.gear, sv.decor).ok) {
+        for (const u of UNITS) {
+          if (!unitOwned(u, sv.gear, sv.decor) || checkLayout(lay, sv.gear, sv.decor).ok) continue;
+          const next = placeUnit(lay, u.id, sv.gear, sv.decor);
+          if (next) lay = next;
+        }
+      }
+      sv.layout = checkLayout(lay, sv.gear, sv.decor).ok ? settleUnowned(lay, sv.gear, sv.decor) : {};
+      if (!canBrisket(sv.gear)) sv.stock.brisket = 0;
+      sv.crew = sv.crew.filter((c) => c.role !== 'pit' || tier1 >= C.PIT_TIER);
+      msg = 'Gear updated.';
+    }
+    if (isPlainObject(op.crew)) {
+      const role = op.crew.role, st = Number(op.crew.stars);
+      if (!ROLE_IDS.includes(role) || !(st >= 1 && st <= 5)) return no('');
+      const tier = pitTier(sv.gear);
+      if (role === 'pit' && tier < C.PIT_TIER) return no(STRINGS.ui.pitLocked);
+      if (sv.crew.length >= C.TIER_SLOTS[tier] || sv.crew.length >= C.CREW_MAX) return no('Crew slots are full (' + C.TIER_SLOTS[tier] + '). Better gear opens more.');
+      const id = Math.max(sv.crewSeq | 0, sv.crew.reduce((a, c) => Math.max(a, c.id + 1), 1));
+      const used = new Set(sv.crew.map((c) => c.name).concat([sv.player.name]));
+      const name = firstFreeName(id * 7, used);
+      const sk = Math.round(st * 2) / 2;
+      const card = { id, name, role, skills: [sk, sk], potential: Math.max(sk, 3), xp: 0, banked: 0, mood: 0, wage: wageFor(sk, role),
+        contract: 1, seasons: 0, rookie: false, look: randomLook(), bring: !sv.crew.some((c) => c.role === role && c.bring), raised: false,
+        notice: false, worked: 0, bench: 0 };
+      if (role === 'pit') card.post = null;
+      sv.crew.push(card);
+      sv.crewSeq = id + 1;
+      ss.drafted = true; sv.hiring = null;
+      msg = name + ' joins as ' + role.toUpperCase() + ', ' + sk + ' stars.';
+    }
+    if (op.fill === true) {
+      for (const m of MEAT_IDS) sv.stock[m] = m === 'brisket' && !canBrisket(sv.gear) ? 0 : 20;
+      sv.charcoal = C.CHARCOAL_MAX; sv.wood = C.WOOD_MAX;
+      msg = 'Stocked: 20 of each meat, full charcoal and wood.';
+    }
+    if (!testerLoad(sv)) return no('That change did not make a valid save.');
+    if (typeof op.booking === 'string') {
+      const r = testerBook(op.booking);
+      if (!r.ok) return r;
+      msg = r.message;
+    }
+    return { ok: true, message: msg };
+  }
+  function testerBook(type) {
+    const no = (m) => ({ ok: false, message: m });
+    if (!BOOKINGS[type] || type === 'finale' || type === 'yard') return no('');
+    if (state.loop !== 'week' || state.phase !== 'morning') return no('Bookings are picked on the week hub.');
     const s = state.season;
-    const pick = save.season.pick;
-    const offer = pick !== null ? (s.offers.find((o) => o.id === pick) || null) : null;
-    if (offer !== null) {
-      s.booking = offer;
-      s.addon = save.season.addon !== null && addonLegal(offer, save.season.addon) ? save.season.addon : null;
-      state.cart = prefill();
+    if (s.week === C.SEASON_WEEKS) return no('Week ' + C.SEASON_WEEKS + ' is the competition. Jump to an earlier week to book.');
+    let o = s.offers.find((x) => x.type === type) || null;
+    if (o === null) {
+      const add = genOffers(Object.assign(offerInput(), { types: [BOOKINGS[type]] })).find((x) => x.type === type) || null;
+      if (add === null) return no('That booking is not open to this yard yet.');
+      const yard = s.offers.filter((x) => x.type === 'yard');
+      s.offers = s.offers.filter((x) => x.type !== 'yard' && x.id !== add.id).concat([add], yard);
+      o = add;
     }
-    // X6.3 and X18.1 item 31: the saved walk-ins (hired flags kept) and the training pick come back
-    // silently, so a reload never offers a hired walk-in again or reopens the pick.
-    const savedWalkins = save.season.walkins;
-    if (Array.isArray(savedWalkins) && savedWalkins.length > 0) {
-      s.walkins = savedWalkins.map((w) => {
-        const stars = cardStars(w.skills);
-        return { name: w.name, role: w.role, skills: w.skills.slice(), potential: w.potential, mood: w.mood, look: cleanLook(w.look),
-          stars, wage: wageFor(stars, w.role), hired: w.hired === true };
-      });
-    }
-    s.trained = save.season.trained;
-    // D9: the saved day of the week (a v5 or older save opens Monday).
-    s.day = save.season.day;
-    s.dayLog = save.season.dayLog.slice();
-    s.money = Array.isArray(save.season.money) ? save.season.money.map((x) => Object.assign({}, x)) : [];   // v4.4
-    s.moneyPrev = typeof save.season.moneyPrev === 'number' ? save.season.moneyPrev : null;
-    s.prepped = save.season.prepped === true;
-    s.loadin = save.season.loadin === true;
-    s.overnight = save.season.overnight !== null && s.loadin && s.day === 5 && bookedDay() === 5
-      ? { meat: save.season.overnight.meat, n: save.season.overnight.n } : null;
-    if (eventPlayed()) s.offers = [];
-    // v3.4: the advance stays with the booking it came from (never more than its deposit).
-    const bk = s.booking;
-    s.advance = bk !== null && bk.type !== 'yard' && !bk.comp && !eventPlayed() ? Math.min(save.season.advance | 0, bk.deposit) : 0;
-    s.plan = save.season.plan !== null && save.season.plan !== undefined ? save.season.plan.slice() : null;   // v3.5
-    state.cart = morningCart();
+    const r = bookOffer(o.id);
+    if (!r.ok) return no(r.message || 'That booking could not be picked.');
+    return { ok: true, message: 'Booked: ' + BOOKINGS[type].label + '.' };
   }
 
   const sim = {
@@ -9925,8 +10130,9 @@ function createSim(saved, seed) {
     planView, setPlanDay, togglePlanDay, startPlan, skipToWeekend, planOf, restNote,
     pitView, pickPitSkill, cookTime, extraSeconds, moneyView, yardPlates, nextGear,
     // v3.9 arrange mode
-    canArrange, arrangeView, checkMove, previewLayout, setLayout,
+    canArrange, arrangeView, checkMove, previewLayout, setLayout, canTurnUnit,
     // v4.3 the PIT card
+    testerView, testerApply,   // v4.7 the tester panel (preview only)
     setPitPost, cyclePitPost, pitOpen, pitPostOf: (id) => { const c = findCard(id); return c ? pitPostOf(c) : null; }
   };
   return sim;
@@ -9980,6 +10186,8 @@ PitSim.unitAt = unitAt;
 PitSim.unitTiles = unitTiles;
 PitSim.applyLayout = applyLayout;
 PitSim.layoutKey = function () { return LAYOUT_KEY; };
+PitSim.canTurn = canTurn;   // v4.7
+PitSim.TURN_UNITS = TURN_UNITS;
 // v4.1 the gear ladder
 PitSim.PIT_TIERS = PIT_TIERS;
 PitSim.TIER_GEAR = TIER_GEAR;

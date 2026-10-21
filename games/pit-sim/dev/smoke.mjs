@@ -287,7 +287,7 @@ const DEVICE_SIZES = [
 ];
 
 // Contract D2 and D3.
-const C_EXPECT = { WALK_TILES_PER_S: 6, SAVE_VERSION: 14, PATIENCE_MID_FRAC: 0.5, GEAR_RESERVE: 30, QUEUE_SPOTS: 3, QUEUE_SPOTS_BIG: 5, TABLE_SPOTS: 3, TABLE_SPOTS_BIG: 5 };
+const C_EXPECT = { WALK_TILES_PER_S: 6, SAVE_VERSION: 15, PATIENCE_MID_FRAC: 0.5, GEAR_RESERVE: 30, QUEUE_SPOTS: 3, QUEUE_SPOTS_BIG: 5, TABLE_SPOTS: 3, TABLE_SPOTS_BIG: 5 };
 const C_NEW_KEYS = ['EAT_MIN', 'EAT_MAX', 'HEART_SECONDS', 'SEAT_BONUS_BASE', 'SEAT_BONUS_MAX', 'CHARM_STEP', 'CHARM_MAX', 'REP_TOGO_QUICK', 'SWEAT_FRAC', 'ZZZ_AFTER', 'FX', 'PATIENCE_MID_FRAC', 'GEAR_RESERVE'];
 const FX_KEYS = ['NUMBER_S', 'NUMBER_RISE_PX', 'NUMBER_FADE_AT', 'TIP_GAP_PX', 'SPARKLE_S', 'SPARKLE_FRAME_S', 'SPARKLE_STAGGER_S',
   'HEART_S', 'HEART_FRAME_S', 'HEART_RISE_PX', 'HEART_FADE_S', 'EAT_FRAME_S', 'PUFF_EVERY_LOW', 'PUFF_EVERY_GOOD', 'PUFF_EVERY_HOT',
@@ -416,7 +416,7 @@ const C_W2 = {
 };
 const C_W2_FIXED = ['SAVE_VERSION', 'SEASON_WEEKS', 'NAME_MAX', 'NAME_PUNCT', 'LENGTHS'];
 // W2 changed values and the v2.1 keys that stay (W2 last paragraph).
-const C_W2_EXACT = { SAVE_VERSION: 14, DRIVEWAY_PRICE: 400, GATE_OPENS: 30, LAST_CALL: 110, DAY_SECONDS: 125, STEPPER_MAX: 99, START_CASH: 80, START_REP: 20 };
+const C_W2_EXACT = { SAVE_VERSION: 15, DRIVEWAY_PRICE: 400, GATE_OPENS: 30, LAST_CALL: 110, DAY_SECONDS: 125, STEPPER_MAX: 99, START_CASH: 80, START_REP: 20 };
 // W22.18: the keys whose starting values the W19 literals assume.
 const LITERAL_KEYS = ['FEE_MULT', 'FEE_ROUND', 'DEPOSIT_FRAC', 'PAY_BASE', 'PAY_PER_STAR', 'STAR_FANS', 'REP_DAY_MIN', 'SPARE_FRAC', 'BAGS_PER_COOKER',
   'SCORE_FED', 'SCORE_WAIT', 'SCORE_QUALITY', 'STAR_EDGES', 'WAIT_FULL_S', 'WAIT_ZERO_S', 'BURNT_PENALTY', 'OFFMENU_PENALTY', 'COOLER_CAP', 'SEASON_CARRY_REP', 'SEASON_REP_FLOOR',
@@ -566,7 +566,7 @@ const ID3 = {
 };
 const SEASON_WEEKS = 7;   // v3.5: six weeks and the competition finale (was 9)
 const P_POOL = 24;        // v3.6: the Hiring Day pool (6 a role, 4 roles)
-const SAVE_V = 14;        // v4.1: v13 (the gear ladder); v3.5: save v9 (season.plan, pit); v3.6: v10 (the register, the TILL card); v3.7: v11 (pay, then sit)
+const SAVE_V = 15;        // v4.7: v15 (a turned unit in the layout); v4.1: v13 (the gear ladder); v3.5: save v9 (season.plan, pit); v3.6: v10 (the register, the TILL card); v3.7: v11 (pay, then sit)
 // W19 step 51: the v2.1 (v3) save sample.
 const SAVE_V3_SAMPLE = {
   v: 3, day: 5, cash: 150, rep: 20,
@@ -1225,7 +1225,7 @@ const SAVE_V1_SAMPLE = {
   drivewayShown: false
 };
 const SAVE_DIRTY = { v: 1, day: 'abc', cash: -50, rep: 400, stock: { sausage: 200, bogus: 1 }, gear: { drum: true, kettle2: false }, hires: { tender: true }, extra: 1 };
-const INVALID_SAVES = [null, 'x', [], {}, undefined, 42, { v: '5' }, { v: 0 }, { v: '3' }, { v: '4' }, { v: 15 }];   // v4.1: v 1 to 13 accepted; v4.3: 14
+const INVALID_SAVES = [null, 'x', [], {}, undefined, 42, { v: '5' }, { v: 0 }, { v: '3' }, { v: '4' }, { v: 16 }];   // v4.1: v 1 to 13 accepted; v4.3: 14; v4.7: 15
 
 // The shopping list for day 1 and later days. Two sausage units give four plates, so later
 // customers walk out and the walk out step has something to assert.
@@ -1593,6 +1593,7 @@ async function nodeChecks() {
   await step('four plates set down land in four counter spots, headless', () => countersHeadless(globalThis[GLOBAL_NAME]));
   await step('v3.7 the register: guests order and pay first, a TILL card rings them up, to go spots, the crew idle by their work, save v11, headless', () => registerHeadless(globalThis[GLOBAL_NAME]));
   await step('v4.3 the PIT card: locked on the kettle, open with the cabinet, hired, a cook it runs alone, Timing and Care by stars, never on its cooker with you, save v14, headless', () => pitHeadless(globalThis[GLOBAL_NAME]));
+  await step('v4.7 turning a long cooker and the tester panel sim side: the counter row, save v15, week 4 with a PIT card on the turned stick burner, headless', () => turnHeadless(globalThis[GLOBAL_NAME]));
   await step('v3.7 pay then sit: the RUN card and the pitmaster deliver to the table, eating starts on delivery, refunds, headless', () => deliveryHeadless(globalThis[GLOBAL_NAME]));
   await step('v3.8 overtime: paid guests hold the day past the hard end, boxed to go at the cap, the unpaid line leaves uncharged, headless', () => overtimeHeadless(globalThis[GLOBAL_NAME]));
   await step('overtime delivery (Joel 2026-10-20): past the hard end the RUN card still carries a counter plate to the seated guest, headless', () => overtimeRunHeadless(globalThis[GLOBAL_NAME]));
@@ -2160,6 +2161,88 @@ function pitPlay(h, player) {
   }
   return { evs, clash, sameTile };
 }
+// v4.7 (Joel 2026-10-21, "technically the long cookers should do that as well", "There also needs to
+// be a way for me to test the advanced levels as well"): a 2 tile unit turns (its footprint swaps
+// axes around its first tile, the art draws mirrored), stored as the layout value's third entry
+// (save v15); and the tester panel's sim side (testerView, testerApply). Headless.
+function turnHeadless(P) {
+  const C = P.C, notes = [];
+  const gear2 = { cabinet: true, offset: true };
+  // (a) The turn: the stick burner along x at (1,8) (2,8) runs along y when turned, about its first tile.
+  P.applyLayout({}, 2);
+  const flat = P.MAP.station('kettle1');
+  assert(sameJSON(flat.tiles.map((t) => [t.x, t.y]), [[1, 8], [2, 8]]) && flat.turned !== true, 'the stick burner default ' + describe(flat.tiles));
+  P.applyLayout({ kettle1: [0, 0, 1] }, 2);
+  const tf = P.MAP.station('kettle1');
+  assert(sameJSON(tf.tiles.map((t) => [t.x, t.y]), [[1, 8], [1, 9]]) && tf.turned === true, 'turned about (1,8) ' + describe(tf.tiles));
+  assert(P.checkLayout({ kettle1: [0, 0, 1] }, gear2, {}).reason === 'Cookers stay on the patio', 'turned in place must leave the patio');
+  // (b) The counter row (x 4): blocked by the cooler and the pile; free once they go to the back row.
+  const row = { kettle1: [3, -1, 1] };
+  const blocked = P.checkLayout(row, gear2, {});
+  assert(blocked.ok === false && /Overlaps/.test(blocked.reason), 'the counter row with the pile on it ' + describe(blocked));
+  const moved = { kettle1: [3, -1, 1], cooler: [-3, 0], pile: [-3, -1] };
+  const ok = P.checkLayout(moved, gear2, {});
+  assert(ok.ok === true, 'turned stick burner in the counter row ' + describe(ok));
+  P.applyLayout(moved, 2);
+  const tr = P.MAP.station('kettle1');
+  assert(sameJSON(tr.tiles.map((t) => [t.x, t.y]), [[4, 7], [4, 8]]) && tr.work.some((u) => u.x === 3 && u.y === 7 && u.face === 'right'), 'counter row tiles and work ' + describe([tr.tiles, tr.work]));
+  // The trailer turns the same way; the drum (along y) turns along x; the counter and a kettle do not.
+  assert(P.checkLayout(moved, Object.assign({ trailer: true }, gear2), {}).ok === true, 'the trailer in the counter row');
+  P.applyLayout({ drum: [0, 0, 1] }, 0);
+  assert(sameJSON(P.MAP.station('drum').tiles.map((t) => [t.x, t.y]), [[2, 5], [3, 5]]), 'the drum turned ' + describe(P.MAP.station('drum').tiles));
+  assert(P.canTurn('drum', {}) === true && P.canTurn('kettle1', { cabinet: true }) === false && P.canTurn('kettle1', gear2) === true && P.canTurn('counter', gear2) === false, 'canTurn');
+  assert(sameJSON(P.cleanLayout({ counter: [0, 1, 1], kettle1: [0, 0, 1], drum: [1, 0, 0], cooler: [0, 0, 1] }), { kettle1: [0, 0, 1], drum: [1, 0], counter: [0, 1] }), 'cleanLayout turn entries ' + describe(P.cleanLayout({ counter: [0, 1, 1], kettle1: [0, 0, 1], drum: [1, 0, 0], cooler: [0, 0, 1] })));
+  P.applyLayout({}, 0);
+  notes.push('stick burner (1,8)(2,8) turns to (1,8)(1,9); counter row (4,7)(4,8) once the cooler and pile move back');
+  // (c) A season through the tester: week 4, 2000 cash, the stick burner (the cabinet comes with it),
+  // a 4 star PIT card, the picnic; then the turned stick burner in the counter row cooks it.
+  const h = headless(P, null, 47, { days: true });
+  const t = (op) => { const r = h.sim.testerApply(op); h.drain(); return r; };
+  assert(t({ week: 4 }).ok && h.st().loop === LOOP.week && h.st().season.week === 4 && h.st().season.results.length === 3 && h.st().tutorial.done === true, 'jump to week 4 ' + describe(h.st().season));
+  assert(t({ cash: 2000 }).ok && h.st().cash === 2000, 'cash 2000');
+  assert(t({ gear: { offset: true } }).ok && h.st().gear.cabinet === true && h.st().gear.offset === true && P.pitTier(h.st().gear) === 2, 'the stick burner brings the cabinet ' + describe(h.st().gear));
+  const pc = t({ crew: { role: 'pit', stars: 4 } });
+  assert(pc.ok && h.st().crew.length === 1 && h.st().crew[0].role === 'pit' && sameJSON(h.st().crew[0].skills, [4, 4]) && h.st().crew[0].bring === true, 'PIT 4 stars ' + describe([pc, h.st().crew]));
+  const bk = t({ booking: 'picnic' });
+  assert(bk.ok && h.st().season.booking && h.st().season.booking.type === 'picnic', 'the picnic booked ' + describe(bk));
+  const lay = h.sim.setLayout(moved);
+  h.drain();
+  assert(lay.ok && sameJSON(h.st().layout.kettle1, [3, -1, 1]), 'setLayout turned ' + describe([lay, h.st().layout]));
+  const sv = h.sim.serialize();
+  const back = P.validateSave(JSON.parse(JSON.stringify(sv)));
+  assert(sv.v === SAVE_V && sameJSON(back.layout.kettle1, [3, -1, 1]) && back.crew[0].role === 'pit' && back.season.week === 4, 'save v15 keeps the turn ' + describe([sv.v, back.layout]));
+  const v14 = JSON.parse(JSON.stringify(sv)); v14.v = 14;
+  const l14 = P.validateSave(v14).layout;
+  assert(!l14.kettle1 || l14.kettle1.length === 2, 'a v14 layout carries no turn ' + describe(l14));
+  h.sim.skipToWeekend(); h.drain();
+  for (let i = 0; i < 9 && !(h.st().phase === PHASE.morning && h.sim.dayOptions().booked); i++) { if (h.st().phase === 'evening') h.sim.advanceDay(); else h.sim.chooseDay('off'); h.drain(); }
+  h.sim.shopOpen('event');
+  const go = h.sim.shopConfirm('event');
+  h.drain();
+  assert(go && go.ok && h.st().phase === PHASE.service, 'the picnic did not start ' + describe(go));
+  const refused = h.sim.testerApply({ cash: 5 });
+  assert(refused.ok === false && /Not during service/.test(refused.message) && h.st().cash !== 5, 'the tester in service ' + describe(refused));
+  let guard = 0;
+  while (h.st().phase === PHASE.service && guard++ < 40000) h.tick();
+  const on = h.log.filter((e) => e.type === 'pit_on' && e.cooker === 'kettle1').length, pull = h.log.filter((e) => e.type === 'pit_pull').length;
+  assert(on > 0 && pull > 0, 'the PIT card did not cook on the turned stick burner ' + describe({ on, pull }));
+  notes.push('tester to week 4, 2000, stick burner, PIT 4 stars, picnic; turned in the counter row the PIT card put ' + on + ' pieces on, pulled ' + pull + '; refused in service');
+  // (d) The report first (the tester waits for it), then the ladder rule both ways, the slots, a reset.
+  const inReport = h.sim.testerApply({ cash: 5 });
+  assert(inReport.ok === false && /Finish the day/.test(inReport.message), 'the tester on the report ' + describe(inReport));
+  h.sim.finishReport(); h.drain();
+  if (h.st().phase === 'evening') { h.sim.advanceDay(); h.drain(); }
+  assert(t({ gear: { trailer: true } }).ok && P.pitTier(h.st().gear) === 3 && sameJSON(h.st().layout.kettle1, [3, -1, 1]), 'the trailer keeps the turned spot ' + describe(h.st().layout));
+  assert(t({ gear: { cabinet: false } }).ok && P.pitTier(h.st().gear) === 0 && !h.st().crew.some((c) => c.role === 'pit') && !h.st().layout.kettle1, 'off the cabinet takes the rungs above ' + describe([h.st().gear, h.st().layout]));
+  for (let i = 0; i < 2; i++) t({ crew: { role: 'run', stars: 2 } });
+  const full = t({ crew: { role: 'fire', stars: 2 } });
+  assert(full.ok === false && h.st().crew.length === C.TIER_SLOTS[0], 'slots on the kettle ' + describe([full, h.st().crew.length]));
+  assert(t({ crew: { role: 'pit', stars: 3 } }).ok === false, 'a PIT card on the kettle');
+  assert(t({ reset: true }).ok && h.st().season.week === 1 && h.st().cash === C.START_CASH && h.st().crew.length === 0 && P.pitTier(h.st().gear) === 0, 'reset season');
+  assert(t({ week: 7 }).ok && h.st().season.week === 7 && t({ booking: 'birthday' }).ok === false, 'week 7 is the competition');
+  notes.push('ladder on and off, ' + C.TIER_SLOTS[0] + ' slots on the kettle, reset, week 7 refuses a booking');
+  return notes.join('; ');
+}
 function pitHeadless(P) {
   const C = P.C, U = P.STRINGS.ui;
   const notes = [];
@@ -2277,7 +2360,7 @@ function pitHeadless(P) {
   // (i) Save v14: the pick and the card keep; a v13 save drops a PIT card; a bad pick is the default.
   const sv = hp.sim.serialize();
   const pc = sv.crew.find((c) => c.role === 'pit');
-  assert(sv.v === 14 && pc && pc.post === 'kettle1', 'serialize ' + describe([sv.v, pc]));
+  assert(sv.v === SAVE_V && pc && pc.post === 'kettle1', 'serialize ' + describe([sv.v, pc]));
   const back = P.validateSave(JSON.parse(JSON.stringify(sv)));
   assert(back.crew.find((c) => c.role === 'pit').post === 'kettle1', 'v14 reload lost the pick');
   const v13 = JSON.parse(JSON.stringify(sv)); v13.v = 13;
@@ -4866,7 +4949,7 @@ function daysLoopHeadless(P) {
   assert(d3.season.day === 5 && d3.season.loadin === false && sameJSON(d3.season.dayLog, ['off', 'off', 'off', 'off', 'off', null, null]), 'no pick keeps the day, never the Load-in ' + describe(d3.season));
   const d4 = V(v6Save({ season: { week: 5, pick: 'birthday', day: 3 } }));
   assert(d4.season.week === 3 && d4.season.day === 0, 'a week that does not hold opens Monday ' + describe(d4.season));
-  assert(V({ v: 15 }) === null, '{ v: 15 } accepted');
+  assert(V({ v: 16 }) === null, '{ v: 16 } accepted');
   notes.push('morning shops cost ' + seen.join(', ') + ' Monday to Thursday');
   return notes.join('; ') + '; the report save reloads on Sunday, a Yard week writes { yard, 0 }, dirty v6 keys clamp';
 }
@@ -10727,6 +10810,133 @@ async function browserChecks() {
     const c1 = await ev(hasKind(CARRY_KIND.charcoal));
     assert(c0 && !c1 && f1 > f0, 'Space at the kettle did nothing: fire ' + f0 + ' to ' + f1 + ', charcoal ' + c0 + ' to ' + c1);
     return 'hub (' + hub.panel + ' open): ' + seen.join(', ') + '; W up; 2 quick presses = 2 tiles; service ' + sd + ' walked; Space fed kettle1 ' + f0 + ' to ' + f1;
+  });
+
+  // v4.7 (Joel 2026-10-21): the tester panel (only with window.PitSimTester, which the preview
+  // packager sets and the website copy never does) and the long cookers turning to fit the counter row.
+  const tstFit = () => ev('(() => { const t = $("tester"); if (!t || t.hidden) return null; const r = t.getBoundingClientRect(); const bs = [...t.querySelectorAll("button")].filter((b) => b.offsetParent); const small = bs.filter((b) => b.getBoundingClientRect().height < 44 - 0.5).map((b) => b.id); const out = bs.filter((b) => { const q = b.getBoundingClientRect(); return q.left < r.left - 0.5 || q.right > r.right + 0.5; }).map((b) => b.id); return { w: Math.round(r.width), left: Math.round(r.left), right: Math.round(r.right), vw: innerWidth, docW: document.documentElement.scrollWidth, small, out, n: bs.length, back: !!$("tester-back") }; })()');
+  const stationTile = async (id, k = 0) => ev('(() => { const t = MAP.station(' + JSON.stringify(id) + ').tiles[' + k + ']; return { x: t.x, y: t.y }; })()');
+  await step('v4.7 tester panel: absent without the flag (the website copy)', async () => {
+    const m = await ev('({ flag: window.PitSimTester === true, tester: !!$("tester"), pit: !!$("pit-tester"), hub: !!$("hub-tester"), pause: !!$("pause-tester"), css: !!$("tester-css") })');
+    assert(!m.flag && !m.tester && !m.pit && !m.hub && !m.pause && !m.css, 'tester parts without the flag ' + describe(m));
+    return 'no #tester, no Tester entries, no tester style without window.PitSimTester';
+  });
+
+  await step('v4.7 tester panel: with the flag, week 4, 2000 cash, the stick burner, PIT 4 stars and the picnic by real taps; then the stick burner turned into the counter row by tap, cooked on', async () => {
+    const base = saveV9({ cash: 300, season: { week: 2, results: resultsOf(1) } });
+    let flagId = (await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: 'window.PitSimTester = true;' })).identifier;
+    try { await reload(base); } finally { await cdp.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: flagId }).catch(() => {}); }
+    assert(await ev('window.PitSimTester === true && !!$("tester")'), 'the flag did not build #tester');
+    await click('hub-tab-pit'); await advance(0);
+    assert(await visible('pit-tester'), '#pit-tester not on the Your pit tab');
+    await realTap('pit-tester');
+    assert(await visible('tester'), '#tester did not open');
+    const fit0 = await tstFit();
+    assert(fit0.docW <= fit0.vw && fit0.small.length === 0 && fit0.out.length === 0 && fit0.back, 'tester fit ' + describe(fit0));
+    const label = await text('tester-h');
+    assert(label === 'Tester tools' && (await text('tester-body')).includes('Tester tool'), 'not labelled as a tester tool: ' + describe(label));
+    for (const id of ['tester-week-4', 'tester-cash-2000', 'tester-gear-offset', 'tester-role-pit', 'tester-stars-4', 'tester-crew-add', 'tester-book-picnic']) await realTap(id);
+    const st = await ev('({ wk: S().season.week, cash: S().cash, tier: PitSim.pitTier(S().gear), gear: Object.assign({}, S().gear), crew: S().crew.map((c) => [c.role, c.skills[0], c.bring]), book: S().season.booking && S().season.booking.type, loop: S().loop, msg: txt("tester-msg") })');
+    assert(st.wk === 4 && st.cash === 2000 && st.tier === 2 && st.gear.cabinet && st.gear.offset && sameJSON(st.crew, [['pit', 4, true]]) && st.book === 'picnic' && st.loop === LOOP.week, 'tester state ' + describe(st));
+    const raw = await storedSave();
+    assert(raw && raw.v === SAVE_V && raw.season.week === 4 && raw.cash === 2000 && raw.gear.offset === true && raw.season.pick === 'picnic', 'the stored save ' + describe(raw && { v: raw.v, w: raw.season.week, pick: raw.season.pick }));
+    await ev('($("tester").scrollTop = 0, true)');
+    await screenshot(DESKTOP_MODE ? 'tester-panel-desktop.png' : 'tester-panel.png');
+    // 1427 by 890: the side column holds the whole panel width with no page scroll across.
+    if (!DESKTOP_MODE) {
+      await emulate(DESK_J, false); await sleep(TIMEOUT_MS.resize); await advance(0);
+      const fitD = await tstFit();
+      await emulate(RUN_METRICS, true); await sleep(TIMEOUT_MS.resize); await advance(0);
+      assert(fitD && fitD.docW <= fitD.vw && fitD.out.length === 0, 'tester at 1427x890 ' + describe(fitD));
+    } else {
+      await emulate(DESK_J, false); await sleep(TIMEOUT_MS.resize); await advance(0);
+      const fitD = await tstFit();
+      assert(fitD && fitD.docW <= fitD.vw && fitD.out.length === 0, 'tester at 1427x890 ' + describe(fitD));
+    }
+    await realTap('tester-back');
+    assert(!(await visible('tester')) && (await visible('week')), 'Back did not return to the hub');
+    // Turn: the cooler and the pile go to the back row, the stick burner lifts, turns by tap and drops
+    // into the counter row (4,7) (4,8).
+    await enterArrange();
+    const moves = [[[4, 6], [1, 6], 'cooler'], [[4, 8], [1, 7], 'pile']];
+    for (const [from, to, id] of moves) {
+      await canvasTap(from[0], from[1]); await advance(0);
+      let a = await AR();
+      assert(a.lift === id, 'tap did not lift the ' + id + ': ' + describe(a));
+      await canvasTap(to[0], to[1]); await advance(0);
+      a = await AR();
+      assert(a.lift === null && a.draft[id], id + ' to the back row ' + describe(a));
+    }
+    assert(!(await visible('arr-turn')), '#arr-turn shows with nothing lifted');
+    await canvasTap(1, 8); await advance(0);
+    let a = await AR();
+    assert(a.lift === 'kettle1' && (await visible('arr-turn')), 'the stick burner did not lift with Turn shown ' + describe(a));
+    await realTap('arr-turn');
+    a = await AR();
+    assert(a.turn === true && a.aim && a.aim.ok === false && /patio/.test(a.msg), 'turn in place ' + describe(a));
+    await canvasTap(4, 7); await advance(0);
+    a = await AR();
+    assert(a.lift === null && sameJSON(a.draft.kettle1, [3, -1, 1]), 'turned drop in the counter row ' + describe(a));
+    const geo = await ev('({ t: MAP.station("kettle1").tiles.map((q) => [q.x, q.y]), turned: MAP.station("kettle1").turned === true })');
+    assert(sameJSON(geo.t, [[4, 7], [4, 8]]) && geo.turned, 'live tiles ' + describe(geo));
+    await screenshot(DESKTOP_MODE ? 'arrange-turned-desktop.png' : 'arrange-turned.png');
+    await click('arr-done'); await advance(0);
+    assert(sameJSON((await ev('S().layout')).kettle1, [3, -1, 1]), 'Done did not keep the turn');
+    // The weekend picnic, cooked on the turned stick burner by real taps beside the PIT card.
+    if (await present('plan-skip')) { await click('plan-skip'); await advance(0); }
+    await toBookedDay();
+    assert(await toService(), 'the picnic did not reach service');
+    assert(await ev('S().today.booking && S().today.booking.type === "picnic"'), 'not the picnic in service');
+    const sb = await stationTile('kettle1', 0), cl = await stationTile('cooler', 0);
+    const n0 = await eventCount();
+    await canvasTap(sb.x, sb.y); await settle();
+    const fed = (await eventsSince(n0, 'fire_fed')).filter((e) => e.cooker === 'kettle1' && (e.id === null || e.id === undefined));
+    const lit = await ev(F.fire('kettle1') + ' > 0');
+    assert(lit, 'the turned stick burner never lit ' + describe(fed));
+    await ev('sim.selectMeat(S().today.booking.menu[0])');
+    await canvasTap(cl.x, cl.y); await settle();
+    const carry = await ev(F.carrying);
+    assert(carry && carry.kind === CARRY_KIND.raw, 'the cooler tap gave ' + describe(carry));
+    const p0 = await ev(F.pieces('kettle1') + '.length');
+    await canvasTap(sb.x, sb.y + 1); await settle();
+    const p1 = await ev(F.pieces('kettle1') + '.length');
+    const carry1 = await ev(F.carrying);
+    assert(carry1 === null && p1 > p0, 'the meat did not go on the turned stick burner ' + describe({ p0, p1, carry1 }));
+    await screenshotYard(DESKTOP_MODE ? 'turned-stick-burner-desktop.png' : 'turned-stick-burner.png');
+    // Step off the cooker (the PIT card never works it while you stand at it), then let the day run.
+    await canvasTap(1, 4); await settle();
+    const off = await ev('MAP.station("kettle1").work.some((u) => u.x === S().player.x && u.y === S().player.y)');
+    assert(!off, 'still at the stick burner ' + describe(await ev('[S().player.x, S().player.y]')));
+    const n1 = await eventCount();
+    const r = await until('S().phase !== "service"', 900);
+    assert(r.ok, 'the picnic never ended');
+    const evs = await eventsFrom(n0);
+    const on = evs.filter((e) => e.type === 'pit_on' && e.cooker === 'kettle1').length, served = evs.filter((e) => e.type === EVENT.served).length;
+    const dbg = await ev('({ loop: S().loop, phase: S().phase, till: S().till && { served: S().till.served, label: S().till.label }, n: globalThis.__smoke.events.length })');
+    const kinds = {}; evs.forEach((e) => { kinds[e.type] = (kinds[e.type] || 0) + 1; });
+    assert(on > 0 && (kinds.pit_pull | 0) > 0 && dbg.loop === LOOP.report && dbg.till && dbg.till.label === 'Church picnic', 'the picnic on the turned stick burner ' + describe({ on, served, n0, n1, r, dbg, kinds }));
+    return 'tester ' + describe(st.crew) + ' week ' + st.wk + ' cash ' + st.cash + '; fit ' + fit0.w + ' px, ' + fit0.n + ' buttons; turned to (4,7)(4,8) by tap; you lit it and put a piece on, the PIT card put ' + on + ' on and pulled ' + kinds.pit_pull + '; the picnic report: ' + dbg.till.served + ' served';
+  });
+
+  await step('v4.7 a turned trailer rig mid cook (frames)', async () => {
+    const s = saveV9({ cash: 900, season: { week: 2, results: resultsOf(1) } });
+    s.v = SAVE_V;
+    s.gear = Object.assign({}, s.gear, { cooler: true, cabinet: true, offset: true, trailer: true });
+    s.layout = { kettle1: [3, -1, 1], cooler: [-3, 0], pile: [-3, -1] };
+    s.stock = { sausage: 12, chicken: 12, ribs: 12, butt: 12, brisket: 12 };
+    s.charcoal = 60; s.wood = 60;
+    s.crew = [{ id: 1, name: 'Gus', role: 'pit', skills: [4, 4], potential: 4, bring: true, look: Object.assign({}, DEFAULT_LOOK) }];
+    s.crewSeq = 2;
+    await reload(s);
+    const geo = await ev('({ t: MAP.station("kettle1").tiles.map((q) => [q.x, q.y]), turned: MAP.station("kettle1").turned === true, sprite: MAP.station("kettle1").sprite, tester: !!$("tester") })');
+    assert(sameJSON(geo.t, [[4, 7], [4, 8]]) && geo.turned && geo.sprite === 'trailer_rig' && !geo.tester, 'the turned trailer ' + describe(geo));
+    assert(await toService(), 'no service day');
+    const r = await until(F.pieces('kettle1') + '.length >= 3 && ' + F.fire('kettle1') + ' > 0', 120);
+    assert(r.ok, 'the PIT card did not load the trailer ' + describe(await ev(F.pieces('kettle1') + '.length')));
+    const hit = await ev('(() => { const t = MAP.station("kettle1").tiles; const p = g.tileToClient(t[1].x, t[1].y); return !!p; })()');
+    await screenshotYard(DESKTOP_MODE ? 'turned-trailer-desktop.png' : 'turned-trailer.png');
+    if (!DESKTOP_MODE) await screenshot('turned-trailer-near.png');
+    return 'trailer at (4,7)(4,8) mirrored, ' + (await ev(F.pieces('kettle1') + '.length')) + ' pieces on, frames saved' + (hit ? '' : ' (no tile point)');
   });
 
   await step('zero console errors across the run', () => {
