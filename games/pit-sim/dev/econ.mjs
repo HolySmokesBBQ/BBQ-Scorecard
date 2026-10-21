@@ -36,6 +36,15 @@
 //   --react N sets the seconds between taps for the others (default 1.5, 0 is a perfect bot).
 //   --sim path runs another copy of sim.js (a before copy, for comparisons).
 //
+// v4.4 the real pace phone player (Joel 2026-10-20, "Still losing money here"): a tap 2.5 to 3.5 s
+// after the last (the walk inside it), the game's own cart, the planner's default and Start, the Gear
+// tile's Next once it leaves 40, the fire fed under 30, pulls a few seconds late, 1 piece in 14 burnt.
+//   realsolo      no crew.          real          on Hiring Day the first card under the wage line.
+//   realhire      the first card it can sign (ignores the wage line, as Joel did).
+//   realcareless  realhire, a Yard day every day, the stretch booking, 3 more chicken on every cart,
+//                 1 piece in 4 burnt, no reserve before gear.
+//   --days        the per day ledger over every seed (means; cash the median at day end).
+//
 // Output: per strategy, median cash at the end of each week (and at the season end), median gear
 // owned, and the season's money by line summed over seeds: revenue, tips, booking pay, meat and
 // charcoal bought, gear, wages, daily costs, refunds, spoilage, waste, leftover stock value.
@@ -74,8 +83,20 @@ const STRAT = {
   greedy: { crew: ['fire', 'run'], cheap: false, plan: 'all', sunday: true, offer: 'stretch', reserve: 30 },
   nocrew: { crew: [], cheap: false, plan: 'default', sunday: 'rec', offer: 'pay', reserve: 80 },
   typicalpit: { crew: ['fire', 'run'], cheap: false, plan: 'default', sunday: 'rec', offer: 'pay', reserve: 80, pit: 3 },
-  careless: { crew: ['fire', 'run'], cheap: false, plan: 'all', sunday: true, offer: 'stretch', reserve: 0, react: 3 }
+  careless: { crew: ['fire', 'run'], cheap: false, plan: 'all', sunday: true, offer: 'stretch', reserve: 0, react: 3 },
+  // v4.4 the real pace phone player (Joel 2026-10-20, "Still losing money here"): a tap every 2.5 to
+  // 3.5 s plus the walk, the game's own cart as is, the planner's default and the Start button, on
+  // Hiring Day the first card it can sign (the UI asks before an empty pass), the Gear tile's Next
+  // item once it leaves 40, a fire fed late, pulls a few seconds late and a burn now and then.
+  real: { crew: [], ui: true, heed: true, cheap: false, plan: 'default', sunday: 'rec', offer: 'pay', reserve: 40, real: true },
+  // real pace and careless: a Yard day every day, the stretch booking, no reserve before gear, the
+  // first card it can sign, 3 more units of chicken on every cart, and 1 piece in 4 left to burn.
+  realcareless: { crew: [], ui: true, heed: false, cheap: false, plan: 'all', sunday: true, offer: 'stretch', reserve: 0, real: true, over: 3, burn: 0.25 },
+  realhire: { crew: [], ui: true, heed: false, cheap: false, plan: 'default', sunday: 'rec', offer: 'pay', reserve: 40, real: true },   // ignores the wage line
+  realsolo: { crew: [], ui: false, cheap: false, plan: 'default', sunday: 'rec', offer: 'pay', reserve: 40, real: true }
 };
+// The Gear tile's Next item: the first unowned gear row in catalog order (game.js R-10).
+const uiNextGear = (s, sim) => { if (sim && sim.nextGear) { const n = sim.nextGear(); return n ? n.id : null; } const r = CATALOG.find((x) => x.kind === 'gear' && s.gear[x.id] !== true); return r ? r.id : null; };
 // v4.1 the gear ladder: the cabinet smoker early, the stick burner mid season, the trailer last.
 const GEAR_ORDER = ROW.cabinet && !process.env.ECON_OLD ? ['cabinet', 'kettle2', 'offset', 'cooler', 'bigtable', 'tray', 'drum', 'canopy', 'trailer'] : ['kettle2', 'cooler', 'bigtable', 'tray', 'drum', 'canopy'];
 const woodOf = (id) => (MAP.station(id).fuel || 'charcoal') === 'wood';
@@ -145,6 +166,7 @@ function decide(sim) {
   let pull = null, pullKey = -Infinity;
   for (const id of cookers) for (const p of s.stations[id].pieces) {
     if (p.state === 'cooking') continue;
+    if (REAL && p.state === 'done' && p.prog - MEATS[p.meat].cook < lateOf(s, p)) continue;   // not noticed yet
     const key = p.state === 'burnt' ? 0.5 : 1 + (p.prog - MEATS[p.meat].cook);
     if (key > pullKey) { pullKey = key; pull = id; }
   }
@@ -161,14 +183,14 @@ function decide(sim) {
     for (const id of cookers) if (needsFire(id, under) && (woodOf(id) ? s.wood > 0 : s.charcoal > 0)) return tile(woodOf(id) ? id : 'pile');
     return null;
   };
-  if (!tender) { const f = feed(40); if (f) return f; }
+  if (!tender) { const f = feed(REAL ? 30 : 40); if (f) return f; }
   // 2. ring up the line (unless a TILL card does it)
   const line = s.customers.filter((o) => o.queueIndex >= 0 && o.mode === 'waiting' && !o.booked).length;
   if (line > 0 && !s.cashier) return tile('register');
   // 3. a plate on the counter for a seated guest (unless a RUN card is out)
   const runner = !!s.buddy;
   if (!runner && s.customers.some((cu) => awaitsPlate(cu) && !cu.togo && cu.seat && s.stations.table.spots.some((x) => x && x.meat === cu.want))) return tile('table');
-  if (!tender) { const f = feed(50); if (f) return f; }
+  if (!tender) { const f = feed(REAL ? 40 : 50); if (f) return f; }
   if (!runner && s.stations.board.stacks.some((st) => st.times.length > 0 && tableFits(s, st.meat))) return tile('board');
   if (pull) return tile(pull);
   // 4. put meat on: what the waiting guests want first, else the meat that cooks soonest
@@ -199,6 +221,15 @@ function decide(sim) {
 // REACT: seconds a human takes to look, decide and tap between actions (0 is a perfect bot).
 const REACT0 = Number(arg('--react', 1.5));
 let REACT = REACT0;
+let REAL = false;   // v4.4 the real pace player
+let BURN = 0.07;    // the share of pieces it loses track of until they burn
+// Seconds past done before the real player notices a piece: a few seconds most of the time, and one
+// piece in about 14 is lost track of until it burns. A hash of the season seed, day and piece id.
+function lateOf(s, p) {
+  const h = hash((s.season.seed >>> 0) % 100000 * 131 + (s.season.week * 7 + s.season.day) * 977 + p.id * 31);
+  const w = MEATS[p.meat].window;
+  return h < BURN ? w + 1 : w * (0.05 + 0.4 * (h - BURN) / (1 - BURN));
+}
 // v4.2: taps the bot spends in a cook (each walkTo the sim takes, each trash tap), for taps per plate.
 let TAPS = 0;
 function playCook(sim, evs) {
@@ -209,7 +240,8 @@ function playCook(sim, evs) {
   while (s.phase === 'service' && g++ < 200000) {
     const p = s.player;
     const idle = !(p.busy || p.next || p.path.length || p.target);
-    if (idle && !wasIdle) readyAt = s.clock + REACT * (0.6 + 0.8 * hash(g));
+    // v4.4: the real player taps 2.5 to 3.5 s after the last tap (the walk counts inside that gap).
+    if (idle && !wasIdle && !REAL) readyAt = s.clock + REACT * (0.6 + 0.8 * hash(g));
     wasIdle = idle;
     if (idle && s.clock >= readyAt) {
       wasIdle = false;
@@ -217,8 +249,8 @@ function playCook(sim, evs) {
       if (process.env.ECON_TRACE && process.env.ECON_TRACE === s.season.week + '.' + s.season.day && g % 3 === 0) console.log('T', s.clock.toFixed(1), JSON.stringify(t), JSON.stringify(s.player.carrying), 'wood', s.wood, 'coal', s.charcoal, COOKERS.map((id) => owned(s, id) ? id + ':' + s.stations[id].fire.toFixed(0) + ':' + s.stations[id].pieces.map((p) => p.meat + '/' + p.state).join('|') : '').join(' '), JSON.stringify(s.stock), sim.verbAt ? sim.verbAt().label : '');
       // The trash never acts on arrival (auto false): once there, tap it.
       const tr = MAP.station('trash').tiles[0];
-      if (t && t.x === tr.x && t.y === tr.y && sim.reach() === 'trash' && sim.verbAt().enabled) { sim.interact(); TAPS += 1; }
-      else if (t) { const ok = sim.walkTo(t.x, t.y); if (ok) TAPS += 1; if (!ok && process.env.ECON_DEBUG) console.log('walk refused', JSON.stringify(t), JSON.stringify(s.player.carrying)); }
+      if (t && t.x === tr.x && t.y === tr.y && sim.reach() === 'trash' && sim.verbAt().enabled) { sim.interact(); TAPS += 1; if (REAL) readyAt = s.clock + 2.5 + hash(g + 7); }
+      else if (t) { const ok = sim.walkTo(t.x, t.y); if (ok) TAPS += 1; if (REAL) readyAt = s.clock + 2.5 + hash(g + 7); if (!ok && process.env.ECON_DEBUG) console.log('walk refused', JSON.stringify(t), JSON.stringify(s.player.carrying)); }
       else if (process.env.ECON_DEBUG && (g % 200 === 0)) console.log('idle', s.clock.toFixed(1), JSON.stringify(s.player.carrying), JSON.stringify(s.stock), s.charcoal, COOKERS.map((id) => owned(s, id) ? id + ':' + s.stations[id].fire.toFixed(0) + ':' + s.stations[id].pieces.map((p) => p.meat + '/' + p.state).join('|') : '').join(' '), 'line', s.customers.filter((o) => o.queueIndex >= 0).length);
     }
     sim.tick();
@@ -242,6 +274,20 @@ const cartSplit = (sim) => {
 const capOf = (sim) => { const p = sim.payroll(); return p.hire !== undefined ? p.hire : C.PAYROLL[0]; };
 function hiring(sim, st) {
   const s = sim.state;
+  if (st.real) {   // v4.4: the first card on the page it can sign, in round 1; pass the rest
+    for (let round = 1; round <= C.HIRE_ROUNDS && s.loop === 'hiring'; round++) {
+      const v = sim.hiringView();
+      // v4.4 heed: under the Hiring Day wage line when the game shows one (hv.money.half)
+      const line = st.heed && v && v.money && v.money.warn ? v.money.half : Infinity;
+      const pick = st.ui && round === 1 && v ? v.pool.find((e) => e.status === 'open' && e.wage <= capOf(sim) && e.wage <= line) : null;
+      if (pick) sim.hireApplicant(pick.idx); else sim.passRound();
+      sim.drainEvents();
+    }
+    if (s.loop === 'hiring') sim.finishHiring();
+    sim.drainEvents();
+    for (const c of s.crew) sim.setBring(c.id, true);
+    return;
+  }
   for (let round = 1; round <= C.HIRE_ROUNDS && s.loop === 'hiring'; round++) {
     const role = st.crew.find((r) => !s.crew.some((c) => c.role === r)) || null;
     const v = sim.hiringView();
@@ -291,6 +337,17 @@ function pickOffer(sim, st) {
 
 function buyGear(sim, st, led) {
   const s = sim.state;
+  if (st.real) {   // v4.4: the Gear tile's Next item, once it leaves the reserve
+    for (let k = 0; k < 3; k++) {
+      const g = uiNextGear(s, sim);
+      if (!g || s.cash - ROW[g].price < st.reserve) return;
+      const r = sim.buy(g, 1);
+      if (!r || !r.ok) return;
+      led.gear += ROW[g].price;
+      led.bought = (led.bought || []).concat(g);
+    }
+    return;
+  }
   for (const g of GEAR_ORDER) {
     if (s.gear[g]) continue;
     const row = ROW[g];
@@ -313,12 +370,14 @@ function newLedgerRow(sim, label) {
 function playSeason(seed, stName) {
   const st = STRAT[stName];
   REACT = st.react !== undefined ? st.react : REACT0;
+  REAL = st.real === true;
+  BURN = st.burn !== undefined ? st.burn : 0.07;
   const sim = P.createSim(null, seed);
   sim.skipTutorial(); sim.drainEvents();
   sim.setPlayer(P.DEFAULT_LOOK, 'Pitmaster', 'Your Pit'); sim.drainEvents();
   const s = sim.state;
   if (s.loop === 'hiring') hiring(sim, st);
-  if (!st.crew.length) for (const c of s.crew) sim.setBring(c.id, false);
+  if (!st.crew.length && !st.ui) for (const c of s.crew) sim.setBring(c.id, false);
   const rows = [];
   const weekEnd = [];
   let hub = null;
@@ -388,8 +447,10 @@ function playSeason(seed, stName) {
     // typicalpit: the PIT card works the bookings and rests on Yard days (a loss there by design).
     if (st.pit) for (const c of s.crew) if (c.role === 'pit') { sim.setBring(c.id, kind === 'event' && week < C.SEASON_WEEKS); sim.drainEvents(); }
     sim.shopOpen(kind);
-    const cs = cartSplit(sim);
-    const res = sim.shopConfirm(kind);
+    if (st.over && s.cart) s.cart.meat.chicken += st.over;   // overbuys
+    let cs = cartSplit(sim);
+    let res = sim.shopConfirm(kind);
+    if (!res.ok && st.over) { s.cart.meat.chicken = Math.max(0, s.cart.meat.chicken - st.over); cs = cartSplit(sim); res = sim.shopConfirm(kind); }
     sim.drainEvents();
     if (!res.ok) { if (process.env.ECON_DEBUG) console.log("refused", s.season.week, d, kind, res.message, JSON.stringify(sim.shopView(kind))); sim.shopBack(); sim.chooseDay('off'); sim.drainEvents(); continue; }
     r.meatBuy = cs.meat; r.coalBuy = cs.coal;
@@ -404,7 +465,7 @@ function playSeason(seed, stName) {
     r.revenue = t.revenue + r.refunds;   // rung up before refunds
     r.tips = t.tips + t.seatTips;
     r.pay = (t.deposit | 0) + (t.payRest | 0) + (t.menuBonus | 0) + (t.comp ? (t.comp.prize | 0) : 0);
-    r.wages = t.wages; r.daily = C.DAILY_COSTS;
+    r.wages = t.wages; r.daily = typeof t.daily === 'number' ? t.daily : C.DAILY_COSTS;   // v4.4: a weekday Yard day's half
     r.walkouts = t.walkouts; r.served = t.served; r.customers = t.customers; r.boxed = t.boxed | 0;
     r.spoil = t.spoilCost | 0; r.waste = (t.wasteCost | 0) + (t.grateCost | 0) + (t.rawWaste | 0);
     r.entry = t.entry | 0;
@@ -495,6 +556,37 @@ function pitPairs() {
 
 if (flag('--pitpair')) {
   pitPairs();
+} else if (flag('--days')) {
+  // v4.4: the per day ledger over every seed: the mean of each line a (week, day), the median cash.
+  for (const sn of STRATS) {
+    const runs = SEEDS.map((sd) => playSeason(sd, sn));
+    console.log('\n' + sn + ' (' + runs.length + ' seeds), per day means; cash is the median at day end');
+    console.log('wk d kind(most)  n  meat coal gear sales tips  pay wage dly refd spoil waste walk srv/cust stockV  cash');
+    const keyOf = (r) => r.wk * 10 + r.day;
+    const groups = new Map();
+    for (const run of runs) {
+      const seen = new Map();
+      for (const r of run.rows) {
+        if (r.kind === 'rescue') continue;
+        const k = keyOf(r);
+        const g = seen.get(k) || { kinds: [], meatBuy: 0, coalBuy: 0, gear: 0, sales: 0, tips: 0, pay: 0, wages: 0, daily: 0, refunds: 0, spoil: 0, waste: 0, walkouts: 0, served: 0, customers: 0, stockEnd: 0, cashEnd: 0 };
+        g.kinds.push(r.kind);
+        g.meatBuy += r.meatBuy; g.coalBuy += r.coalBuy; g.gear += r.gear; g.sales += r.revenue - r.refunds; g.tips += r.tips; g.pay += r.pay;
+        g.wages += r.wages; g.daily += (r.kind === 'rest' || r.kind === 'hub') ? 0 : r.daily; g.refunds += r.refunds; g.spoil += r.spoil; g.waste += r.waste;
+        g.walkouts += r.walkouts; g.served += r.served; g.customers += r.customers; g.stockEnd = r.stockEnd; g.cashEnd = r.cashEnd;
+        seen.set(k, g);
+      }
+      for (const [k, g] of seen) { const a = groups.get(k) || []; a.push(g); groups.set(k, a); }
+    }
+    for (const k of [...groups.keys()].sort((a, b) => a - b)) {
+      const a = groups.get(k);
+      const mean = (f) => Math.round(a.reduce((x, g) => x + g[f], 0) / a.length);
+      const kinds = {}; for (const g of a) for (const kd of g.kinds) kinds[kd] = (kinds[kd] || 0) + 1;
+      const top = Object.entries(kinds).sort((x, y) => y[1] - x[1])[0][0].replace('yard-', '');
+      console.log([pad(Math.floor(k / 10), 2), pad(k % 10, 1), top.padEnd(11), pad(a.length, 2), pad(mean('meatBuy'), 5), pad(mean('coalBuy'), 4), pad(mean('gear'), 4), pad(mean('sales'), 5), pad(mean('tips'), 4), pad(mean('pay'), 4), pad(mean('wages'), 4), pad(mean('daily'), 3),
+        pad(mean('refunds'), 4), pad(mean('spoil'), 5), pad(mean('waste'), 5), pad(mean('walkouts'), 4), pad(mean('served') + '/' + mean('customers'), 8), pad(mean('stockEnd'), 6), pad(med(a.map((g) => g.cashEnd)), 5)].join(' '));
+    }
+  }
 } else if (LEDGER) {
   for (const sn of STRATS) {
     const out = playSeason(SEEDS[0], sn);

@@ -5078,7 +5078,7 @@ function surfaceV31(P, sim) {
   assert(ev.length === 0, "hire('buddy') emitted " + describe(ev));
   s.gear.kettle2 = true; s.gear.drum = true;   // fixture: the v3.0 order reached the buddy here
   const g = sim.goal();
-  assert(g && g.id !== 'buddy' && g.id === 'bigtable', 'goal() with the second kettle and the drum ' + describe(g) + ', wanted bigtable (GOAL_ORDER has no buddy)');
+  assert(g && g.id !== 'buddy' && g.id === 'cooler' && deepEq(g, sim.nextGear()), 'goal() with the second kettle and the drum ' + describe(g) + ', wanted the cooler (v4.4: the Next on the Gear tile; no buddy)');
   report.metrics.cTunedV31 = tuned;
   return 'v3.1: ' + Object.keys(C_X2).length + ' X2 keys (ties hold), ROLE_IDS, menus on the rows, MAP.prepIdle and prepUse, ' + SIM_METHODS_V31.length + ' X7 methods, no state.hires, the hire stub, no buddy goal' + (tuned.length ? '; tuned: ' + tuned.join('; ') : '; every X2 value at its starting value');
 }
@@ -7224,7 +7224,7 @@ async function v3BrowserSteps(captures) {
     const gl = await accText(ID3.goal);
     const glWant = 'Next goal: ' + goal.label + ', ' + goal.price + '.';
     assert(gl === glWant, '#goal reads ' + describe(gl) + ', wanted ' + describe(glWant));
-    assert(gl === 'Next goal: Second kettle, 90.', '#goal reads ' + describe(gl) + ', W19 literal "Next goal: Second kettle, 90."');
+    assert(gl === 'Next goal: Cooler, 60.', '#goal reads ' + describe(gl) + ', v4.4 literal "Next goal: Cooler, 60." (the cooler, then the cabinet smoker)');
     assert(!(await visible(ID3.goal)) && !(await visible('news')), '#goal or #news visible in week 1');
     const gearTile = await attrOf(ID3.cardGear, 'aria-label');
     assert(gearTile && gearTile.includes(fill(UI.gearNext, { label: goal.label, price: goal.price })), '#card-gear reads ' + describe(gearTile));

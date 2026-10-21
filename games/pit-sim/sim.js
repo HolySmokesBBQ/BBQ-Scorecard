@@ -16,6 +16,22 @@
 //     the report's Take today is what the day made; game.js shows Costs and Wages above it and the
 //     stock row (Bought for later, Bought earlier) in place of Paid at the shop. ui.yardTake.
 //
+// v4.4 Money for a real pace player (2026-10-20, Joel: "Still losing money here", week 3, cash 70,
+// one kettle, ribs and butt left in the cooler). dev/econ.mjs realhire plays at phone pace (a tap every
+// 2.5 to 3.5 s): it sells about 5 plates on a weekday Yard day and 7 on a weekend one, but the cart
+// was sized to the whole crowd (about twice that), a picked booking's cart (ribs, butt) was bought and
+// cooked on Monday's Yard day, and with no cooler every unsold unit spoiled that night.
+//   yardPlates(): a Yard day's cart buys the plates the last Yard day of its kind sold (state.pace
+//     [weekday, weekend], saved as 'pace') times C.PACE_GROW plus C.PACE_ADD, C.PACE_START before any,
+//     plus C.PIT_AHEAD a PIT card, inside what the grate can turn (C.PACE_TURN_S a piece a slot).
+//   shopOpen('yard') before the booked day swaps an untouched booking cart for the Yard day's own.
+//   yardCart() cooks the booking's meats on a Yard day only with a cooler.
+//   A weekday Yard day's daily costs are C.YARD_DAY_COSTS (till.daily; a half shift, as the wages).
+//   nextGear(): the Gear tile's Next and goal(): the cooler, then the cabinet smoker, then the rest.
+//   hiringView().money (wageCheck): what a Yard day clears at this pace and the wage line (half of it).
+//   The money log: season.money (one row a day: day, kind, plates, net, big), season.moneyPrev, and
+//     moneyView() for the Season tab (STRINGS.money). Both saved in the season only when set.
+
 // v4.1 The gear ladder (2026-10-20, Joel: start with an old kettle, work up to a full trailer). The
 // main cooker (station and unit id 'kettle1') climbs PIT_TIERS: kettle, cabinet smoker (gear.cabinet),
 // offset stick burner (gear.offset, needs the cabinet) and trailer rig (gear.trailer, needs the offset).
@@ -668,6 +684,13 @@ const C = Object.freeze({
   // wages past it is refused. A weekday Yard day is a half shift: each card is paid YARD_DAY_WAGE of
   // its wage (rounded).
   PAYROLL_START: 30, PAYROLL_PER_GEAR: 10, YARD_DAY_WAGE: 0.5,
+  // v4.4 (Joel 2026-10-20, "Still losing money here"): a Yard day's cart buys what this pitmaster
+  // sells, not the whole crowd. The plates of the last Yard day of its kind (weekday, weekend) times
+  // PACE_GROW plus PACE_ADD; PACE_START (weekday, weekend) before any. PACE_TURN_S is the seconds a
+  // grate slot needs a piece (cook and handling), so the cart never passes what the cookers can turn.
+  // A weekday Yard day's daily costs are YARD_DAY_COSTS (a half shift, as the wages).
+  PACE_START: Object.freeze([5, 8]), PACE_GROW: 1.2, PACE_ADD: 1, PACE_TURN_S: 30, YARD_DAY_COSTS: 5,
+  PLATE_CLEAR: 6,   // v4.4: what a sold plate clears after its meat, with the tip (Hiring Day's estimate)
   // v4.1 the gear ladder, by pitTier (kettle, cabinet smoker, stick burner, trailer rig): crew slots,
   // the lineup budget, the extra signable wages a tier and the booking headcount factor.
   TIER_SLOTS: Object.freeze([2, 3, 4, 5]),
@@ -765,7 +788,11 @@ const SEAT_IDS = Object.freeze(['pt1b', 'pt1a', 'chair1', 'chair2', 'pt2b', 'pt2
 const HIRE_IDS = Object.freeze(['buddy', 'tender']);
 const COOKER_IDS = Object.freeze(['kettle1', 'kettle2', 'drum']);
 const STAT_IDS_V1 = Object.freeze(['days', 'served', 'walkouts', 'past', 'burnt']);
+const MONEY_COSTS = Object.freeze(['meat', 'fuel', 'spoil', 'wages', 'daily']);   // v4.4 the money log's cost words
 const STAT_IDS = Object.freeze(['days', 'served', 'walkouts', 'past', 'burnt', 'seated']);
+// v4.4: the Gear tile's Next, in this order (the first unowned row whose needs are met): the cooler
+// stops the overnight spoilage, the cabinet smoker holds its heat and opens the crew, then the rest.
+const NEXT_GEAR = Object.freeze(['cooler', 'cabinet', 'kettle2', 'bigtable', 'tray', 'canopy', 'drum', 'offset', 'trailer']);
 const GOAL_ORDER = Object.freeze(['kettle2', 'drum', 'bigtable', 'driveway']);   // R-3: the drum second; X4.1: no buddy step (Hiring Day replaces it)
 const ROLE_IDS = Object.freeze(['run', 'fire', 'prep', 'till', 'pit']);   // X1; v3.6 adds the TILL card; v4.3 the PIT card
 const POOL_ROLES = Object.freeze(['run', 'fire', 'prep', 'till']);         // v4.3: the roles open with any cooker (PIT needs the cabinet)
@@ -1646,6 +1673,18 @@ const STRINGS = Object.freeze({
   }),
   hostThird: Object.freeze(['', 'Folks at the last event asked who cooked, {name}.', 'People ask for you by name now, {name}.']),
   // v3.2 days of the week (contract D8.1, exact text)
+  // v4.4 the money log on the Season tab
+  money: Object.freeze({
+    head: 'Money this week',
+    help: 'What each day made after meat, fuel, spoilage, wages and daily costs.',
+    none: 'No days played yet this week.',
+    total: 'Week so far',
+    prev: 'Last week',
+    plates: '{n} plates',
+    biggest: 'most went to {w}',
+    kind: Object.freeze({ yard: 'Yard day', event: 'Booking', comp: 'Competition', off: 'Rest' }),
+    big: Object.freeze({ meat: 'meat', fuel: 'fuel', spoil: 'spoilage', wages: 'wages', daily: 'upkeep' })
+  }),
   dayName: Object.freeze(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']),
   dayShort: Object.freeze(['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']),
   dayKind: Object.freeze({ yard: 'Yard day', prep: 'Prep', market: 'Market run', train: 'Train', off: 'Rest', loadin: 'Load-in', event: 'Booked event' }),   // v3.4: Rest
@@ -2078,6 +2117,9 @@ const STRINGS = Object.freeze({
     noticeCrew: 'Your save was updated. Your helpers are crew cards now.',
     // review round 1 (contract X20)
     passEmpty: 'Pass round {r}? Nobody is on your crew yet.',
+    // v4.4 Hiring Day: what a Yard day clears at this pitmaster's pace, before wages.
+    wageNote: 'At your pace a Yard day clears about {n} before wages. Wages come out of every cook, half on a weekday. You can run the kettle alone.',
+    wageWarn: 'A card over {h} a cook takes more than half of that. You can pass and hire once the yard sells more.',
     tryoutTaken: '{name} went to another outfit after the tryout.',
     takenBadge: '{n} taken',
     takenPageAria: '{n} hired elsewhere on page {p}',
@@ -2920,6 +2962,24 @@ function toBool(v) {
 
 // W22.15: plain objects with a known type, a finale only as the ninth entry, at most nine.
 // D9: seven entries, a DayKind below `day` (a bad entry reads 'off'), null from `day` on.
+// v4.4: the money log's rows, days before `day` only, one a day.
+function readMoney(arr, day) {
+  const out = [];
+  if (!Array.isArray(arr)) return out;
+  for (let i = 0; i < arr.length && i < C.WEEK_DAYS; i++) {
+    let e;
+    try { e = arr[i]; } catch (x) { e = undefined; }
+    if (!isPlainObject(e)) continue;
+    const d = toInt(readKey(e, 'day'), -1, -1, C.WEEK_DAYS - 1);
+    if (d < 0 || d > day || out.some((x) => x.day === d)) continue;
+    const kind = readKey(e, 'kind');
+    const big = readKey(e, 'big');
+    out.push({ day: d, kind: kind === 'yard' || kind === 'event' || kind === 'comp' ? kind : 'off', plates: toInt(readKey(e, 'plates'), 0, 0, 999),
+      net: toInt(readKey(e, 'net'), 0, -C.MAX_CASH, C.MAX_CASH), big: MONEY_COSTS.includes(big) ? big : null });
+  }
+  return out.sort((a, b) => a.day - b.day);
+}
+
 function readDayLog(arr, day) {
   const out = [];
   for (let i = 0; i < C.WEEK_DAYS; i++) {
@@ -3310,6 +3370,11 @@ function validateSave(obj) {
     // v3.5: the week plan, only on the same week (five 'yard' or 'off' entries).
     const planIn = v >= 9 && sameWeek ? readKey(seasonIn, 'plan') : undefined;
     season.plan = readPlan(planIn);
+    // v4.4 the money log (an older save has none).
+    const moneyIn = sameWeek ? readKey(seasonIn, 'money') : undefined;
+    if (Array.isArray(moneyIn)) season.money = readMoney(moneyIn, season.day);
+    const prevIn = isPlainObject(seasonIn) ? readKey(seasonIn, 'moneyPrev') : undefined;
+    if (typeof prevIn === 'number' && Number.isFinite(prevIn)) season.moneyPrev = toInt(prevIn, 0, -C.MAX_CASH, C.MAX_CASH);
     season.overnight = (typeof onMeat === 'string' && C.OVERNIGHT_MEATS.includes(onMeat) && (!MEATS[onMeat].drumOnly || canBrisket(gear))
       && typeof onN === 'number' && Number.isInteger(onN) && onN >= 1 && onN <= C.OVERNIGHT_PIECES) ? { meat: onMeat, n: onN } : null;
     // X11.2 and X11.3: the crew, the next card id, Hiring Day and the three season keys.
@@ -3342,10 +3407,13 @@ function validateSave(obj) {
     const pit = { xp: pitXp, longDay: Math.min(toInt(readKey(pitIn, 'longDay'), 0, 0, C.LONG_DAY_MAX), lvl - 1) };
     // v3.9: the yard layout (v11 and older: the default). An invalid layout falls back to the default.
     const layout = v >= 12 ? fitLayout(readKey(obj, 'layout'), gear, decor) : {};
+    // v4.4: the plates of the last Yard day of each kind (an older save has none: the starting cart).
+    const paceIn = readKey(obj, 'pace');
+    const pace = paceIn === undefined ? undefined : [0, 1].map((i) => { let x; try { x = Array.isArray(paceIn) ? paceIn[i] : undefined; } catch (e) { x = undefined; } return typeof x === 'number' && Number.isFinite(x) ? toInt(x, 0, 0, 999) : null; });
     return {
       v: C.SAVE_VERSION, day, cash, rep, stock, charcoal, wood, gear, decor, stats, drivewayShown,
       tutorial: { done: !owed },
-      season, crew, crewSeq, hiring, player, pitName, trophies, ribbons, offseason, pit, layout
+      season, crew, crewSeq, hiring, player, pitName, trophies, ribbons, offseason, pit, layout, ...(pace ? { pace } : {})
     };
   } catch (e) {
     return null;
@@ -3573,10 +3641,12 @@ function createSim(saved, seed) {
       loadin: false,
       overnight: null,
       advance: 0,   // v3.4: a deposit taken early (rescueAdvance)
-      plan: null    // v3.5: the week planner's Monday to Friday, null until set
+      plan: null,   // v3.5: the week planner's Monday to Friday, null until set
+      money: [], moneyPrev: ss && typeof ss.moneyPrev === 'number' ? ss.moneyPrev : null   // v4.4: this week's money log and last week's total
     };
     // v3.5: the pitmaster's XP and Long Day picks
     state.pit = { xp: s && s.pit ? s.pit.xp : 0, longDay: s && s.pit ? s.pit.longDay : 0 };
+    state.pace = s && Array.isArray(s.pace) ? s.pace.slice(0, 2) : [null, null];   // v4.4: last Yard day plates (weekday, weekend)
     state.dayCard = null;
     // v3.3: the trophy shelf, the lifetime ribbons, the Offseason screen (built when it opens).
     state.trophies = s ? s.trophies.map((x) => ({ year: x.year, contest: x.contest, place: 1 })) : [];
@@ -6509,6 +6579,7 @@ function createSim(saved, seed) {
     t.wages = 0;
     for (const c of state.crew) if (inLineupToday(c)) t.wages += wageToday(c);   // v4.0: half on a weekday Yard day
     t.halfShift = t.kind === 'yard' && t.weekday === true && t.wages > 0;
+    const daily = t.kind === 'yard' && t.weekday === true ? C.YARD_DAY_COSTS : C.DAILY_COSTS;   // v4.4: a half shift
     const maxToday = repMax();
     let rawDelta;
     let net;
@@ -6524,7 +6595,7 @@ function createSim(saved, seed) {
       stars = compOut.stars;
       state.cash += compOut.prize;
       rawDelta = compOut.fans;
-      net = compOut.prize - t.entry - t.wages - C.DAILY_COSTS;
+      net = compOut.prize - t.entry - t.wages - daily;
     } else if (isBooking) {
       if (t.pending > 0) { t.missed += t.pending; t.pending = 0; }
       // W8.1, W8.2, W9: client stars, the rest of the fee, the Menu bonus, word of mouth by stars.
@@ -6535,17 +6606,17 @@ function createSim(saved, seed) {
       menuBonus = (t.addon !== null && t.addonServed >= 1 && t.addonBurnt === 0) ? Math.round(fee * C.MENU_BONUS) : 0;
       state.cash += payRest + menuBonus;
       rawDelta = C.STAR_FANS[stars - 1];
-      net = t.deposit + payRest + menuBonus + t.tips + t.seatTips - t.wages - C.DAILY_COSTS;   // P-3 takes the meat, charcoal and spoilage off below
+      net = t.deposit + payRest + menuBonus + t.tips + t.seatTips - t.wages - daily;   // P-3 takes the meat, charcoal and spoilage off below
     } else {
       rawDelta = t.happy * C.REP_QUICK + t.togoQuick * C.REP_TOGO_QUICK + t.ok * C.REP_OK
         + t.walkouts * C.REP_WALKOUT + t.close * C.CLOSE_PENALTY;
-      net = t.revenue + t.tips + t.seatTips - t.wages - C.DAILY_COSTS;
+      net = t.revenue + t.tips + t.seatTips - t.wages - daily;
     }
     const repDelta = clamp(rawDelta, C.REP_DAY_MIN, maxToday);
     const repCapped = repDelta !== rawDelta;
     const repEnd = clamp(state.rep + repDelta, 0, 100);
     state.rep = repEnd;
-    state.cash = Math.max(C.CASH_FLOOR, state.cash - t.wages - C.DAILY_COSTS);
+    state.cash = Math.max(C.CASH_FLOOR, state.cash - t.wages - daily);
     // W10.4: the cooler keeps up to its capacity overnight, costliest units first; the rest spoils.
     const cap = coolerCap();
     let spoiledUnits = 0;
@@ -6571,6 +6642,13 @@ function createSim(saved, seed) {
     // v4.0: a Yard day's take also comes after the meat, charcoal and spoilage it used, so the big
     // number on its report is what the day made (the tutorial day keeps the v2.1 take).
     if (isBooking || t.kind === 'yard') net -= t.foodCost + t.rawWaste + t.bags * C.CHARCOAL_PRICE + (t.splits | 0) * C.WOOD_PRICE + t.spoilCost;
+    // v4.4: the plates this Yard day sold set the next cart of its kind (weekday, weekend), and the
+    // Season tab's money log gets the day.
+    if (t.kind === 'yard' && state.pace) state.pace[t.weekday === true ? 0 : 1] = t.served;
+    if (t.kind !== 'tutorial' && state.loop !== 'tutorial') {
+      const costs = { meat: t.foodCost + t.rawWaste, fuel: t.bags * C.CHARCOAL_PRICE + (t.splits | 0) * C.WOOD_PRICE, spoil: t.spoilCost, wages: t.wages, daily: daily + (t.entry | 0) };
+      logMoney({ day: s.day, kind: isBooking ? (t.comp ? 'comp' : 'event') : 'yard', plates: t.served, net, costs });
+    }
     state.day += 1;
     state.stats.days += 1;
     state.yesterday = { served: t.served, walkouts: t.walkouts, past: t.past };
@@ -6599,6 +6677,7 @@ function createSim(saved, seed) {
     till.repMax = maxToday;
     till.net = net;
     till.cashAfter = state.cash;
+    till.daily = daily;   // v4.4
     // W4.2 additions
     till.kind = compOut !== null ? 'comp' : t.kind;   // v3.3: the judges' results card
     till.label = isBooking ? t.booking.label : STRINGS.booking.yard;
@@ -6737,6 +6816,20 @@ function createSim(saved, seed) {
   function expectedCrowd() {
     const win = state.loop === 'tutorial' ? (C.LAST_CALL - C.GATE_OPENS) : lengthRow().window + extraSeconds();
     return Math.round(win / spawnInterval());
+  }
+
+  // v4.4: the plates a Yard day's cart buys for, in full day plates (yardCart halves a weekday's):
+  // the last Yard day of the same kind sold, a little more, inside what the grate can turn.
+  function yardPlates() {
+    const wkday = state.loop === 'week' && state.season.day <= 4;
+    const last = state.pace ? state.pace[wkday ? 0 : 1] : null;
+    let plates = typeof last === 'number' ? Math.ceil(last * C.PACE_GROW - 1e-9) + C.PACE_ADD : C.PACE_START[wkday ? 0 : 1];
+    // A PIT card in the lineup cooks on its own cooker, PIT_AHEAD plates ahead of the line.
+    plates += C.PIT_AHEAD * lineupCards().filter((c) => c.role === 'pit').length;
+    const secs = (wkday ? lengthRow().seconds * C.YARD_DAY_FRAC : lengthRow().seconds) + extraSeconds();
+    const grate = grateSlots(state.gear.kettle2 === true, state.gear.drum === true, pitTier(state.gear)) * Math.max(1, Math.floor(secs / C.PACE_TURN_S)) * 2;
+    plates = Math.min(plates, grate);
+    return wkday ? Math.ceil(plates / C.YARD_DAY_FRAC) : plates;
   }
 
   // ---- shop ---------------------------------------------------------------------------------
@@ -7160,6 +7253,8 @@ function createSim(saved, seed) {
     s.trained = null;
     s.day = 0;
     s.dayLog = new Array(C.WEEK_DAYS).fill(null);
+    s.moneyPrev = Array.isArray(s.money) && s.money.length ? s.money.reduce((a, x) => a + x.net, 0) : (s.moneyPrev === undefined ? null : s.moneyPrev);   // v4.4
+    s.money = [];
     s.prepped = false;
     s.loadin = false;
     s.overnight = null;
@@ -7488,7 +7583,7 @@ function createSim(saved, seed) {
     try { c = prefill(); } finally { s.booking = keep; }
     if (s.day <= 4) for (const m of MEAT_IDS) c.meat[m] = Math.ceil(c.meat[m] * C.YARD_DAY_FRAC);
     // v3.4 review: with an event booked ahead, today cooks that event's meats (the same units).
-    const bn = bookingNeeds();
+    const bn = coolerCap() > 0 ? bookingNeeds() : null;   // v4.4: without a cooler those units spoil tonight
     if (bn !== null) {
       const on = MEAT_IDS.filter((m) => bn.rail[m] > 0 && (!MEATS[m].drumOnly || canBrisket(state.gear)));
       if (on.length) {
@@ -7546,11 +7641,19 @@ function createSim(saved, seed) {
   }
 
   let shopKeep = null;   // the cart as shopOpen() found it, for Back (not saved)
+  function cartOf(c) { return { meat: Object.assign({}, c.meat), charcoal: c.charcoal | 0, wood: c.wood | 0 }; }
 
   function shopOpen(kind) {
     if (!inWeek()) return null;
     shopKeep = { meat: Object.assign({}, state.cart.meat), charcoal: state.cart.charcoal, wood: state.cart.wood | 0 };
     const noFuel = (ownedCookers('charcoal') > 0 && state.charcoal === 0) || (ownedCookers('wood') > 0 && state.wood === 0);   // v4.1
+    // v4.4 (Joel's week 3 kettle with ribs and butt left over): picking a booking fills the cart for
+    // its day. A Yard day before that day that finds that cart untouched buys the Yard day's own cart
+    // (what this pitmaster sells), not the booking's meat to cook today and lose tonight.
+    const bd = bookedDay();
+    if (kind === 'yard' && cartCount() > 0 && bd !== null && bd !== state.season.day && JSON.stringify(cartOf(state.cart)) === JSON.stringify(cartOf(prefill()))) {
+      state.cart = { meat: zeroByMeat(), charcoal: 0, wood: 0 };
+    }
     if (cartCount() === 0) {
       if (kind === 'yard' && (totalStock() === 0 || noFuel)) state.cart = yardCart();
       else if (kind === 'event' && (noFuel || !railStocked())) state.cart = prefill();
@@ -7697,8 +7800,33 @@ function createSim(saved, seed) {
     return out;
   }
 
+  // v4.4 the money log (Season tab): one row a day this week, { day, kind, plates, net, big }; big is
+  // the day's largest cost ('meat', 'fuel', 'spoil', 'wages', 'daily'), null with none.
+  let spoilCostTonight = 0;
+  function logMoney(e) {
+    const s = state.season;
+    if (!Array.isArray(s.money)) s.money = [];
+    let big = null, most = 0;
+    for (const k of MONEY_COSTS) if ((e.costs[k] | 0) > most) { most = e.costs[k] | 0; big = k; }
+    s.money = s.money.filter((x) => x.day !== e.day);
+    s.money.push({ day: e.day, kind: e.kind, plates: e.plates | 0, net: Math.round(e.net), big });
+    s.money.sort((a, b) => a.day - b.day);
+  }
+
+  // v4.4: the Season tab's money log. rows: { day, dayName, what, plates, net, big } (big is the word
+  // for the largest cost, '' with none); total this week; prev last week's total or null.
+  function moneyView() {
+    const s = state.season;
+    if (!s) return null;
+    const M = STRINGS.money;
+    const rows = (Array.isArray(s.money) ? s.money : []).map((x) => ({ day: x.day, dayName: STRINGS.dayName[x.day], what: M.kind[x.kind] || M.kind.off,
+      plates: x.plates, net: x.net, big: x.big ? M.big[x.big] : '' }));
+    return { week: s.week, rows, total: rows.reduce((a, x) => a + x.net, 0), prev: typeof s.moneyPrev === 'number' ? s.moneyPrev : null };
+  }
+
   // D4.7 step 1 off a cook day: the cooler keeps its cap overnight, costliest first; the rest spoils.
   function spoilTonight() {
+    spoilCostTonight = 0;
     const cap = coolerCap();
     const meat = zeroByMeat();
     let units = 0;
@@ -7708,7 +7836,7 @@ function createSim(saved, seed) {
         const keep = Math.min(state.stock[m], room);
         room -= keep;
         const gone = state.stock[m] - keep;
-        if (gone > 0) { meat[m] = gone; state.stock[m] = keep; units += gone; }
+        if (gone > 0) { meat[m] = gone; state.stock[m] = keep; units += gone; spoilCostTonight += gone * MEATS[m].unit; }
       }
     }
     if (units > 0) emit('spoiled', { units, meat });
@@ -7890,6 +8018,7 @@ function createSim(saved, seed) {
       s.overnight = null;
     }
     const spoiled = cooked ? 0 : spoilTonight();
+    if (!cooked && state.loop === 'week') logMoney({ day: s.day, kind: 'off', plates: 0, net: -spoilCostTonight, costs: { meat: 0, fuel: 0, spoil: spoilCostTonight, wages: 0, daily: 0 } });   // v4.4
     if (moodChanges && moodChanges.length > 0) emit('crew_mood', { changes: moodChanges });
     s.dayLog[s.day] = kind;
     if (s.day === C.WEEK_DAYS - 1) {
@@ -8284,7 +8413,9 @@ function createSim(saved, seed) {
         let inStock = 0;
         for (const m of MEAT_IDS) inStock += state.stock[m] * MEATS[m].plates;
         const crowd = expectedCrowd();
-        const plates = (spare ? ceilG(1.1 * crowd) + 1 : crowd) - inStock;
+        let want = spare ? ceilG(1.1 * crowd) + 1 : crowd;
+        if (state.loop === 'week') want = Math.min(want, yardPlates());   // v4.4: what this yard sells
+        const plates = want - inStock;
         const units = plates > 0 ? Math.ceil(plates / 2) : 0;
         meat.chicken = Math.floor(units / 2);
         meat.sausage = units - meat.chicken;
@@ -8438,7 +8569,22 @@ function createSim(saved, seed) {
     state.comingNext = false;
   }
 
+  // v4.4: the Gear tile's Next item ({ id, label, price }), null when every row is owned.
+  function nextGear() {
+    let fallback = null;
+    for (const id of NEXT_GEAR) {
+      if (state.gear[id] === true) continue;
+      const r = CATALOG_BY_ID[id];
+      const need = r.needs && r.needs.gear ? r.needs.gear : null;
+      if (need === null || state.gear[need] === true) return { id, label: r.label, price: r.price };
+      if (fallback === null) fallback = { id, label: r.label, price: r.price };
+    }
+    return fallback;
+  }
+
   function goal() {
+    const ng = nextGear();   // v4.4: the goal is the Gear tile's Next (the cooler, then the cabinet smoker)
+    if (ng !== null) return ng;
     for (const id of GOAL_ORDER) {
       if (id === 'driveway' && C.DRIVEWAY_BUYABLE !== true) continue;   // Q-8
       const owned = id === 'driveway' ? false : state.gear[id] === true;
@@ -9241,11 +9387,27 @@ function createSim(saved, seed) {
     return c === null ? null : cardView(c);
   }
 
+  // v4.4: Hiring Day's plain money line. clear: what a weekend Yard day clears at the pitmaster's own
+  // pace (the last one's plates, else the starting cart) before wages; half: the wage that takes half
+  // of it (less the crew's wages); warn: true when an open card's wage is over that.
+  function wageCheck(wages) {
+    const last = state.pace ? state.pace[1] : null;
+    const plates = typeof last === 'number' ? last : C.PACE_START[1];
+    const clear = Math.max(0, Math.round(plates * C.PLATE_CLEAR - C.DAILY_COSTS - C.CHARCOAL_PRICE * C.BAGS_PER_COOKER * 0.5));
+    const open = (wages || []).filter((w) => typeof w === 'number');
+    const crew = state.crew.reduce((a, c) => a + c.wage, 0);
+    const half = Math.max(0, Math.floor(clear / 2) - crew);
+    const warn = open.some((w) => w > half);
+    const U = STRINGS.ui;
+    return { clear, half, warn, note: fillText(U.wageNote, { n: clear }), warnLine: warn ? fillText(U.wageWarn, { h: half }) : '' };
+  }
+
   function hiringView() {
     if (state.loop !== 'hiring' || state.hiring === null) return null;
     const h = state.hiring;
     return {
       year: h.year, round: h.round, tryouts: h.tryouts, picksLeft: Math.max(0, C.HIRE_ROUNDS + 1 - h.round),
+      money: wageCheck(h.pool.filter((e) => e.status === 'open').map((e) => e.wage)),   // v4.4
       pool: h.pool.map((e) => ({
         name: e.name, role: e.role, skills: e.skills.slice(), potential: e.tried ? e.potential : null, mood: e.mood,
         look: cleanLook(e.look), stars: e.stars, wage: e.wage, idx: e.idx, status: e.status, tried: e.tried
@@ -9331,8 +9493,15 @@ function createSim(saved, seed) {
       advance: live && !eventPlayed() ? s.advance | 0 : 0,   // v3.4
       plan: live && s.plan !== null && s.plan !== undefined ? s.plan.slice(0, C.PLAN_DAYS) : null   // v3.5
     };
+    // v4.4 the money log: this week's rows while the week is live; a finished week leaves its total.
+    // Written only when there is something to keep, so an older save reads back the same.
+    const mRows = live && Array.isArray(s.money) ? s.money.map((x) => ({ day: x.day, kind: x.kind, plates: x.plates, net: x.net, big: x.big })) : [];
+    if (mRows.length) out.season.money = mRows;
+    const mPrev = live ? s.moneyPrev : (Array.isArray(s.money) && s.money.length ? s.money.reduce((a, x) => a + x.net, 0) : s.moneyPrev);
+    if (typeof mPrev === 'number' && Number.isFinite(mPrev)) out.season.moneyPrev = Math.trunc(mPrev);
     out.layout = cleanLayout(state.layout);   // v3.9
     out.pit = { xp: clamp(Math.trunc(state.pit.xp) || 0, 0, C.PIT_XP_MAX), longDay: clamp(Math.trunc(state.pit.longDay) || 0, 0, C.LONG_DAY_MAX) };   // v3.5
+    out.pace = (state.pace || [null, null]).map((x) => (typeof x === 'number' && Number.isFinite(x) ? clamp(Math.trunc(x), 0, 999) : null));   // v4.4
     out.crew = state.crew.slice().sort(byId).map(copyCard);
     out.crewSeq = clamp(Math.trunc(state.crewSeq), 1, 9999);
     const h = state.loop === 'hiring' ? state.hiring : null;
@@ -9410,6 +9579,8 @@ function createSim(saved, seed) {
     // D9: the saved day of the week (a v5 or older save opens Monday).
     s.day = save.season.day;
     s.dayLog = save.season.dayLog.slice();
+    s.money = Array.isArray(save.season.money) ? save.season.money.map((x) => Object.assign({}, x)) : [];   // v4.4
+    s.moneyPrev = typeof save.season.moneyPrev === 'number' ? save.season.moneyPrev : null;
     s.prepped = save.season.prepped === true;
     s.loadin = save.season.loadin === true;
     s.overnight = save.season.overnight !== null && s.loadin && s.day === 5 && bookedDay() === 5
@@ -9447,7 +9618,7 @@ function createSim(saved, seed) {
     compView, compJudges, resign, release, hireReferral,
     // v3.5 (the note at the top)
     planView, setPlanDay, togglePlanDay, startPlan, skipToWeekend, planOf, restNote,
-    pitView, pickPitSkill, cookTime, extraSeconds,
+    pitView, pickPitSkill, cookTime, extraSeconds, moneyView, yardPlates, nextGear,
     // v3.9 arrange mode
     canArrange, arrangeView, checkMove, previewLayout, setLayout,
     // v4.3 the PIT card

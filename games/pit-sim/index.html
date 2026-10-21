@@ -369,6 +369,11 @@
     #panels .news .tab { position: absolute; top: -15px; left: 6px; margin: 0; padding: 2px 8px; background: var(--crew); border: 2px solid var(--k); box-shadow: inset 0 2px 0 #f0614f; }
     .news-body p { color: #fff; font-size: 13px; }
     .news-body .card { border-color: var(--gold); }
+    .money-rows { list-style: none; margin: 4px 0; padding: 0; }
+    .money-rows li { display: grid; grid-template-columns: 1fr auto; column-gap: 8px; padding: 3px 0; border-bottom: 1px solid #2a3550; color: #fff; font-size: 13px; }
+    .money-rows li .m-net { font-weight: 700; text-align: right; }
+    .money-rows li .m-big { grid-column: 1 / -1; color: #b8c4dc; font-size: 12px; }
+    .money-rows li.bad .m-net, #panels .news-body p#money-total.bad { color: #ff9a8c; }
     .foot-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
     /* W22.25 shrink steps, applied in order while #week is taller than two screens (game.js fitWeek) */
     .fit1 .offer:not(.yard) .band { height: 48px; }

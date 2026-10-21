@@ -2824,7 +2824,7 @@ function compactBookingRows(box, t, stars) {
   box.appendChild(repRow(U1(stars, 'rowFeeOne', 'rowFee'), U('deposit', { d: t.deposit | 0 }), plus(feeAt)));
   const extras = (t.tips | 0) + (t.seatTips | 0) + (t.addon ? t.menuBonus | 0 : 0);
   box.appendChild(repRow(U('rowExtras'), '', plus(extras)));
-  const costs = (t.foodCost | 0) + (t.rawWaste | 0) + (t.bags | 0) * C.CHARCOAL_PRICE + woodCost(t) + (t.spoilCost | 0) + C.DAILY_COSTS;
+  const costs = (t.foodCost | 0) + (t.rawWaste | 0) + (t.bags | 0) * C.CHARCOAL_PRICE + woodCost(t) + (t.spoilCost | 0) + dailyOf(t);
   box.appendChild(repRow(U('rowCosts'), '', minus(costs)));
   if ((t.wages | 0) > 0) box.appendChild(repRow(U('rowWages'), t.wageNames && t.wageNames.length ? t.wageNames.join(', ') : '', minus(t.wages | 0)));
   box.appendChild(takeRow(t, U('rowTake'), ''));
@@ -2850,7 +2850,7 @@ function fullBookingRows(money, t, stars) {
   money.appendChild(repRow(U('rowCharcoal'), plural(t.bags | 0, 'bag', 'bags'), minus((t.bags | 0) * C.CHARCOAL_PRICE)));
   if ((t.splits | 0) > 0) money.appendChild(repRow(U('rowWood'), plural(t.splits | 0, 'split', 'splits'), minus(woodCost(t))));
   if ((t.wages | 0) > 0) money.appendChild(repRow(U('rowWages'), t.wageNames && t.wageNames.length ? t.wageNames.join(', ') : '', minus(t.wages | 0)));
-  money.appendChild(repRow(U('rowDaily'), 'ice and trash bags', minus(C.DAILY_COSTS)));
+  money.appendChild(repRow(U('rowDaily'), 'ice and trash bags', minus(dailyOf(t))));
   if ((t.spoilCost | 0) > 0) money.appendChild(repRow(U('rowSpoiled'), meatList(t.spoiled), minus(t.spoilCost | 0)));
   if ((t.wasteCost | 0) > 0) {
     const thrown = [];
@@ -3034,8 +3034,11 @@ function buildYardReport(t, head, body) {
 
 // v4.0 economy: what a Yard day's cook used, besides wages: meat cooked or thrown out raw, charcoal
 // burnt, tonight's spoilage and the daily costs.
+// v4.4: the day's daily costs (a weekday Yard day is a half shift: C.YARD_DAY_COSTS).
+function dailyOf(t) { return t && typeof t.daily === 'number' ? t.daily : C.DAILY_COSTS; }
+
 function yardCosts(t) {
-  return (t.foodCost | 0) + (t.rawWaste | 0) + (t.bags | 0) * C.CHARCOAL_PRICE + woodCost(t) + (t.spoilCost | 0) + C.DAILY_COSTS;
+  return (t.foodCost | 0) + (t.rawWaste | 0) + (t.bags | 0) * C.CHARCOAL_PRICE + woodCost(t) + (t.spoilCost | 0) + dailyOf(t);
 }
 // v4.1: the wood splits a cook burnt, at the list price.
 function woodCost(t) { return (t.splits | 0) * (C.WOOD_PRICE | 0); }
@@ -3059,7 +3062,7 @@ function tutorialRows(box, t, cashDetail) {
   box.appendChild(repRow('Food cost (what you cooked)', '', String(t.foodCost | 0), 'info'));
   box.appendChild(repRow('Charcoal used', plural(t.bags, 'bag', 'bags'), String((t.bags | 0) * C.CHARCOAL_PRICE), 'info'));
   box.appendChild(repRow('Wages', wages, minus(t.wages)));
-  box.appendChild(repRow('Daily costs', 'ice and trash bags', minus(C.DAILY_COSTS)));
+  box.appendChild(repRow('Daily costs', 'ice and trash bags', minus(dailyOf(t))));
   box.appendChild(repRow('Spoiled overnight', spoiled, String(t.spoilCost | 0), 'info'));
   box.appendChild(repRow('Thrown out', plural(t.wastePlates, 'plate', 'plates') + ', ' + t.wasteBurnt + ' burnt', String(t.wasteCost | 0), 'info'));
   box.appendChild(repRow('Left on the grate', grate, String(t.grateCost | 0), 'info'));
@@ -3083,7 +3086,7 @@ function yardDetailRows(box, t, cashDetail) {
   box.appendChild(repRow(U('rowCharcoal'), plural(t.bags | 0, 'bag', 'bags'), minus((t.bags | 0) * C.CHARCOAL_PRICE)));
   if ((t.splits | 0) > 0) box.appendChild(repRow(U('rowWood'), plural(t.splits | 0, 'split', 'splits'), minus(woodCost(t))));
   if ((t.wages | 0) > 0) box.appendChild(repRow(U('rowWages'), wagesDetail(t), minus(t.wages | 0)));
-  box.appendChild(repRow(U('rowDaily'), 'ice and trash bags', minus(C.DAILY_COSTS)));
+  box.appendChild(repRow(U('rowDaily'), 'ice and trash bags', minus(dailyOf(t))));
   if ((t.spoilCost | 0) > 0) box.appendChild(repRow(U('rowSpoiled'), meatList(t.spoiled), minus(t.spoilCost | 0)));
   if ((t.wasteCost | 0) > 0) box.appendChild(repRow('Thrown out', plural(t.wastePlates, 'plate', 'plates') + ', ' + (t.wasteBurnt | 0) + ' burnt, ' + U('counted'), String(t.wasteCost | 0), 'info'));
   if ((t.grateCost | 0) > 0) box.appendChild(repRow('Left on the grate', (meatList(t.grateLeft) || 'nothing') + ', ' + U('counted'), String(t.grateCost | 0), 'info'));
@@ -3229,8 +3232,8 @@ function weekSig(s) {
   const o = se.booking;
   const rail = o && o.type !== 'yard' && typeof sim.railFor === 'function' ? sim.railFor(o, se.addon || null) : null;
   const rl = rail ? MEAT_IDS.filter(function (m) { return (rail[m] | 0) > 0; }).length : 0;
-  let nextGear = '';
-  for (let i = 0; i < CATALOG.length; i++) if (CATALOG[i].kind === 'gear' && s.gear[CATALOG[i].id] !== true) { nextGear = CATALOG[i].id; break; }
+  const ng = typeof sim.nextGear === 'function' ? sim.nextGear() : null;   // v4.4
+  const nextGear = ng ? ng.id : '';
   const g = sim.goal();
   const cl = typeof sim.canLoadUp === 'function' ? sim.canLoadUp() : { ok: false, reason: '' };
   return [(se.offers || []).map(function (x) { return x.id + (x.needs ? '!' : ''); }).join(','), o ? (o.type === 'yard' ? 'y' : 'b') : '', rl, meats,
@@ -3414,6 +3417,8 @@ function buildWeekAt(level) {
   // Inventory and Pit news.
   tPit.appendChild(invCard(s));
   tSeason.appendChild(strip);
+  const mc = moneyCard();   // v4.4 the money log
+  if (mc) tSeason.appendChild(mc);
   tSeason.appendChild(newsCard(s));
   if (hubOn) { body.appendChild(tWeek); body.appendChild(tPit); body.appendChild(tSeason); }
   else { body.insertBefore(strip, body.firstChild); body.appendChild(tWeek); body.appendChild(tPit); body.appendChild(tSeason); }
@@ -3889,13 +3894,9 @@ function hubGrid(s, se) {
   g.appendChild(hubTile('card-crew', 't-crew', U('crew'), cw, U('crewLine', { n: crew.length, s: pay.slots }),
     U('crewSub', { p: pay.now, b: pay.budget }), noticed ? U('noticeLine', { name: noticed.name }) : ''));
   // Gear.
-  let ownedN = 0, next = null;
-  for (let i = 0; i < CATALOG.length; i++) {
-    const it = CATALOG[i];
-    if (it.kind !== 'gear') continue;
-    if (s.gear[it.id] === true) ownedN++;
-    else if (!next) next = it;
-  }
+  let ownedN = 0;
+  for (let i = 0; i < CATALOG.length; i++) if (CATALOG[i].kind === 'gear' && s.gear[CATALOG[i].id] === true) ownedN++;
+  const next = typeof sim.nextGear === 'function' ? sim.nextGear() : null;   // v4.4: the cooler, then the cabinet smoker
   // P-14: the window shows the cooker you own (the drum once bought, else the kettles), as the mock
   // does; the next item to buy stays in the second line.
   const mainSpr = MAP.station('kettle1') ? MAP.station('kettle1').sprite : 'kettle';
@@ -3966,6 +3967,40 @@ function invCard(s) {
   return sec;
 }
 
+// v4.4 (Joel 2026-10-20, "Still losing money here"): the Season tab's money log, one row a day this
+// week (day, what it was, plates, what it made after costs and wages, where most of the money went),
+// then the week so far and last week. The day report keeps the full breakdown.
+function moneyCard() {
+  const mv = typeof sim.moneyView === 'function' ? sim.moneyView() : null;
+  const M = STRINGS.money;
+  if (!mv || !M) return null;
+  const sec = mk('section', { id: 'money', cls: 'news money', attrs: { 'aria-labelledby': 'money-h' } });
+  sec.appendChild(uiPut(mk('h3', { id: 'money-h', cls: 'tab' }), M.head.toUpperCase(), 2, UI.white, { bold: true, shadow: '#8f1f1a' }, M.head));
+  const body = mk('div', { cls: 'news-body' });
+  body.appendChild(mk('p', { cls: 'muted', text: M.help }));
+  const signed = function (n) { return (n > 0 ? '+' : (n < 0 ? '-' : '')) + Math.abs(n | 0); };
+  if (!mv.rows.length) body.appendChild(mk('p', { id: 'money-none', text: M.none }));
+  else {
+    const ol = mk('ol', { id: 'money-rows', cls: 'money-rows' });
+    for (let i = 0; i < mv.rows.length; i++) {
+      const r = mv.rows[i];
+      const bits = [r.dayName.slice(0, 3), r.what];
+      if (r.plates > 0) bits.push(fill(M.plates, { n: r.plates }));
+      const li = mk('li', { cls: r.net < 0 ? 'bad' : '' }, [
+        mk('span', { cls: 'm-what', text: bits.join(', ') }),
+        mk('span', { cls: 'm-net', text: signed(r.net) }),
+        mk('span', { cls: 'm-big', text: r.big ? fill(M.biggest, { w: r.big }) : '' })
+      ]);
+      ol.appendChild(li);
+    }
+    body.appendChild(ol);
+  }
+  body.appendChild(mk('p', { id: 'money-total', cls: mv.total < 0 ? 'bad' : '', text: M.total + ': ' + signed(mv.total) }));
+  if (mv.prev !== null) body.appendChild(mk('p', { id: 'money-prev', cls: 'muted', text: M.prev + ': ' + signed(mv.prev) }));
+  sec.appendChild(body);
+  return sec;
+}
+
 function newsCard(s) {
   const sec = mk('section', { id: 'news', cls: 'news', attrs: { 'aria-labelledby': 'news-h' } });
   sec.appendChild(uiPut(mk('h3', { id: 'news-h', cls: 'tab' }), U('news').toUpperCase(), 2, UI.white, { bold: true, shadow: '#8f1f1a' }, U('news')));
@@ -3986,8 +4021,8 @@ function newsCard(s) {
   } else {
     const g = sim.goal();
     // R-10: the Gear tile already says "Next: {label}, {price}" for the first unowned gear row.
-    let nextGear = null;
-    for (let i = 0; i < CATALOG.length; i++) if (CATALOG[i].kind === 'gear' && s.gear[CATALOG[i].id] !== true) { nextGear = CATALOG[i].id; break; }
+    const ng = typeof sim.nextGear === 'function' ? sim.nextGear() : null;   // v4.4: the cooler, then the cabinet smoker
+    const nextGear = ng ? ng.id : null;
     const gp = mk('p', { id: 'goal', text: g ? 'Next goal: ' + g.label + ', ' + g.price + '.' : '' });
     gp.hidden = !g || g.id === nextGear;
     if (!gp.hidden) shown++;
@@ -5010,6 +5045,11 @@ function buildHiring() {
   if (growH) foot.appendChild(growH);
   // v4.3: no PIT cards in the pool until the yard has the cabinet smoker, said plainly.
   if (typeof sim.pitOpen === 'function' && !sim.pitOpen()) foot.appendChild(mk('p', { id: 'hire-pit-lock', cls: 'muted pgrow', text: U('pitLockedH') }));
+  // v4.4: what a Yard day clears at the player's pace, and a plain warning when every card costs more than half of it.
+  if (hv && hv.money && round <= 3) {
+    foot.appendChild(mk('p', { id: 'hire-wage-note', cls: 'muted pgrow', text: hv.money.note }));
+    if (hv.money.warnLine) foot.appendChild(mk('p', { id: 'hire-wage-warn', cls: 'gold pgrow', text: hv.money.warnLine }));
+  }
   const news = mk('div', { id: 'hire-news', cls: 'hnews' });
   if (hireNews) {
     news.appendChild(mk('p', { text: hireNews.line }));
