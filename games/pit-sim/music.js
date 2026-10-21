@@ -59,6 +59,7 @@
   const RISE_CAP = 0.06;        // at most 6 percent faster
   const KEEP = 2;               // decoded tracks kept in memory
   const TRACK_DIR = './tracks/'; // the MP3s, beside the page
+  const STALL_MS = 1500;        // no frame drawn this long: the page is out of sight, go quiet
 
   const TRACKS = ['highway-heat', 'burning-road', 'rock-drive', 'country-southern-rock',
     'freewheeling', 'southern-sin', 'blues-rock-energetic', 'cold-one'];
@@ -73,6 +74,7 @@
 
   let ctx = null, master = null, env = null, sfxOut = null;
   let muted = false, sfxMuted = false, started = false, timer = null, created = 0;
+  let lastFrame = 0, stalled = false;   // the frame watchdog (see sync)
   let want = { day: 0, week: 1, comp: false, cook: false, waiting: 0, screen: null };
   let cur = null;               // the playing voice
   let pick = null;              // the last choice: { theme, mode, track, rate }
@@ -230,6 +232,9 @@
 
   function sync() {
     if (!ctx || muted) return;
+    // A page kept alive out of sight (an app's closed artifact view, a hidden frame) can still read
+    // as visible but draws no frames. No frame for STALL_MS: go quiet until frames come back.
+    if (outOfSight()) { stalled = true; sleep(); return; }
     try {
       pick = choose(want);
       if (cur && cur.track === pick.track) {
@@ -332,8 +337,35 @@
     if (ctx && !muted && timer !== null) sync();
   }
 
+  // Out of sight: no frame drawn for STALL_MS (a throttled frame), or a page of no size (a frame set
+  // to display none).
+  function outOfSight() {
+    if (lastFrame && Date.now() - lastFrame > STALL_MS) return true;
+    return onScreen === false || root.innerWidth === 0 || root.innerHeight === 0;
+  }
+  // The page's own body seen against the top window's viewport: false when the frame holding the
+  // game is hidden or moved off screen.
+  let onScreen = null;
+  function watchScreen() {
+    try {
+      if (typeof root.IntersectionObserver !== 'function' || !document.body) return;
+      new root.IntersectionObserver(function (es) {
+        const e = es[es.length - 1];
+        onScreen = !!(e && e.isIntersecting);
+        if (onScreen && stalled && !outOfSight()) { stalled = false; if (started) wake(); }
+        else if (!onScreen && ctx && !muted) { stalled = true; sleep(); }
+      }).observe(document.body);
+    } catch (e) { /* no observer: the frame watchdog still runs */ }
+  }
+  function frameTick() {
+    lastFrame = Date.now();
+    if (stalled && !outOfSight()) { stalled = false; if (started) wake(); }
+    root.requestAnimationFrame(frameTick);
+  }
   function init(opts) {
     muted = !!(opts && opts.muted);
+    if (typeof root.requestAnimationFrame === 'function') root.requestAnimationFrame(frameTick);
+    if (typeof document !== 'undefined') { if (document.body) watchScreen(); else document.addEventListener('DOMContentLoaded', watchScreen); }
     if (opts && opts.sfxMuted !== undefined) sfxMuted = !!opts.sfxMuted;
     try {
       root.addEventListener('pointerdown', onGesture, true);
@@ -350,7 +382,7 @@
     const p = pick || choose(want);
     return {
       supported: !!AC, started, muted, sfxMuted, context: !!ctx, created,
-      running: !!ctx && ctx.state === 'running', playing: !!cur && !!ctx && ctx.state === 'running' && !!cur.src.buffer, theme: cur ? cur.theme : null, mode: cur ? cur.mode : null,
+      running: !!ctx && ctx.state === 'running', stalled, playing: !!cur && !!ctx && ctx.state === 'running' && !!cur.src.buffer, theme: cur ? cur.theme : null, mode: cur ? cur.mode : null,
       // bpm is kept as a tempo index: 100 is the track's own speed, up to 106 with a long line.
       bpm: cur ? Math.round(cur.rate * 1000) / 10 : null,
       track: cur ? cur.track : null, rate: cur ? Math.round(cur.rate * 1000) / 1000 : null,

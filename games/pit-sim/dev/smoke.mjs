@@ -9987,12 +9987,23 @@ async function browserChecks() {
       for (let i = 0; i < 80 && !(m1.running && m1.playing); i++) { await sleep(100); m1 = await ms(); }
       assert(m1.muted === false && m1.running === true && m1.playing === true && m1.track === m1.wantTrack, 'one real click did not start the music: ' + describe(m1));
       const pressed1 = await fev('document.getElementById("mute").getAttribute("aria-pressed")');
+      // Joel heard the game with nothing open: an app can keep a closed view's frame alive out of
+      // sight. Hide the frame (still "visible" to the page), the music must go quiet, then return.
+      const hostEv = (e) => cdp.send('Runtime.evaluate', { expression: e, returnByValue: true });
+      await hostEv('document.getElementById("f").style.display = "none"');
+      let mh = await ms();
+      for (let i = 0; i < 40 && mh.running; i++) { await sleep(100); mh = await ms(); }
+      assert(mh.running === false && mh.stalled === true, 'the hidden frame kept playing: ' + describe(mh));
+      await hostEv('document.getElementById("f").style.display = ""');
+      let mb = await ms();
+      for (let i = 0; i < 40 && !(mb.running && mb.playing); i++) { await sleep(100); mb = await ms(); }
+      assert(mb.running === true && mb.playing === true && mb.stalled === false, 'the music did not come back with the frame: ' + describe(mb));
       await realClick();
       await sleep(200);
       const m2 = await ms();
       const pressed2 = await fev('document.getElementById("mute").getAttribute("aria-pressed")');
       assert(m2.muted === true && m2.playing === false && pressed1 === 'false' && pressed2 === 'true', 'the second click did not stop it: ' + describe(m2) + ' pressed ' + pressed1 + '/' + pressed2);
-      return 'panel open ' + panel + '; click 1: context running, ' + m1.track + ' playing; click 2: muted';
+      return 'panel open ' + panel + '; click 1: context running, ' + m1.track + ' playing; frame hidden: quiet; shown: playing again; click 2: muted';
     } finally {
       cdp.off('Runtime.executionContextCreated', onCtx);
       await emulate(RUN_METRICS);
