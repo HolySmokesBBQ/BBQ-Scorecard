@@ -51,7 +51,7 @@ for (const page of ['pit.html', 'episodes.html', 'about.html', 'door.js']) {
 //     at the CDN; bump PIT_V on every game update) and the page gets the
 //     standard gtm-init tag (the game itself sends nothing).
 const SHIP_PIT = process.env.SHIP_PIT === '1';
-const PIT_V = '2';
+const PIT_V = '3';
 if (SHIP_PIT) {
   const pitSrc = join(ROOT, 'games', 'pit-sim');
   const pitDst = join(DIST, 'yourpit');
