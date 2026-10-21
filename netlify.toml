@@ -166,6 +166,14 @@
   [headers.values]
     Cache-Control = "public, max-age=31536000, immutable"
 
+# Your Pit music. Plain MP3s fetched lazily by /yourpit/music.js after the
+# player turns sound on. Content-stable: the game session renames a track
+# file if its audio ever changes, so these carry no ?v= and can be immutable.
+[[headers]]
+  for = "/yourpit/tracks/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
 [[headers]]
   for = "/assets/*"
   [headers.values]

@@ -51,13 +51,20 @@ for (const page of ['pit.html', 'episodes.html', 'about.html', 'door.js']) {
 //     at the CDN; bump PIT_V on every game update) and the page gets the
 //     standard gtm-init tag (the game itself sends nothing).
 const SHIP_PIT = process.env.SHIP_PIT === '1';
-const PIT_V = '1';
+const PIT_V = '2';
 if (SHIP_PIT) {
   const pitSrc = join(ROOT, 'games', 'pit-sim');
   const pitDst = join(DIST, 'yourpit');
+  // 23 files, audited at 7aefd0b. Tracks are plain MP3s fetched lazily by
+  // music.js after the player turns sound on; the game session renames a
+  // track file if its audio ever changes, so tracks need no ?v= (they get a
+  // long immutable cache in netlify.toml instead).
   const PIT_FILES = ['index.html', 'sprites.js', 'sim.js', 'music.js', 'game.js',
-    ...['palette', 'proj', 'people', 'kit', 'yard', 'fx', 'rule', 'index', 'bridge'].map(f => `art3/${f}.js`)];
+    ...['palette', 'proj', 'people', 'kit', 'yard', 'fx', 'rule', 'index', 'bridge'].map(f => `art3/${f}.js`),
+    ...['highway-heat', 'burning-road', 'rock-drive', 'country-southern-rock', 'freewheeling', 'southern-sin', 'blues-rock-energetic', 'cold-one'].map(f => `tracks/${f}.mp3`),
+    'tracks/LICENSE.txt'];
   mkdirSync(join(pitDst, 'art3'), { recursive: true });
+  mkdirSync(join(pitDst, 'tracks'), { recursive: true });
   let n = 0;
   for (const f of PIT_FILES) if (copyIfExists(join(pitSrc, f), join(pitDst, f))) n++;
   const page = join(pitDst, 'index.html');
