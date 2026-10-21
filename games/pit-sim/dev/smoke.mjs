@@ -10038,7 +10038,7 @@ async function browserChecks() {
   };
 
   await step('v3.9 arrange 1: a v11 save migrates to the default layout, a bad stored layout falls back, the week 2 tip', async () => {
-    await ev('(localStorage.removeItem("pit-sim-arrange-tip"), true)');
+    await ev('(localStorage.removeItem("hs.pitsim.tip"), true)');
     await reload(arrFixture());
     const m = await ev('(() => { const o = sim.serialize(); const bad = Object.assign({}, o, { layout: { cooler: [0, -1] } }); const ok = Object.assign({}, o, { layout: { cooler: [0, -2] } }); return { lay: JSON.stringify(S().layout), v: o.v, sl: JSON.stringify(o.layout), cooler: MAP.station("cooler").tiles[0], bad: JSON.stringify(PitSim.validateSave(bad).layout), good: JSON.stringify(PitSim.validateSave(ok).layout), loop: S().loop, tip: $("arrange-tip") ? $("arrange-tip").textContent : null }; })()');
     assert(m.lay === '{}' && m.v === SAVE_V && m.sl === '{}' && m.cooler.x === 4 && m.cooler.y === 6, 'v11 migration ' + describe(m));

@@ -6714,9 +6714,9 @@ let arrTipWeek = null;
 function arrangeTip(se) {
   if (!se || (se.week | 0) < 2) return null;
   let seen = null;
-  try { seen = localStorage.getItem('pit-sim-arrange-tip'); } catch (e) { seen = 'x'; }
+  try { seen = localStorage.getItem('hs.pitsim.tip'); } catch (e) { seen = 'x'; }
   if (seen && arrTipWeek !== (se.week | 0)) return null;
-  if (!seen) { arrTipWeek = se.week | 0; try { localStorage.setItem('pit-sim-arrange-tip', '1'); } catch (e) { /* no storage */ } }
+  if (!seen) { arrTipWeek = se.week | 0; try { localStorage.setItem('hs.pitsim.tip', '1'); } catch (e) { /* no storage */ } }
   return mk('p', { id: 'arrange-tip', cls: 'muted', text: 'Tip: Arrange yard lets you move your gear.' });
 }
 
