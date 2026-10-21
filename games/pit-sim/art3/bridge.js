@@ -22,8 +22,8 @@ const BUBBLE_DROP = 10;
 const HAIRS = ['short', 'curly', 'long', 'buzz', 'bun', 'bald'];
 const FACES = ['none', 'mustache', 'beard', 'glasses'];
 const HATS = ['none', 'cap', 'cowboy', 'bandana'];
-const ROLE3 = { run: 'RUN', fire: 'FIRE', prep: 'PREP', till: 'TILL' };
-const KIND_LOOK = { player: 'player', buddy: 'crew_run', tender: 'crew_fire', prep: 'crew_prep', till: 'crew_till' };
+const ROLE3 = { run: 'RUN', fire: 'FIRE', prep: 'PREP', till: 'TILL', pit: 'PIT' };
+const KIND_LOOK = { player: 'player', buddy: 'crew_run', tender: 'crew_fire', prep: 'crew_prep', till: 'crew_till', pit: 'crew_pit' };
 const POSE = { down: 'down', up: 'up', side: 'side', slice: 'down', sit: 'sit' };
 const CARRY = { down: 'carry_down', up: 'carry_up', side: 'carry_side' };
 const POSE3 = { down: 'down', up: 'up', side: 'side', carry_down: 'carryDown', carry_up: 'carryUp', carry_side: 'carrySide', sit: 'sit' };
@@ -40,6 +40,7 @@ const keys = Object.create(null);
 const guests = Object.create(null);
 const misses = Object.create(null);   // v2 names drawn as v2 art (no art3 sprite yet)
 
+const PIT_APRON = 4;   // v4.3: palette APRON index 4, charcoal
 function intIn(v, n, d) { return (typeof v === 'number' && Number.isInteger(v) && v >= 0 && v < n) ? v : d; }
 
 // The v2 look (skin, hair, hairColor, face, hat, apron as indexes) as art3 look parts.
@@ -57,6 +58,8 @@ function toParts(l, kind, role) {
     tongs: kind === 'player'
   };
   if (kind === 'crew') { p.role = ROLE3[role] || 'RUN'; p.body = role === 'fire' ? 'B' : 'A'; p.pants = role === 'prep' ? 2 : 1; }
+  // v4.3: the PIT card, a second pitmaster: always the charcoal apron, the purple role shirt and tongs.
+  if (kind === 'crew' && role === 'pit') { p.apron = PIT_APRON; p.tongs = true; p.pants = 2; }
   else p.shirt = 'white';
   return p;
 }
@@ -68,7 +71,7 @@ function boot() {
     if (art3.rule && typeof art3.sizes === 'function') art3.sizes('rule');
     art3.build();
     if (!art3.lookOf || !art3.lookOf('player')) art3.look('player', toParts(null, 'player'));
-    ['run', 'fire', 'prep', 'till'].forEach(function (r) { if (!art3.lookOf || !art3.lookOf('crew_' + r)) art3.look('crew_' + r, art3.randomLook('crew_' + r, 'crew', ROLE3[r])); });
+    ['run', 'fire', 'prep', 'till', 'pit'].forEach(function (r) { if (!art3.lookOf || !art3.lookOf('crew_' + r)) art3.look('crew_' + r, art3.randomLook('crew_' + r, 'crew', ROLE3[r])); });
     ready = true;
   } catch (e) { console.error(e); ready = false; }
   return ready;
@@ -115,7 +118,7 @@ const PERSON_AX = 16;   // art3/people.js AX: a person frame's foot centre from 
 
 // Draws the art3 version of v2 sprite `name` drawn at (x, y) sim px with v2 size w by h.
 // ctx is the 2x transformed off canvas; returns false when art3 has nothing for the name.
-const PERSON = /^(player|buddy|tender|prep|till|cust\d)_(down|up|side|sit|slice)$/;
+const PERSON = /^(player|buddy|tender|prep|till|pit|cust\d)_(down|up|side|sit|slice)$/;
 function draw(ctx, name, x, y, w, h, frame, flip) {
   if (!ready) return false;
   const fx = Math.round(x * S + w), fy = Math.round((y + h) * S);

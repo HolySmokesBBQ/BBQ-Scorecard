@@ -412,8 +412,8 @@ const MOOD_PIX = (function () {
     return { map: g.map(function (r) { return r.join(''); }), pal: { '#': '#2A1406', o: sh.fill, e: '#2A1406', w: '#ffffff' } };
   });
 })();
-const ROLE_FALLBACK = ['run', 'fire', 'prep', 'till'];
-const ROLE_KIND = { run: 'buddy', fire: 'tender', prep: 'prep', till: 'till' };   // the in-yard sprite prefix of each role (X12.2)
+const ROLE_FALLBACK = ['run', 'fire', 'prep', 'till', 'pit'];
+const ROLE_KIND = { run: 'buddy', fire: 'tender', prep: 'prep', till: 'till', pit: 'pit' };   // the in-yard sprite prefix of each role (X12.2)
 const TAG_COLOR = { safe: '#9ff0a8', stretch: '#ffb070', invite: '#F3CF6D' };   // deviation 53
 const CR_ROWS = [   // creator option rows in W17.5 order: [look key, id part, kind, label key]
   ['skin', 'skin', 'swatch', 'crSkin'], ['hair', 'hair', 'chooser', 'crHair'],
@@ -866,7 +866,7 @@ function lookKeyOf(look) {
 function ensureCrewLook(role, look) {
   if (B3 && look) B3.setCrew(role, copyLook(look));
   // v3.6: the TILL card is art3 only (sprites.js keeps three roles).
-  if (role === 'till') return look ? 'till:' + lookKeyOf(look) : '';
+  if (role === 'till' || role === 'pit') return look ? role + ':' + lookKeyOf(look) : '';   // v4.3: the PIT card is art3 only too
   if (!art || typeof art.setCrewLook !== 'function' || !look) return '';
   const want = role + ':' + lookKeyOf(look);
   let have = '';
@@ -889,7 +889,7 @@ function moverCard(m) { return m && m.cardId !== undefined && m.cardId !== null 
 // X13.7: at yard_open each lineup card's look goes on its role's in-yard sprites.
 function dressCrew() {
   const s = sim.state;
-  const movers = [['run', s.buddy], ['fire', s.tender], ['prep', s.prep || null], ['till', s.cashier || null]];
+  const movers = [['run', s.buddy], ['fire', s.tender], ['prep', s.prep || null], ['till', s.cashier || null], ['pit', s.pitCard || null]];
   for (let i = 0; i < movers.length; i++) {
     const card = moverCard(movers[i][1]);
     if (card && card.look) ensureCrewLook(movers[i][0], card.look);
@@ -1341,7 +1341,8 @@ function crewNow() {
     try { key = art && typeof art.crewKey === 'function' ? art.crewKey(role) : ''; } catch (e) { key = ''; }
     return { id: m.cardId !== undefined ? m.cardId : null, key: key };
   };
-  return { run: one(s.buddy, 'run'), fire: one(s.tender, 'fire'), prep: one(s.prep || null, 'prep'), till: s.cashier ? { id: s.cashier.cardId !== undefined ? s.cashier.cardId : null, key: 'till' } : null };
+  return { run: one(s.buddy, 'run'), fire: one(s.tender, 'fire'), prep: one(s.prep || null, 'prep'), till: s.cashier ? { id: s.cashier.cardId !== undefined ? s.cashier.cardId : null, key: 'till' } : null,
+    pit: s.pitCard ? { id: s.pitCard.cardId !== undefined ? s.pitCard.cardId : null, key: 'pit', cooker: s.pitCard.cooker } : null };
 }
 function hiringPageNow() {
   if (loopOf(sim.state) !== 'hiring') return null;
@@ -1585,6 +1586,7 @@ function onEvent(ev) {
     case 'turnin_missed': announce(SX('comp', 'missed', { meat: L.toLowerCase() }, 'missed')); break;
     case 'comp_results': announce(SX('comp', 'place', { p: ordinal(ev.place | 0), n: 10 }, 'compPlace')); break;
     case 'fire_fed': simFeeds = true; if (ev.cooker) feedPuff(ev.cooker); break;
+    case 'pit_fed': case 'pit_lit': if (ev.cooker) feedPuff(ev.cooker); break;   // v4.3: the PIT card's bag or split puffs too
     case 'player_set': applyLook(lookNow()); break;
     case 'tutorial_refill':
       if (ev.kind === 'meat') announce(SAY('refillMeat', { label: ev.meat && MEATS[ev.meat] ? MEATS[ev.meat].label : '' }));
@@ -5006,6 +5008,8 @@ function buildHiring() {
   if (slotsH) foot.appendChild(slotsH);
   const growH = payrollGrowLine('hire-payroll-grow');
   if (growH) foot.appendChild(growH);
+  // v4.3: no PIT cards in the pool until the yard has the cabinet smoker, said plainly.
+  if (typeof sim.pitOpen === 'function' && !sim.pitOpen()) foot.appendChild(mk('p', { id: 'hire-pit-lock', cls: 'muted pgrow', text: U('pitLockedH') }));
   const news = mk('div', { id: 'hire-news', cls: 'hnews' });
   if (hireNews) {
     news.appendChild(mk('p', { text: hireNews.line }));
@@ -5195,7 +5199,8 @@ function cardData(c) {
   return { id: v.id, name: v.name, role: role, look: v.look, skills: v.skills || [1, 1], potential: typeof v.potential === 'number' ? v.potential : null,
     stars: typeof v.stars === 'number' ? v.stars : cardStarsOf(v.skills), wage: v.wage | 0, mood: v.mood | 0, rookie: v.rookie === true,
     contract: v.contract | 0, xp: v.xp | 0, banked: v.banked | 0, notice: v.notice === true, bring: v.bring === true,
-    raised: v.raised === true, worked: v.worked | 0 };
+    raised: v.raised === true, worked: v.worked | 0,
+    postLabel: v.postLabel || '', posts: Array.isArray(v.posts) ? v.posts : [], open: v.open !== false };   // v4.3: the PIT card's cooker
 }
 
 function buildCard() {
@@ -5342,6 +5347,13 @@ function cardCrewActs(act, d) {
     focusOr(keep, el['card-h']);
   };
   if (crewLoops()) act.appendChild(bringBtn('card-bring', d, function () { done(sim.setBring(id, !d.bring), 'card-bring'); }, 22));
+  // v4.3: the cooker a PIT card runs; a tap moves it to the next one you own.
+  if (d.role === 'pit' && crewLoops() && typeof sim.cyclePitPost === 'function') {
+    const pb = pixBtn('card-post', U('pitPost', { c: d.postLabel }), 'alt', function () { done(sim.cyclePitPost(id), 'card-post'); }, 22);
+    pb.disabled = d.posts.length < 2;
+    act.appendChild(pb);
+    if (!d.open) act.appendChild(mk('p', { id: 'card-pit-lock', cls: 'bad', text: U('pitLocked') }));
+  }
   if (weekOnly() && !autoTrain()) {
     const tid = trainedId();
     const tr = pixBtn('card-train', tid !== null ? U('trainDone') : U('train'), 'alt', function () {
@@ -5403,11 +5415,12 @@ function cardCrewActs(act, d) {
 }
 
 // Review 1: the curve each skill's level line names, and how its value reads.
-const LEVEL_KEY = { run: ['runSpeed', 'runTip'], fire: ['fireSense', 'firePace'], prep: ['prepKnife', 'prepPace'], till: ['tillRing', 'tillTip'] };
+const LEVEL_KEY = { run: ['runSpeed', 'runTip'], fire: ['fireSense', 'firePace'], prep: ['prepKnife', 'prepPace'], till: ['tillRing', 'tillTip'], pit: ['pitTiming', 'pitCare'] };
 function curveWords(key, v) {
   if (!Number.isFinite(v)) return '';
   if (key === 'runTip' || key === 'tillTip') return String(Math.round((1 + v) * 100));
-  if (key === 'prepKnife') return String(Math.round(v * 100));
+  if (key === 'prepKnife' || key === 'pitCare') return String(Math.round(v * 100));
+  if (key === 'pitTiming') return String(Math.round(v));
   if (key === 'fireSense') return String(Math.round(v));
   return (Math.round(v * 10) / 10).toFixed(1);
 }
@@ -7817,6 +7830,7 @@ function nearestWalkable(x, y) {
 function size(name) {
   let s = SIZE[name];
   if (!s && /^till_/.test(name)) return (SIZE[name] = size('buddy_' + name.slice(5)));   // v3.6: art3 only, the buddy's box
+  if (!s && /^pit_/.test(name)) return (SIZE[name] = size('buddy_' + name.slice(4)));    // v4.3: the PIT card too
   if (!s) {
     const sp = art.SPRITES ? art.SPRITES[name] : null;
     s = SIZE[name] = sp ? [sp.w, sp.h, Math.max(1, art.frames(name))] : [16, 16, Math.max(1, art.frames(name))];
@@ -8115,7 +8129,7 @@ function drawGround(s) {
     if (sign && MAP.signText) { const info = signInfo(); if (info) recordGlyphs(info.font, info.text, info.x, info.font === 'font_s' ? MAP.signText.y + 1 : MAP.signText.y); }
   }
   const sale = saleShown() ? forSale() : [];
-  const people = [s.player, s.buddy, s.tender, s.prep, s.cashier || null].concat(s.customers.filter(function (c) { return c.mode !== 'eating' && c.mode !== 'seated'; }));
+  const people = [s.player, s.buddy, s.tender, s.prep, s.cashier || null, s.pitCard || null].concat(s.customers.filter(function (c) { return c.mode !== 'eating' && c.mode !== 'seated'; }));
   const onTile = function (tiles) {
     return people.some(function (m) { return m && hasTile(tiles, Math.round(m.px / TILE), Math.round(m.py / TILE)); });
   };
@@ -8424,7 +8438,7 @@ function drawSorted(s) {
   for (let i = 0; i < MAP.decor.length; i++) if (s.decor[MAP.decor[i].id] === true) decorItems(MAP.decor[i], s, push);
 
   // People (layer 2): the player, the RUN, FIRE and PREP cards' movers, then customers by id.
-  const staff = [['player', s.player, ''], ['buddy', s.buddy, 'run'], ['tender', s.tender, 'fire'], ['prep', s.prep || null, 'prep'], ['till', s.cashier || null, 'till']];
+  const staff = [['player', s.player, ''], ['buddy', s.buddy, 'run'], ['tender', s.tender, 'fire'], ['prep', s.prep || null, 'prep'], ['till', s.cashier || null, 'till'], ['pit', s.pitCard || null, 'pit']];
   for (let i = 0; i < staff.length; i++) {
     const m = staff[i][1], role = staff[i][2];
     if (!m) continue;
@@ -8434,6 +8448,7 @@ function drawSorted(s) {
       if (card && card.look) ensureCrewLook(role, card.look);
       if (kind === 'prep' && !art.has('prep_down')) kind = 'buddy';
       if (kind === 'till' && !B3) kind = 'buddy';   // v3.6: the TILL card draws through art3
+      if (kind === 'pit' && !B3) kind = 'buddy';    // v4.3: so does the PIT card
     }
     const mx = Math.round(m.px), my = Math.round(m.py);
     if (kind === 'player') playerDrawn = [isoX(mx + 8, my + 8) * RS, isoY(mx + 8, my + 8) * RS];

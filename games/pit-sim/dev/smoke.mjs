@@ -287,7 +287,7 @@ const DEVICE_SIZES = [
 ];
 
 // Contract D2 and D3.
-const C_EXPECT = { WALK_TILES_PER_S: 6, SAVE_VERSION: 13, PATIENCE_MID_FRAC: 0.5, GEAR_RESERVE: 30, QUEUE_SPOTS: 3, QUEUE_SPOTS_BIG: 5, TABLE_SPOTS: 3, TABLE_SPOTS_BIG: 5 };
+const C_EXPECT = { WALK_TILES_PER_S: 6, SAVE_VERSION: 14, PATIENCE_MID_FRAC: 0.5, GEAR_RESERVE: 30, QUEUE_SPOTS: 3, QUEUE_SPOTS_BIG: 5, TABLE_SPOTS: 3, TABLE_SPOTS_BIG: 5 };
 const C_NEW_KEYS = ['EAT_MIN', 'EAT_MAX', 'HEART_SECONDS', 'SEAT_BONUS_BASE', 'SEAT_BONUS_MAX', 'CHARM_STEP', 'CHARM_MAX', 'REP_TOGO_QUICK', 'SWEAT_FRAC', 'ZZZ_AFTER', 'FX', 'PATIENCE_MID_FRAC', 'GEAR_RESERVE'];
 const FX_KEYS = ['NUMBER_S', 'NUMBER_RISE_PX', 'NUMBER_FADE_AT', 'TIP_GAP_PX', 'SPARKLE_S', 'SPARKLE_FRAME_S', 'SPARKLE_STAGGER_S',
   'HEART_S', 'HEART_FRAME_S', 'HEART_RISE_PX', 'HEART_FADE_S', 'EAT_FRAME_S', 'PUFF_EVERY_LOW', 'PUFF_EVERY_GOOD', 'PUFF_EVERY_HOT',
@@ -416,7 +416,7 @@ const C_W2 = {
 };
 const C_W2_FIXED = ['SAVE_VERSION', 'SEASON_WEEKS', 'NAME_MAX', 'NAME_PUNCT', 'LENGTHS'];
 // W2 changed values and the v2.1 keys that stay (W2 last paragraph).
-const C_W2_EXACT = { SAVE_VERSION: 13, DRIVEWAY_PRICE: 400, GATE_OPENS: 30, LAST_CALL: 110, DAY_SECONDS: 125, STEPPER_MAX: 99, START_CASH: 80, START_REP: 20 };
+const C_W2_EXACT = { SAVE_VERSION: 14, DRIVEWAY_PRICE: 400, GATE_OPENS: 30, LAST_CALL: 110, DAY_SECONDS: 125, STEPPER_MAX: 99, START_CASH: 80, START_REP: 20 };
 // W22.18: the keys whose starting values the W19 literals assume.
 const LITERAL_KEYS = ['FEE_MULT', 'FEE_ROUND', 'DEPOSIT_FRAC', 'PAY_BASE', 'PAY_PER_STAR', 'STAR_FANS', 'REP_DAY_MIN', 'SPARE_FRAC', 'BAGS_PER_COOKER',
   'SCORE_FED', 'SCORE_WAIT', 'SCORE_QUALITY', 'STAR_EDGES', 'WAIT_FULL_S', 'WAIT_ZERO_S', 'BURNT_PENALTY', 'OFFMENU_PENALTY', 'COOLER_CAP', 'SEASON_CARRY_REP', 'SEASON_REP_FLOOR',
@@ -426,11 +426,11 @@ const LITERAL_KEYS = ['FEE_MULT', 'FEE_ROUND', 'DEPOSIT_FRAC', 'PAY_BASE', 'PAY_
 const C_X2 = {
   SKILL_CURVE: { fireSense: [45, 55, 65], firePace: [5.0, 4.0, 2.5], runSpeed: [3.5, 4.0, 5.5], runHandle: [0.6, 0.4, 0.2],
     runSeatTip: [0, 0.1, 0.4], runTip: [-0.25, 0, 1.0], prepKnife: [1.4, 1.0, 0.6], prepPace: [3.5, 4.0, 5.5],
-    tillRing: [2.0, 1.2, 0.5], tillTip: [-0.1, 0, 0.3] },   // runTip: review 1 (X20.1); till: v3.6
-  ROLE_SKILLS: { run: [['runSpeed'], ['runHandle', 'runSeatTip', 'runTip']], fire: [['fireSense'], ['firePace']], prep: [['prepKnife'], ['prepPace']], till: [['tillRing'], ['tillTip']] },   // review 1: runTip on Friendliness; v3.6 TILL
+    tillRing: [2.0, 1.2, 0.5], tillTip: [-0.1, 0, 0.3], pitTiming: [9, 4, 1], pitCare: [0.3, 0.1, 0], pitSense: [45, 55, 70] },   // runTip: review 1 (X20.1); till: v3.6; pit: v4.3
+  ROLE_SKILLS: { run: [['runSpeed'], ['runHandle', 'runSeatTip', 'runTip']], fire: [['fireSense'], ['firePace']], prep: [['prepKnife'], ['prepPace']], till: [['tillRing'], ['tillTip']], pit: [['pitTiming'], ['pitCare', 'pitSense']] },   // review 1: runTip on Friendliness; v3.6 TILL; v4.3 PIT
   MOOD_STARS: [-1, -0.5, 0, 0, 0.5],
   WAGE_TABLE: [10, 13, 16, 20, 24, 29, 34, 40, 46],
-  ROLE_WAGE: { run: 1.0, fire: 1.25, prep: 1.0, till: 1.0 },
+  ROLE_WAGE: { run: 1.0, fire: 1.25, prep: 1.0, till: 1.0, pit: 1.5 },
   PAYROLL: [60, 90, 140, 220], ROSTER_SLOTS: [2, 3, 4, 6],
   CREW_MAX: 8, BENCH_STREAK: 2, HIRE_ROUNDS: 3, POOL_SIZE: 24, POOL_PAGE: 9, TAKEN_PER_ROUND: 3, TAKEN_SHORTLIST: 6, TRYOUTS: 2,
   WALKINS: [2, 2, 3], LEVEL_XP: 200, BANK_MAX: 9, XP_RUN_PLATE: 3, XP_PREP_CUT: 3, XP_FIRE_BAG: 1, XP_FIRE_HOLD: 10,
@@ -441,10 +441,11 @@ const C_X2 = {
   FIRE_WALK: [3.5, 5.5], HEADLINER: [2.5, 2], HAT_SHARE: 0.25, STRETCH_EDGE: 1.0
 };
 const C_X2_FIXED = ['HIRE_ROUNDS', 'POOL_SIZE', 'POOL_PAGE', 'CREW_MAX', 'ROLE_SKILLS'];
-const CURVE_KEYS = ['fireSense', 'firePace', 'runSpeed', 'runHandle', 'runSeatTip', 'runTip', 'prepKnife', 'prepPace', 'tillRing', 'tillTip'];
-const CURVE_MID = { fireSense: 55, firePace: 4.0, runSpeed: 4.0, runHandle: 0.4, runSeatTip: 0.1, runTip: 0, prepKnife: 1.0, prepPace: 4.0, tillRing: 1.2, tillTip: 0 };   // fixed (runTip 0: v2's plate tip at 3 stars)
+const CURVE_KEYS = ['fireSense', 'firePace', 'runSpeed', 'runHandle', 'runSeatTip', 'runTip', 'prepKnife', 'prepPace', 'tillRing', 'tillTip', 'pitTiming', 'pitCare', 'pitSense'];
+const CURVE_MID = { fireSense: 55, firePace: 4.0, runSpeed: 4.0, runHandle: 0.4, runSeatTip: 0.1, runTip: 0, prepKnife: 1.0, prepPace: 4.0, tillRing: 1.2, tillTip: 0, pitTiming: 4, pitCare: 0.1, pitSense: 55 };   // fixed (runTip 0: v2's plate tip at 3 stars)
 // X12.1 to X12.3, the art additions.
-const ROLE_IDS = ['run', 'fire', 'prep', 'till'];   // v3.6: TILL
+const ROLE_IDS = ['run', 'fire', 'prep', 'till', 'pit'];   // v3.6: TILL; v4.3: PIT
+const POOL_ROLES = ['run', 'fire', 'prep', 'till'];          // v4.3: the roles open with any cooker (PIT needs the cabinet smoker)
 const PREP_DEFAULT_LOOK = { skin: 2, hair: 4, hairColor: 0, face: 0, hat: 0, apron: 2 };
 const BUST = { w: 26, h: 22 };
 // X7: the new sim methods (own properties).
@@ -565,7 +566,7 @@ const ID3 = {
 };
 const SEASON_WEEKS = 7;   // v3.5: six weeks and the competition finale (was 9)
 const P_POOL = 24;        // v3.6: the Hiring Day pool (6 a role, 4 roles)
-const SAVE_V = 13;        // v4.1: v13 (the gear ladder); v3.5: save v9 (season.plan, pit); v3.6: v10 (the register, the TILL card); v3.7: v11 (pay, then sit)
+const SAVE_V = 14;        // v4.1: v13 (the gear ladder); v3.5: save v9 (season.plan, pit); v3.6: v10 (the register, the TILL card); v3.7: v11 (pay, then sit)
 // W19 step 51: the v2.1 (v3) save sample.
 const SAVE_V3_SAMPLE = {
   v: 3, day: 5, cash: 150, rep: 20,
@@ -672,25 +673,28 @@ const W15 = ({
     'Thanks, {name}. We will call you again next year.'
   ]),                                                     // index stars - 1; {name} is state.player.name
   // X10 top level additions, spliced from the contract
-  role: Object.freeze({ run: 'RUN', fire: 'FIRE', prep: 'PREP', till: 'TILL' }),
-  roleName: Object.freeze({ run: 'Server', fire: 'Pit hand', prep: 'Prep cook', till: 'Cashier' }),
+  role: Object.freeze({ run: 'RUN', fire: 'FIRE', prep: 'PREP', till: 'TILL', pit: 'PIT' }),
+  roleName: Object.freeze({ run: 'Server', fire: 'Pit hand', prep: 'Prep cook', till: 'Cashier', pit: 'Pitmaster' }),
   roleJob: Object.freeze({
     run: 'Carries plates from the board to the table.',
     fire: 'Keeps every lit cooker fed with charcoal.',
     prep: 'Slices the cuts you leave on the board.',
-    till: 'Works the register and rings every guest up.'
+    till: 'Works the register and rings every guest up.',
+    pit: 'Runs one cooker start to finish: lights it, feeds it, puts meat on and pulls it.'
   }),
   skill: Object.freeze({
     run: Object.freeze(['Speed', 'Friendliness']),
     fire: Object.freeze(['Fire sense', 'Pace']),
     prep: Object.freeze(['Knife', 'Pace']),
-    till: Object.freeze(['Speed', 'Friendliness'])
+    till: Object.freeze(['Speed', 'Friendliness']),
+    pit: Object.freeze(['Timing', 'Care'])
   }),
   skillHelp: Object.freeze({
     run: Object.freeze(['Walks plates over faster.', 'Hands plates over quicker. Guests tip more on the plates they carry.']),   // review 1
     fire: Object.freeze(['Keeps the fire hotter.', 'Checks the fires more often.']),
     prep: Object.freeze(['Slices faster than you do.', 'Walks to the board faster.']),
-    till: Object.freeze(['Rings guests up faster.', 'Guests tip a little more at the register.'])
+    till: Object.freeze(['Rings guests up faster.', 'Guests tip a little more at the register.']),
+    pit: Object.freeze(['Pulls meat closer to done.', 'Burns fewer pieces and keeps the fire steadier.'])
   }),
   mood: Object.freeze(['Done', 'Grumpy', 'OK', 'Happy', 'Fired up']),      // index mood + 2
   crewSay: Object.freeze({
@@ -704,6 +708,8 @@ const W15 = ({
     prepOne: '{name} sliced 1 cut and saved you {s} seconds.',
     till: '{name} rang up {n} guests. Guests tipped {t}.',
     tillOne: '{name} rang up 1 guest. Guests tipped {t}.',
+    pit: '{name} ran {c}: {n} pieces off on time, {b} burnt.',   // v4.3
+    pitOne: '{name} ran {c}: 1 piece off on time, {b} burnt.',
     idle: '{name} had nothing to do this time.',
     settled: '{name} worked the event.',
     rested: '{name} rested.'
@@ -1040,7 +1046,9 @@ const W15 = ({
       prepKnife: 'Slices in {b} percent of your time instead of {a}.',
       prepPace: 'Walks {b} tiles a second instead of {a}.',
       tillRing: 'Rings a guest up in {b} seconds instead of {a}.',
-      tillTip: 'Guests tip {b} percent of the usual instead of {a}.'
+      tillTip: 'Guests tip {b} percent of the usual instead of {a}.',
+      pitTiming: 'Pulls {b} seconds past done instead of {a}.',
+      pitCare: 'Loses track of {b} percent of pieces instead of {a}.'
     }),
     levelStars: 'Now {n} stars. The wage stays {w} this contract.',
     firedUp: '{name} is fired up for this one.',
@@ -1217,7 +1225,7 @@ const SAVE_V1_SAMPLE = {
   drivewayShown: false
 };
 const SAVE_DIRTY = { v: 1, day: 'abc', cash: -50, rep: 400, stock: { sausage: 200, bogus: 1 }, gear: { drum: true, kettle2: false }, hires: { tender: true }, extra: 1 };
-const INVALID_SAVES = [null, 'x', [], {}, undefined, 42, { v: '5' }, { v: 0 }, { v: '3' }, { v: '4' }, { v: 14 }];   // v4.1: v 1 to 13 accepted
+const INVALID_SAVES = [null, 'x', [], {}, undefined, 42, { v: '5' }, { v: 0 }, { v: '3' }, { v: '4' }, { v: 15 }];   // v4.1: v 1 to 13 accepted; v4.3: 14
 
 // The shopping list for day 1 and later days. Two sausage units give four plates, so later
 // customers walk out and the walk out step has something to assert.
@@ -1584,6 +1592,7 @@ async function nodeChecks() {
   await step('v2.1 and v3.0 saves migrate to cards, headless', () => migrateHeadless(globalThis[GLOBAL_NAME]));
   await step('four plates set down land in four counter spots, headless', () => countersHeadless(globalThis[GLOBAL_NAME]));
   await step('v3.7 the register: guests order and pay first, a TILL card rings them up, to go spots, the crew idle by their work, save v11, headless', () => registerHeadless(globalThis[GLOBAL_NAME]));
+  await step('v4.3 the PIT card: locked on the kettle, open with the cabinet, hired, a cook it runs alone, Timing and Care by stars, never on its cooker with you, save v14, headless', () => pitHeadless(globalThis[GLOBAL_NAME]));
   await step('v3.7 pay then sit: the RUN card and the pitmaster deliver to the table, eating starts on delivery, refunds, headless', () => deliveryHeadless(globalThis[GLOBAL_NAME]));
   await step('v3.8 overtime: paid guests hold the day past the hard end, boxed to go at the cap, the unpaid line leaves uncharged, headless', () => overtimeHeadless(globalThis[GLOBAL_NAME]));
   // v3.2 (D10.1): the Node legs of steps 73 to 75, the day loop and save v6.
@@ -2072,6 +2081,194 @@ function overtimeHeadless(P) {
   notes.push('ended at ' + st.clock.toFixed(1) + ' s, boxed 1, served counts it, no refund');
   return notes.join('; ');
 }
+// v4.3 the PIT card (Joel: "Or even another pitmaster."): a second pitmaster who runs one cooker end
+// to end. Headless: locked on the kettle, open from the cabinet smoker, hired from the pool and as a
+// walk-in, a cook where the PIT card lights, loads and pulls on time with no tap on its cooker, Timing
+// and Care by stars, never on its cooker while you are, the FIRE card leaves its cooker alone, save v14.
+function pitSeason(P, seed, gear) {
+  const h = headless(P, null, seed, { days: true });
+  assert(h.sim.skipTutorial() === true, 'skipTutorial() did not return true');
+  h.drain();
+  h.sim.setPlayer(DEFAULT_LOOK, 'Pitmaster', 'Your Pit');
+  h.drain();
+  passHiring(h, 'PIT ' + seed);
+  Object.assign(h.st().gear, gear || {});
+  h.st().charcoal = 20;
+  h.st().wood = 20;
+  return h;
+}
+// To the booked Saturday and into service (the morning shop fills the cart).
+function pitToBooking(h) {
+  const b = h.sim.bookOffer('birthday');
+  assert(b && b.ok, 'bookOffer birthday ' + describe(b));
+  h.sim.skipToWeekend(); h.drain();
+  for (let i = 0; i < 7 && !h.sim.dayOptions().booked; i++) { h.sim.chooseDay('off'); h.drain(); }
+  h.sim.shopOpen('event');
+  const r = h.sim.shopConfirm('event');
+  h.drain();
+  assert(r && r.ok && h.st().phase === PHASE.service, 'the booking did not start ' + describe(r));
+}
+const pitAtCooker = (s, id, P) => {
+  const p = s.player;
+  if (p.target && p.target.station === id) return true;
+  return p.next === null && P.MAP.station(id).use.some((u) => P.tileOwned(u, s.gear) && u.x === p.x && u.y === p.y);
+};
+// Plays the cook out with `player(h, s)` called every tick (it may tap), and returns the PIT events,
+// the ticks the PIT card acted on its cooker while you were on it, and the ticks you both stood
+// still on one tile.
+function pitPlay(h, player) {
+  const s = h.st();
+  const evs = [];
+  let clash = 0, sameTile = 0, guard = 0, mark = h.log.length;
+  while (s.phase === PHASE.service && guard++ < 20000) {
+    if (player) player(h, s);
+    h.tick();
+    for (; mark < h.log.length; mark++) if (/^pit_|^fire_fed$/.test(h.log[mark].type)) evs.push(h.log[mark]);
+    const pt = s.pitCard;
+    if (!pt) continue;
+    if (pt.task === 'act' && pt.dest === pt.cooker && pitAtCooker(s, pt.cooker, h.P)) clash += 1;
+    // Both standing still (no step under way, nothing left to walk) on one tile.
+    if (pt.next === null && pt.path.length === 0 && s.player.next === null && s.player.path.length === 0 && pt.x === s.player.x && pt.y === s.player.y) { sameTile += 1; if (!pitPlay.at) pitPlay.at = [s.clock, pt.x, pt.y, pt.task, pt.step]; }
+  }
+  return { evs, clash, sameTile };
+}
+function pitHeadless(P) {
+  const C = P.C, U = P.STRINGS.ui;
+  const notes = [];
+  // (a) Wages and the curves: above FIRE at every star level; Timing and Care improve with stars.
+  for (let st = 1; st <= 5; st += 0.5) assert(P.wageFor(st, 'pit') > P.wageFor(st, 'fire'), 'PIT wage ' + P.wageFor(st, 'pit') + ' not above FIRE ' + P.wageFor(st, 'fire') + ' at ' + st);
+  assert(P.skillValue('pitTiming', 5) < P.skillValue('pitTiming', 1) && P.skillValue('pitCare', 5) < P.skillValue('pitCare', 1), 'PIT curves');
+  // (b) Locked on the kettle: no PIT cards in the pool or the walk-ins, a PIT walk-in refused, a PIT
+  // card on the crew stays out of the lineup.
+  const k = pitSeason(P, 41, {});
+  assert(k.sim.pitOpen() === false && P.pitTier(k.st().gear) === 0, 'PIT open on the kettle');
+  const g0 = P.genPool({ seed: 41, year: 1 }), g1 = P.genPool({ seed: 41, year: 1, pit: true });
+  assert(g0.length === C.POOL_SIZE && !g0.some((e) => e.role === 'pit'), 'the kettle pool holds PIT cards');
+  assert(g1.length === C.POOL_SIZE + C.PIT_POOL && g1.filter((e) => e.role === 'pit').length === C.PIT_POOL && deepEq(g1.slice(0, C.POOL_SIZE), g0)
+    && g1.every((e, i) => e.idx === i), 'the open pool ' + describe(g1.slice(C.POOL_SIZE).map((e) => [e.role, e.stars, e.wage])));
+  let wkLocked = 0, wkOpen = 0;
+  for (let sd = 1; sd <= 30; sd++) for (let w = 2; w <= 6; w++) {
+    wkLocked += P.genWalkins({ seed: sd, year: 1, week: w, rep: 80 }).filter((e) => e.role === 'pit').length;
+    wkOpen += P.genWalkins({ seed: sd, year: 1, week: w, rep: 80, pit: true }).filter((e) => e.role === 'pit').length;
+  }
+  assert(wkLocked === 0 && wkOpen > 0, 'PIT walk-ins locked ' + wkLocked + ', open ' + wkOpen);
+  const pw = { name: 'Dee', role: 'pit', skills: [3, 3], potential: 3, mood: 0, look: Object.assign({}, DEFAULT_LOOK), stars: 3, wage: P.wageFor(3, 'pit'), hired: false };
+  k.st().cash = 500;
+  k.st().season.walkins = [Object.assign({}, pw)];
+  const lockR = k.sim.hireWalkin(0);
+  assert(lockR.ok === false && lockR.message === U.pitLocked && k.st().crew.length === 0, 'a PIT walk-in on the kettle ' + describe(lockR));
+  k.st().crew = [mkCard(P, 1, 'Dee', 'pit', [3, 3])];
+  k.st().crewSeq = 2;
+  assert(k.sim.payroll().now === 0, 'a PIT card works the kettle: payroll ' + describe(k.sim.payroll()));
+  notes.push('locked on the kettle: 24 card pool, 0 PIT walk-ins over 150 weeks, "' + lockR.message + '"');
+  // (c) Open with the cabinet smoker: the walk-in signs, the pool from a Hiring Day holds six.
+  const o = pitSeason(P, 42, { cabinet: true });
+  assert(o.sim.pitOpen() === true, 'PIT not open with the cabinet');
+  o.st().cash = 500;
+  o.st().season.walkins = [Object.assign({}, pw)];
+  const n0 = o.log.length;
+  const hr = o.sim.hireWalkin(0);
+  o.drain();
+  const hiredEv = o.log.slice(n0).filter((e) => e.type === 'crew_hired');
+  assert(hr.ok === true && hiredEv.length === 1 && hiredEv[0].role === 'pit' && o.sim.crewView(hr.id).post === null && o.sim.crewView(hr.id).postNow === 'kettle1'
+    && o.sim.payroll().now === pw.wage, 'the PIT walk-in with the cabinet ' + describe([hr, hiredEv, o.sim.crewView(hr.id)]));
+  const hsave = o.sim.serialize();
+  hsave.season.results = []; hsave.season.week = 1; hsave.season.drafted = false; hsave.crew = []; hsave.hiring = null;
+  const hd = headless(P, hsave, 43, { days: true });
+  assert(hd.st().loop === LOOP.hiring, 'no Hiring Day with the cabinet: loop ' + describe(hd.st().loop));
+  const hv = hd.sim.hiringView();
+  const pitIdx = hv.pool.filter((e) => e.role === 'pit').map((e) => e.idx);
+  assert(hv.pool.length === C.POOL_SIZE + C.PIT_POOL && pitIdx.length === C.PIT_POOL, 'the Hiring Day pool with the cabinet ' + hv.pool.length);
+  const cheap = hv.pool.filter((e) => e.role === 'pit').sort((a, b) => a.wage - b.wage)[0];
+  const hx = hd.sim.hireApplicant(cheap.idx);
+  hd.drain();
+  assert(hx.ok === true && hd.st().crew.some((c) => c.role === 'pit'), 'drafting a PIT card ' + describe(hx) + ', ' + hd.sim.payroll().hire);
+  notes.push('the cabinet opens it: PIT walk-in signed for ' + pw.wage + ', Hiring Day pool ' + hv.pool.length + ' with ' + pitIdx.length + ' PIT, drafted ' + cheap.name + ' at ' + cheap.wage);
+  // (d) A cook where the PIT card runs kettle 2 by itself: lights it, loads it, pulls on time. The
+  // pitmaster never taps (5 stars: Care 0, so every pull is on time).
+  const runPit = (stars, player, extra) => {
+    const h = pitSeason(P, 44, Object.assign({ cabinet: true, kettle2: true }, extra && extra.gear));
+    h.st().crew = [mkCard(P, 1, 'Dee', 'pit', [stars, stars])].concat(extra && extra.crew ? extra.crew : []);
+    h.st().crewSeq = 3;
+    pitToBooking(h);
+    const pt = h.st().pitCard;
+    assert(pt && pt.cardId === 1 && pt.cooker === 'kettle2', 'no PIT mover on kettle 2 ' + describe(pt && { cooker: pt.cooker, id: pt.cardId }));
+    const taps = [];
+    const out = pitPlay(h, (hh, s) => { if (player) player(hh, s, taps); });
+    out.h = h; out.taps = taps; out.pt = pt;
+    return out;
+  };
+  const r5 = runPit(5, null);
+  const lit = r5.evs.filter((e) => e.type === 'pit_lit' && e.cooker === 'kettle2');
+  const on = r5.evs.filter((e) => e.type === 'pit_on' && e.cooker === 'kettle2');
+  const pulls = r5.evs.filter((e) => e.type === 'pit_pull' && e.cooker === 'kettle2');
+  const t5 = P.skillValue('pitTiming', 5);
+  assert(lit.length >= 1 && lit[0]._at < C.EVENT_GATE, 'the PIT card did not light kettle 2 before the gate ' + describe(lit));
+  assert(on.length >= 3 && pulls.length >= 3, 'loads ' + on.length + ', pulls ' + pulls.length);
+  // On time: within 2 s of its Timing (the walk and a trip in hand), never into the burn warning.
+  assert(pulls.every((e) => e.burnt === false && e.over >= t5 - 1e-6 && e.over <= t5 + 2), 'pulls off time at 5 stars ' + describe(pulls.map((e) => e.over)));
+  notes.push('5 star PIT lit kettle 2 at ' + lit[0]._at.toFixed(1) + ' s, ' + on.length + ' pieces on, ' + pulls.length + ' pulled ' + pulls.map((e) => e.over).join('/') + ' s past done, no tap on it');
+  // (e) Stars: a 1 star PIT card pulls later and burns more than a 5 star one on the same cook.
+  const r1 = runPit(1, null);
+  const p1 = r1.evs.filter((e) => e.type === 'pit_pull');
+  const mean = (a) => a.reduce((x, y) => x + y, 0) / Math.max(1, a.length);
+  const ok1 = p1.filter((e) => !e.burnt).map((e) => e.over), ok5 = pulls.map((e) => e.over);
+  const b1 = p1.filter((e) => e.burnt).length, b5 = pulls.filter((e) => e.burnt).length;
+  assert(mean(ok1) > mean(ok5) + 3 && b1 >= b5, 'stars: 1 star over ' + mean(ok1).toFixed(1) + ' burnt ' + b1 + ', 5 star over ' + mean(ok5).toFixed(1) + ' burnt ' + b5);
+  notes.push('1 star pulls ' + mean(ok1).toFixed(1) + ' s past done, ' + b1 + ' burnt; 5 star ' + mean(ok5).toFixed(1) + ' s, ' + b5 + ' burnt');
+  // (f) Never on its cooker while you are: you stand at kettle 2's use tile for 6 s in every 14, and
+  // tap it once a cycle; the PIT card waits, never acts there while you are on it and never shares your tile.
+  const use2 = P.MAP.station('kettle2').use[0];
+  const rc = runPit(3, (hh, s, taps) => {
+    const ph = Math.floor(s.clock * 20) % 280;   // 14 s cycles in ticks
+    if (s.player.busy !== null) return;
+    if (ph === 20) { hh.sim.walkTo(use2.x, use2.y); taps.push(['stand', s.clock]); }
+    if (ph === 140 || ph === 260) hh.sim.walkTo(1, 4);   // step away
+    if (ph === 180 && s.player.carrying === null) { hh.sim.walkTo(4, 7); taps.push(['tap', s.clock]); }
+  });
+  assert(rc.clash === 0, 'the PIT card acted on kettle 2 while you were on it for ' + rc.clash + ' ticks');
+  assert(rc.sameTile === 0, 'you and the PIT card stood on one tile for ' + rc.sameTile + ' ticks ' + describe(pitPlay.at));
+  assert(rc.pt.waitS > 0.5 && rc.evs.some((e) => e.type === 'pit_pull' || e.type === 'pit_on'), 'the PIT card never waited (' + rc.pt.waitS + ' s) or never worked');
+  notes.push('you on kettle 2 ' + rc.taps.length + ' times: 0 clash ticks, 0 shared tiles, the PIT card waited ' + rc.pt.waitS.toFixed(1) + ' s');
+  // (g) A FIRE card leaves the PIT card's cooker alone; the main cooker is still fed.
+  const rf = runPit(3, null, { crew: [mkCard(P, 2, 'Sal', 'fire', [3, 3])] });
+  const ff = rf.evs.filter((e) => e.type === 'fire_fed');
+  assert(ff.length > 0 && ff.every((e) => e.cooker !== 'kettle2'), 'the FIRE card fed ' + describe(ff.map((e) => e.cooker)));
+  notes.push('FIRE fed ' + ff.length + ' bags, none on kettle 2');
+  // (h) The pick: on kettle 1 when set; the default without kettle 2 is the main cooker.
+  const hp = pitSeason(P, 45, { cabinet: true, kettle2: true });
+  hp.st().crew = [mkCard(P, 1, 'Dee', 'pit', [3, 3])];
+  hp.st().crewSeq = 2;
+  const sp = hp.sim.setPitPost(1, 'kettle1');
+  const bad = hp.sim.setPitPost(1, 'drum');
+  const cy = hp.sim.cyclePitPost(1);
+  assert(sp.ok && sp.post === 'kettle1' && bad.ok === false && cy.ok && cy.post === 'kettle2', 'setPitPost ' + describe([sp, bad, cy]));
+  hp.sim.setPitPost(1, 'kettle1');
+  pitToBooking(hp);
+  assert(hp.st().pitCard.cooker === 'kettle1', 'the pick kettle 1 ran ' + hp.st().pitCard.cooker);
+  // (i) Save v14: the pick and the card keep; a v13 save drops a PIT card; a bad pick is the default.
+  const sv = hp.sim.serialize();
+  const pc = sv.crew.find((c) => c.role === 'pit');
+  assert(sv.v === 14 && pc && pc.post === 'kettle1', 'serialize ' + describe([sv.v, pc]));
+  const back = P.validateSave(JSON.parse(JSON.stringify(sv)));
+  assert(back.crew.find((c) => c.role === 'pit').post === 'kettle1', 'v14 reload lost the pick');
+  const v13 = JSON.parse(JSON.stringify(sv)); v13.v = 13;
+  assert(!P.validateSave(v13).crew.some((c) => c.role === 'pit'), 'a v13 save kept a PIT card');
+  const badPost = JSON.parse(JSON.stringify(sv)); badPost.crew.find((c) => c.role === 'pit').post = 'grill';
+  assert(P.validateSave(badPost).crew.find((c) => c.role === 'pit').post === null, 'a bad pick kept');
+  // A referral from a PIT card that moved on is a PIT card (v14), dropped from a v13 Hiring Day.
+  const hs = JSON.parse(JSON.stringify(hsave));
+  hs.v = 14;
+  hs.hiring = { year: hs.season.year, round: 1, tryouts: 2, pool: hv.pool.map((e) => ({ name: e.name, role: e.role, skills: e.skills, potential: e.potential || 3, mood: e.mood, look: e.look, status: 'open', tried: false })),
+    refs: [{ name: 'Lou', role: 'pit', skills: [3, 3], potential: 3.5, mood: 0, look: Object.assign({}, DEFAULT_LOOK), status: 'open', from: 'Dee' }] };
+  const vh = P.validateSave(hs);
+  assert(vh.hiring && vh.hiring.pool.length === C.POOL_SIZE + C.PIT_POOL && vh.hiring.refs.length === 1 && vh.hiring.refs[0].role === 'pit', 'a v14 Hiring Day with a PIT referral ' + describe(vh.hiring && vh.hiring.refs));
+  hs.v = 13;
+  assert(P.validateSave(hs).hiring === null, 'a v13 Hiring Day with PIT cards kept');
+  notes.push('pick kettle 1 kept by save v14; v13 drops PIT cards; a PIT referral reloads');
+  return notes.join('; ');
+}
+
 function registerHeadless(P) {
   const C = P.C, M = P.MAP, notes = [];
   const reg = M.station('register');
@@ -4443,7 +4640,7 @@ function refGenPool(P, input) {
   const C = P.C, names = P.STRINGS.names, avoid = input.avoid || [];
   const rp = refMulberry32(refMix32((input.seed ^ 0x504F4F4C) >>> 0, input.year, 0));
   const roles = [];
-  for (const role of ROLE_IDS) for (let i = 0; i < 6; i++) roles.push(role);
+  for (const role of POOL_ROLES) for (let i = 0; i < 6; i++) roles.push(role);
   for (let i = roles.length - 1; i >= 1; i--) {
     const j = Math.floor(rp() * (i + 1));
     const t = roles[i]; roles[i] = roles[j]; roles[j] = t;
@@ -4472,7 +4669,8 @@ function refGenWalkins(P, input) {
   const out = [];
   const count = input.week === 1 ? 0 : C.WALKINS[third];   // review 1 (X20.7): none the week of Hiring Day
   for (let n = 0; n < count; n++) {
-    const role = ROLE_IDS[Math.floor(rw() * ROLE_IDS.length)];
+    const roles = input.pit === true ? ROLE_IDS : POOL_ROLES;   // v4.3: PIT walk-ins with the cabinet smoker
+    const role = roles[Math.floor(rw() * roles.length)];
     const name = refName(names, rw, avoid, out);
     const s0 = 2 + Math.floor(rw() * 5) / 2;
     const s1 = 2 + Math.floor(rw() * 5) / 2;
@@ -4634,7 +4832,7 @@ function daysLoopHeadless(P) {
   assert(d3.season.day === 5 && d3.season.loadin === false && sameJSON(d3.season.dayLog, ['off', 'off', 'off', 'off', 'off', null, null]), 'no pick keeps the day, never the Load-in ' + describe(d3.season));
   const d4 = V(v6Save({ season: { week: 5, pick: 'birthday', day: 3 } }));
   assert(d4.season.week === 3 && d4.season.day === 0, 'a week that does not hold opens Monday ' + describe(d4.season));
-  assert(V({ v: 14 }) === null, '{ v: 14 } accepted');
+  assert(V({ v: 15 }) === null, '{ v: 15 } accepted');
   notes.push('morning shops cost ' + seen.join(', ') + ' Monday to Thursday');
   return notes.join('; ') + '; the report save reloads on Sunday, a Yard week writes { yard, 0 }, dirty v6 keys clamp';
 }
@@ -4989,7 +5187,7 @@ function hiringHeadless(P) {
   const g1 = P.genPool({ seed: 7, year: 1 }), g2 = P.genPool({ seed: 7, year: 1 });
   assert(Array.isArray(g1) && deepEq(g1, g2), 'genPool twice differs');
   assert(g1.length === C.POOL_SIZE, 'genPool has ' + g1.length + ' entries');
-  for (const role of ROLE_IDS) assert(g1.filter((e) => e.role === role).length === 6, 'genPool ' + role + ' count ' + g1.filter((e) => e.role === role).length);
+  for (const role of POOL_ROLES) assert(g1.filter((e) => e.role === role).length === 6, 'genPool ' + role + ' count ' + g1.filter((e) => e.role === role).length);
   for (const e of g1) {
     assert(e.stars >= 1 && e.stars <= 3 && e.potential >= 2 && e.potential <= 5 && e.potential >= Math.max(...e.skills) + 0.5, 'genPool entry ' + describe(e));
     assert(e.stars === P.cardStars(e.skills) && e.wage === P.wageFor(e.stars, e.role) && (e.mood === 0 || e.mood === 1), 'genPool entry stars, wage or mood ' + describe(e));
@@ -7350,7 +7548,7 @@ async function browserChecks() {
     assert(v3hooks.rail && v3hooks.sign && v3hooks.panel, 'PitSim.game v3.0 hooks ' + describe(v3hooks));
     // v3.1 (X13.8): the crew and hiringPage getters.
     const v31hooks = await ev('({ crew: "crew" in g, page: "hiringPage" in g, crewVal: g.crew ? Object.keys(g.crew).sort() : null, pageVal: g.hiringPage })');
-    assert(v31hooks.crew && v31hooks.page && sameJSON(v31hooks.crewVal, ['fire', 'prep', 'run', 'till']) && v31hooks.pageVal === null, 'PitSim.game v3.1 hooks ' + describe(v31hooks));
+    assert(v31hooks.crew && v31hooks.page && sameJSON(v31hooks.crewVal, ['fire', 'pit', 'prep', 'run', 'till']) && v31hooks.pageVal === null, 'PitSim.game v3.1 hooks ' + describe(v31hooks));
     await installProbe();
     await advance(0);
     return 'version ' + ver;
@@ -9973,6 +10171,77 @@ async function browserChecks() {
   // reads the AudioContext graph: every source node start is logged (a buffer source with its buffer
   // length, an oscillator with its frequency), and music.state().gains reads the live loop gains.
   // Sizzle is the 1.6 s one shot buffer, the ding the 1318.5 Hz oscillator.
+  // ---- v4.3 the PIT card (Joel: "Or even another pitmaster."). A Hiring Day fixture on the kettle and
+  // one on the cabinet smoker, then a week 3 cook with a PIT card on kettle 2. Every tap is real.
+  // Screenshots: the PIT card mid-cook on the phone run (375 by 812) and the desktop run (1427 by 890).
+  const pitHiringFixture = (gear) => {
+    const s = saveV9({ cash: 400, season: { week: 1, results: [] }, crew: [] });
+    s.v = SAVE_V;
+    s.gear = Object.assign({}, s.gear, gear || {});
+    s.season.drafted = false;
+    s.hiring = null;
+    s.layout = {};
+    return s;
+  };
+  await step('v4.3 PIT 1: Hiring Day says plainly a PIT card needs the cabinet smoker; with it six PIT cards come and one signs by taps', async () => {
+    await reload(pitHiringFixture({}));
+    assert((await loop()) === LOOP.hiring, 'the kettle fixture loaded as ' + describe(await loop()));
+    const k = await ev('({ lock: vis("hire-pit-lock") ? $("hire-pit-lock").textContent : null, pit: sim.hiringView().pool.filter((e) => e.role === "pit").length, n: sim.hiringView().pool.length, open: sim.pitOpen() })');
+    assert(k.lock === LU.pitLockedH && k.pit === 0 && k.n === LC.POOL_SIZE && k.open === false, 'Hiring Day on the kettle ' + describe(k));
+    await reload(pitHiringFixture({ cabinet: true }));
+    assert((await loop()) === LOOP.hiring, 'the cabinet fixture loaded as ' + describe(await loop()));
+    const c = await ev('({ lock: !!$("hire-pit-lock"), pool: sim.hiringView().pool.map((e) => [e.idx, e.role, e.wage]), open: sim.pitOpen() })');
+    const pits = c.pool.filter((e) => e[1] === 'pit');
+    assert(c.lock === false && c.open === true && pits.length === LC.PIT_POOL && c.pool.length === LC.POOL_SIZE + LC.PIT_POOL, 'Hiring Day with the cabinet ' + describe(c));
+    const pick = pits.slice().sort((a, b) => a[2] - b[2])[0];
+    for (let i = 0; i < 4 && !(await present(ID31.app(pick[0]))); i++) { await click(ID31.pageNext); await advance(0); }
+    assert(await present(ID31.app(pick[0])), '#app-' + pick[0] + ' never shown');
+    const band = await ev('(() => { const e = $("app-' + pick[0] + '"); return e ? (e.querySelector(".r-pit") ? "r-pit" : e.className) : null; })()');
+    await click(ID31.app(pick[0])); await advance(0);
+    assert(await visible(ID31.card), '#card hidden after #app-' + pick[0]);
+    const role = await accText(ID31.cardRole);
+    await click(ID31.cardHire); await advance(0);
+    const hired = await ev('S().crew.filter((x) => x.role === "pit").map((x) => ({ id: x.id, wage: x.wage, post: x.post === undefined ? "none" : x.post }))');
+    assert(hired.length === 1 && hired[0].wage === pick[2], 'the PIT draft ' + describe([hired, role]));
+    return 'kettle: "' + k.lock + '", no PIT in 24; cabinet: ' + pits.length + ' PIT of ' + c.pool.length + ', drafted #app-' + pick[0] + ' (' + band + ', "' + role + '") at ' + pick[2];
+  });
+
+  await step('v4.3 PIT 2: the crew sheet picks the cooker, then a cook where the PIT card lights, loads and pulls kettle 2 with no tap on it, drawn mid-cook', async () => {
+    const pitC = pageCard(2, 'Dee', 'pit', [3.5, 3.5], { look: { skin: 3, hair: 1, hairColor: 0, face: 2, hat: 0, apron: 1 } });
+    await reload(ladFixture({ kettle2: true, cabinet: true }, { crew: [pageCard(1, 'Bo', 'run', [3, 3]), pitC] }));
+    assert((await loop()) === LOOP.week, 'the fixture loaded as ' + describe(await loop()));
+    await click(ID3.cardCrew); await advance(0);
+    await click(ID31.crew(2)); await advance(0);
+    assert(await visible('card-post'), '#card-post hidden on the PIT card');
+    const t0 = await accText('card-post');
+    await click('card-post'); await advance(0);
+    const t1 = await accText('card-post');
+    const p1 = await ev('sim.pitPostOf(2)');
+    await click('card-post'); await advance(0);
+    const t2 = await accText('card-post');
+    const p2 = await ev('sim.pitPostOf(2)');
+    assert(t0 === fill(LU.pitPost, { c: 'Kettle 2' }) && p1 === 'kettle1' && t1 === fill(LU.pitPost, { c: 'Cabinet smoker' }) && p2 === 'kettle2' && t2 === t0, '#card-post ' + describe([t0, t1, p1, t2, p2]));
+    await click(ID31.cardBack); await advance(0);
+    await click(ID3.sheetBack); await advance(0);
+    assert(await toService(), 'no service day');
+    const n0 = await eventCount();
+    const hook = await ev('JSON.parse(JSON.stringify(g.crew.pit))');
+    assert(hook && hook.id === 2 && hook.cooker === 'kettle2', 'PitSim.game.crew.pit ' + describe(hook));
+    // No tap at all: the pitmaster stands at the gate while the PIT card runs kettle 2.
+    // The frame: after its first pull, the PIT card with raw meat in hand and no burn warning over kettle 2.
+    const busy = await until('S().pitCard && S().today.crew["2"] && S().today.crew["2"].cuts >= 1 && S().stations.kettle2.pieces.length >= 1 && S().pitCard.carrying !== null && S().pitCard.carrying.kind === "raw" && !S().stations.kettle2.pieces.some((p) => p.warn)', 90);
+    const r = await ev('({ rec: S().today.crew["2"], fire: S().stations.kettle2.fire, n: S().stations.kettle2.pieces.length, k1: S().stations.kettle1.pieces.length, task: S().pitCard.task, hold: S().pitCard.carrying, at: [S().pitCard.x, S().pitCard.y], clock: S().clock, ptarget: S().player.target })');
+    const evs = await eventsFrom(n0);
+    const lit = evs.filter((e) => e.type === 'pit_lit' && e.cooker === 'kettle2').length, on = evs.filter((e) => e.type === 'pit_on').length, pulls = evs.filter((e) => e.type === 'pit_pull' && !e.burnt);
+    assert(busy.ok && lit >= 1 && on >= 2 && pulls.length >= 1 && r.k1 === 0 && r.ptarget === null, 'the PIT cook ' + describe([busy, r, { lit, on, pulls: pulls.length }]));
+    await advance(0);
+    const frame = await captureFrame();
+    const pitDraw = frame.filter((d) => /^pit_/.test(d.name)).map((d) => d.name);
+    assert(pitDraw.length >= 1, 'no pit_ record in the frame: ' + describe([...new Set(frame.map((d) => d.name))].filter((n) => /^(buddy|tender|prep|till|pit|player)_/.test(n))));
+    await ladShot('pit-cook');
+    return 'Runs Kettle 2, Cabinet smoker, Kettle 2 by taps; with no tap the PIT card lit kettle 2, put ' + on + ' pieces on, pulled ' + pulls.map((e) => e.over).join('/') + ' s past done by ' + r.clock.toFixed(0) + ' s, holding ' + (r.hold ? r.hold.kind + ' ' + r.hold.meat : 'nothing') + ' (' + pitDraw[0] + ')';
+  });
+
   await step('v4.2 pit sounds: muted plays nothing, one speaker click turns sound on, a sizzle on the grate, the ding at the register, the fire loop follows the fire', async () => {
     await reload(ladFixture({}, { crew: [] }));
     assert(await toService(), 'no service day');

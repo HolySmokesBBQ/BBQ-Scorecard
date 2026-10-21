@@ -176,7 +176,7 @@ const SHIRT = Object.freeze({
   denim:   cloth3('#86cede', '#5fb4c9', '#3f8ea6')                        // creator tee
 });
 // Crew shirt by role, on the hue of the card bands in design doc 12.3.
-const ROLE_SHIRT = Object.freeze({ FIRE: 'orange', PREP: 'green', RUN: 'blue', DRIVE: 'denim', TILL: 'yellow' });
+const ROLE_SHIRT = Object.freeze({ FIRE: 'orange', PREP: 'green', RUN: 'blue', DRIVE: 'denim', TILL: 'yellow', PIT: 'purple' });   // v4.3: PIT, purple with the charcoal apron
 const PANTS = Object.freeze([
   cloth3('#50648e', '#3c4f7a', '#2c3b5e'),                                // navy (mock B default)
   cloth3('#6e5e4c', '#5a4a3a', '#44382a'),                                // khaki brown

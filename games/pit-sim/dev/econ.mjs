@@ -17,6 +17,15 @@
 //   greedy    the stretch booking when it can load, Yard days every weekday and Sunday, both cards
 //             brought everywhere, gear with 30 left over.
 //   nocrew    typical without any crew.
+//   typicalpit typical, and from the week 3 hub a 3 star PIT card (v4.3) signed as a walk-in once the
+//             yard has the cabinet smoker (the FIRE card goes when the wages cap needs the room). The
+//             PIT card works the bookings and rests on Yard days and at the competition; the bot
+//             leaves its cooker to it. ECON_LETGO=1 lets the FIRE card go when the cap is full.
+//
+//   --pitpair  paired cooks (v4.3): the typical season forked at its first stick burner booking and
+//             at its first weekday Yard day with a kettle beside the cabinet smoker, played once
+//             without and once with a 3 star PIT card (on the second kettle, and on the stick burner
+//             at the booking); prints the median cash difference after the PIT card's wage.
 //
 // Usage:
 //   node games/pit-sim/dev/econ.mjs                       all four strategies, seeds 1 to 30
@@ -64,6 +73,7 @@ const STRAT = {
   typical: { crew: ['fire', 'run'], cheap: false, plan: 'default', sunday: 'rec', offer: 'pay', reserve: 80 },
   greedy: { crew: ['fire', 'run'], cheap: false, plan: 'all', sunday: true, offer: 'stretch', reserve: 30 },
   nocrew: { crew: [], cheap: false, plan: 'default', sunday: 'rec', offer: 'pay', reserve: 80 },
+  typicalpit: { crew: ['fire', 'run'], cheap: false, plan: 'default', sunday: 'rec', offer: 'pay', reserve: 80, pit: 3 },
   careless: { crew: ['fire', 'run'], cheap: false, plan: 'all', sunday: true, offer: 'stretch', reserve: 0, react: 3 }
 };
 // v4.1 the gear ladder: the cabinet smoker early, the stick burner mid season, the trailer last.
@@ -98,13 +108,18 @@ function platesInPlay(s, m) {
   for (const st of s.stations.board.stacks) if (st.meat === m) n += st.times.length;
   for (const sp of s.stations.table.spots) if (sp && sp.meat === m) n += sp.times.length;
   if (s.player.carrying && s.player.carrying.meat === m) n += s.player.carrying.kind === 'plates' ? s.player.carrying.times.length : MEATS[m].plates;
+  const pc = s.pitCard ? s.pitCard.carrying : null;   // v4.3
+  if (pc && pc.meat === m && pc.kind !== 'burnt') n += MEATS[m].plates;
+  for (const w of s.stations.board.waiting || []) if (w.meat === m) n += MEATS[m].plates;
+  if (s.stations.board.slicing && s.stations.board.slicing.meat === m && s.stations.board.slicing.who !== 'player') n += MEATS[m].plates;
   return n;
 }
 function decide(sim) {
   const s = sim.state;
   const t = s.today;
   const tile = (id) => stationTile(sim, id);
-  const cookers = COOKERS.filter((id) => owned(s, id));
+  const pitOn = s.pitCard ? s.pitCard.cooker : null;   // v4.3: the PIT card's cooker is left to it
+  const cookers = COOKERS.filter((id) => owned(s, id) && id !== pitOn);
   const fireOf = (id) => s.stations[id].fire;
   const c = s.player.carrying;
   const seatOf = (g) => MAP.seats.find((x) => x.id === g.seat);
@@ -241,6 +256,28 @@ function hiring(sim, st) {
   for (const c of s.crew) sim.setBring(c.id, true);
 }
 
+// v4.3: a 3 star PIT card signed as a walk-in (the fee is one wage); the FIRE card goes when the
+// wages cap needs the room.
+function pitWalkin(sim, stars) {
+  const s = sim.state;
+  s.season.walkins.push({ name: 'Dee', role: 'pit', skills: [stars, stars], potential: stars, mood: 0, look: Object.assign({}, P.DEFAULT_LOOK), stars, wage: P.wageFor(stars, 'pit'), hired: false });
+  return s.season.walkins.length - 1;
+}
+function hirePit(sim, led) {
+  const s = sim.state;
+  const before = s.cash;
+  const i = pitWalkin(sim, 3);
+  let r = sim.hireWalkin(i);
+  if (!r.ok && LETGO && /wages/.test(r.message)) { const f = s.crew.find((c) => c.role === 'fire'); if (f && sim.letGo(f.id).ok) r = sim.hireWalkin(i); }
+  if (!r.ok) s.season.walkins.splice(i, 1);
+  else sim.setBring(r.id, true);
+  led.other += s.cash - before;
+  sim.drainEvents();
+  return r.ok;
+}
+const LETGO = !!process.env.ECON_LETGO;   // let the FIRE card go to make room (else wait for the cap)
+let FORK = null;   // --pitpair: called on each cook morning before the shop
+
 function pickOffer(sim, st) {
   const s = sim.state;
   const offers = s.season.offers.filter((o) => o.type !== 'yard');
@@ -301,6 +338,7 @@ function playSeason(seed, stName) {
         const w = (s.season.walkins || []).map((x, i) => [x, i]).filter(([x]) => !x.hired && x.role === role && s.crew.reduce((n, c) => n + c.wage, 0) + x.wage <= capOf(sim)).sort((a, b) => b[0].stars - a[0].stars)[0];
         if (w && s.cash - w[0].wage - st.reserve >= 60) { const before = s.cash; if (sim.hireWalkin(w[1]).ok) pre.other += s.cash - before; }
       }
+      if (st.pit && week >= st.pit && sim.pitOpen && sim.pitOpen() && !s.crew.some((c) => c.role === 'pit')) hirePit(sim, pre);
       const o = pickOffer(sim, st);
       if (o) sim.bookOffer(o.id);
       pre.cashEnd = s.cash;
@@ -346,6 +384,9 @@ function playSeason(seed, stName) {
     // a cook day: the morning shop with the game's cart, then the cook
     const r = newLedgerRow(sim, kind === 'event' ? (s.season.booking.type) : (d <= 4 ? 'yard-wkday' : 'yard-wkend'));
     if (process.env.ECON_DEBUG) console.log('DAY', week, d, kind);
+    if (FORK) FORK(sim, kind, d, week);
+    // typicalpit: the PIT card works the bookings and rests on Yard days (a loss there by design).
+    if (st.pit) for (const c of s.crew) if (c.role === 'pit') { sim.setBring(c.id, kind === 'event' && week < C.SEASON_WEEKS); sim.drainEvents(); }
     sim.shopOpen(kind);
     const cs = cartSplit(sim);
     const res = sim.shopConfirm(kind);
@@ -387,7 +428,74 @@ function playSeason(seed, stName) {
 const med = (a) => { const v = a.slice().sort((x, y) => x - y); return v.length ? v[Math.floor(v.length / 2)] : NaN; };
 const pad = (v, n) => String(v).padStart(n);
 
-if (LEDGER) {
+// v4.3 --pitpair: one cook from a saved morning, with or without a PIT card (and where it works).
+function pairCook(save, seed, kind, pit) {
+  const sim = P.createSim(JSON.parse(JSON.stringify(save)), seed);
+  sim.drainEvents();
+  const s = sim.state;
+  let wage = 0;
+  if (pit) {
+    const id = s.crewSeq;
+    s.crewSeq += 1;
+    const card = { id, name: 'Dee', role: 'pit', skills: [3, 3], potential: 3, xp: 0, banked: 0, mood: 0, wage: P.wageFor(3, 'pit'), contract: 1, seasons: 0, rookie: false, trait: null,
+      look: Object.assign({}, P.DEFAULT_LOOK), bring: true, raised: false, notice: false, worked: 0, bench: 0, post: pit.post || null };
+    s.crew.push(card);
+    // over the lineup budget: the FIRE card rests (the PIT card does its job on its cooker)
+    if (sim.payroll().now > sim.payroll().budget) { const f = s.crew.find((c) => c.role === 'fire' && c.bring); if (f) f.bring = false; }
+    wage = card.wage;
+  }
+  sim.shopOpen(kind);
+  const res = sim.shopConfirm(kind);
+  sim.drainEvents();
+  if (!res.ok) return null;
+  const c0 = s.cash + 0;
+  const evs = [];
+  playCook(sim, evs);
+  const t = s.till;
+  const out = { served: t.served, customers: t.customers, burnt: t.burnt, wages: t.wages, stars: t.stars || 0, walkouts: t.walkouts, pitWage: wage, fireRest: pit ? !s.crew.some((c) => c.role === 'fire' && c.bring) : false };
+  sim.finishReport(); sim.drainEvents();
+  out.cash = s.cash;
+  out.cashDay = s.cash - c0;
+  return out;
+}
+function pitPairs() {
+  const book = [], yard = [];
+  for (const sd of SEEDS) {
+    let gotB = null, gotY = null;
+    FORK = (sim, kind, d) => {
+      const s = sim.state;
+      const tier = P.pitTier(s.gear);
+      if (!gotB && kind === 'event' && tier >= 2 && !(s.today && s.today.comp) && s.season.week < C.SEASON_WEEKS) gotB = { save: sim.serialize(), kind };
+      if (!gotY && kind === 'yard' && d <= 4 && tier >= 1 && s.gear.kettle2) gotY = { save: sim.serialize(), kind };
+    };
+    playSeason(sd, 'typical');
+    FORK = null;
+    if (gotB) {
+      const a = pairCook(gotB.save, sd, 'event', null), b = pairCook(gotB.save, sd, 'event', { post: null }), c = pairCook(gotB.save, sd, 'event', { post: 'kettle1' });
+      if (a && b && c) book.push({ sd, a, b, c });
+    }
+    if (gotY) {
+      const a = pairCook(gotY.save, sd, 'yard', null), b = pairCook(gotY.save, sd, 'yard', { post: 'kettle2' });
+      if (a && b) yard.push({ sd, a, b });
+    }
+  }
+  const line = (label, rows, k) => {
+    if (!rows.length) { console.log(label + ': no cooks'); return; }
+    const d = rows.map((r) => r[k].cash - r.a.cash);
+    const sv = rows.map((r) => r[k].served - r.a.served);
+    const br = rows.map((r) => r[k].burnt - r.a.burnt);
+    const st = rows.map((r) => r[k].stars - r.a.stars);
+    console.log(label + ' (' + rows.length + ' seeds): median cash after the day ' + (med(d) >= 0 ? '+' : '') + med(d) + ' (wage ' + rows[0][k].pitWage + ', FIRE rested in ' + rows.filter((r) => r[k].fireRest).length + '), plates ' + (med(sv) >= 0 ? '+' : '') + med(sv)
+      + ', burnt ' + (med(br) >= 0 ? '+' : '') + med(br) + ', stars ' + (med(st) >= 0 ? '+' : '') + med(st) + '; ahead in ' + d.filter((x) => x > 0).length + ' of ' + d.length);
+  };
+  line('stick burner booking, PIT on the second kettle', book, 'b');
+  line('stick burner booking, PIT on the stick burner', book, 'c');
+  line('weekday Yard day, PIT on the second kettle (a kettle)', yard, 'b');
+}
+
+if (flag('--pitpair')) {
+  pitPairs();
+} else if (LEDGER) {
   for (const sn of STRATS) {
     const out = playSeason(SEEDS[0], sn);
     console.log('\n' + sn + ' seed ' + SEEDS[0] + ' (gear ' + out.gear.join(',') + ')');
@@ -397,8 +505,10 @@ if (LEDGER) {
     }
   }
 } else {
+  const allRuns = {};
   for (const sn of STRATS) {
     const runs = SEEDS.map((sd) => playSeason(sd, sn));
+    allRuns[sn] = runs;
     const weeks = [];
     for (let w = 0; w < C.SEASON_WEEKS; w++) weeks.push(med(runs.map((r) => r.weekEnd[w])));
     const sum = {};
@@ -428,5 +538,13 @@ if (LEDGER) {
     for (const [k, b] of Object.entries(byKind)) {
       console.log('  ' + k.padEnd(11) + ' cooks ' + pad((b.n / n).toFixed(1), 4) + '/season  avg take ' + pad(Math.round(b.in / b.n), 4) + '  wages ' + pad(Math.round(b.wages / b.n), 3) + '  meat ' + pad(Math.round(b.meat / b.n), 3) + '  coal ' + pad(Math.round(b.coal / b.n), 3) + '  avg cash net ' + pad(Math.round(b.net / b.n), 4) + '  taps/plate ' + (b.served ? (b.taps / b.served).toFixed(2) : '-'));
     }
+  }
+  // v4.3: two strategies on the same seeds: the median of the per seed cash difference each week.
+  if (STRATS.length === 2) {
+    const [a, b] = STRATS.map((k) => allRuns[k]);
+    const dw = [];
+    for (let w = 0; w < C.SEASON_WEEKS; w++) dw.push(med(a.map((r, i) => b[i].weekEnd[w] - r.weekEnd[w])));
+    const gearD = med(a.map((r, i) => (b[i].rows.reduce((x, y) => x + (y.gear || 0), 0)) - r.rows.reduce((x, y) => x + (y.gear || 0), 0)));
+    console.log('\n' + STRATS[1] + ' minus ' + STRATS[0] + ', median per seed: ' + dw.map((d, i) => 'W' + (i + 1) + ' ' + (d >= 0 ? '+' : '') + d).join('  ') + '; gear bought ' + (gearD >= 0 ? '+' : '') + gearD);
   }
 }
