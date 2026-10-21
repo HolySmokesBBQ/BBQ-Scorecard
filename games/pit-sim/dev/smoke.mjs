@@ -5566,7 +5566,7 @@ function feltBotPick(P, s, leave) {
     if (c.kind === 'plates') {
       // v3.7: carry it to the seated guest who ordered it (the RUN leg leaves that to the card).
       const g = leave === 'run' ? null : s.customers.filter((cu) => awaitsPlate(cu) && !cu.togo && cu.seat && cu.want === c.meat).sort((a, b) => a.paidAt - b.paidAt)[0];
-      if (g) { const se = P.MAP.seats.find((x) => x.id === g.seat); return { x: se.x, y: se.y }; }
+      if (g) { const se = P.MAP.seats.find((x) => x.id === g.seat) || (P.MAP.hostSeats || []).find((x) => x.id === g.seat); return { x: se.x, y: se.y }; }
       return tableFits(c.meat) ? tile('table') : null;
     }
     return null;
@@ -6202,6 +6202,11 @@ async function canvasPoint(tx, ty) {
   tileToClientSeen = true;
   return live;
 }
+// v4.5: a guest's body on screen (PitSim.game.guestClient), asked again after a frame until two
+// answers agree, so the follow camera is at rest when the harness taps (as a player taps what is shown).
+async function guestPoint(id) {
+  return ev('(async () => { const g = window.PitSim && window.PitSim.game; let a = g.guestClient(' + Number(id) + '); for (let i = 0; a && i < 12; i++) { await new Promise((r) => { requestAnimationFrame(() => r()); setTimeout(r, 100); }); const b = g.guestClient(' + Number(id) + '); if (b && Math.abs(b.x - a.x) < 0.5 && Math.abs(b.y - a.y) < 0.5) break; a = b; } return a; })()');
+}
 async function mouseTap(x, y) {
   await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y });
   await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', clickCount: 1 });
@@ -6233,7 +6238,7 @@ const seatedWants = (meatExpr) => F.customers + '.filter((c) => c.paid && !c.fed
 const counterForSeated = F.customers + '.some((c) => c.paid && !c.fed && !c.togo && c.seat && (c.mode === "seated" || c.mode === "toSeat") && ' + F.tableSpots + '.some((sp) => sp && sp.meat === c.want && sp.times.length > 0))';
 // v3.7: a plate in hand goes to the seated guest who ordered it (a tap on their table), else onto the counter.
 async function deliverOrSet() {
-  const seat = await ev('(() => { const h = ' + F.carrying + '; if (!h || h.kind !== "plates") return null; const c = ' + seatedWants('h.meat') + '[0]; return c ? MAP.seats.find((x) => x.id === c.seat) : null; })()');
+  const seat = await ev('(() => { const h = ' + F.carrying + '; if (!h || h.kind !== "plates") return null; const c = ' + seatedWants('h.meat') + '[0]; return c ? (MAP.seats.find((x) => x.id === c.seat) || (MAP.hostSeats || []).find((x) => x.id === c.seat)) : null; })()');
   if (seat) {
     const n0 = await ev(F.today + '.served');
     await canvasTap(seat.x, seat.y + 1);
@@ -10281,7 +10286,10 @@ async function browserChecks() {
   // the pitmaster stopped at the patio edge. Real taps (touch on the phone run, mouse on desktop), each
   // in overtime with a paid guest seated and the plate in hand: the guest's body, the table, the seat,
   // and an open lawn tile. A second guest (another meat) keeps overtime open between rounds.
-  await step('overtime delivery by real taps: the guest, the table, the seat and the lawn each carry the plate off the patio to the seated guest', async () => {
+  // v4.5 (Joel 2026-10-20, "Still problems with leaving the pit"): the lawn is open ground now, so the
+  // lawn tap walks to that lawn tile and stops there with the plate still in hand; a tap on the guest
+  // from there carries it over.
+  await step('overtime delivery by real taps: the guest, the table and the seat carry the plate off the patio to the seated guest; a lawn tap stops on the lawn, then the guest tap delivers', async () => {
     await reload(ladFixture({}, { crew: [] }));
     assert(await toService(), 'no service day');
     await advance(5);
@@ -10312,7 +10320,18 @@ async function browserChecks() {
         taps += 1;
       } else if (how === 'table') await canvasTap(seat.x, seat.y + 1);
       else if (how === 'seat') await canvasTap(seat.x, seat.y);
-      else await canvasTap(lawn.x, lawn.y);
+      else {
+        await canvasTap(lawn.x, lawn.y);
+        await advance(0);
+        await settle();
+        const st0 = await ev('({ x: S().player.x, y: S().player.y, n: S().player.path.length, aim: S().player.target, hold: S().player.carrying, walk: sim.walkable(S().player.x, S().player.y) })');
+        assert(st0.x === lawn.x && st0.y === lawn.y && st0.n === 0 && !st0.walk && st0.hold && st0.hold.kind === 'plates', 'lawn: the tap did not stop on the lawn tile ' + describe({ want: lawn, got: st0 }));
+        const gp = await guestPoint(id);
+        assert(gp, 'lawn: no body box for guest ' + id);
+        if (DESKTOP_MODE) await mouseTap(gp.x, gp.y);
+        else { await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: gp.x, y: gp.y, radiusX: 4, radiusY: 4, force: 1 }] }); await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }); }
+        taps += 1;
+      }
       await advance(0);
       const aim = await ev('S().player.target');
       assert(aim && aim.deliver === id, how + ': the tap did not head for the guest (target ' + describe(aim) + ', player at ' + describe(await ev('[S().player.x, S().player.y, S().player.path.length]')) + ')');
@@ -10324,6 +10343,182 @@ async function browserChecks() {
       id += 1;
     }
     return 'overtime, ' + out.join('; ') + '; lawn tap at ' + lawn.x + ',' + lawn.y;
+  });
+
+  // v4.5 (Joel 2026-10-20 on his Android phone: "Still problems with leaving the pit and tapping on
+  // customers", "on a phone the touch sensor is confused as to where I am tapping"). Real taps (touch
+  // on the phone run, mouse on desktop): (a) a seated guest tapped while the follow camera eases
+  // behind a walk lands on that guest (the tap is resolved where the finger came down); (b) a touch
+  // that wobbles 10 CSS px still taps (a mouse: 6 px); (c) an empty lawn tile: the pitmaster walks
+  // there and stops; (d) empty hands, a guest tap walks next to them; the ring sits where the tap
+  // resolved, green when it acts, red when it cannot.
+  await step('v4.5 taps: a guest under a following camera, a wobbly tap, an empty lawn tile, empty hands to a guest, the ring where the tap resolved', async () => {
+    await reload(ladFixture({}, { crew: [] }));
+    assert(await toService(), 'no service day');
+    await advance(5);
+    const seats = await ev('MAP.seats.filter((x) => ' + GLOBAL_NAME + '.tileOwned(x, S().gear, S().decor)).map((x) => ({ id: x.id, x: x.x, y: x.y, face: x.face }))');
+    assert(seats.length >= 1, 'no owned seat');
+    const seat = seats[0];
+    const guest = (id, sx, meat) => '{ x: ' + sx.x + ', y: ' + sx.y + ', px: ' + sx.x * 16 + ', py: ' + sx.y * 16 + ', face: "' + sx.face + '", next: null, path: [], walking: false, anim: 0, id: ' + id + ', body: 2, want: "' + meat + '", patienceMax: 999, patience: 999, wait: 0, queueIndex: -1, mode: "seated", mood: "neutral", reason: null, pause: 0, hop: 0, seat: "' + sx.id + '", eat: 0, eatMax: 9, bonusPaid: false, booked: false, runPlate: false, paid: true, fed: false, togo: false, spot: -1, price: 6, paidAt: S().clock, rungBy: "you", incoming: null }';
+    const setUp = (id, px, py) => run('const st = S(); st.customers = []; for (const k of Object.keys(st.seats)) st.seats[k] = null; st.spawnAt = Infinity; if (st.today.pending !== undefined) st.today.pending = 0; st.seats["' + seat.id + '"] = ' + id + '; st.customers.push(' + guest(id, seat, 'brisket') + '); const p = st.player; p.x = ' + px + '; p.y = ' + py + '; p.px = ' + px * 16 + '; p.py = ' + py * 16 + '; p.path = []; p.next = null; p.target = null; p.walking = false; p.carrying = null; p.busy = null; g.advance(0); return true;');
+    const touch = async (x, y, wobble, holdMs) => {
+      if (DESKTOP_MODE) {
+        await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y });
+        await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', clickCount: 1 });
+        if (holdMs) await sleep(holdMs);
+        if (wobble) await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: x + wobble[0], y: y + wobble[1], button: 'left', buttons: 1 });
+        await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: x + (wobble ? wobble[0] : 0), y: y + (wobble ? wobble[1] : 0), button: 'left', clickCount: 1 });
+      } else {
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y, radiusX: 4, radiusY: 4, force: 1 }] });
+        if (holdMs) await sleep(holdMs);
+        if (wobble) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: x + wobble[0], y: y + wobble[1], radiusX: 4, radiusY: 4, force: 1 }] });
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      }
+      taps += 1;
+    };
+    const lastTap = () => ev('(g.tapLog || []).slice(-1)[0] || null');
+    const adjacent = () => ev('Math.abs(S().player.x - ' + seat.x + ') + Math.abs(S().player.y - ' + seat.y + ')');
+    const out = [];
+
+    // (a) and (d): the near view on the seated guest, the pitmaster at the far corner of the patio.
+    // The finger goes down on the guest, then a walk starts and the follow camera eases toward the
+    // pitmaster while the finger rests (the yard slides under it), then it lifts.
+    await setUp(9501, 1, 1);
+    await ev('(g.camera.follow(false), g.camera.set("near"), g.camera.centerOn(' + seat.x + ', ' + seat.y + '), true)');
+    await advance(0);
+    const far = await ev('(() => { let best = null; for (let y = 0; y < MAP.H; y++) for (let x = 0; x < MAP.W; x++) { if (!sim.walkable(x, y)) continue; const d = Math.abs(x - 1) + Math.abs(y - 1); if (!best || d > best.d) best = { x, y, d }; } return best; })()');
+    const cam0 = await ev('g.camera.get()');
+    const gp = await ev('g.guestClient(9501)');
+    assert(gp, 'no body box for the seated guest');
+    const n0 = (await ev('(g.tapLog || []).length'));
+    if (DESKTOP_MODE) { await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: gp.x, y: gp.y }); await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: gp.x, y: gp.y, button: 'left', clickCount: 1 }); }
+    else await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: gp.x, y: gp.y, radiusX: 4, radiusY: 4, force: 1 }] });
+    assert(far && (await ev('(sim.walkTo(' + far.x + ', ' + far.y + ') === true && (g.camera.follow(true), true))')) === true, 'no walk ' + describe(far));
+    await sleep(350);
+    const cam1 = await ev('g.camera.get()');
+    if (DESKTOP_MODE) await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: gp.x, y: gp.y, button: 'left', clickCount: 1 });
+    else await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    taps += 1;
+    const slid = Math.hypot(cam1.x0 - cam0.x0, cam1.y0 - cam0.y0);
+    assert(slid >= 8, '(a) the camera did not ease under the finger (' + slid.toFixed(1) + ' rp)');
+    await advance(0);
+    const t1 = await lastTap();
+    assert((await ev('(g.tapLog || []).length')) > n0 && t1 && t1.kind === 'guest' && t1.guest === 9501 && t1.ok === true, '(a) the tap under the moving camera missed the guest ' + describe({ t1, cam0: [cam0.x0, cam0.y0], cam1: [cam1.x0, cam1.y0] }));
+    assert(t1.x === seat.x && t1.y === seat.y, '(a) the ring is not on the guest\'s seat ' + describe(t1));
+    const ring = await ev('g.fxLog.filter((e) => e.kind === "ring").slice(-1)[0] || null');
+    assert(ring && ring.x === seat.x * 16 && ring.y === seat.y * 16, '(a) the ring is not where the tap resolved ' + describe({ ring, seat }));
+    await settle();
+    const d1 = await adjacent();
+    const hold1 = await ev('S().player.carrying');
+    assert(d1 === 1 && hold1 === null, '(d) empty hands: not next to the guest ' + describe({ d1, at: await ev('[S().player.x, S().player.y]') }));
+    out.push('(a) the camera slid ' + Math.round(slid) + ' rp under the resting finger, the tap took guest 9501; (d) walked next to them (' + (await ev('[S().player.x, S().player.y].join(",")')) + ')');
+
+    // (b) a wobbly tap: 10 CSS px on touch (6 on a mouse) still taps the guest.
+    await setUp(9502, 1, 4);
+    await advance(0);
+    const gp2 = await guestPoint(9502);
+    const n2 = (await ev('(g.tapLog || []).length'));
+    const wob = DESKTOP_MODE ? [4, 4.5] : [6, 8];
+    await touch(gp2.x, gp2.y, wob, 60);
+    await advance(0);
+    const t2 = await lastTap();
+    assert((await ev('(g.tapLog || []).length')) > n2 && t2 && t2.guest === 9502, '(b) the wobbly tap (' + Math.hypot(wob[0], wob[1]).toFixed(1) + ' px) did not tap ' + describe(t2));
+    await settle();
+    out.push('(b) a ' + Math.hypot(wob[0], wob[1]).toFixed(0) + ' px wobble tapped');
+
+    // (c) an empty lawn tile, away from the patio: walk there and stop on it.
+    await setUp(9503, 1, 4);
+    const lawn = await ev('(() => { let best = null; for (let y = 0; y < MAP.H; y++) for (let x = 0; x < MAP.W; x++) { if (MAP.tiles[y * MAP.W + x] !== MAP.T.LAWN || !sim.standable(x, y) || sim.walkable(x, y)) continue; if (MAP.queue.some((q) => q.x === x && q.y === y) || MAP.togo.some((q) => q.x === x && q.y === y)) continue; const d = Math.abs(x - 4) + Math.abs(y - 4); if (x >= 6 && (!best || d > best.d)) best = { x, y, d }; } return best; })()');
+    assert(lawn, 'no open lawn tile');
+    await canvasTap(lawn.x, lawn.y);
+    await advance(0);
+    const t3 = await lastTap();
+    await settle();
+    const at3 = await ev('({ x: S().player.x, y: S().player.y, n: S().player.path.length, aim: S().player.target })');
+    assert(t3 && t3.kind === 'tile' && t3.ok && t3.x === lawn.x && t3.y === lawn.y && at3.x === lawn.x && at3.y === lawn.y && at3.n === 0 && at3.aim === null, '(c) the lawn tap did not stop on the lawn tile ' + describe({ lawn, t3, at3 }));
+    out.push('(c) stopped on lawn ' + lawn.x + ',' + lawn.y);
+    return out.join('; ');
+  });
+
+  // v4.5 (Joel 2026-10-20, "at an event there should be max seating available as the host would
+  // probably provide that"): at a booking the host sets out folding tables and chairs for the crowd,
+  // whatever the yard owns; they never sit on the gate path, the line, a to-go spot or a station, and
+  // are gone after the day; a Yard day keeps the yard's own seats. A host seat is a buffet seat: the
+  // guest takes the plate off the counter and eats there. Headless: a full picnic with a RUN card,
+  // every booked guest fed sat down to eat (none went home to go). Then the phone frame of a
+  // booking in the page with the host seating out and guests at it (host-seating.png).
+  await step('v4.5 host seating: a booking sets out folding tables and chairs for the crowd, every guest gets a seat, gone after the day; the phone frame', async () => {
+    const PH = globalThis[GLOBAL_NAME];
+    const h = headless(PH, null, 81);
+    assert(h.sim.skipTutorial() === true, 'skipTutorial');
+    h.drain();
+    h.sim.setPlayer(DEFAULT_LOOK, 'Pitmaster', 'Your Pit');
+    h.drain();
+    passHiring(h, 'host seating');
+    const st = h.st;
+    st().crew = [mkCard(PH, 1, 'Rosa', 'run', [3, 3], { potential: 5, wage: Math.min(PH.wageFor(3, 'run'), PH.C.PAYROLL[0]) })];
+    st().crewSeq = 2;
+    st().cash = 2000;
+    st().gear.kettle2 = true;
+    reOffer(h);
+    h.drain();
+    assert(h.sim.hostSeating().seats.length === 0, 'host seats in the hub');
+    const o = st().season.offers.find((x) => x.type === 'picnic' && x.safe);
+    assert(o, 'no picnic offer');
+    assert(h.sim.bookOffer(o.id).ok && h.sim.loadUp().ok, 'book and load the picnic');
+    h.drain();
+    const hs = h.sim.hostSeating();
+    const own = PH.MAP.seats.filter((x) => PH.tileOwned(x, st().gear, st().decor));
+    const want = Math.min(st().today.booked, PH.C.HOST_SEATS_MAX) - own.length;
+    assert(st().today.kind === 'booking' && hs.seats.length > 0 && hs.seats.length <= want && hs.tables.length === hs.seats.length, 'host seats ' + hs.seats.length + ', want up to ' + want + ' for ' + st().today.booked + ' booked and ' + own.length + ' owned');
+    // Never on the gate path, the line, a to-go spot, a station or a prop; every seat reachable.
+    const bad = [];
+    const on = (t, list) => list.some((q) => q.x === t.x && q.y === t.y);
+    for (const se of hs.seats) for (const t of [se, se.table]) {
+      if (PH.MAP.tiles[t.y * PH.MAP.W + t.x] !== PH.MAP.T.LAWN) bad.push('off the lawn ' + t.x + ',' + t.y);
+      if (on(t, PH.MAP.queue) || on(t, PH.MAP.togo) || (t.x === PH.MAP.gate.x && t.y >= PH.MAP.passStop.y) || on(t, own)) bad.push('in the way ' + t.x + ',' + t.y);
+      if (PH.MAP.stations.some((q) => q.tiles.some((w) => w.x === t.x && w.y === t.y))) bad.push('on a station ' + t.x + ',' + t.y);
+      if (PH.MAP.props.some((q) => (q.blocks || []).some((w) => w.x === t.x && w.y === t.y))) bad.push('on a prop ' + t.x + ',' + t.y);
+    }
+    assert(!bad.length, 'host seating ' + bad.join('; '));
+    let guard = 0, togoBooked = 0, seated = new Set(), hostUsed = new Set();
+    while (st().phase === PHASE.service && guard++ < 200000) {
+      const p = st().player;
+      if (!(p.busy || p.next || p.path.length || p.target)) {
+        const t = feltBotPick(PH, st(), 'run');
+        if (t) { if (t.meat) h.sim.selectMeat(t.meat); h.sim.walkTo(t.x, t.y); }
+      }
+      h.sim.tick();
+      for (const e of h.drain()) {
+        if (e.type === 'to_go') { const c = st().customers.find((q) => q.id === e.id); if (c && c.booked) togoBooked += 1; }
+        if (e.type === 'seat_taken') { seated.add(e.id); if (/^host/.test(e.seat)) hostUsed.add(e.seat); }
+      }
+    }
+    const till = st().till;
+    assert(till && till.kind === 'booking', 'the picnic did not end on the report');
+    assert(togoBooked === 0, togoBooked + ' booked guests went home to go (no seat)');
+    assert(seated.size > 0 && hostUsed.size > 0, 'nobody sat at the host seats ' + describe({ seated: seated.size, hostUsed: [...hostUsed] }));
+    assert(h.sim.hostSeating().seats.length === 0 && PH.MAP.hostSeats.length === 0, 'host seating left out after the day');
+    const line = 'picnic for ' + till.booked + ': ' + hs.seats.length + ' host seats (room on the lawn for ' + hs.seats.length + ' of ' + want + ') beside ' + own.length + ' owned, ' + seated.size + ' guests sat (' + hostUsed.size + ' host seats used), 0 to go, fed ' + till.fed + '; gone after the day';
+
+    // The page: a picnic booked from the hub, the host seating drawn, guests sat at some of it.
+    await reload(ladFixture({ kettle2: true }, { crew: [], cash: 900 }));
+    await advance(0);
+    // Book the picnic, move the week to its day (the days before it rested), and start it.
+    const go = await ev('(() => { const st = S(); const o = st.season.offers.find((x) => x.type === "picnic" && x.safe) || st.season.offers.find((x) => x.safe && x.type !== "finale"); if (!o) return null; const b = sim.bookOffer(o.id); const bd = st.season.booking && st.season.booking.day; if (typeof bd === "number") { st.season.day = bd; st.season.dayLog = st.season.dayLog.map((v, i) => (i < bd ? "off" : null)); } const c = sim.chooseDay("event"); const l = st.phase === "service" ? { ok: true } : sim.loadUp(); return { o: o.id, day: bd, b: b && b.ok, c: c && c.ok, l: l && l.ok, why: sim.canLoadUp().reason, kind: st.today && st.today.kind, phase: st.phase }; })()');
+    if (go && go.phase !== 'service') { await toService(); go.phase = await ev('S().phase'); go.kind = await ev('S().today.kind'); }
+    assert(go && go.b && go.l && go.phase === 'service' && go.kind === 'booking', 'no booking in the page ' + describe(go));
+    await advance(0);
+    await until('!!(g.host && g.host.seats.length)', 2);   // wait on the frame, not the clock
+    const ph = await ev('g.host');
+    assert(ph && ph.seats.length > 0, 'no host seating in the page');
+    await run('const st = S(); const hs = g.host.seats; let id = 9600; hs.slice(0, Math.ceil(hs.length * 0.6)).forEach((se, i) => { st.seats[se.id] = id; st.customers.push({ x: se.x, y: se.y, px: se.x * 16, py: se.y * 16, face: "down", next: null, path: [], walking: false, anim: 0, id: id, body: i % 4, want: ["chicken", "butt", "ribs"][i % 3], patienceMax: 999, patience: 999, wait: 0, queueIndex: -1, mode: "eating", mood: "happy", reason: null, pause: 0, hop: 0, seat: se.id, eat: 60 + i, eatMax: 99, bonusPaid: false, booked: true, runPlate: false, paid: true, fed: true, togo: false, spot: -1, price: 0, paidAt: st.clock, rungBy: "booked", incoming: null }); id += 1; }); g.camera.set("near"); g.advance(0); return true;');
+    await ev('(g.camera.reveal(' + ph.seats[0].x + ', ' + ph.seats[0].y + '), true)');
+    await sleep(400);
+    await advance(0);
+    const drawn = await ev('g.people.length');
+    const shot = await screenshot('host-seating' + (DESKTOP_MODE ? '-desktop' : '') + '.png');
+    return line + '; page: ' + ph.seats.length + ' host seats drawn, ' + drawn + ' people, ' + shot;
   });
 
   await step('v4.2 pit sounds: muted plays nothing, one speaker click turns sound on, a sizzle on the grate, the ding at the register, the fire loop follows the fire', async () => {

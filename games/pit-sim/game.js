@@ -1317,6 +1317,31 @@ function exposeGame() {
     get railBoxes() { return railBoxes ? JSON.parse(JSON.stringify(railBoxes)) : null; },
     get badgeLog() { return badgeLog.slice(); },
     get orderBubbles() { return orderBubbles.slice(); },
+    // v4.5: the taps as the game resolved them, today's host seating, and a guest's body on screen
+    // (client px: the middle of the box drawn last frame, f up from its foot, default 0.6).
+    get tapLog() { return tapLog.slice(); },
+    get host() { const h = hostNow(); return { tables: h.tables.slice(), seats: h.seats.slice() }; },
+    // The point nearest that one which a tap there resolves to this guest (another guest's chip
+    // may cover part of the body), with 2 rp of the same answer around it when it can.
+    guestClient: function (id, f) {
+      const b = custBoxes.get(id);
+      if (!b) return null;
+      const w = clientToWorld(0, 0), k = f === undefined ? 0.6 : f;
+      const X0 = (b.x0 + b.x1) / 2, Y0 = b.y1 - (b.y1 - b.y0) * k;
+      const is = function (x, y) { const h = hitWorld(x, y); return h.guest === id; };
+      let best = null, bd = Infinity;
+      for (const margin of [2, 0]) {
+        for (let y = Math.floor(b.y0); y < b.y1; y++) for (let x = Math.floor(b.x0); x < b.x1; x++) {
+          const d = (x - X0) * (x - X0) + (y - Y0) * (y - Y0);
+          if (d >= bd || !is(x + 0.5, y + 0.5)) continue;
+          if (margin && !(is(x + 0.5 - margin, y + 0.5) && is(x + 0.5 + margin, y + 0.5) && is(x + 0.5, y + 0.5 - margin) && is(x + 0.5, y + 0.5 + margin))) continue;
+          bd = d; best = [x + 0.5, y + 0.5];
+        }
+        if (best) break;
+      }
+      if (!best) return null;
+      return { x: w.r.left + (best[0] - w.o[0]) * w.k, y: w.r.top + (best[1] - w.o[1]) * w.k, X: best[0], Y: best[1] };
+    },
     get people() { return peopleBoxes.slice(); },
     get kitchenBox() { return kitchenBox(); },
     get sign() { return signInfo(); },
@@ -6556,8 +6581,18 @@ function extRect() {
 // v3.6 (spec C, F): a pointer that moves more than 8 CSS px is a drag that pans the camera, never a
 // tap; two pointers pinch (together: far view, apart: near view, centred on the pinch); a pointer
 // that lifts without dragging taps.
+// v4.5 (Joel 2026-10-20 on his phone, "the touch sensor is confused as to where I am tapping"): the
+// tap is resolved where the finger came DOWN (the world point and what is under it), with the camera
+// as it stood then; the follow camera eases while the pitmaster walks, so the yard slid under a
+// resting finger and the lift landed off target. A touch may wobble 12 CSS px and still tap (a mouse 8).
+const TAP_SLOP = Object.freeze({ mouse: 8, touch: 12 });
 const ptrs = new Map();
 let dragP = null, pinchP = null;
+function tapResolve(clientX, clientY) {
+  const w = clientToWorld(clientX, clientY);
+  if (!(w.r.width > 0 && w.r.height > 0)) return null;
+  return { X: w.X, Y: w.Y, hit: hitWorld(w.X, w.Y), at: tAnim };
+}
 function onPtrDown(e) {
   if (e.button !== undefined && e.button !== 0) return;
   if (currentPanel && !saleTaps()) return;
@@ -6569,7 +6604,10 @@ function onPtrDown(e) {
     pinchP = { d0: Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y) || 1, done: false };
     dragP = null;
   } else if (ptrs.size === 1) {
-    dragP = { id: e.pointerId, x0: e.clientX, y0: e.clientY, lx: e.clientX, ly: e.clientY, moved: false };
+    const slop = e.pointerType === 'mouse' ? TAP_SLOP.mouse : TAP_SLOP.touch;
+    let pre = null;
+    try { pre = tapResolve(e.clientX, e.clientY); } catch (err) { pre = null; }
+    dragP = { id: e.pointerId, x0: e.clientX, y0: e.clientY, lx: e.clientX, ly: e.clientY, moved: false, slop: slop, pre: pre };
   }
 }
 function onPtrMove(e) {
@@ -6589,7 +6627,7 @@ function onPtrMove(e) {
     return;
   }
   if (!dragP || dragP.id !== e.pointerId) return;
-  if (!dragP.moved && Math.hypot(e.clientX - dragP.x0, e.clientY - dragP.y0) > 8) dragP.moved = true;
+  if (!dragP.moved && Math.hypot(e.clientX - dragP.x0, e.clientY - dragP.y0) > dragP.slop) dragP.moved = true;
   if (dragP.moved) camPan(e.clientX - dragP.lx, e.clientY - dragP.ly);
   dragP.lx = e.clientX; dragP.ly = e.clientY;
 }
@@ -6599,31 +6637,46 @@ function onPtrUp(e) {
   if (pinchP) { if (ptrs.size === 0) pinchP = null; dragP = null; return; }
   const d = dragP;
   if (d && d.id === e.pointerId) dragP = null;
-  if (had && e.type === 'pointerup' && d && d.id === e.pointerId && !d.moved) tapAt(e.clientX, e.clientY);
+  if (had && e.type === 'pointerup' && d && d.id === e.pointerId && !d.moved) tapAt(d.x0, d.y0, d.pre);
 }
 
-function tapAt(clientX, clientY) {
+// The last taps as the game resolved them (harness): { kind, guest, x, y, ok, at }.
+const tapLog = [];
+function tapAt(clientX, clientY, pre) {
   if (currentPanel) {
     // v3.4: with the Shop or Gear sheet open beside the yard (desktop), a "+" picks its row there.
     if (!saleTaps()) return;
-    const w0 = clientToWorld(clientX, clientY);
-    const h0 = w0.r.width > 0 ? hitWorld(w0.X, w0.Y) : {};
+    const h0 = pre ? pre.hit : (function () { const w0 = clientToWorld(clientX, clientY); return w0.r.width > 0 ? hitWorld(w0.X, w0.Y) : {}; })();
     if (h0.plus) openForSale(h0.plus);
     return;
   }
   if (arr) { arrTap(clientX, clientY); return; }
   const s = sim.state;
   if (s.paused || s.phase !== 'service') return;
-  const w = clientToWorld(clientX, clientY);
-  if (!(w.r.width > 0 && w.r.height > 0)) return;
-  const hit = hitWorld(w.X, w.Y);
+  let hit = pre ? pre.hit : null;
+  if (!hit) {
+    const w = clientToWorld(clientX, clientY);
+    if (!(w.r.width > 0 && w.r.height > 0)) return;
+    hit = hitWorld(w.X, w.Y);
+  }
   if (hit.plus) { openForSale(hit.plus); return; }
-  let tx = -1, ty = -1;
-  if (hit.st) { tx = hit.st.tiles[0].x; ty = hit.st.tiles[0].y; }
-  else if (hit.tile) { tx = hit.tile.x; ty = hit.tile.y; }
-  const ok = sim.walkTo(tx, ty) === true;
+  let tx = -1, ty = -1, ok = false;
+  if (hit.guest !== undefined) {
+    // v4.5: the ring goes under the guest (their seat, or the tile they stand on).
+    const c = s.customers.find(function (o) { return o.id === hit.guest; }) || null;
+    const se = c ? seatOf(c) : null;
+    const sat = se && c && (c.mode === 'seated' || c.mode === 'eating' || (c.mode === 'toSeat' && c.next === null && c.path.length === 0));
+    if (c) { tx = sat ? se.x : Math.round(c.px / TILE); ty = sat ? se.y : Math.round(c.py / TILE); }
+    ok = sim.walkToGuest(hit.guest) === true;
+  } else {
+    if (hit.st) { tx = hit.st.tiles[0].x; ty = hit.st.tiles[0].y; }
+    else if (hit.tile) { tx = hit.tile.x; ty = hit.tile.y; }
+    ok = sim.walkTo(tx, ty) === true;
+  }
   pump();
   if (ok) cam.follow = true;
+  tapLog.push({ kind: hit.guest !== undefined ? 'guest' : hit.st ? 'station' : 'tile', guest: hit.guest !== undefined ? hit.guest : null, st: hit.st ? hit.st.id : null, x: tx, y: ty, ok: ok, at: tAnim });
+  if (tapLog.length > 12) tapLog.shift();
   if (tx >= 0 && tx < MAP.W && ty >= 0 && ty < MAP.H) {
     rings.push({ x: tx * TILE, y: ty * TILE, at: tAnim, ok: ok });
     if (rings.length > 6) rings.shift();
@@ -7099,8 +7152,9 @@ function dogPick() {
 // stand behind a seated customer's head.
 function seatTakenBelow(x, y) {
   const seats = sim.state.seats || {};
-  for (let i = 0; i < MAP.seats.length; i++) {
-    const st = MAP.seats[i];
+  const all = MAP.seats.concat(hostNow().seats);
+  for (let i = 0; i < all.length; i++) {
+    const st = all[i];
     if (st.x === x && st.y === y + 1 && seats[st.id] !== null && seats[st.id] !== undefined) return true;
   }
   return false;
@@ -7255,7 +7309,11 @@ function keepPerson(id) {
   const p = B3 && typeof B3.lastPerson === 'function' ? B3.lastPerson() : null;
   if (!p) return;
   peopleNext.push(p);
-  if (id !== null && id !== undefined) custBoxes.set(id, p);
+  if (id !== null && id !== undefined) {
+    custBoxes.set(id, p);
+    // v4.5: a guest's drawn body is a tap target, in draw order with the sprites (front most last).
+    hits.push({ guest: id, box: p });
+  }
 }
 function overlaps(a, b) { return a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1; }
 function drawBadge(kind, name, frame, X, Y) {
@@ -7777,24 +7835,42 @@ function makeZoom() {
 const hits = [];
 function hitPush(name, frame, X, Y, flip, clip, what) {
   const m = maskOf(name, frame, flip);
-  hits.push({ name: name, frame: frame | 0, flip: !!flip, X0: Math.round(X) - m.ax, Y0: Math.round(Y) - m.ay, w: m.w, h: m.h, clip: clip || null, st: what.st || null, at: what.at || null });
+  hits.push({ name: name, frame: frame | 0, flip: !!flip, X0: Math.round(X) - m.ax, Y0: Math.round(Y) - m.ay, w: m.w, h: m.h, clip: clip || null, st: what.st || null, at: what.at || null, seat: what.seat || null });
 }
+// v4.5: a guest's body box, with 3 rp of slack each side and above (a thumb is wider than a pixel).
+const BODY_SLACK = 3;
 function hitOne(h, X, Y) {
+  if (h.box) return X >= h.box.x0 - BODY_SLACK && X < h.box.x1 + BODY_SLACK && Y >= h.box.y0 - BODY_SLACK && Y < h.box.y1 + 1;
   if (X < h.X0 || Y < h.Y0 || X >= h.X0 + h.w || Y >= h.Y0 + h.h) return false;
   if (h.clip && (X < h.clip[0] || X >= h.clip[1])) return false;
   const m = maskOf(h.name, h.frame, h.flip);
   return m.a[((Y - h.Y0) | 0) * m.w + ((X - h.X0) | 0)] >= 128;
 }
-// A tap at world rp (X, Y): the tutorial arrow, sprites front to back, "+" marks by their tiles,
-// then the ground. Returns { st }, { tile } or { plus: id }.
+// A tap at world rp (X, Y): the tutorial arrow, the order chips, people and sprites front to back,
+// "+" marks by their tiles, then the ground. Returns { st }, { guest: id }, { tile } or { plus: id }.
+// v4.5 (Joel 2026-10-20, "the touch sensor is confused as to where I am tapping"): a guest's body,
+// head or chip, or their seat or table, is the guest (sim.walkToGuest), front most first.
 function hitWorld(X, Y) {
   const ab = arrowBox();
   if (ab && X >= ab.X - 8 && X < ab.X + 8 && Y >= ab.Y - 20 && Y < ab.Y + 2) return { st: ab.st };
   const g = unIso(X / RS, Y / RS), tx = Math.floor(g.x / TILE), ty = Math.floor(g.y / TILE);
   const inMap = tx >= 0 && tx < MAP.W && ty >= 0 && ty < MAP.H;
-  const standable = inMap && sim.walkable(tx, ty);
+  const standable = inMap && sim.standable(tx, ty);
   // v3.7: holding a plate, a tap on the seat, table or head of the guest who ordered it delivers it.
-  if (inMap && deliverTile(tx, ty)) return { tile: { x: tx, y: ty } };
+  const dg = inMap ? deliverTile(tx, ty) : null;
+  if (dg !== null) return { guest: dg };
+  // The order chips draw over everything: a chip is its guest.
+  for (let i = orderBubbles.length - 1; i >= 0; i--) {
+    const b = orderBubbles[i], r = b.rect;
+    if (X >= r.x0 - 1 && X < r.x1 + 1 && Y >= r.y0 - 1 && Y < r.y1 + ORDER_BUB.tail + 1 && guestLive(b.id)) return { guest: b.id };
+  }
+  // v4.5: the front most thing under the point, when it is a guest, wins over the register floor.
+  for (let i = hits.length - 1; i >= 0; i--) {
+    const h = hits[i];
+    if (!hitOne(h, X, Y)) continue;
+    if (h.guest !== undefined && guestLive(h.guest)) return { guest: h.guest };
+    if (h.guest === undefined) break;
+  }
   // v3.9: the counter sprite covers most of the register's floor, so a tap on that floor rings up.
   if (inMap) {
     for (let i = 0; i < MAP.stations.length; i++) {
@@ -7805,7 +7881,11 @@ function hitWorld(X, Y) {
   for (let i = hits.length - 1; i >= 0; i--) {
     const h = hits[i];
     if (!hitOne(h, X, Y)) continue;
+    if (h.guest !== undefined) { if (guestLive(h.guest)) return { guest: h.guest }; continue; }
     if (h.st) return { st: h.st };
+    // A seat, bench, chair or table: the guest sitting there (the seat nearest the tap).
+    const sg = seatGuestNear(h, g.x, g.y);
+    if (sg !== null) return { guest: sg };
     if (standable) return { tile: { x: tx, y: ty } };
     const dvh = deliverNear(tx, ty);
     if (dvh) return { tile: dvh };
@@ -7819,10 +7899,53 @@ function hitWorld(X, Y) {
       if (owned(st) && st.tiles.some(function (t) { return t.x === tx && t.y === ty && owned(t); })) return { st: st };
     }
   }
+  if (inMap) {
+    const og = seatGuestAt(tx, ty);
+    if (og !== null) return { guest: og };
+  }
   if (standable) return { tile: { x: tx, y: ty } };
   const dv = deliverNear(tx, ty);
   if (dv) return { tile: dv };
   return { tile: nearestWalkable(g.x, g.y) };
+}
+// A guest still in the yard (not a passer by on the street).
+function guestLive(id) {
+  const cs = sim.state.customers;
+  for (let i = 0; i < cs.length; i++) if (cs[i].id === id) return cs[i].mode !== 'passing';
+  return false;
+}
+// The guest who holds seat `se` now (walking to it, sitting, eating), or null.
+function seatHolder(se) {
+  const v = sim.state.seats ? sim.state.seats[se.id] : null;
+  if (v === null || v === undefined) return null;
+  const c = sim.state.customers.find(function (o) { return o.id === v; });   // a host seat held for a guest still at the counter is not theirs yet
+  return c && c.seat === se.id && c.mode !== 'passing' ? v : null;
+}
+// The guest on the seat at tile (tx, ty), or on the seat right behind the table tile (tx, ty).
+function seatGuestAt(tx, ty) {
+  const all = seatsNow();
+  for (let i = 0; i < all.length; i++) {
+    const se = all[i];
+    if (se.x !== tx || (se.y !== ty && se.y !== ty - 1)) continue;
+    if (se.y === ty - 1 && !(se.host || seatTable(se))) continue;   // a lawn chair has no table in front
+    const id = seatHolder(se);
+    if (id !== null) return id;
+  }
+  return null;
+}
+// A tap on furniture sprite h at sim point (x, y): the taken seat of that piece nearest the tap.
+function seatGuestNear(h, x, y) {
+  const all = seatsNow();
+  let best = null, bd = Infinity;
+  for (let i = 0; i < all.length; i++) {
+    const se = all[i];
+    if (h.seat ? se.id !== h.seat : !h.at || Math.abs(se.x * TILE + 8 - h.at[0]) > 24 || Math.abs(se.y * TILE + 8 - h.at[1]) > 24) continue;
+    const id = seatHolder(se);
+    if (id === null) continue;
+    const d = Math.pow(se.x * TILE + 8 - x, 2) + Math.pow(se.y * TILE + 8 - y, 2);
+    if (d < bd) { bd = d; best = id; }
+  }
+  return best;
 }
 // Joel 2026-10-20 ("I can't leave the pit area to deliver food"): with a plate in hand, a tap off the
 // patio (the guest's body or head, the picnic table, a bench, the lawn) meant the patio tile nearest
@@ -7845,11 +7968,16 @@ function deliverNear(tx, ty) {
 }
 function deliverTile(tx, ty) {
   const s = sim.state, h = s.player && s.player.carrying;
-  if (!h || h.kind !== 'plates' || !Array.isArray(s.customers)) return false;
-  return s.customers.some(function (c) {
+  if (!h || h.kind !== 'plates' || !Array.isArray(s.customers)) return null;
+  let best = null, bp = Infinity;
+  for (let i = 0; i < s.customers.length; i++) {
+    const c = s.customers[i];
     const st = waitsPlate(c) && !c.togo && c.want === h.meat ? seatOf(c) : null;
-    return !!st && st.x === tx && Math.abs(st.y - ty) <= 1;
-  });
+    if (!st || st.x !== tx || Math.abs(st.y - ty) > 1) continue;
+    const pa = Number(c.paidAt) || 0;
+    if (pa < bp) { bp = pa; best = c.id; }
+  }
+  return best;
 }
 function clientToWorld(cx, cy) {
   const r = el.cv.getBoundingClientRect(), k = r.width > 0 ? r.width / cam.vw : 1, o = camOrigin();
@@ -7882,7 +8010,7 @@ function tileToClient(tx, ty, opts) {
     if (!wantM || x === undefined) return true;
     return want0(hitWorld(x - 2, y)) && want0(hitWorld(x + 2, y)) && want0(hitWorld(x, y - 2)) && want0(hitWorld(x, y + 2));
   };
-  if ((st || (inMap && sim.walkable(tx, ty))) && !want(hitWorld(X + 0.5, Y + 0.5), X + 0.5, Y + 0.5)) for (let pass = 0; pass < 2; pass++) {
+  if ((st || (inMap && sim.standable(tx, ty))) && !want(hitWorld(X + 0.5, Y + 0.5), X + 0.5, Y + 0.5)) for (let pass = 0; pass < 2; pass++) {
     wantM = pass === 0;
     let best = null, bd = Infinity;
     const vis = function (x, y) { return x >= w.o[0] + 2 && x < w.o[0] + cam.vw - 2 && y >= w.o[1] + 2 && y < w.o[1] + cam.vh - 2; };
@@ -7914,7 +8042,7 @@ function nearestWalkable(x, y) {
   let best = null, bd = Infinity;
   for (let ty = 0; ty < MAP.H; ty++) {
     for (let tx = 0; tx < MAP.W; tx++) {
-      if (!sim.walkable(tx, ty)) continue;
+      if (!sim.standable(tx, ty)) continue;
       const d = Math.pow(tx * TILE + 8 - x, 2) + Math.pow(ty * TILE + 8 - y, 2);
       if (d < bd) { bd = d; best = { x: tx, y: ty }; }
     }
@@ -8497,6 +8625,17 @@ function nearStation(x, y) {
   return false;
 }
 
+// v4.5: a booking's host folding chairs and tables (sim.hostSeating), drawn like the yard's own
+// chairs; a tap on one is a tap on its seat.
+function hostItems(push) {
+  if (!A3 || !A3.has('fold_chair') || !A3.has('fold_table')) return;
+  const h = hostNow();
+  for (let i = 0; i < h.seats.length; i++) {
+    const se = h.seats[i], at = [se.x * TILE + 8, se.y * TILE + 8];
+    pushArt(push, 'fold_chair', 0, [{ x: se.x, y: se.y }], { hit: { at: at, seat: se.id } });
+    pushArt(push, 'fold_table', 0, [{ x: se.table.x, y: se.table.y }], { hit: { at: at, seat: se.id } });
+  }
+}
 // What each prop draws (rule art names), by its v2 sprite. Wall pieces (door, sign) are in the stage.
 const PROP_FRAME = { pot1: 0, pot2: 1, pot3: 0, pot4: 0, planter: 2, planter2: 1, woodpile: 0, woodpile2: 1, woodpile3: 1, woodpile4: 0 };
 // v3.4 playtest: no decorative props in the work area (on the pavers or next to a station tile).
@@ -8588,6 +8727,7 @@ function drawSorted(s) {
   dressItems(push);
   for (let i = 0; i < MAP.stations.length; i++) if (owned(MAP.stations[i])) stationItems(MAP.stations[i], s, push);
   for (let i = 0; i < MAP.decor.length; i++) if (s.decor[MAP.decor[i].id] === true) decorItems(MAP.decor[i], s, push);
+  hostItems(push);
 
   // People (layer 2): the player, the RUN, FIRE and PREP cards' movers, then customers by id.
   const staff = [['player', s.player, ''], ['buddy', s.buddy, 'run'], ['tender', s.tender, 'fire'], ['prep', s.prep || null, 'prep'], ['till', s.cashier || null, 'till'], ['pit', s.pitCard || null, 'pit']];
@@ -8615,8 +8755,11 @@ function drawSorted(s) {
       push(seat.x + seat.y, 2, q[0], function () { drawSeated(c, seat); keepPerson(c.id); });
       // The eater's plate: on the table top in front of the seat, or in the lap on a chair.
       const tb = seatTable(seat), sx = seat.x * TILE, sy = seat.y * TILE;
-      const px = sx + 4, py = tb ? sy + 17 : sy + 9;
-      if (c.mode !== 'eating') { /* v3.7: no plate on the table yet */ } else if (tb) push(seat.x + seat.y + 1, 1.5, q[0], function () { drawRp('plate_' + c.want, 0, q[0] + 1, q[1] + 4, px, py); });
+      const px = sx + 4, py = tb || seat.host ? sy + 17 : sy + 9;
+      if (c.mode !== 'eating') { /* v3.7: no plate on the table yet */ } else if (seat.host) {
+        const tq = tileRp(seat.table.x, seat.table.y);   // v4.5: on the host's folding table top
+        push(seat.table.x + seat.table.y, 1.5, tq[0], function () { drawRp('plate_' + c.want, 0, tq[0], tq[1] - 9, px, py); });
+      } else if (tb) push(seat.x + seat.y + 1, 1.5, q[0], function () { drawRp('plate_' + c.want, 0, q[0] + 1, q[1] + 4, px, py); });
       else push(seat.x + seat.y, 2.5, q[0], function () { drawRp('plate_' + c.want, 0, q[0] + 1, q[1] - 9, px, py); });
     } else {
       const cx = Math.round(c.px), cy = Math.round(c.py);
@@ -8771,15 +8914,20 @@ function bandColor(band) {
 }
 
 // The tap ring: a tile's diamond outline on the ground, then its four corners.
+// v4.5: the tap ring is green where the tap will act and red where nothing can be done, on a dark
+// edge so it reads on the lawn as well as the patio.
+const TAP_OK = '#7ed957', TAP_NO = '#ff5a4a';
 function ringRp(tx, ty, color, corners) {
   const t = vtxRp(tx, ty);
   onWorld(function () {
-    octx.fillStyle = color;
-    for (let r = 0; r <= 24; r++) {
-      const w = r <= 12 ? r * 2 : (24 - r) * 2;
-      if (corners && r > 2 && r < 22 && w < 42) continue;
-      octx.fillRect(t[0] - w, t[1] + r, 2, 1);
-      octx.fillRect(t[0] + w - 2, t[1] + r, 2, 1);
+    for (const pass of [0, 1]) {
+      octx.fillStyle = pass ? color : '#1b1410';
+      for (let r = 0; r <= 24; r++) {
+        const w = r <= 12 ? r * 2 : (24 - r) * 2;
+        if (corners && r > 2 && r < 22 && w < 42) continue;
+        if (pass) { octx.fillRect(t[0] - w, t[1] + r, 2, 1); octx.fillRect(t[0] + w - 2, t[1] + r, 2, 1); }
+        else { octx.fillRect(t[0] - w - 1, t[1] + r - 1, 4, 3); octx.fillRect(t[0] + w - 3, t[1] + r - 1, 4, 3); }
+      }
     }
   });
 }
@@ -8882,7 +9030,24 @@ function drawMover(kind, m, s) {
 }
 
 
-function seatOf(c) { return c.seat ? SEAT_BY_ID[c.seat] || null : null; }
+function seatOf(c) { return c.seat ? SEAT_BY_ID[c.seat] || hostNow().byId[c.seat] || null : null; }
+// v4.5: today's host folding tables and chairs (a booking only), read from the sim once a frame.
+let hostCache = null, hostAt = -1;
+function hostNow() {
+  if (hostCache && hostAt === tAnim) return hostCache;
+  const h = sim && typeof sim.hostSeating === 'function' ? sim.hostSeating() : { tables: [], seats: [] };
+  const byId = Object.create(null);
+  for (let i = 0; i < h.seats.length; i++) byId[h.seats[i].id] = h.seats[i];
+  hostCache = { tables: h.tables, seats: h.seats, byId: byId };
+  hostAt = tAnim;
+  return hostCache;
+}
+// Every seat a guest can take now: the yard's owned ones and today's host seats.
+function seatsNow() {
+  const s = sim.state, out = [];
+  for (let i = 0; i < MAP.seats.length; i++) if (PitSim.tileOwned(MAP.seats[i], s.gear, s.decor)) out.push(MAP.seats[i]);
+  return out.concat(hostNow().seats);
+}
 
 
 
@@ -9022,7 +9187,7 @@ function drawCues(s, custs) {
           if (!blink) D('icon_' + c.want, px + 18, py - 20);
         }
       });
-    } else if (c.mode === 'eating' && c.eat > 0) {
+    } else if (c.mode === 'eating' && c.eat > 0 && !(seatC && seatC.host)) {   // v4.5: a host seat's plate shows on its table; no bubble over a whole lawn of diners
       const seat = seatOf(c);
       const sx = seat ? seat.x * TILE : px, sy = seat ? seat.y * TILE : Math.round(c.py);
       bigBubble(sx, sy - 21, function () {
@@ -9179,7 +9344,7 @@ function drawTop(s) {
       const age = tAnim - m.at;
       if (age < 0 || age >= FX.TAP_RING_S) continue;
       if (B3) {
-        ringRp(Math.floor(m.x / TILE), Math.floor(m.y / TILE), m.ok ? COLOR.yellow : COLOR.O, !(reduced || age < FX.TAP_RING_S * 0.6));
+        ringRp(Math.floor(m.x / TILE), Math.floor(m.y / TILE), m.ok ? TAP_OK : TAP_NO, !(reduced || age < FX.TAP_RING_S * 0.6));
         continue;
       }
       octx.fillStyle = m.ok ? COLOR.yellow : COLOR.O;

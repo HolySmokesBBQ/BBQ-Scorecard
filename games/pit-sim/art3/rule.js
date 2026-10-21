@@ -817,6 +817,27 @@ function chair(r, f) {
     for (let u = 9; u < 17; u += 3) r.seg(P, [u, 8, 9], [u, 8, 18], R.shade);
   });
 }
+// v4.5 host seating at a booking (Joel 2026-10-20): the host's white folding chair (its back on the
+// far side, the sitter faces the camera and the table) and a one tile white folding table.
+function foldChair(r) {
+  const P = r.F(1, 1);
+  r.obj(function () {
+    [[8, 9], [15, 9], [8, 16], [15, 16]].forEach(function (l) { r.box(P, l[0], l[1], l[0] + 1, l[1] + 1, 0, 6, ST, { rim: false }); });
+    r.seg(P, [8, 16, 1], [15, 16, 1], ST.shade);
+    r.box(P, 7, 8, 17, 17, 6, 1, CW, { rim: false });
+    r.box(P, 7, 7, 17, 8, 7, 4, ST, { rim: false });
+    r.box(P, 7, 7, 17, 8, 11, 8, CW, { rim: false });
+  });
+}
+function foldTable(r) {
+  const P = r.F(1, 1);
+  r.obj(function () {
+    [[4, 4], [19, 4], [4, 19], [19, 19]].forEach(function (l) { r.box(P, l[0], l[1], l[0] + 1, l[1] + 1, 0, 11, ST, { rim: false }); });
+    r.seg(P, [4, 19, 2], [19, 19, 2], ST.shade);
+    r.box(P, 2, 2, 22, 22, 11, 2, CW, { crease: false });
+    r.seg(P, [2, 22, 10.5], [22, 22, 10.5], CW.dark); r.seg(P, [22, 2, 10.5], [22, 22, 10.5], CW.dark);
+  });
+}
 function canopy(r, f) {
   const P = r.F(4, 2), ST2 = [[OR, CW], [CL, CW], [RP.stem, CW]][f];
   r.obj(function () {
@@ -1121,6 +1142,8 @@ def('picnic', 76, 56, 38, 36, 2, picnicTable, { footprint: [2, 1], shadow: [30, 
 def('picnic_bench', 76, 56, 38, 36, 2, picnicBench, { footprint: [2, 1], seats: [[-3, -17], [21, -5]] });
 def('flower_box', 52, 38, 26, 24, 1, flowerBox, { footprint: [2, 1] });
 def('chair', 32, 42, 16, 28, 2, chair, { footprint: [1, 1], seats: [[0, -7]] });
+def('fold_chair', 32, 42, 16, 28, 1, foldChair, { footprint: [1, 1], seats: [[0, -7]] });
+def('fold_table', 48, 42, 24, 28, 1, foldTable, { footprint: [1, 1], shadow: [18, 8] });
 def('canopy', 152, 144, 76, 106, 3, canopy, { footprint: [4, 2] });
 def('birdbath', 24, 30, 12, 26, 2, birdbath, { footprint: [1, 1], shadow: [7, 3] });
 def('mailbox', 28, 38, 14, 32, 2, mailbox, { footprint: [1, 1] });
@@ -1187,6 +1210,8 @@ const SIZE = Object.freeze({
   picnic_bench: { h: 7, extra: 17, w: null, rule: 'bench 7' },
   flower_box: { h: 10, extra: 11, w: null, rule: 'flower box 10' },
   chair: { h: 20, extra: 5, w: null, rule: 'seat 7, back 20' },
+  fold_chair: { h: 19, extra: 5, w: null, rule: 'v4.5: host folding chair, seat 7, back 19' },
+  fold_table: { h: 13, extra: 10, w: null, rule: 'v4.5: host folding table, top 13, 1 tile' },
   canopy: { h: 64, extra: 35, w: null, rule: 'canopy posts 64' },
   birdbath: { h: 20, extra: 3, w: null, rule: 'bird bath 20' },
   mailbox: { h: 26, extra: 4, w: null, rule: 'mailbox 26' },

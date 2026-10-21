@@ -143,7 +143,7 @@ function decide(sim) {
   const cookers = COOKERS.filter((id) => owned(s, id) && id !== pitOn);
   const fireOf = (id) => s.stations[id].fire;
   const c = s.player.carrying;
-  const seatOf = (g) => MAP.seats.find((x) => x.id === g.seat);
+  const seatOf = (g) => MAP.seats.find((x) => x.id === g.seat) || MAP.hostSeats.find((x) => x.id === g.seat);   // v4.5: host seats at a booking
   if (c) {
     if (c.kind === 'charcoal') { const cc = cookers.filter((id) => !woodOf(id)); if (!cc.length) return tile('trash'); let b = cc[0]; for (const id of cc) if (fireOf(id) < fireOf(b)) b = id; return tile(b); }
     if (c.kind === 'raw') {

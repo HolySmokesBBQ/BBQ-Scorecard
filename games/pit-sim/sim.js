@@ -738,6 +738,7 @@ const C = Object.freeze({
   ARRIVAL_PULL_S: 3,
   // seating and charm [V2.5], [V2.6]
   EAT_MIN: 8, EAT_MAX: 12,            // seconds a seated customer eats: EAT_MIN + (EAT_MAX - EAT_MIN) * rng()
+  HOST_SEATS_MAX: 12,                 // v4.5: a booking's host seats every guest, up to this many seats in all
   HEART_SECONDS: 0.6,                 // seated pause after the bonus is paid, before standing up
   SEAT_BONUS_BASE: 1, SEAT_BONUS_MAX: 3,
   CHARM_STEP: 10, CHARM_MAX: 30,      // seatBonus = min(MAX, BASE + floor(charm / STEP)); repMax = REP_DAY_MAX + floor(charm / STEP)
@@ -1351,6 +1352,7 @@ let STATION_BY_ID = STATION_BY_ID0;
 let SEAT_BY_ID = Object.freeze(SEATS0.reduce((acc, s) => { acc[s.id] = s; return acc; }, {}));
 let PROP_BLOCKED = new Uint8Array(MAP_W * MAP_H);
 let IDLE = { tender: TENDER_IDLE0, prep: PREP_IDLE0, dogHome: DOG_HOME0, dogRoam: DOG_ROAM0 };
+let HOST_LIVE = Object.freeze([]);   // v4.5: the running sim's host seats today (MAP.hostSeats)
 
 // Points the live records at a layout. Cheap when nothing changed.
 function applyLayout(layIn, tier) {
@@ -1421,6 +1423,8 @@ const MAP = Object.freeze({
   get props() { return PROPS; },
   get decor() { return DECOR; },
   get seats() { return SEATS; },
+  // v4.5: today's host folding chairs at a booking (each { id, x, y, face, host, table }), else [].
+  get hostSeats() { return HOST_LIVE; },
   SEAT_ORDER: SEAT_IDS,
   get spawn() { return GEO.spawn; },
   gate: px(8, 11),
@@ -3713,20 +3717,156 @@ function createSim(saved, seed) {
     return state.decor[id] === true;
   }
 
-  // A blocking tile of an owned decor footprint.
+  // A blocking tile of an owned decor footprint, or (v4.5) one of today's host folding tables.
   function decorBlocks(x, y) {
     for (const d of DECOR) {
       if (!decorOwned(d.id)) continue;
       for (const b of d.blocks) if (b.x === x && b.y === y) return true;
     }
-    return false;
+    return hostTableAt(x, y);
   }
 
   function ownedSeatAt(x, y) {
     for (const s of SEATS) {
       if (s.x === x && s.y === y && tileOwned(s, state.gear, state.decor)) return s;
     }
+    for (const s of host.seats) if (s.x === x && s.y === y) return s;
     return null;
+  }
+
+  // ---- v4.5 host seating (Joel 2026-10-20: "at an event there should be max seating available as
+  // the host would probably provide that") -------------------------------------------------------
+  // On a booked day (not a Yard day) the host sets out folding tables, each with one folding chair
+  // on its far side, for the expected crowd, whatever picnic tables the yard owns: enough seats that
+  // every guest gets one (up to C.HOST_SEATS_MAX in all). The yard's own seats stay table service;
+  // a host seat is a buffet seat (pickHostSeat). They stand on open lawn only, never on the
+  // gate path, the line, a to-go spot, a station, a prop, owned decor or seating, and every seat
+  // stays reachable by guests and by the plate carriers. They are gone once the day ends. Never saved.
+  const HOST_NONE = Object.freeze({ key: '', tables: Object.freeze([]), seats: Object.freeze([]), byId: Object.freeze({}) });
+  let host = HOST_NONE;
+  function hostWanted() {
+    const t = state.today;
+    if (state.phase !== 'service' || !t || t.kind !== 'booking' || !t.booking) return 0;
+    let owned = 0;
+    for (const s of SEATS) if (tileOwned(s, state.gear, state.decor)) owned += 1;
+    const guests = Math.max(0, Math.trunc(Number(t.booked) || 0));   // the booked headcount (0 at the competition)
+    return Math.max(0, Math.min(guests, C.HOST_SEATS_MAX) - owned);
+  }
+  function refreshHost() {
+    const want = hostWanted();
+    if (want <= 0) { if (host !== HOST_NONE) host = HOST_NONE; HOST_LIVE = host.seats; return host; }
+    const key = state.day + '|' + want + '|' + LAYOUT_KEY + '|' + (state.gear.bigtable ? 1 : 0)
+      + SEAT_IDS.map((id) => (tileOwned(SEAT_BY_ID[id], state.gear, state.decor) ? 1 : 0)).join('')
+      + DECOR_IDS.map((id) => (state.decor[id] === true ? 1 : 0)).join('');
+    if (host.key === key) { HOST_LIVE = host.seats; return host; }
+    host = buildHost(key, want);
+    HOST_LIVE = host.seats;
+    for (const s of host.seats) if (!(s.id in state.seats)) state.seats[s.id] = null;
+    return host;
+  }
+  function buildHost(key, want) {
+    const N = MAP_W * GRID_H, at = (x, y) => y * MAP_W + x;
+    const open = new Uint8Array(N);       // lawn a host piece may stand on
+    const block = new Uint8Array(N);      // what guests and carriers can never cross (props, decor, stations)
+    const seatT = new Uint8Array(N);      // owned seats
+    host = HOST_NONE;                     // decorBlocks below reads the yard alone
+    for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) {
+      const i = at(x, y);
+      if (PROP_BLOCKED[i] === 1 || decorBlocks(x, y) || stationAt(x, y) !== null) block[i] = 1;
+      if (TILES[i] === T.LAWN && !block[i]) open[i] = 1;
+    }
+    for (const s of SEATS) if (tileOwned(s, state.gear, state.decor)) { seatT[at(s.x, s.y)] = 1; open[at(s.x, s.y)] = 0; }
+    for (const d of DECOR) if (decorOwned(d.id)) for (const t of d.tiles) if (inMap(t.x, t.y)) open[at(t.x, t.y)] = 0;
+    // Held clear: the gate and its stop, every line and to-go spot, and the guests' own way from the
+    // gate to each of them.
+    const spots = MAP.queue.concat(MAP.togo);
+    for (const t of [MAP.gate, MAP.passStop].concat(spots)) if (inMap(t.x, t.y)) open[at(t.x, t.y)] = 0;
+    const CS = MAP.custSpawn, PS = MAP.passStop;
+    const custBase = (x, y) => (x === CS.x && y === CS.y) || (inMap(x, y) && (TILES[at(x, y)] === T.LAWN || TILES[at(x, y)] === T.GATE) && !block[at(x, y)] && !seatT[at(x, y)]);
+    for (const q of spots) {
+      const path = bfs(CS.x, CS.y, (x, y) => x === q.x && y === q.y, custBase);
+      if (path) for (const t of path) if (inMap(t.x, t.y)) open[at(t.x, t.y)] = 0;
+    }
+    // Held clear too: every lawn tile beside the patio, so the pitmaster and the crew always step
+    // straight off the patio onto the lawn.
+    for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) {
+      if (!open[at(x, y)]) continue;
+      if (DIR_ORDER.some((d) => { const nx = x + DIRS[d].dx, ny = y + DIRS[d].dy; return inMap(nx, ny) && TILES[at(nx, ny)] === T.PAVER; })) open[at(x, y)] = 0;
+    }
+    const ownedSeats = SEATS.filter((s) => tileOwned(s, state.gear, state.decor));
+    const tables = [], seats = [];
+    const tb = new Uint8Array(N), hs = new Uint8Array(N);
+    // Carry steps from the register to every owned seat, so the host pieces never send a plate the long way round.
+    const carryDist = () => {
+      const dist = new Int16Array(N).fill(-1), q = [at(GEO.spawn.x, GEO.spawn.y)];
+      dist[q[0]] = 0;
+      for (let k = 0; k < q.length; k++) {
+        const cx = q[k] % MAP_W, cy = (q[k] - cx) / MAP_W;
+        for (const d of DIR_ORDER) {
+          const nx = cx + DIRS[d].dx, ny = cy + DIRS[d].dy;
+          if (!inMap(nx, ny)) continue;
+          const i = at(nx, ny), g = TILES[i];
+          if (dist[i] >= 0 || block[i] || tb[i] || hs[i] || seatT[i] || (g !== T.PAVER && g !== T.LAWN)) continue;
+          dist[i] = dist[q[k]] + 1;
+          q.push(i);
+        }
+      }
+      return dist;
+    };
+    const seatSteps = (dist, s) => { let b = Infinity; for (const d of DIR_ORDER) { const x = s.x + DIRS[d].dx, y = s.y + DIRS[d].dy; if (inMap(x, y) && dist[at(x, y)] >= 0) b = Math.min(b, dist[at(x, y)]); } return b; };
+    const base = carryDist(), baseSteps = ownedSeats.map((s) => seatSteps(base, s));
+    const nextTo = (G, s) => DIR_ORDER.some((d) => { const x = s.x + DIRS[d].dx, y = s.y + DIRS[d].dy; return x >= 0 && x < MAP_W && y >= 0 && y < GRID_H && G[at(x, y)] === 1; });
+    const valid = () => {
+      const cust = gridBfs([CS], (x, y) => custBase(x, y) && !tb[at(x, y)] && !hs[at(x, y)]);
+      if (!cust[at(PS.x, PS.y)]) return false;
+      for (const q of MAP.queue) if (tileOwned(q, state.gear) && !cust[at(q.x, q.y)]) return false;
+      for (const q of MAP.togo) if (!cust[at(q.x, q.y)]) return false;
+      const all = ownedSeats.concat(seats);
+      for (const s of all) if (!nextTo(cust, s)) return false;
+      const carry = gridBfs([GEO.spawn], (x, y) => {
+        if (!inMap(x, y)) return false;
+        const i = at(x, y), g = TILES[i];
+        if (block[i] || tb[i] || hs[i] || seatT[i]) return false;
+        return g === T.PAVER || g === T.LAWN;
+      });
+      for (const s of all) if (!nextTo(carry, s)) return false;
+      const dist = carryDist();
+      for (let k = 0; k < ownedSeats.length; k++) if (seatSteps(dist, ownedSeats[k]) > baseSteps[k] + 1) return false;
+      return true;
+    };
+    // Seat (x, y) with its table (x, y + 1), nearest the register first so the carries stay short;
+    // a spot right beside a station only once the rest of the lawn is full (the cookers stay in view).
+    const byStation = (x, y) => { for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (stationAt(x + dx, y + dy) !== null) return true; return false; };
+    const cands = [];
+    for (let y = 1; y < MAP_H - 2; y++) for (let x = 1; x < MAP_W - 1; x++) {
+      if (!open[at(x, y)] || !open[at(x, y + 1)]) continue;
+      cands.push({ x, y, near: byStation(x, y) || byStation(x, y + 1) ? 1 : 0, d: Math.abs(x - GEO.spawn.x) + Math.abs(y - GEO.spawn.y) });
+    }
+    cands.sort((a, b) => a.near - b.near || a.d - b.d || a.y - b.y || a.x - b.x);
+    for (const c of cands) {
+      if (seats.length >= want) break;
+      const si = at(c.x, c.y), ti = at(c.x, c.y + 1);
+      if (tb[si] || hs[si] || tb[ti] || hs[ti]) continue;
+      const seat = Object.freeze({ kind: 'seat', id: 'host' + (seats.length + 1), x: c.x, y: c.y, face: 'down', decor: null, host: true, table: Object.freeze({ x: c.x, y: c.y + 1 }) });
+      tb[ti] = 1; hs[si] = 1; seats.push(seat); tables.push(seat.table);
+      if (!valid()) { tb[ti] = 0; hs[si] = 0; seats.pop(); tables.pop(); }
+    }
+    const byId = {};
+    for (const s of seats) byId[s.id] = s;
+    return Object.freeze({ key, tables: Object.freeze(tables), seats: Object.freeze(seats), byId: Object.freeze(byId) });
+  }
+  function hostTableAt(x, y) {
+    for (const t of host.tables) if (t.x === x && t.y === y) return true;
+    return false;
+  }
+  // Any seat by id: the yard's own, or today's host seat.
+  function seatRec(id) {
+    return SEAT_BY_ID[id] || host.byId[id] || null;
+  }
+  // v4.5: today's host folding tables and chairs (empty on a Yard day and between days).
+  function hostSeating() {
+    refreshHost();
+    return { tables: host.tables.map((t) => ({ x: t.x, y: t.y })), seats: host.seats.map((s) => ({ id: s.id, x: s.x, y: s.y, face: s.face, host: true, table: { x: s.table.x, y: s.table.y } })) };
   }
 
   // Customers: the spawn, or ground LAWN or GATE; no fixed prop; no blocking tile of owned decor;
@@ -3795,14 +3935,20 @@ function createSim(saved, seed) {
   }
 
   // v3.7: a plate carrier (the pitmaster or the RUN card) walks the patio and the guests' lawn, never
-  // through a prop, a blocking decor tile or a seat. Taps still only stop on the patio (walkable).
+  // through a prop, a station, a blocking decor tile (or a host table) or a seat. v4.5 (Joel
+  // 2026-10-20, "Still problems with leaving the pit"): the pitmaster also stops on any such lawn
+  // tile, by a tap or the keys (standable), not only on the patio.
   function carrierWalkable(x, y) {
     if (walkable(x, y)) return true;
     if (!inMap(x, y)) return false;
     if (TILES[y * MAP_W + x] !== T.LAWN) return false;
     if (PROP_BLOCKED[y * MAP_W + x] === 1) return false;
+    if (stationAt(x, y) !== null) return false;
     if (decorBlocks(x, y)) return false;
     return ownedSeatAt(x, y) === null;
+  }
+  function standable(x, y) {
+    return carrierWalkable(Math.trunc(Number(x)), Math.trunc(Number(y)));
   }
   function nextToSeat(seat) {
     return (x, y) => Math.abs(x - seat.x) + Math.abs(y - seat.y) === 1;
@@ -3817,7 +3963,7 @@ function createSim(saved, seed) {
     let bestD = Infinity;
     for (let ty = 0; ty < MAP_H; ty++) {
       for (let tx = 0; tx < MAP_W; tx++) {
-        if (!walkable(tx, ty)) continue;
+        if (!standable(tx, ty)) continue;
         const d = Math.abs(tx - x) + Math.abs(ty - y);
         if (d < bestD) { bestD = d; best = { x: tx, y: ty }; }
       }
@@ -3946,15 +4092,63 @@ function createSim(saved, seed) {
     const dv = deliveryAt(tx, ty);
     if (dv !== null) {
       // v3.7: carry the plate in hand to the seated guest whose table was tapped.
-      const path = carrierRoute(p, nextToSeat(SEAT_BY_ID[dv.seat]));
+      const path = carrierRoute(p, nextToSeat(seatRec(dv.seat)));
       if (path === null) { emit('blocked'); return false; }
       p.path = path;
       p.target = { deliver: dv.id };
       return true;
     }
-    if (walkable(tx, ty)) {
+    if (standable(tx, ty)) {
       const path = playerBfs(anchor.x, anchor.y, (x, y) => x === tx && y === ty);
       if (path === null) { emit('blocked'); return false; }
+      p.path = path;
+      p.target = null;
+      return true;
+    }
+    emit('blocked');
+    return false;
+  }
+
+  // v4.5 (Joel 2026-10-20, "Still problems with leaving the pit and tapping on customers"): a tap
+  // on a guest (any part of them, their chip, their seat or table). With a plate of their order in
+  // hand it carries it to them; a guest in line with nobody on the till means the register (rings
+  // them up, as a register tap does); otherwise the pitmaster walks to a lawn or patio tile next to
+  // them and stops. Mid slice the tap is kept like any other and taken when the slice is done.
+  function walkToGuest(id) {
+    moveBuf = null;
+    refreshHost();
+    const c = state.customers.find((o) => o.id === id) || null;
+    if (c === null) { emit('blocked'); return false; }
+    if (state.phase === 'service' && !state.paused && state.player.busy !== null) {
+      state.player.queued = { guest: c.id };
+      emit('tap_queued');
+      return true;
+    }
+    if (!playerIdle()) return false;
+    const p = state.player, h = p.carrying;
+    const seat = c.seat ? seatRec(c.seat) : null;
+    if (h !== null && h.kind === 'plates' && h.times.length > 0 && awaitsPlate(c) && !c.togo && seat && c.want === h.meat) {
+      const path = carrierRoute(p, nextToSeat(seat));
+      if (path === null) { emit('blocked'); return false; }
+      p.path = path;
+      p.target = { deliver: c.id };
+      return true;
+    }
+    if (h !== null && h.kind === 'plates' && h.times.length > 0 && awaitsPlate(c) && c.togo && c.want === h.meat) {
+      const tb = STATION_BY_ID.table.tiles[0];   // a to-go guest takes it off the counter
+      return walkTo(tb.x, tb.y);
+    }
+    if (c.queueIndex >= 0 && (c.mode === 'waiting' || c.mode === 'arriving') && !state.cashier) {
+      const reg = STATION_BY_ID.register.tiles[0];
+      return walkTo(reg.x, reg.y);
+    }
+    const at = seat && (c.mode === 'toSeat' || c.mode === 'seated' || c.mode === 'eating') && c.next === null && c.path.length === 0
+      ? seat : moverAnchor(c);
+    const anchor = moverAnchor(p);
+    for (const reach of [1, 2]) {
+      const near = (x, y) => { const d = Math.abs(x - at.x) + Math.abs(y - at.y); return d >= 1 && d <= reach; };
+      const path = playerBfs(anchor.x, anchor.y, (x, y) => near(x, y) && standable(x, y));
+      if (path === null) continue;
       p.path = path;
       p.target = null;
       return true;
@@ -3985,7 +4179,7 @@ function createSim(saved, seed) {
     p.face = dir;
     const nx = p.x + DIRS[dir].dx;
     const ny = p.y + DIRS[dir].dy;
-    if (!(walkable(p.x, p.y) ? walkable(nx, ny) : carrierWalkable(nx, ny))) return false;   // v3.7: back from a table
+    if (!standable(nx, ny)) return false;   // v4.5: the open lawn too
     p.next = { x: nx, y: ny };
     p.walking = true;
     return true;
@@ -4196,6 +4390,7 @@ function createSim(saved, seed) {
   // Leaving the yard: route to the spawn, optionally holding LEAVE_TURN_SECONDS first. An empty
   // route (no way out) removes the customer as soon as nothing holds them (moveCustomers).
   function sendOut(c, reason, mood, turnPause) {
+    if (c.hostSeat) { if (state.seats[c.hostSeat] === c.id) state.seats[c.hostSeat] = null; c.hostSeat = null; }
     c.mode = 'leaving';
     c.reason = reason;
     c.mood = mood;
@@ -4222,11 +4417,21 @@ function createSim(saved, seed) {
   // customer's anchor tile by customer BFS. Returns { seat, path } or null.
   function pickSeat(c) {
     for (const id of SEAT_IDS) {
-      const s = SEAT_BY_ID[id];
+      const s = seatRec(id);
       if (!tileOwned(s, state.gear, state.decor)) continue;
       if (state.seats[id] !== null) continue;
       const path = custRoute(c, s.x, s.y);
       if (path !== null) return { seat: s, path };
+    }
+    return null;
+  }
+  // v4.5: a free host seat (nearest the register first) a guest who found no yard seat can reach.
+  // Host seating is a buffet: they take the plate off the counter at a to-go spot as before, then
+  // carry it to this seat and eat there (deliverTo), so nobody goes home to go at a booking.
+  function pickHostSeat(c) {
+    for (const s of refreshHost().seats) {
+      if (state.seats[s.id] !== null && state.seats[s.id] !== undefined) continue;
+      if (custRoute(c, s.x, s.y) !== null) return s;
     }
     return null;
   }
@@ -4286,9 +4491,27 @@ function createSim(saved, seed) {
     c.runPlate = run !== null;
     c.mood = 'happy';
     c.hop = SERVED_HOP;
-    const s = c.seat ? SEAT_BY_ID[c.seat] : null;
+    const s = c.seat ? seatRec(c.seat) : null;
     const x = s ? s.x * TILE + 8 : c.x * TILE + 8, y = s ? s.y * TILE : c.y * TILE;
     emit('served', { id: c.id, meat: c.want, price: c.price, tip, quick, x, y, booked, by });
+    if (c.togo && c.hostSeat) {
+      // v4.5: a booking's buffet guest walks the plate to their host seat and eats there.
+      const hs = seatRec(c.hostSeat);
+      const path = hs ? custRoute(c, hs.x, hs.y) : null;
+      if (path !== null) {
+        if (!booked) { if (quick) t.happy += 1; else t.ok += 1; }
+        c.togo = false;
+        c.spot = -1;
+        c.seat = c.hostSeat;
+        c.hostSeat = null;
+        c.eatMax = C.EAT_MIN + (C.EAT_MAX - C.EAT_MIN) * (((c.id * 37) % 11) / 10);   // no rng draw: the day's rolls stay as they were
+        c.eat = 0;
+        c.mode = 'toSeat';
+        setRoute(c, path);
+        emit('seat_taken', { id: c.id, seat: c.seat, buffet: true });
+        return;
+      }
+    }
     if (c.togo) {
       t.togo += 1;
       if (!booked) { if (quick) t.togoQuick += 1; else t.ok += 1; }
@@ -4332,7 +4555,7 @@ function createSim(saved, seed) {
     const cands = state.customers.filter((c) => awaitsPlate(c) && !c.togo && c.seat && c.want === h.meat)
       .sort((a, b) => a.paidAt - b.paidAt || a.id - b.id);
     for (const c of cands) {
-      const s = SEAT_BY_ID[c.seat];
+      const s = seatRec(c.seat);
       if (tx === s.x && (ty === s.y || ty === s.y + 1 || ty === s.y - 1)) return c;
     }
     return null;
@@ -4345,11 +4568,11 @@ function createSim(saved, seed) {
     const h = p.carrying;
     if (h === null || h.kind !== 'plates' || h.times.length === 0) return false;
     const fits = (o) => o && awaitsPlate(o) && !o.togo && o.seat && o.want === h.meat
-      && Math.abs(p.x - SEAT_BY_ID[o.seat].x) + Math.abs(p.y - SEAT_BY_ID[o.seat].y) === 1;
+      && Math.abs(p.x - seatRec(o.seat).x) + Math.abs(p.y - seatRec(o.seat).y) === 1;
     let c = state.customers.find((o) => o.id === id) || null;
     if (!fits(c)) c = state.customers.find(fits) || null;
     if (c === null) { emit('blocked'); return false; }
-    const s = SEAT_BY_ID[c.seat];
+    const s = seatRec(c.seat);
     p.face = faceToward(p.x, p.y, s.x, s.y);
     const at = h.times.shift();
     if (h.times.length === 0) p.carrying = null;
@@ -4414,6 +4637,8 @@ function createSim(saved, seed) {
       emit('seat_taken', { id: c.id, seat: id });
       return;
     }
+    const hs = pickHostSeat(c);
+    if (hs) { state.seats[hs.id] = c.id; c.hostSeat = hs.id; }
     const used = new Set(state.customers.filter((o) => o !== c && o.mode === 'togo').map((o) => o.spot));
     let k = 0;
     while (k < MAP.togo.length - 1 && used.has(k)) k += 1;
@@ -5245,7 +5470,7 @@ function createSim(saved, seed) {
             c.mode = 'waiting';
           }
         } else if (c.mode === 'toSeat') {
-          const s = SEAT_BY_ID[c.seat];
+          const s = seatRec(c.seat);
           if (s && c.x === s.x && c.y === s.y) {
             // v3.7: they sit and wait for the plate; one delivered on the way starts the meal.
             c.mode = c.fed ? 'eating' : 'seated';
@@ -5288,7 +5513,7 @@ function createSim(saved, seed) {
     state.today.seated += 1;
     state.stats.seated += 1;
     c.bonusPaid = true;
-    const s = SEAT_BY_ID[c.seat];
+    const s = seatRec(c.seat);
     emit('seat_done', { id: c.id, seat: c.seat, bonus, x: s.x * TILE, y: s.y * TILE, atClose: atClose === true });
   }
 
@@ -5586,11 +5811,11 @@ function createSim(saved, seed) {
       b.t = 0;
       const h = b.carrying;
       const fits = (o) => o && awaitsPlate(o) && !o.togo && o.seat && h && o.want === h.meat
-        && Math.abs(b.x - SEAT_BY_ID[o.seat].x) + Math.abs(b.y - SEAT_BY_ID[o.seat].y) === 1;
+        && Math.abs(b.x - seatRec(o.seat).x) + Math.abs(b.y - seatRec(o.seat).y) === 1;
       let c = state.customers.find((o) => o.id === b.deliver) || null;
       if (!fits(c)) c = state.customers.find(fits) || null;
       if (c !== null) {
-        const s = SEAT_BY_ID[c.seat];
+        const s = seatRec(c.seat);
         b.face = faceToward(b.x, b.y, s.x, s.y);
         const at = h.times.shift();
         b.carrying = null;
@@ -5627,7 +5852,7 @@ function createSim(saved, seed) {
   }
   // Route the RUN card (holding the plate) to the tile beside the guest's seat.
   function runTo(b, c) {
-    const path = carrierRoute(b, nextToSeat(SEAT_BY_ID[c.seat]));
+    const path = carrierRoute(b, nextToSeat(seatRec(c.seat)));
     if (path === null) {
       setDown(b.carrying, true);
       if (b.carrying.times.length === 0) b.carrying = null;
@@ -6271,7 +6496,8 @@ function createSim(saved, seed) {
         if (p.queued) {
           const q = p.queued;
           p.queued = null;
-          walkTo(q.tx, q.ty);
+          if (q.guest !== undefined) walkToGuest(q.guest);
+          else walkTo(q.tx, q.ty);
         }
       }
       return;
@@ -6435,6 +6661,7 @@ function createSim(saved, seed) {
   }
 
   function tick() {
+    refreshHost();
     if (state.phase !== 'service' || state.paused) return;
     applyLayout(state.layout, pitTier(state.gear));
     tickStages();
@@ -6527,6 +6754,7 @@ function createSim(saved, seed) {
     }
     if (state.phase !== 'service' || state.paused) return;
     applyLayout(state.layout, pitTier(state.gear));
+    refreshHost();
     let d = Number(dt);
     if (!Number.isFinite(d) || d < 0) d = 0;
     if (d > C.MAX_FRAME_DT) d = C.MAX_FRAME_DT;
@@ -7005,7 +7233,7 @@ function createSim(saved, seed) {
     while (spots.length < want) spots.push(null);
     while (spots.length > want) spots.pop();
     const p = state.player;
-    if (!walkable(p.x, p.y)) {
+    if (!standable(p.x, p.y)) {
       const t = nearestWalkableTo(p.x, p.y);
       if (t) {
         p.x = t.x; p.y = t.y; p.px = t.x * TILE; p.py = t.y * TILE;
@@ -9596,7 +9824,7 @@ function createSim(saved, seed) {
   const sim = {
     state,
     seed: seedUsed,
-    step, tick, walkTo, move, interact, verbAt, holding, walkable, reach,
+    step, tick, walkTo, walkToGuest, move, interact, verbAt, holding, walkable, standable, hostSeating, reach,
     selectMeat, cycleMeat, buy, canBuy, hire, sell, cartTotal, canOpen, openGate,
     continueFromTill, continueFromBroke, dismissComingNext, goal, setPaused, reset,
     drainEvents, serialize, rng, expectedCrowd,
