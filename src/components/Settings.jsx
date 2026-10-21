@@ -10,6 +10,7 @@ import { sendProblemReport, nativeAppVersion } from '../diagnostics.js';
 import Avatar from './Avatar.jsx';
 import EmailSignInBox from './EmailSignInBox.jsx';
 import AboutScreen from './AboutScreen.jsx';
+import DeleteAccountScreen from './DeleteAccountScreen.jsx';
 import { useConsent, openPrivacyPolicy, CONSENT_PURPOSE } from './ConsentCard.jsx';
 import { setConsent } from '../consent.js';
 
@@ -33,6 +34,7 @@ export default function Settings() {
   } = useAppContext();
 
   const [showAbout, setShowAbout] = useState(false);
+  const [showDelete, setShowDelete] = useState(false);
   const importRef = useRef(null);
   const consentRec = useConsent();
 
@@ -262,7 +264,12 @@ export default function Settings() {
           }} style={{ ...sBtn(false, true), width: '100%', textAlign: 'left' }}>Share BBQ Scorecard</button>
           <button onClick={() => openUrl('privacy.html')} style={{ ...sBtn(false, true), width: '100%', textAlign: 'left' }}>Privacy Policy</button>
           <button onClick={() => openUrl('changelog.html')} style={{ ...sBtn(false, true), width: '100%', textAlign: 'left' }}>Changelog</button>
-          <button onClick={() => openUrl('delete-account.html')} style={{ ...sBtn(false, true), width: '100%', textAlign: 'left', color: '#f87171', borderColor: '#f87171' }}>Delete Account</button>
+          {/* Signed in: delete right here (Apple 5.1.1(v)). Signed out there
+              is no account on this device to delete, so the web page with
+              the email route stays as the fallback. */}
+          {fbUser
+            ? <button onClick={() => setShowDelete(true)} style={{ ...sBtn(false, true), width: '100%', textAlign: 'left', color: '#f87171', borderColor: '#f87171' }}>Delete Account</button>
+            : <button onClick={() => openUrl('delete-account.html')} style={{ ...sBtn(false, true), width: '100%', textAlign: 'left', color: '#f87171', borderColor: '#f87171' }}>Delete Account</button>}
           {fbUser && (
             <button onClick={async () => {
               if (!window.confirm('Sign out of BBQ Scorecard? Your local reviews stay on this device.')) return;
@@ -279,6 +286,7 @@ export default function Settings() {
       )}
 
       {showAbout && <AboutScreen onClose={() => setShowAbout(false)} />}
+      {showDelete && <DeleteAccountScreen onClose={() => setShowDelete(false)} />}
     </div>
   );
 }
