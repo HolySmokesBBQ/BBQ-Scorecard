@@ -10059,6 +10059,59 @@ async function browserChecks() {
     try { return await screenshot(name + (DESKTOP_MODE ? '-desktop' : '') + '.png'); }
     finally { if (DESKTOP_MODE) { await emulate(RUN_METRICS); await sleep(TIMEOUT_MS.resize); await advance(0); } }
   };
+
+  // v4.6 (Joel 2026-10-21, "The only thing I can move to the back row of the pit is the chopping
+  // block"): a station is worked from any free side. Real taps in Arrange yard put the cooler and
+  // the charcoal pile on the back row (x 1, along the back fence) and the trash under the counter in
+  // the counter row (x 4), Done, then a cook where the pitmaster taps each one and the PIT card on
+  // kettle 2 takes meat from the moved cooler and a bag from the moved pile.
+  await step('v4.6 arrange 5: real taps put the cooler and the charcoal pile on the back row and the trash in the counter row, Done, then the pitmaster and the PIT card work them', async () => {
+    const pitC = pageCard(2, 'Dee', 'pit', [3.5, 3.5]);
+    await reload(ladFixture({ kettle2: true, cabinet: true }, { crew: [pageCard(1, 'Bo', 'run', [3, 3]), pitC] }));
+    assert((await loop()) === LOOP.week, 'the fixture loaded as ' + describe(await loop()));
+    if (DESKTOP_MODE) { await emulate(DESK_J, false); await sleep(TIMEOUT_MS.resize); await advance(0); }
+    const moves = [['cooler', [4, 6], [1, 4]], ['pile', [4, 8], [1, 8]], ['trash', [2, 2], [4, 4]]];
+    try {
+      await enterArrange();
+      for (const [id, from, to] of moves) {
+        await canvasTap(from[0], from[1]); await advance(0);
+        let a = await AR();
+        assert(a.lift === id, 'tap on the ' + id + ' did not lift it: ' + describe(a));
+        await canvasTap(to[0], to[1]); await advance(0);
+        a = await AR();
+        const at = await ev('MAP.station(' + JSON.stringify(id) + ').tiles[0]');
+        assert(a.lift === null && at.x === to[0] && at.y === to[1], id + ' drop at ' + to + ' refused: ' + describe([a, at]));
+      }
+      await screenshot(DESKTOP_MODE ? 'arrange-backrow-desktop.png' : 'arrange-backrow.png');
+      await click('arr-done'); await advance(0);
+    } finally {
+      if (DESKTOP_MODE) { await emulate(RUN_METRICS); await sleep(TIMEOUT_MS.resize); await advance(0); }
+    }
+    const saved = await ev('({ lay: S().layout, ok: PitSim.checkLayout(S().layout, S().gear, S().decor).ok, arr: g.arrange() })');
+    assert(saved.ok && saved.arr === null && ['cooler', 'pile', 'trash'].every((k) => Array.isArray(saved.lay[k])), 'Done did not save the yard: ' + describe(saved));
+    assert(await toService(), 'no service day');
+    // The PIT card's trips, seen tick by tick: where it stood when it took meat and a bag.
+    await ev('(globalThis.__arr5 = {}, true)');
+    const seenExpr = '(() => { const t = S().pitCard; if (t && t.task === "act" && t.next === null && t.path.length === 0 && (t.dest === "cooler" || t.dest === "pile") && !globalThis.__arr5[t.dest]) globalThis.__arr5[t.dest] = [t.x, t.y, t.face]; return !!(globalThis.__arr5.cooler && globalThis.__arr5.pile); })()';
+    const worked = [];
+    for (const [id, , to] of moves) {
+      await canvasTap(to[0], to[1]);
+      await settle();
+      const p = await ev('({ x: S().player.x, y: S().player.y, face: S().player.face, reach: sim.reach() })');
+      assert(p.reach === id && Math.abs(p.x - to[0]) + Math.abs(p.y - to[1]) === 1, 'the pitmaster did not reach the moved ' + id + ': ' + describe(p));
+      worked.push(id + ' from (' + p.x + ',' + p.y + ') ' + p.face);
+      await ev(seenExpr);
+    }
+    const pit = await until(seenExpr, 90);
+    const seen = await ev('globalThis.__arr5');
+    const adj = (k, t) => seen[k] && Math.abs(seen[k][0] - t[0]) + Math.abs(seen[k][1] - t[1]) === 1;
+    assert(pit.ok && adj('cooler', [1, 4]) && adj('pile', [1, 8]), 'the PIT card did not work the moved cooler and pile: ' + describe([pit, seen, await ev('S().pitCard && { task: S().pitCard.task, dest: S().pitCard.dest, at: [S().pitCard.x, S().pitCard.y] }')]));
+    const stand = await ev('[S().player, S().buddy, S().pitCard].filter(Boolean).filter((m) => MAP.stations.some((st) => st.tiles.some((t) => t.x === m.x && t.y === m.y))).length');
+    assert(stand === 0, stand + ' mover(s) on a station tile');
+    await ladShot('arrange-backrow-cook');
+    return 'cooler (4,6) to (1,4), pile (4,8) to (1,8), trash (2,2) to (4,4) by taps; you worked ' + worked.join(', ') + '; the PIT card took meat from (' + seen.cooler.slice(0, 2) + ') and a bag from (' + seen.pile.slice(0, 2) + ')';
+  });
+
   const mainCk = () => ev('({ fire: S().stations.kettle1.fire, n: S().stations.kettle1.pieces.length, slots: S().stations.kettle1.slots, spr: MAP.station("kettle1").sprite, tiles: MAP.station("kettle1").tiles.map((t) => [t.x, t.y]), wood: S().wood, splits: S().today ? S().today.splits : null, hold: S().player.carrying })');
   // The near view at a long cooker takes in the whole cooker (camFollow; the harness has no frames).
   const longView = async () => {
@@ -10183,7 +10236,8 @@ async function browserChecks() {
       assert(a.lift === null && sameJSON(a.draft, { kettle1: [0, -2] }), 'the trailer drop ' + describe(a));
       await click('arr-done'); await advance(0);
       const s = await ev('({ lay: S().layout, tiles: MAP.station("kettle1").tiles.map((t) => [t.x, t.y]), ls: JSON.parse(localStorage.getItem(' + JSON.stringify(SAVE_KEY) + ')).layout })');
-      assert(sameJSON(s.lay, { kettle1: [0, -2] }) && sameJSON(s.tiles, [[1, 6], [2, 6]]) && sameJSON(s.ls, s.lay), 'Done ' + describe(s));
+      // v4.6: the unbought drum's "+" spot under (2,6) now finds a free spot and steps aside.
+      assert(sameJSON(s.lay.kettle1, [0, -2]) && Object.keys(s.lay).every((k) => k === 'kettle1' || k === 'drum') && sameJSON(s.tiles, [[1, 6], [2, 6]]) && sameJSON(s.ls, s.lay), 'Done ' + describe(s));
       return 'lifted from (2,8), "Cookers stay on the patio" refused on the lawn, set on (1,6) (2,6), saved';
     } finally {
       if (DESKTOP_MODE) { await emulate(RUN_METRICS); await sleep(TIMEOUT_MS.resize); await advance(0); }
@@ -10194,7 +10248,8 @@ async function browserChecks() {
     const m = await ev('(() => { const V = PitSim.validateSave, o = sim.serialize(); const g12 = { kettle2: true, cooler: true, bigtable: false, tray: false, canopy: false, drum: true }; const a = V(Object.assign({}, o, { v: 12, gear: g12, layout: { cooler: [0, -2] } })); const bad = V(Object.assign({}, o, { gear: Object.assign({}, o.gear, { cabinet: false, offset: true, trailer: true }) })); const keep = V(Object.assign({}, o, { gear: Object.assign({}, o.gear, { cabinet: true, offset: true, trailer: false }), layout: { kettle1: [0, -2] } })); return { v: a.v, g: a.gear, lay: a.layout, bad: bad.gear, keep: keep.layout }; })()');
     assert(m.v === SAVE_V && m.g.kettle2 === true && m.g.drum === true && m.g.cooler === true && m.g.cabinet === false && m.g.offset === false && m.g.trailer === false && sameJSON(m.lay, { cooler: [0, -2] }),
       'v12 to v13 ' + describe(m));
-    assert(m.bad.offset === false && m.bad.trailer === false && sameJSON(m.keep, { kettle1: [0, -2] }), 'ladder clamps ' + describe(m));
+    // v4.6: the unbought drum's "+" spot may step aside from the stick burner.
+    assert(m.bad.offset === false && m.bad.trailer === false && sameJSON(m.keep.kettle1, [0, -2]) && Object.keys(m.keep).every((k) => k === 'kettle1' || k === 'drum'), 'ladder clamps ' + describe(m));
     const f = ladFixture({ kettle2: true, drum: true });
     f.v = 12;
     delete f.gear.cabinet; delete f.gear.offset; delete f.gear.trailer;

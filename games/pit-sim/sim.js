@@ -1125,14 +1125,43 @@ function offOf(lay, uid) { const o = lay[uid]; return o ? o : [0, 0]; }
 function shXY(o, d) { return (d[0] || d[1]) ? Object.freeze(Object.assign({}, o, { x: o.x + d[0], y: o.y + d[1] })) : o; }
 function shPx(o, d) { return (d[0] || d[1]) ? Object.freeze(Object.assign({}, o, { x: o.x + d[0] * TILE, y: o.y + d[1] * TILE })) : o; }
 
+// v4.6 (Joel 2026-10-21, "The only thing I can move to the back row of the pit is the chopping
+// block"): a station is worked from any patio tile beside its footprint, from whichever side. `use`
+// lists the station's own default tiles first (same order, so use[0] and use[1] keep their v4.5
+// meaning when they still stand free), then every other patio tile 4-adjacent to the footprint, each
+// facing the footprint tile it touches and carrying that tile's gear. That list is `work`; `use`
+// stays the station's own default tiles (shifted). Readers of `work` filter by ownership and by what
+// stands there now (activeUseTiles in the sim, the reach check in checkLayout).
+const FACE_BACK = Object.freeze({ up: 'down', down: 'up', left: 'right', right: 'left' });
+function flexUse(tiles, declared) {
+  const out = [], at = {};
+  for (const u of declared) { const k = u.x + ',' + u.y; if (!at[k]) { at[k] = true; out.push(u); } }
+  const own = (x, y) => tiles.some((t) => t.x === x && t.y === y);
+  const extra = {};
+  for (const t of tiles) {
+    for (const d of DIR_ORDER) {
+      const x = t.x + DIRS[d].dx, y = t.y + DIRS[d].dy;
+      if (own(x, y) || groundAt(x, y) !== T.PAVER) continue;
+      const k = x + ',' + y;
+      if (at[k]) continue;
+      const g = t.gear || null;
+      if (extra[k]) { if (extra[k].gear && !g) extra[k] = use(x, y, extra[k].face); continue; }
+      extra[k] = use(x, y, FACE_BACK[d], g);
+    }
+  }
+  for (const k of Object.keys(extra)) out.push(extra[k]);
+  return list(out);
+}
+
 // The shifted copies of every positioned record for a clean layout.
 function buildGeom(lay, tier) {
   const stations = list(stationsFor(tier).map((st) => {
     const d = offOf(lay, UNIT_OF.station[st.id]);
-    if (!d[0] && !d[1]) return st;
     const o = Object.assign({}, st);
-    o.tiles = list(st.tiles.map((t) => shXY(t, d)));
-    o.use = list(st.use.map((u) => shXY(u, d)));
+    o.tiles = (d[0] || d[1]) ? list(st.tiles.map((t) => shXY(t, d))) : st.tiles;
+    o.use = (d[0] || d[1]) ? list(st.use.map((u) => shXY(u, d))) : st.use;
+    o.work = flexUse(o.tiles, o.use);
+    if (!d[0] && !d[1]) return Object.freeze(o);
     o.draw = shPx(st.draw, d);
     o.sortRow = st.sortRow + d[1];
     if (st.spotPx) o.spotPx = list(st.spotPx.map((q) => shPx(q, d)));
@@ -1163,16 +1192,34 @@ function buildGeom(lay, tier) {
     forSale[k] = list(FORSALE0[k].map((t) => shXY(t, d)));
   }
   const reg = byId.register, table = byId.table, board = byId.board;
+  // v4.6: the crew posts sit on a free tile of their station: the default one while it stands free
+  // and joins the patio, else the first free one that does (one post a tile where it can).
+  const footAll = new Uint8Array(MAP_W * GRID_H);
+  for (const st of stations) for (const t of st.tiles) if (t.x >= 0 && t.x < MAP_W && t.y >= 0 && t.y < GRID_H) footAll[t.y * MAP_W + t.x] = 1;
+  for (const p of props) for (const b of p.blocks) if (b.x >= 0 && b.x < MAP_W && b.y >= 0 && b.y < GRID_H) footAll[b.y * MAP_W + b.x] = 1;
+  const free = (x, y) => groundAt(x, y) === T.PAVER && !footAll[y * MAP_W + x];
+  const taken = [];
+  const isTaken = (u) => taken.some((q) => q.x === u.x && q.y === u.y);
+  let reachG = null;
+  const fine = (u) => u && free(u.x, u.y) && (!reachG || reachG[u.y * MAP_W + u.x] === 1);
+  const post = (st, idx, face) => {
+    const d = st.use[idx];
+    const pick = fine(d) && !isTaken(d) ? d : (st.work.find((u) => fine(u) && !isTaken(u)) || st.work.find(fine) || d || st.work[0]);
+    taken.push(pick);
+    return Object.freeze({ x: pick.x, y: pick.y, face: pick === d ? face : pick.face });
+  };
+  const spawn = post(reg, 1, 'right');
+  reachG = gridBfs([spawn], free);
+  const tillIdle = post(reg, 0, 'right');
+  const buddyIdle = post(table, 1, 'down');
+  const prepUse = post(board, 1, 'down');
   return {
     stations, byId, props, decor, seats,
     queue: list(QUEUE0.map((q) => shXY(q, dc))),
     togo: list(TOGO0.map((q) => shXY(q, dc))),
     canopy: Object.freeze({ x: CANOPY0.x + dc[0] * TILE, y: CANOPY0.y + dc[1] * TILE, tiles: list(CANOPY0.tiles.map((t) => shXY(t, dc))) }),
     forSale: Object.freeze(forSale),
-    spawn: Object.freeze({ x: reg.use[1].x, y: reg.use[1].y, face: 'right' }),
-    buddyIdle: Object.freeze({ x: table.use[1].x, y: table.use[1].y, face: 'down' }),
-    tillIdle: Object.freeze({ x: reg.use[0].x, y: reg.use[0].y, face: 'right' }),
-    prepUse: Object.freeze({ x: board.use[1].x, y: board.use[1].y, face: 'down' })
+    spawn, buddyIdle, tillIdle, prepUse
   };
 }
 
@@ -1183,7 +1230,7 @@ function unitParts(geo, u, gear, decor) {
     const st = geo.byId[sid];
     if (!tileOwned(st, gear)) continue;
     for (const t of st.tiles) if (tileOwned(t, gear)) foot.push(t);
-    for (const t of st.use) if (tileOwned(t, gear)) use.push({ x: t.x, y: t.y, st: sid });
+    for (const t of st.work) if (tileOwned(t, gear)) use.push({ x: t.x, y: t.y, st: sid });
   }
   for (const pid of u.props) { const p = geo.props.find((q) => q.id === pid); for (const b of p.blocks) foot.push(b); }
   if (u.decor) { const q = geo.decor.find((w) => w.id === u.decor); if (decor[u.decor] === true) for (const t of q.tiles) foot.push(t); }
@@ -1265,14 +1312,18 @@ function checkLayout(layIn, gear, decor, focus) {
   const sp = geo.spawn;
   const pit = gridBfs([sp], pitPass);
   const unitOfStation = (sid) => UNIT_OF.station[sid];
-  // The pitmaster and the crew: every use tile of every owned station, from each other.
+  // The pitmaster and the crew: every owned station keeps at least one free tile beside it that the
+  // patio reaches (v4.6: from any side), and every crew post stands on the reached patio.
+  const workFail = (sid) => fail(unitOfStation(sid) === focus ? 'No room to work the ' + stationNoun(sid, tier) : 'Blocks the path to the ' + stationNoun(sid, tier));
   for (const u of order) {
-    for (const t of parts[u.id].use) {
-      if (pit[t.y * MAP_W + t.x]) continue;
-      const own = unitOfStation(t.st) === focus;
-      return fail(own ? 'No room to work the ' + stationNoun(t.st, tier) : 'Blocks the path to the ' + stationNoun(t.st, tier));
+    for (const sid of u.stations) {
+      if (!tileOwned(geo.byId[sid], gear)) continue;
+      if (!parts[u.id].use.some((t) => t.st === sid && pit[t.y * MAP_W + t.x])) return workFail(sid);
     }
   }
+  if (!pit[geo.spawn.y * MAP_W + geo.spawn.x] || !pit[geo.tillIdle.y * MAP_W + geo.tillIdle.x]) return workFail('register');
+  if (!pit[geo.buddyIdle.y * MAP_W + geo.buddyIdle.x]) return workFail('table');
+  if (!pit[geo.prepUse.y * MAP_W + geo.prepUse.x]) return workFail('board');
   // Guests from the gate.
   const custPass = (x, y) => {
     if (x === CUST_SPAWN.x && y === CUST_SPAWN.y) return true;
@@ -1371,7 +1422,7 @@ function applyLayout(layIn, tier) {
   PROP_BLOCKED = pb;
   // Idle posts: the default tile, else the nearest free patio tile the pitmaster can reach.
   const foot = new Uint8Array(MAP_W * GRID_H), use = new Uint8Array(MAP_W * GRID_H);
-  for (const st of STATIONS) { for (const t of st.tiles) foot[t.y * MAP_W + t.x] = 1; for (const t of st.use) use[t.y * MAP_W + t.x] = 1; }
+  for (const st of STATIONS) { for (const t of st.tiles) foot[t.y * MAP_W + t.x] = 1; for (const t of st.work) use[t.y * MAP_W + t.x] = 1; }
   const free = (x, y) => groundAt(x, y) === T.PAVER && !foot[y * MAP_W + x] && pb[y * MAP_W + x] !== 1;
   const reach = gridBfs([GEO.spawn], free);
   const post = (d) => {
@@ -3699,8 +3750,28 @@ function createSim(saved, seed) {
     return null;
   }
 
+  // v4.6: the owned tiles beside the station that stand free now (any side; see flexUse).
   function activeUseTiles(st) {
-    return st.use.filter((u) => tileOwned(u, state.gear));
+    return st.work.filter((u) => tileOwned(u, state.gear) && walkable(u.x, u.y));
+  }
+
+  // v4.6: the use tile of station `sid` a crew mover works from: `pref` (its default tile) while
+  // free, else the one it stands on, else the nearest by walk, skipping the tiles in `avoid` (another
+  // worker's post) when another tile is open. Never null while the station has a tile.
+  function crewUse(sid, m, pref, avoid) {
+    const st = STATION_BY_ID[sid];
+    const uses = activeUseTiles(st);
+    if (uses.length === 0) return pref || st.use[0];
+    const hit = (u, q) => q && u.x === q.x && u.y === q.y;
+    const open = uses.filter((u) => !(avoid || []).some((q) => hit(u, q)));
+    const pool = open.length ? open : uses;
+    if (pref) { const p = pool.find((u) => hit(u, pref)); if (p) return p; }
+    if (m && m.next === null) { const on = pool.find((u) => hit(u, m)); if (on) return on; }
+    if (m) {
+      const path = playerBfs(m.x, m.y, (x, y) => pool.some((u) => u.x === x && u.y === y));
+      if (path && path.length) { const e = path[path.length - 1]; const u = pool.find((q) => hit(q, e)); if (u) return u; }
+    }
+    return pool[0];
   }
 
   // Player, buddy and tender: ground PAVER, no fixed prop, no active station tile.
@@ -4659,7 +4730,7 @@ function createSim(saved, seed) {
   }
   function onRegisterUse(p) {
     if (p.next !== null) return false;
-    return STATION_BY_ID.register.use.some((u) => u.x === p.x && u.y === p.y);
+    return activeUseTiles(STATION_BY_ID.register).some((u) => u.x === p.x && u.y === p.y);
   }
   // Each tick: a booked guest at the front goes straight through; the pitmaster rings up the whole
   // line standing at the register with empty hands; the TILL card rings one every tillRing seconds.
@@ -5651,8 +5722,10 @@ function createSim(saved, seed) {
     if (!b) return;
     const speed = b.vals ? b.vals.runSpeed : C.NPC_TILES_PER_S;   // a mover without vals plays v2's 3 star numbers
     const handle = b.vals ? b.vals.runHandle : C.BUDDY_HANDLE;
-    const boardUse = STATION_BY_ID.board.use[0];    // the angle redo: (3,4) on the lane, facing left ((2,3) is the PREP card's)
-    const tableUse = STATION_BY_ID.table.use[1];    // (3,3) by default, facing right; v3.9: follows the counter
+    // The angle redo: (3,4) on the lane, facing left ((2,3) is the PREP card's), and (3,3) at the
+    // counter by default; v4.6: the nearest free tile when the default one is covered or gone.
+    const boardUse = crewUse('board', b, STATION_BY_ID.board.use[0], state.prep ? [MAP.prepUse] : null);
+    const tableUse = crewUse('table', b, STATION_BY_ID.table.use[1], null);
     const comp = compOn();
     if (b.task === 'idle' && comp) {
       // v3.3: the RUN card carries a finished box left on the board to the window.
@@ -5991,7 +6064,7 @@ function createSim(saved, seed) {
     const pr = state.prep;
     if (!pr) return;
     const board = state.stations.board;
-    const use = MAP.prepUse;
+    const use = crewUse('board', pr, MAP.prepUse, null);   // v4.6: its post, else the nearest free board tile
     const home = MAP.prepIdle;
     const speed = pr.vals ? pr.vals.prepPace : C.NPC_TILES_PER_S;
     const firstFits = () => board.waiting.length > 0 && board.slicing === null
@@ -6075,12 +6148,16 @@ function createSim(saved, seed) {
 
   function pitCooker() { return state.pitCard ? state.pitCard.cooker : null; }
 
-  // The pitmaster is on this cooker: walking to it, or standing at one of its use tiles.
+  // The pitmaster is on this cooker: walking to it, or standing at one of its own default use tiles,
+  // or (v4.6) at any other free tile beside it while facing it (a cooker has a tile on every free
+  // side now, so a pitmaster just passing one of those does not hold the PIT card).
   function playerAt(id) {
     const p = state.player;
     if (p.target && p.target.station === id) return true;
     if (p.next !== null) return false;
-    return activeUseTiles(STATION_BY_ID[id]).some((u) => u.x === p.x && u.y === p.y);
+    const st = STATION_BY_ID[id];
+    if (st.use.some((u) => tileOwned(u, state.gear) && u.x === p.x && u.y === p.y)) return true;
+    return activeUseTiles(st).some((u) => u.x === p.x && u.y === p.y && u.face === p.face);
   }
 
   // Plates of a meat past the cooler: on a grate, the board, the counter or in someone's hands.
