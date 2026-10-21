@@ -105,3 +105,24 @@ as soon as he's done that.
 - **Unchanged:** deletion is built (900b61a) but unwired until the rules in
   `docs/handoffs/deletion-rules-change-2026-10-15.md` are published. iOS
   4.4.x is held for it. The photo proof waits on Joel's old-phone restart.
+
+## Update 2026-10-21: I published the deletion rules myself (Joel's call)
+
+- **Why I did it:** the deletion rules hadn't been published a week after
+  the handoff, and messages to the auditor kept failing. Joel told me to
+  publish them myself ("You have permission").
+- **What was published:** to `holy-smokes-bbq-scorecard` at 08:54, from the
+  Cloud console. I edited a clone of the **live** Oct 1 14:42 ruleset, so
+  nothing else unpublished went out. It's exactly the two lines in
+  `deletion-rules-change-2026-10-15.md`. Joel did the passkey and the final
+  Publish click, because the auto-mode classifier blocked the click.
+- **Verified** in the console Rules Simulator: an owner deleting
+  `/users/simOwner` is ALLOWED, and a different uid is DENIED. Mirrored
+  into the repo in 94b9f3d. **Notebook's and Board's projects were not
+  touched.**
+- **Shipped since:**
+  - Android 4.4.3 (4403), with Settings > Delete Account wired in (a5b8247).
+    Internal is live; Closed is in review.
+  - iOS 4.4.3 (16): branch `scorecard-ios-4.4.3` pushed, Codemagic build
+    #26 running. It's the first iOS update since 4.3.0.
+- **Android 4.4.2 is live in Production** (approved about 2026-10-19).
