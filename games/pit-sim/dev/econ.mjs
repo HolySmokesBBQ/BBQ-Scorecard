@@ -466,7 +466,7 @@ function playSeason(seed, stName) {
     r.tips = t.tips + t.seatTips;
     r.pay = (t.deposit | 0) + (t.payRest | 0) + (t.menuBonus | 0) + (t.comp ? (t.comp.prize | 0) : 0);
     r.wages = t.wages; r.daily = typeof t.daily === 'number' ? t.daily : C.DAILY_COSTS;   // v4.4: a weekday Yard day's half
-    r.walkouts = t.walkouts; r.served = t.served; r.customers = t.customers; r.boxed = t.boxed | 0;
+    r.walkouts = t.walkouts; r.served = t.served; r.customers = t.customers; r.boxed = t.boxed | 0; r.self = t.selfServed | 0;   // v4.6 self-serve plates
     r.spoil = t.spoilCost | 0; r.waste = (t.wasteCost | 0) + (t.grateCost | 0) + (t.rawWaste | 0);
     r.entry = t.entry | 0;
     r.stars = t.stars;
@@ -613,8 +613,8 @@ if (flag('--pitpair')) {
       if (x.kind !== 'rest' && x.kind !== 'hub' && x.kind !== 'rescue') {
         daily += x.daily; cooks += 1;
         const k = x.kind;
-        const b = byKind[k] || (byKind[k] = { n: 0, net: 0, wages: 0, meat: 0, coal: 0, in: 0, taps: 0, served: 0 });
-        b.taps += x.taps || 0; b.served += x.served || 0;
+        const b = byKind[k] || (byKind[k] = { n: 0, net: 0, wages: 0, meat: 0, coal: 0, in: 0, taps: 0, served: 0, self: 0 });
+        b.taps += x.taps || 0; b.served += x.served || 0; b.self += x.self || 0;
         b.n += 1; b.wages += x.wages; b.meat += x.meatBuy; b.coal += x.coalBuy;
         b.in += x.revenue - x.refunds + x.tips + x.pay;
         b.net += x.revenue - x.refunds + x.tips + x.pay - x.wages - x.daily - x.meatBuy - x.coalBuy - (x.entry || 0);
@@ -628,7 +628,7 @@ if (flag('--pitpair')) {
     console.log('median gear owned: ' + med(runs.map((r) => r.gear.length)) + '; by season end: ' + ['drum', 'cabinet', 'offset', 'trailer'].filter((g) => GEAR_ORDER.includes(g)).map((g) => g + ' ' + runs.filter((r) => r.gear.includes(g)).length + '/' + n).join(', '));
     console.log('per seed season totals: ' + keys.map((k) => k + ' ' + Math.round(sum[k] / n)).join(', ') + ', daily ' + Math.round(daily / n));
     for (const [k, b] of Object.entries(byKind)) {
-      console.log('  ' + k.padEnd(11) + ' cooks ' + pad((b.n / n).toFixed(1), 4) + '/season  avg take ' + pad(Math.round(b.in / b.n), 4) + '  wages ' + pad(Math.round(b.wages / b.n), 3) + '  meat ' + pad(Math.round(b.meat / b.n), 3) + '  coal ' + pad(Math.round(b.coal / b.n), 3) + '  avg cash net ' + pad(Math.round(b.net / b.n), 4) + '  taps/plate ' + (b.served ? (b.taps / b.served).toFixed(2) : '-'));
+      console.log('  ' + k.padEnd(11) + ' cooks ' + pad((b.n / n).toFixed(1), 4) + '/season  avg take ' + pad(Math.round(b.in / b.n), 4) + '  wages ' + pad(Math.round(b.wages / b.n), 3) + '  meat ' + pad(Math.round(b.meat / b.n), 3) + '  coal ' + pad(Math.round(b.coal / b.n), 3) + '  avg cash net ' + pad(Math.round(b.net / b.n), 4) + '  taps/plate ' + (b.served ? (b.taps / b.served).toFixed(2) : '-') + (b.self ? '  self-serve ' + Math.round(100 * b.self / b.served) + '%' : ''));
     }
   }
   // v4.3: two strategies on the same seeds: the median of the per seed cash difference each week.

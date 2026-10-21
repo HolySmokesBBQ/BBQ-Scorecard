@@ -1318,6 +1318,9 @@ function exposeGame() {
     get railBoxes() { return railBoxes ? JSON.parse(JSON.stringify(railBoxes)) : null; },
     get badgeLog() { return badgeLog.slice(); },
     get orderBubbles() { return orderBubbles.slice(); },
+    get eatCues() { return JSON.parse(JSON.stringify(eatCues)); },   // v4.6: the eaters' steam puffs (world rp)
+    get registerBoxes() { return registerBoxes(); },
+    get counterBoxes() { return counterBoxes(); },
     // v4.5: the taps as the game resolved them, today's host seating, and a guest's body on screen
     // (client px: the middle of the box drawn last frame, f up from its foot, default 0.6).
     get tapLog() { return tapLog.slice(); },
@@ -8919,6 +8922,7 @@ function drawSorted(s) {
     push((mx + my) / TILE, 2, isoX(mx + 8, my + 8) * RS, function () { withShift(moverShift(mx, my), function () { drawMover(kind, m, s); }); keepPerson(null); });
   }
   const custs = s.customers.slice().sort(byId);
+  eatPlates.clear();
   for (let i = 0; i < custs.length; i++) {
     const c = custs[i];
     const seat = c.mode === 'eating' || c.mode === 'seated' ? seatOf(c) : null;   // v3.7: seated, waiting for the plate
@@ -8930,9 +8934,15 @@ function drawSorted(s) {
       const px = sx + 4, py = tb || seat.host ? sy + 17 : sy + 9;
       if (c.mode !== 'eating') { /* v3.7: no plate on the table yet */ } else if (seat.host) {
         const tq = tileRp(seat.table.x, seat.table.y);   // v4.5: on the host's folding table top
+        eatPlates.set(c.id, { X: tq[0], Y: tq[1] - 9, name: 'plate_' + c.want });
         push(seat.table.x + seat.table.y, 1.5, tq[0], function () { drawRp('plate_' + c.want, 0, tq[0], tq[1] - 9, px, py); });
-      } else if (tb) push(seat.x + seat.y + 1, 1.5, q[0], function () { drawRp('plate_' + c.want, 0, q[0] + 1, q[1] + 4, px, py); });
-      else push(seat.x + seat.y, 2.5, q[0], function () { drawRp('plate_' + c.want, 0, q[0] + 1, q[1] - 9, px, py); });
+      } else if (tb) {
+        eatPlates.set(c.id, { X: q[0] + 1, Y: q[1] + 4, name: 'plate_' + c.want });
+        push(seat.x + seat.y + 1, 1.5, q[0], function () { drawRp('plate_' + c.want, 0, q[0] + 1, q[1] + 4, px, py); });
+      } else {
+        eatPlates.set(c.id, { X: q[0] + 1, Y: q[1] - 9, name: 'plate_' + c.want });
+        push(seat.x + seat.y, 2.5, q[0], function () { drawRp('plate_' + c.want, 0, q[0] + 1, q[1] - 9, px, py); });
+      }
     } else {
       const cx = Math.round(c.px), cy = Math.round(c.py);
       push((cx + cy) / TILE, 2, isoX(cx + 8, cy + 8) * RS, function () { withShift(moverShift(cx, cy), function () { drawMover('cust', c, s); }); keepPerson(c.id); });
@@ -9334,8 +9344,58 @@ function smallOrderBubble(c, showMark, s) {
   orderBubbles.push({ id: c.id, mode: c.mode, rect: r, head: head, counters: counters, day: s.day, lead: lead, tip: lead ? { x: hx, y: hy - 2 } : { x: tailX + 1, y: Math.round(r.y1) + ORDER_BUB.tail } });
   return true;
 }
+// v4.6 (Joel 2026-10-21, "The eating icon blocks the serving table"): no bubble over an eater any
+// more. The eater bobs fork to mouth (drawSeated) and a tiny steam puff, 7 by 9 rp, rises off their
+// own plate on their own seat or table, drawn before every chip so chips, coins and tips stay on top.
+// A puff that would touch a counter or the register is not drawn. eatCues keeps this frame's puffs
+// for the harness (world rp).
+const EAT_PUFF = Object.freeze({ w: 7, h: 9 });
+const eatPlates = new Map();   // guest id -> their plate's art3 anchor this frame (world rp)
+let eatCues = [];
+function registerBoxes() {
+  const out = [];
+  for (let i = 0; i < MAP.stations.length; i++) {
+    const st = MAP.stations[i];
+    if (st.type !== 'register' || !owned(st)) continue;
+    const a = stationArt(st);
+    out.push(boxRp(a.name, 0, a.X, a.Y, a.flip));
+  }
+  return out;
+}
+function drawEatPuffs(custs) {
+  eatCues = [];
+  if (!A3) return;
+  const keepOff = counterBoxes().concat(registerBoxes());
+  for (let i = 0; i < custs.length; i++) {
+    const c = custs[i];
+    if (c.mode !== 'eating' || !(c.eat > 0)) continue;
+    const p = eatPlates.get(c.id);
+    if (!p) continue;
+    const pb = A3.has(p.name) ? boxRp(p.name, 0, p.X, p.Y) : { x0: p.X - 5, x1: p.X + 5, y0: p.Y - 5, y1: p.Y };
+    const cx = Math.round((pb.x0 + pb.x1) / 2), top = Math.round(pb.y0);
+    const r = { x0: cx - 3, x1: cx - 3 + EAT_PUFF.w, y0: top - EAT_PUFF.h, y1: top };
+    const hit = keepOff.some(function (b) { return overlaps(r, b); });
+    eatCues.push({ id: c.id, rect: r, plate: pb, drawn: !hit, keepOff: keepOff });
+    if (hit) continue;
+    // Two wisps that rise and fade, out of step with each other and with the next eater.
+    const ph = reduced ? 0.4 : ((tAnim / 1.2) + (c.id % 5) * 0.21) % 1;
+    onWorld(function () {
+      for (let k = 0; k < 2; k++) {
+        const f = (ph + k * 0.5) % 1;
+        const wy = r.y1 - 2 - Math.round(f * (EAT_PUFF.h - 3));
+        const wx = r.x0 + (k ? 4 : 1) + (f > 0.5 ? (k ? 1 : -1) : 0);
+        octx.globalAlpha = reduced ? 0.9 : 1 - f * 0.45;
+        octx.fillStyle = '#ffffff';
+        octx.fillRect(wx, wy, 2, 2);
+        if (f < 0.6) octx.fillRect(wx + (k ? -1 : 1), wy + 2, 1, 1);
+      }
+      octx.globalAlpha = 1;
+    });
+  }
+}
 function drawCues(s, custs) {
   orderBubbles = [];
+  drawEatPuffs(custs);
   // Bubbles: order icon or walk out mark, then food bubbles.
   for (let i = 0; i < custs.length; i++) {
     const c = custs[i];
@@ -9360,14 +9420,7 @@ function drawCues(s, custs) {
           if (!blink) D('icon_' + c.want, px + 18, py - 20);
         }
       });
-    } else if (c.mode === 'eating' && c.eat > 0 && !(seatC && seatC.host)) {   // v4.5: a host seat's plate shows on its table; no bubble over a whole lawn of diners
-      const seat = seatOf(c);
-      const sx = seat ? seat.x * TILE : px, sy = seat ? seat.y * TILE : Math.round(c.py);
-      bigBubble(sx, sy - 21, function () {
-        D('bubble', sx, sy - 21);
-        D('plate_' + c.want, sx + 4, sy - 18);
-      });
-    }
+    }   // v4.6: an eater gets no bubble (drawEatPuffs)
     octx.restore();
   }
   // "!" bubbles over cookers with a piece about to burn ([T 3.4]); one per cooker.

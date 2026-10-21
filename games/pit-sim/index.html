@@ -93,6 +93,14 @@
     /* position: relative makes each section the containing block of its .sr spans, so they scroll and clip with it (playtest round 1) */
     #panels > section { position: relative; width: 100%; max-width: 448px; max-height: 100%; overflow: auto; background: var(--u); border: 1px solid var(--h); border-radius: 6px; padding: 16px; }
     #panels > section + section { margin-top: 8px; }
+    /* v4.6 (Joel's phone, 2026-10-21): an open panel covered the header, so a tap on the speaker hit
+       the panel. While a panel is open on a phone the speaker sits fixed at the top right over the
+       panel layer, and the panel layer starts below the header row so nothing of the panel is under it. */
+    @media (max-width: 899px) {
+      #root:has(> #panels:not([hidden])) #mute { position: fixed; top: 0; right: max(16px, calc((100vw - 480px) / 2 + 16px)); z-index: 11; background: var(--k); }
+      #root:has(> #panels:not([hidden])) #hud { margin-right: 52px; }   /* the speaker's place in the row while it is fixed */
+      #panels { padding-top: 44px; }
+    }
     #clip-foot { position: sticky; bottom: 0; margin: 0 -16px -16px; padding: 8px 16px 16px; background: var(--u); border-top: 1px solid var(--h); }
     #panels h2 { font-size: 18px; margin-bottom: 8px; }
     #panels h2:focus { outline: none; }
@@ -554,7 +562,7 @@
     #panels #till button.big { width: 100%; min-height: 54px; }
     /* integration: on a phone the season screens and the report fill the screen edge to edge, as the mocks do */
     @media (max-width: 899px) {
-      #panels:has(> section.hub:not([hidden])), #panels:has(> section#till:not([hidden])) { padding: 0; overflow: hidden; }
+      #panels:has(> section.hub:not([hidden])), #panels:has(> section#till:not([hidden])) { padding: 44px 0 0; overflow: hidden; }   /* v4.6: the header row (the speaker) stays clear */
       #panels > section.hub:not([hidden]), #panels > section#till:not([hidden]) { min-height: 100%; margin-top: 0; border-width: 0; }
     }
     /* playtest round 3 (Q-7): the tutorial morning in the hub's look */

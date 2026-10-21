@@ -557,6 +557,9 @@ const C = Object.freeze({
   SPAWN_MAX: 13, SPAWN_MIN: 5, SPAWN_JITTER_LO: 0.85, SPAWN_JITTER_HI: 1.15,
   PATIENCE_BASE: 45, PATIENCE_SPREAD: 10, PATIENCE_WARN_FRAC: 0.2, PATIENCE_MID_FRAC: 0.5,
   ORDER_FROM_TABLE: 0.8, HOT_PLATE_SECONDS: 30, TIP_RATE: 0.25, HOT_PLATE_TIP: 1,
+  // v4.6 self-serve (Joel 2026-10-21): a seated guest whose plate has sat on the counter this long
+  // with nobody bringing it goes and gets it; their tip is SELF_TIP_K of the table service tip.
+  SELF_SERVE_WAIT: 2.5, SELF_TIP_K: 0.5,
   QUEUE_SPOTS: 3, QUEUE_SPOTS_BIG: 5, TABLE_SPOTS: 3, TABLE_SPOTS_BIG: 5,
   TABLE_STACK: 6, BOARD_STACKS: 5, BOARD_STACK: 14, TRAY_PLATES: 2,   // R-2: one stack per meat, two of the largest piece
   WALK_PAST_PAUSE: 0.8, LEAVE_TURN_SECONDS: 0.2,
@@ -3605,7 +3608,7 @@ function createSim(saved, seed) {
     return {
       revenue: 0, tips: 0, foodCost: 0, bags: 0, splits: 0, wages: 0, spoilCost: 0, wasteCost: 0, wastePlates: 0, wasteBurnt: 0, grateCost: 0,
       customers: 0, served: 0, walkouts: 0, past: 0, close: 0, happy: 0, ok: 0, burnt: 0,
-      seated: 0, togo: 0, togoQuick: 0, seatTips: 0,
+      seated: 0, togo: 0, togoQuick: 0, seatTips: 0, selfServed: 0,
       spoiled: zeroByMeat(), grateLeft: zeroByMeat(),
       repStart: state.rep || C.START_REP,
       wageNames: [],
@@ -4496,6 +4499,7 @@ function createSim(saved, seed) {
   // Leaving the yard: route to the spawn, optionally holding LEAVE_TURN_SECONDS first. An empty
   // route (no way out) removes the customer as soon as nothing holds them (moveCustomers).
   function sendOut(c, reason, mood, turnPause) {
+    c.fetch = null;
     if (c.hostSeat) { if (state.seats[c.hostSeat] === c.id) state.seats[c.hostSeat] = null; c.hostSeat = null; }
     c.mode = 'leaving';
     c.reason = reason;
@@ -4576,6 +4580,8 @@ function createSim(saved, seed) {
     const cr = c.rungBy === 'till' && state.cashier && state.cashier.vals ? state.cashier : null;
     if (cr) tip = Math.round(tip * (1 + cr.vals.tillTip));
     tip = Math.max(0, tip);
+    const self = by === 'self' && !!c.fetch;   // v4.6: a seated guest who took their own plate off the counter
+    if (self) { tip = Math.round(tip * C.SELF_TIP_K); t.selfServed = (t.selfServed | 0) + 1; }
     state.cash += tip;
     t.tips += tip;
     if (runRec) { runRec.plates += 1; runRec.tips += tip; }
@@ -4597,9 +4603,9 @@ function createSim(saved, seed) {
     c.runPlate = run !== null;
     c.mood = 'happy';
     c.hop = SERVED_HOP;
-    const s = c.seat ? seatRec(c.seat) : null;
+    const s = c.seat && !c.fetch ? seatRec(c.seat) : null;
     const x = s ? s.x * TILE + 8 : c.x * TILE + 8, y = s ? s.y * TILE : c.y * TILE;
-    emit('served', { id: c.id, meat: c.want, price: c.price, tip, quick, x, y, booked, by });
+    emit('served', { id: c.id, meat: c.want, price: c.price, tip, quick, x, y, booked, by, self });
     if (c.togo && c.hostSeat) {
       // v4.5: a booking's buffet guest walks the plate to their host seat and eats there.
       const hs = seatRec(c.hostSeat);
@@ -4626,7 +4632,78 @@ function createSim(saved, seed) {
       return;
     }
     if (!booked) { if (quick) t.happy += 1; else t.ok += 1; }
+    if (c.fetch) {
+      // v4.6: on the way to (or at) the counter: carry the plate back to the seat and eat there.
+      c.fetch = null;
+      c.selfServe = self;
+      const ss = seatRec(c.seat);
+      c.mode = 'toSeat';
+      setRoute(c, (ss && custRoute(c, ss.x, ss.y)) || []);
+      return;
+    }
     if (c.mode === 'seated') { c.mode = 'eating'; c.eat = c.eatMax; c.pause = 0; }
+  }
+
+  // ---- v4.6 self-serve (Joel 2026-10-21: "if food is on the table, people should be able to grab
+  // it and take it to their seat. But if there's no food then you should have to serve it.") ----
+  // On a yard day, once the tutorial is done, a seated paid guest whose meat sits on the counter and
+  // whom nobody is bringing a plate to waits SELF_SERVE_WAIT, then walks to a free to go spot (the
+  // buffet guests' route at a booking), takes one plate and carries it back to the seat. c.fetch holds
+  // the spot, c.incoming 'self' holds one plate of that meat: the RUN card, the pitmaster and the to go
+  // guests only take plates nobody claimed (freePlates), so no two guests get one plate.
+  function selfServeOn() {
+    const t = state.today;
+    return state.phase === 'service' && !!t && t.kind === 'yard' && !tutRunning() && !compOn();
+  }
+  function counterCount(meat) {
+    let n = 0;
+    for (const sp of state.stations.table.spots) if (sp && sp.meat === meat) n += sp.times.length;
+    return n;
+  }
+  function claimedPlates(meat) {
+    let n = 0;
+    for (const o of state.customers) if (o.fetch && o.incoming === 'self' && o.fed !== true && o.want === meat && o.mode === 'toSeat') n += 1;
+    return n;
+  }
+  function freePlates(meat) { return Math.max(0, counterCount(meat) - claimedPlates(meat)); }
+  function selfServe(dt) {
+    if (!selfServeOn()) return;
+    const sat = state.customers.filter((c) => c.mode === 'seated' && awaitsPlate(c) && !c.togo && c.seat && !c.hostSeat && c.incoming === null)
+      .sort((a, b) => a.paidAt - b.paidAt || a.id - b.id);
+    for (const c of sat) {
+      if (freePlates(c.want) <= 0) { c.selfT = 0; continue; }
+      c.selfT = (c.selfT || 0) + dt;
+      if (c.selfT < C.SELF_SERVE_WAIT) continue;
+      const used = new Set();
+      for (const o of state.customers) {
+        if (o === c) continue;
+        if (o.fetch) used.add(o.fetch.spot);
+        else if (o.mode === 'togo') used.add(o.spot);
+      }
+      let k = -1;
+      for (let i = 0; i < MAP.togo.length; i++) if (!used.has(i)) { k = i; break; }
+      if (k < 0) continue;
+      const sp = MAP.togo[k];
+      const path = custRoute(c, sp.x, sp.y);
+      if (path === null) continue;
+      c.selfT = 0;
+      c.fetch = { spot: k };
+      c.incoming = 'self';
+      c.mode = 'toSeat';
+      c.pause = 0;
+      setRoute(c, path);
+      emit('self_serve', { id: c.id, meat: c.want, spot: k });
+    }
+  }
+  // At the to go spot: take the claimed plate (it is served there), or, if it is gone, go back and wait.
+  function fetchArrive(c, sp) {
+    c.face = sp.face;
+    const at = takeCounterPlate(c.want, c.x * TILE + 8, c.y * TILE + 8);
+    if (at !== null) { deliverTo(c, at, 'self'); return; }
+    c.fetch = null;
+    c.incoming = null;
+    const s = seatRec(c.seat);
+    setRoute(c, (s && custRoute(c, s.x, s.y)) || []);
   }
 
   // Take one plate of `meat` off the counter (the spot nearest the guest's point): its slice time, or null.
@@ -4647,7 +4724,7 @@ function createSim(saved, seed) {
   function serveTogo() {
     const wait = state.customers.filter((c) => c.togo && awaitsPlate(c)).sort((a, b) => a.paidAt - b.paidAt || a.id - b.id);
     for (const c of wait) {
-      if (!tableStackOf(c.want)) continue;
+      if (freePlates(c.want) <= 0) continue;   // v4.6: never a plate a seated guest is walking to
       const at = takeCounterPlate(c.want, c.x * TILE + 8, c.y * TILE + 8);
       if (at !== null) deliverTo(c, at, 'self');
     }
@@ -4694,10 +4771,10 @@ function createSim(saved, seed) {
     const wants = state.customers.filter((c) => awaitsPlate(c) && !c.togo && c.incoming === null)
       .sort((a, b) => a.paidAt - b.paidAt || a.id - b.id);
     for (const c of wants) {
-      const i = spots.findIndex((sp) => sp && sp.meat === c.want && sp.times.length > 0);
+      const i = spots.findIndex((sp) => sp && sp.meat === c.want && sp.times.length > 0 && freePlates(sp.meat) > 0);
       if (i >= 0) return i;
     }
-    return spots.findIndex((sp) => sp && sp.times.length > 0);
+    return spots.findIndex((sp) => sp && sp.times.length > 0 && freePlates(sp.meat) > 0);
   }
 
   // ---- v3.6 the register (v3.7: the guest pays first) -------------------------------------------
@@ -5067,7 +5144,7 @@ function createSim(saved, seed) {
         const i = counterPick();
         if (i < 0) return noop(STRINGS.nothing, stationId);
         const sp = state.stations.table.spots[i];
-        const n = Math.min(state.gear.tray ? C.TRAY_PLATES : 1, sp.times.length);
+        const n = Math.min(state.gear.tray ? C.TRAY_PLATES : 1, sp.times.length, freePlates(sp.meat));   // v4.6: leave claimed plates
         return act('Take ' + MEATS[sp.meat].label + (n === 1 ? ' plate' : ' plates'), true, stationId, () => {
           const times = sp.times.splice(0, n);
           if (Array.isArray(sp.run)) sp.run.splice(0, n);
@@ -5575,6 +5652,9 @@ function createSim(saved, seed) {
             if (c.mode === 'arriving' || stepped) c.face = spot.face;
             c.mode = 'waiting';
           }
+        } else if (c.mode === 'toSeat' && c.fetch) {
+          const sp = MAP.togo[c.fetch.spot] || null;   // v4.6: a self-serve guest at the counter
+          if (sp && c.x === sp.x && c.y === sp.y) fetchArrive(c, sp);
         } else if (c.mode === 'toSeat') {
           const s = seatRec(c.seat);
           if (s && c.x === s.x && c.y === s.y) {
@@ -5671,6 +5751,7 @@ function createSim(saved, seed) {
   // Stage 5: serve checks, patience, walk-outs, then eating, the heart pause and standing up.
   function customersStage(dt) {
     serveTogo();
+    selfServe(dt);
     // [T 2.4] D: patience, wait and mood hold while the tutorial runs. v3.7: patience drains in
     // the line and again while a paid guest waits for the plate.
     // v3.8: in overtime the paid guests keep counting their wait but do not walk out.
@@ -5954,7 +6035,7 @@ function createSim(saved, seed) {
 
   // v3.7: the oldest paid seated guest nobody is bringing a plate to, whose meat is on the counter.
   function runJob() {
-    const wants = state.customers.filter((c) => awaitsPlate(c) && !c.togo && c.seat && c.incoming === null && tableStackOf(c.want))
+    const wants = state.customers.filter((c) => awaitsPlate(c) && !c.togo && c.seat && c.incoming === null && freePlates(c.want) > 0)
       .sort((a, b) => a.paidAt - b.paidAt || a.id - b.id);
     return wants[0] || null;
   }

@@ -6030,6 +6030,7 @@ async function launch() {
     '--disable-extensions',
     '--allow-file-access-from-files',
     '--hide-scrollbars',
+    '--mute-audio',   // the run turns music on; never play it through the user's speakers
     '--autoplay-policy=document-user-activation-required',   // v3.8: the real browser's gate, so the music click is a fair test
     'about:blank'
   ], { stdio: ['ignore', 'ignore', 'pipe'] });
@@ -10492,6 +10493,139 @@ async function browserChecks() {
       id += 1;
     }
     return 'overtime, ' + out.join('; ') + '; lawn tap at ' + lawn.x + ',' + lawn.y;
+  });
+
+  // v4.6 (Joel 2026-10-21 on his phone: "The eating icon blocks the serving table", "if food is on the
+  // table, people should be able to grab it and take it to their seat. But if there's no food then you
+  // should have to serve it"). On a yard day a seated guest whose plate waits on the counter walks to
+  // a to go spot, takes it and eats at their seat; one plate goes to one guest (the pitmaster's real
+  // tap on the counter leaves a claimed plate); with an empty counter the guest waits at the seat and
+  // the pitmaster delivers by a real tap. The eater has no bubble, only a tiny steam puff on their own
+  // plate that never touches a counter or the register. Phone frames: self-serve.png, eating.png.
+  await step('v4.6 self-serve: a seated guest takes a plate off the counter to their seat and eats; one plate one guest; no plate, the guest waits and the pitmaster delivers by real taps; the eating puff is small and off the counter and register; tutorial day only delivers', async () => {
+    await reload(ladFixture({}, { crew: [] }));
+    assert(await toService(), 'no service day');
+    await advance(5);
+    const day = await ev('({ kind: S().today.kind, tut: S().tutorial.done })');
+    assert(day.kind === 'yard' && day.tut === true, 'not a yard day after the tutorial ' + describe(day));
+    const seats = await ev('MAP.seats.filter((x) => ' + GLOBAL_NAME + '.tileOwned(x, S().gear, S().decor)).map((x) => ({ id: x.id, x: x.x, y: x.y, face: x.face }))');
+    assert(seats.length >= 2, 'fewer than two owned seats: ' + describe(seats));
+    const [sa, sb] = seats;
+    const A = 9601, B = 9602;
+    const guest = (id, sx, meat, late) => '{ x: ' + sx.x + ', y: ' + sx.y + ', px: ' + sx.x * 16 + ', py: ' + sx.y * 16 + ', face: "' + sx.face + '", next: null, path: [], walking: false, anim: 0, id: ' + id + ', body: ' + (id % 4) + ', want: "' + meat + '", patienceMax: 999, patience: 999, wait: 0, queueIndex: -1, mode: "seated", mood: "neutral", reason: null, pause: 0, hop: 0, seat: "' + sx.id + '", eat: 0, eatMax: 30, bonusPaid: false, booked: false, runPlate: false, paid: true, fed: false, togo: false, spot: -1, price: 6, paidAt: S().clock + ' + (late || 0) + ', rungBy: "you", incoming: null }';
+    // The yard cleared, A then B seated for brisket, one brisket plate on the counter, the pitmaster on the patio.
+    await run('const st = S(); st.customers = []; for (const k of Object.keys(st.seats)) st.seats[k] = null; st.spawnAt = Infinity; if (st.today.pending !== undefined) st.today.pending = 0; st.stations.table.spots = st.stations.table.spots.map(() => null); st.stations.board.stacks = []; st.seats["' + sa.id + '"] = ' + A + '; st.seats["' + sb.id + '"] = ' + B + '; st.customers.push(' + guest(A, sa, 'brisket') + '); st.customers.push(' + guest(B, sb, 'brisket', 0.5) + '); st.stations.table.spots[0] = { meat: "brisket", times: [st.clock] }; const p = st.player; p.x = 1; p.y = 4; p.px = 16; p.py = 64; p.path = []; p.next = null; p.target = null; p.walking = false; p.carrying = null; p.busy = null; g.advance(0); return true;');
+    const n0 = await eventCount();
+    const go = await until('S().customers.some((c) => c.id === ' + A + ' && c.fetch)', 8);
+    assert(go.ok, 'A did not get up for the plate on the counter ' + describe(await ev('S().customers.map((c) => [c.id, c.mode, c.incoming, c.selfT])')));
+    const both = await ev('S().customers.filter((c) => c.fetch).map((c) => c.id)');
+    assert(sameJSON(both, [A]), 'two guests went for one plate ' + describe(both));
+    // A real tap on the counter while A walks to it: the pitmaster leaves the claimed plate.
+    await canvasTap(TILE.table.x, TILE.table.y);
+    await settle();
+    const hand = await ev('S().player.carrying');
+    assert(hand === null, 'the pitmaster took the plate a guest is walking to ' + describe(hand));
+    // Mid walk back: the plate in A's hand (the phone frame of a guest self-serving).
+    const back = await until('S().customers.some((c) => c.id === ' + A + ' && c.fed === true && c.mode === "toSeat")', 20);
+    assert(back.ok, 'A never carried the plate back ' + describe(await ev('S().customers.map((c) => [c.id, c.mode, c.x, c.y, c.fed, c.fetch])')));
+    const atTogo = await ev('globalThis.__smoke.events.slice(' + n0 + ').filter((x) => x.type === "served" && x.id === ' + A + ')');
+    assert(atTogo.length === 1 && atTogo[0].by === 'self' && atTogo[0].self === true, 'A was not served by their own hand ' + describe(atTogo));
+    const togo = await ev('MAP.togo.map((q) => [q.x * 16 + 8, q.y * 16])');
+    assert(togo.some((q) => q[0] === atTogo[0].x && q[1] === atTogo[0].y), 'A took the plate away from the counter ' + describe({ at: [atTogo[0].x, atTogo[0].y], togo }));
+    const tipCap = await ev('(() => { const t = Math.round(' + GLOBAL_NAME + '.MEATS.brisket.price * C.TIP_RATE) + C.HOT_PLATE_TIP; return { table: t, self: Math.ceil(t * C.SELF_TIP_K) }; })()');
+    assert(atTogo[0].tip <= tipCap.self && atTogo[0].tip < tipCap.table, 'the self-serve tip is not the smaller one ' + describe({ tip: atTogo[0].tip, tipCap }));
+    if (!DESKTOP_MODE) { await ev('(g.camera.set("near"), g.camera.home(), true)'); await advance(0); await advance(0); }
+    const shot1 = await screenshot('self-serve' + (DESKTOP_MODE ? '-desktop' : '') + '.png');
+    const ate = await until('S().customers.some((c) => c.id === ' + A + ' && c.mode === "eating")', 20);
+    const aNow = await ev('S().customers.filter((c) => c.id === ' + A + ').map((c) => ({ x: c.x, y: c.y, seat: c.seat, mode: c.mode }))[0]');
+    assert(ate.ok && aNow.x === sa.x && aNow.y === sa.y && aNow.seat === sa.id, 'A is not eating at their seat ' + describe(aNow));
+    // B: one plate, one guest. Still seated, no plate, nobody bringing one, the counter bare.
+    await until('false', 4);
+    const bNow = await ev('(() => { const c = S().customers.find((o) => o.id === ' + B + '); return { mode: c.mode, fed: c.fed, fetch: c.fetch || null, incoming: c.incoming, counter: S().stations.table.spots.filter(Boolean).length, self: globalThis.__smoke.events.slice(' + n0 + ').filter((x) => x.type === "self_serve").map((x) => x.id) }; })()');
+    assert(bNow.mode === 'seated' && bNow.fed === false && bNow.fetch === null && bNow.incoming === null && bNow.counter === 0 && sameJSON(bNow.self, [A]), 'B with no plate on the counter ' + describe(bNow));
+    // No plate: the pitmaster brings B's by a real tap on B's seat.
+    await run('const p = S().player; p.x = 1; p.y = 4; p.px = 16; p.py = 64; p.path = []; p.next = null; p.target = null; p.walking = false; p.carrying = { kind: "plates", meat: "brisket", times: [S().clock] }; g.advance(0); return true;');
+    await canvasTap(sb.x, sb.y);
+    const fedB = await until('S().customers.some((c) => c.id === ' + B + ' && c.mode === "eating")', WAIT_S.walk);
+    const delB = await ev('globalThis.__smoke.events.slice(' + n0 + ').filter((e) => e.type === "delivered" && e.id === ' + B + ').map((e) => e.by)');
+    assert(fedB.ok && sameJSON(delB, ['you']), 'the pitmaster did not deliver to B ' + describe({ fed: fedB.ok, delB }));
+    // The eaters: no bubble, a puff 7 by 9 rp at most on their own plate, never on a counter or the register.
+    await advance(0);
+    const cues = await ev('g.eatCues');
+    const ids = cues.map((q) => q.id).sort();
+    const badCue = cues.filter((q) => (q.rect.x1 - q.rect.x0) > 8 || (q.rect.y1 - q.rect.y0) > 10 || (q.drawn && q.keepOff.some((b) => q.rect.x0 < b.x1 && b.x0 < q.rect.x1 && q.rect.y0 < b.y1 && b.y0 < q.rect.y1)) || q.rect.y1 > q.plate.y0 + 1 || q.rect.x1 < q.plate.x0 || q.rect.x0 > q.plate.x1);
+    const reg = await ev('g.registerBoxes'), ctr = await ev('g.counterBoxes');
+    assert(sameJSON(ids, [A, B]) && badCue.length === 0 && reg.length >= 1 && ctr.length >= 1, 'eating puffs ' + describe({ cues, reg, ctr }));
+    const eatChips = await ev('g.orderBubbles.filter((b) => b.mode === "eating").length');
+    assert(eatChips === 0, 'an eater has a chip ' + eatChips);
+    if (!DESKTOP_MODE) { await ev('(g.camera.set("near"), g.camera.home(), true)'); await advance(0); await advance(0); }
+    const shot2 = await screenshot('eating' + (DESKTOP_MODE ? '-desktop' : '') + '.png');
+    // Every owned seat with an eater at once: no puff that is drawn touches a counter or the register.
+    await run('const st = S(); const ms = MAP.seats.filter((x) => ' + GLOBAL_NAME + '.tileOwned(x, st.gear, st.decor)); st.customers = []; for (const k of Object.keys(st.seats)) st.seats[k] = null; let id = 9700; for (const sx of ms) { st.seats[sx.id] = id; st.customers.push({ x: sx.x, y: sx.y, px: sx.x * 16, py: sx.y * 16, face: sx.face, next: null, path: [], walking: false, anim: 0, id, body: id % 4, want: "sausage", patienceMax: 999, patience: 999, wait: 0, queueIndex: -1, mode: "eating", mood: "happy", reason: null, pause: 0, hop: 0, seat: sx.id, eat: 20, eatMax: 30, bonusPaid: false, booked: false, runPlate: false, paid: true, fed: true, togo: false, spot: -1, price: 6, paidAt: st.clock, rungBy: "you", incoming: null }); id += 1; } g.advance(0); return true;');
+    await advance(0);
+    const all = await ev('g.eatCues');
+    const allBad = all.filter((q) => q.drawn && q.keepOff.some((b) => q.rect.x0 < b.x1 && b.x0 < q.rect.x1 && q.rect.y0 < b.y1 && b.y0 < q.rect.y1));
+    const nSeats = await ev('MAP.seats.filter((x) => ' + GLOBAL_NAME + '.tileOwned(x, S().gear, S().decor)).length');
+    assert(all.length === nSeats && all.some((q) => q.drawn) && allBad.length === 0, 'puffs at every seat ' + describe({ all: all.map((q) => [q.id, q.drawn, q.rect]), nSeats }));
+    // Tutorial day: the guests waited for the pitmaster (no self-serve on day 1).
+    const d1 = eventsDay1.filter((e) => e.type === 'self_serve' || (e.type === EVENT.served && e.self === true)).length;
+    assert(d1 === 0, 'day 1 had ' + d1 + ' self-serve plates');
+    return 'A got up after ' + go.t + ' s, took the plate at ' + atTogo[0].x + ',' + atTogo[0].y + ' (tip ' + atTogo[0].tip + ' of ' + tipCap.table + '), ate at ' + sa.id + '; B waited, delivered by you; puffs ' + cues.map((q) => (q.rect.x1 - q.rect.x0) + 'x' + (q.rect.y1 - q.rect.y0)).join(',') + ', ' + all.filter((q) => q.drawn).length + ' of ' + all.length + ' seats drawn, none on a counter; frames ' + path.basename(shot1) + ', ' + path.basename(shot2);
+  });
+
+  // v4.6 (Joel's phone 2026-10-21): with a panel open the panel layer covered the header, so a tap
+  // on the speaker hit 'clipboard-h'. The speaker stays the top element at its centre over every
+  // panel this walk opens (the morning order clipboard last), off the panel's content, and one real
+  // tap there turns the music on (touch at 390 by 844 on the phone run, a mouse on desktop).
+  await step('v4.6 the speaker over an open panel: elementFromPoint at #mute is #mute, it covers no panel content, a real tap turns music on', async () => {
+    if (!DESKTOP_MODE) { await emulate({ width: 390, height: 844, deviceScaleFactor: 3, mobile: true }); await sleep(TIMEOUT_MS.resize); }
+    try {
+      await reload(ladFixture({}, { crew: [] }));
+      const probe = () => ev('(() => { const m = document.getElementById("mute"); const r = m.getBoundingClientRect(); const x = r.left + r.width / 2, y = r.top + r.height / 2; const top = document.elementFromPoint(x, y); const open = [...document.querySelectorAll("#panels > section")].filter((s) => !s.hidden && s.offsetParent); const cover = []; for (const s of open) { for (const k of s.querySelectorAll("h2, h3, p, button, .row, img, canvas")) { if (!k.offsetParent) continue; const b = k.getBoundingClientRect(); if (b.width && b.height && b.left < r.right && r.left < b.right && b.top < r.bottom && r.top < b.bottom) cover.push(k.id || k.tagName); } } return { x, y, w: r.width, h: r.height, top: top ? (top.closest("#mute") ? "mute" : (top.id || top.tagName)) : null, panels: open.map((s) => s.id), cover, pressed: m.getAttribute("aria-pressed") }; })()');
+      const seen = [];
+      let clip = null;
+      for (let i = 0; i < 12; i++) {
+        const p = await probe();
+        if (p.panels.length) {
+          seen.push(p.panels.join('+'));
+          assert(p.top === 'mute' && p.cover.length === 0 && p.w >= 40 && p.h >= 40, 'the speaker over ' + p.panels.join('+') + ': ' + describe(p));
+        }
+        const ids = await ev('[...document.querySelectorAll("#panels button")].filter((b) => b.offsetParent && !b.disabled).map((b) => b.id)');
+        const nx = ['plan-start', 'hub-start'].find((x) => ids.includes(x));
+        if (!nx) break;
+        await click(nx); await advance(0);
+      }
+      // The tutorial morning: the order clipboard Joel had open.
+      await reloadFresh();
+      await advance(0);
+      const cp = await probe();
+      if (cp.panels.includes('clipboard')) {
+        seen.push(cp.panels.join('+'));
+        assert(cp.top === 'mute' && cp.cover.length === 0 && cp.w >= 40 && cp.h >= 40, 'the speaker over the clipboard: ' + describe(cp));
+        clip = cp;
+        await screenshot('speaker-over-clipboard' + (DESKTOP_MODE ? '-desktop' : '') + '.png');
+      }
+      assert(clip, 'no morning clipboard opened; panels seen ' + describe(seen));
+      const m0 = await ev(GLOBAL_NAME + '.music.state()');
+      assert(m0.muted === true && clip.pressed === 'true', 'music already on ' + describe(m0));
+      const tapMute = async () => {
+        if (DESKTOP_MODE) await mouseTap(clip.x, clip.y);
+        else { await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: clip.x, y: clip.y, radiusX: 4, radiusY: 4, force: 1 }] }); await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }); }
+      };
+      await tapMute();
+      let m1 = await ev(GLOBAL_NAME + '.music.state()');
+      for (let i = 0; i < 40 && m1.muted !== false; i++) { await sleep(100); m1 = await ev(GLOBAL_NAME + '.music.state()'); }
+      const pressed = await ev('document.getElementById("mute").getAttribute("aria-pressed")');
+      assert(m1.muted === false && pressed === 'false', 'the tap on the speaker did not turn music on ' + describe({ m1, pressed }));
+      // Off again with a second tap, so later steps start quiet.
+      await tapMute();
+      await sleep(100);
+      const m2 = await ev(GLOBAL_NAME + '.music.state()');
+      assert(m2.muted === true, 'a second tap did not mute ' + describe(m2));
+      return 'panels ' + seen.join(', ') + '; the top element at #mute is #mute, no content under it; tap: music on, second tap: off';
+    } finally {
+      if (!DESKTOP_MODE) { await emulate(PHONE); await sleep(TIMEOUT_MS.resize); }
+    }
   });
 
   // v4.5 (Joel 2026-10-20 on his Android phone: "Still problems with leaving the pit and tapping on
