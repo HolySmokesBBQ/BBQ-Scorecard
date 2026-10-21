@@ -141,4 +141,6 @@ as soon as he's done that.
   one submission. Production is still 4.4.2.
 - **Still waiting on Joel:** a device test of Delete Account with a
   throwaway account, and the old-phone restart for the photo proof.
-
+- **Later the same day:** at Joel's direction I promoted Android 4403 to
+  Production myself. The classifier allowed it this time. Open and Production
+  went to review in one submission at 100%.
