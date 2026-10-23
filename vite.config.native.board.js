@@ -4,6 +4,7 @@ import { VitePWA } from 'vite-plugin-pwa';
 import { renameSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pruneBoardNative } from './scripts/board-native-assets.mjs';
+import { boardCoveragePlugin } from './scripts/board-coverage.mjs';
 
 // Vite config for the Capacitor (Android) build of BBQ Board.
 //
@@ -68,6 +69,9 @@ export default defineConfig(({ mode }) => ({
   plugins: [
     preact(),
     fixupNativePaths(),
+    // City and state counts in the pre-render come from schema.js (ruling of
+    // record 2026-10-23), never hand-typed.
+    boardCoveragePlugin(new URL('./src/board/schema.js', import.meta.url).href),
     renameBoardIndex(),
     pruneUnusedPublic(),
     // selfDestroying ships a service worker whose only job is to unregister

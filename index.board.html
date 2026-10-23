@@ -35,7 +35,7 @@
         "name": "BBQ Board",
         "alternateName": ["Holy Smokes BBQ Board", "BBQ Meat Price Board", "BBQ Butcher Price Tracker"],
         "url": "https://holysmokesbbqco.com/board/",
-        "description": "Crowdsourced butcher and meat counter price directory. Find the cheapest BBQ cuts near you and submit prices to keep the community informed. Milwaukee, Madison, Chicago, Kansas City, and more.",
+        "description": "Crowdsourced butcher and meat counter price directory. Find the cheapest BBQ cuts near you and submit prices to keep the community informed. %BOARD_CITY_COUNT% cities in %BOARD_STATE_COUNT% states.",
         "applicationCategory": "LifestyleApplication",
         "applicationSubCategory": "Food & Drink",
         "operatingSystem": "Web",
@@ -53,60 +53,6 @@
           "Community-submitted prices with freshness timestamps",
           "Weekly ad OCR — upload a photo, extract prices",
           "Wisconsin brats coverage — Milwaukee's cultural staple"
-        ]
-      },
-      {
-        "@type": "FAQPage",
-        "@id": "https://holysmokesbbqco.com/board/#faq",
-        "mainEntity": [
-          {
-            "@type": "Question",
-            "name": "Where can I find the cheapest brisket near me?",
-            "acceptedAnswer": {
-              "@type": "Answer",
-              "text": "BBQ Board tracks brisket prices at butcher shops, warehouse clubs (Costco, Sam's Club), and grocery meat counters within your city. Pick your city and radius, filter by 'Brisket,' and the cheapest priced shop appears first. Costco national baseline is around $5.89/lb for whole packer brisket (Prime or Choice). Local butchers price higher because the meat is grass-fed or heritage-raised."
-            }
-          },
-          {
-            "@type": "Question",
-            "name": "How much do brats cost in Wisconsin?",
-            "acceptedAnswer": {
-              "@type": "Answer",
-              "text": "Wisconsin butchers stake their reputation on their brat recipes. Kettle Range Milwaukee's Milwaukee Bratwurst runs about $9.95/lb. Bavaria Sausage Kitchen (Madison) sells Kaiser Bratwurst at about $6/lb in the 10 lb box. Costco's Kirkland Bratwurst (made by Johnsonville in Sheboygan Falls) works out to about $3.51/lb. Submit your local butcher's price to help the community."
-            }
-          },
-          {
-            "@type": "Question",
-            "name": "Which butcher shops are in Milwaukee?",
-            "acceptedAnswer": {
-              "@type": "Answer",
-              "text": "Milwaukee-metro butchers on BBQ Board include Bunzel's Meat Market, Kettle Range Meat Co. (Milwaukee and Elm Grove), Ray's Butcher Shoppe (Greenfield), Buddy's Meat Market, C & R Market, Usinger's, Rupena's Fine Foods (West Allis), Becher Meats (West Allis), Roberts' Specialty Meats (Waukesha), Sausage Haus Meat & Deli (Oconomowoc), and Daybreak Prime Meats (Delafield)."
-            }
-          },
-          {
-            "@type": "Question",
-            "name": "How does BBQ Board get its prices?",
-            "acceptedAnswer": {
-              "@type": "Answer",
-              "text": "Three sources. First, chain-catalog baselines from Costco (via Warehouse Runner, a crowdsourced price tracker), Sam's Club product pages, and Hy-Vee's online store — these give a reasonable national or regional price. Second, weekly ad OCR — you drop a photo of a printed or PDF weekly ad and the app extracts per-pound prices. Third, community submissions — anyone with a Google account can post the price they saw on the shelf. Prices older than 30 days are flagged stale."
-            }
-          },
-          {
-            "@type": "Question",
-            "name": "Which cities does BBQ Board cover?",
-            "acceptedAnswer": {
-              "@type": "Answer",
-              "text": "Launch coverage: Milwaukee, Waukesha, Madison, Middleton, Appleton, Green Bay, Chicago, and Kansas City. Pick any city plus a radius (5 to 100 miles) and see every butcher, warehouse club, and grocery meat counter in range. Coverage grows as users submit prices in their own cities."
-            }
-          },
-          {
-            "@type": "Question",
-            "name": "How do I submit a price?",
-            "acceptedAnswer": {
-              "@type": "Answer",
-              "text": "Every unpriced shop has a Submit button. Sign in with Google (one tap), pick the meat cut, enter the price per pound you saw, and it posts. You can also upload a photo of a weekly ad and let the app OCR the prices for you to confirm and submit."
-            }
-          }
         ]
       }
     ]
@@ -175,7 +121,7 @@
       <h1 style="font-size:28px;margin-bottom:12px;color:#d4a64a;">BBQ Board — Local Meat Prices</h1>
       <p style="margin-bottom:12px;">Crowdsourced meat prices from local butchers, grocery meat counters, and warehouse clubs. <strong>Find the cheapest brisket, pork shoulder, ribs, chicken, and Wisconsin brats near you</strong> — and submit prices to keep everyone honest.</p>
 
-      <p style="margin-bottom:16px;">Launched with coverage in Milwaukee, Madison, Chicago, Kansas City, and the greater Wisconsin corridor. Prices come from real receipts, real store visits, chain-catalog baselines, and the BBQ community. See a better price? Submit it in 20 seconds and help the next pitmaster save a few bucks per pound.</p>
+      <p style="margin-bottom:16px;">Covers %BOARD_CITY_COUNT% cities in %BOARD_STATE_COUNT% states. Prices come from real receipts, real store visits, chain-catalog baselines, and the BBQ community. See a better price? Submit it in 20 seconds and help the next pitmaster save a few bucks per pound.</p>
 
       <h2 style="font-size:20px;margin:20px 0 10px;color:#A85F52;">Tracked cuts</h2>
       <ul style="margin-bottom:20px;padding-left:20px;">
@@ -190,7 +136,7 @@
       </ul>
 
       <h2 style="font-size:20px;margin:20px 0 10px;color:#A85F52;">Cities covered</h2>
-      <p style="margin-bottom:12px;">Milwaukee, WI · Waukesha, WI · Madison, WI · Middleton, WI · Appleton, WI · Green Bay, WI · Chicago, IL · Kansas City, MO. Each city pairs with a radius selector (5, 10, 25, 50, 100 miles) so you can widen or tighten the search. Coverage grows as users submit prices in their own cities.</p>
+      <p style="margin-bottom:12px;">%BOARD_CITY_COUNT% cities in %BOARD_STATE_COUNT% states. Each city pairs with a radius selector (5, 10, 25, 50, 100 miles) so you can widen or tighten the search. Coverage grows as users submit prices in their own cities.</p>
 
       <h2 style="font-size:20px;margin:20px 0 10px;color:#A85F52;">How BBQ Board works</h2>
       <p style="margin-bottom:12px;">Every price on BBQ Board has a store, a cut, a price per pound, and a timestamp. Sort by distance and price. Filter to just butcher shops if you want to support local — every Costco, Walmart, and Meijer drops out. Prices older than 30 days get flagged as stale; older than 90 hidden entirely. Anyone can submit a new price by signing in with Google, or by uploading a photo of a weekly ad for the app to OCR.</p>

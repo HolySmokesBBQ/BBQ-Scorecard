@@ -232,7 +232,8 @@ export const SHOPS = [
     name: 'Bavaria Sausage Kitchen',
     storeType: 'butcher',
     region: 'madison_metro',
-    location: '6317 Nesbitt Rd, Madison',
+    // Official site (bavariasausage.com, checked 2026-10-23): Fitchburg, WI 53719.
+    location: '6317 Nesbitt Rd, Fitchburg',
     website: 'https://bavariasausage.com/',
     note: 'German sausage maker + butcher. Well known statewide.',
   },
