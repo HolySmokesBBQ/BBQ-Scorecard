@@ -1611,6 +1611,14 @@ function CircularScrubPanel({ region, user, onSignIn, onSignInAnon }) {
     const successCount = outcomes.filter(o => o.ok).length;
     const failCount = outcomes.length - successCount;
     track('board_circular_submitted', { proposalCount: kept.length, successCount, failCount });
+    // Scan posts count toward the one-time rating ask, same as form posts.
+    // (The scan path keeps its own success UI until 2.5.0.)
+    if (successCount > 0) {
+      const postCount = recordPost(undefined, successCount);
+      maybeAskForReview({ postCount }).then((asked) => {
+        if (asked) track('board_review_prompt_shown');
+      });
+    }
 
     if (failCount === 0) {
       // Full success — safe to reset the panel.

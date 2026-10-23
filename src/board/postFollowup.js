@@ -21,10 +21,13 @@ const defaultStorage = () => (typeof localStorage !== 'undefined' ? localStorage
 const defaultIsNative = () =>
   typeof window !== 'undefined' && !!window.Capacitor?.isNativePlatform?.();
 
-export function recordPost(storage = defaultStorage()) {
+// `posted` is how many prices just went up: 1 from the submit form, or the
+// number of successful prices from one ad scan. Both count, so a user who
+// only ever scans still reaches the rating ask (auditor, 2026-10-23).
+export function recordPost(storage = defaultStorage(), posted = 1) {
   let n = 0;
   try { n = parseInt(storage?.getItem(POSTED_COUNT_KEY), 10) || 0; } catch {}
-  n += 1;
+  n += Math.max(0, posted | 0);
   try { storage?.setItem(POSTED_COUNT_KEY, String(n)); } catch {}
   return n;
 }

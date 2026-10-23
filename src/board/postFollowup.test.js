@@ -16,6 +16,12 @@ describe('recordPost', () => {
     expect(recordPost(s)).toBe(2);
     expect(s.getItem(POSTED_COUNT_KEY)).toBe('2');
   });
+  test('an ad scan adds every price it posted', () => {
+    const s = memStorage();
+    expect(recordPost(s, 3)).toBe(3);
+    expect(recordPost(s)).toBe(4);
+    expect(recordPost(s, 0)).toBe(4);
+  });
   test('survives a broken value', () => {
     expect(recordPost(memStorage({ [POSTED_COUNT_KEY]: 'junk' }))).toBe(1);
   });

@@ -35,3 +35,12 @@ test('index.board.html pre-render uses the tokens, not a hand-typed city list', 
   expect(html).not.toMatch(/Launched with coverage in/);
   expect(html).not.toMatch(/Milwaukee, WI · Waukesha, WI/);
 });
+
+// Auditor 2026-10-23: the native page's pre-render repeated stale website
+// SEO copy. It now carries no claims at all; keep it that way.
+test('index.board.html makes no price, "cheapest" or Google-only claims', () => {
+  const html = readFileSync(resolve(ROOT, 'index.board.html'), 'utf8').replace(/<!--[\s\S]*?-->/g, '');
+  expect(html).not.toMatch(/cheap/i);
+  expect(html).not.toMatch(/\$\d/);
+  expect(html).not.toMatch(/sign(ing)? in with google/i);
+});
