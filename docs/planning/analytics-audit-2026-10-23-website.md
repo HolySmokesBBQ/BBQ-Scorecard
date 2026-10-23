@@ -123,7 +123,7 @@ The skill's steps, in order:
 - Homepage hero: "Watch the latest cook" (to `/episodes`). MORE FROM HOLY
   SMOKES: EPISODES card button "See the episodes" (to `/episodes`).
 - /episodes: three stills and three "Watch" buttons to `youtu.be/<id>`
-  (Episode 3 `cXQxAk_Cj0E`, Episode 2 `I8UXczTyIgM`, Pilot `x0NodCwbVYk`),
+  (Episode 3 `cXQxAk_Cj0E`, Episode 2 `I8UXczTylgM`, Pilot `x0NodCwbVYk`),
   plus "Subscribe on YouTube". Episode 4 premieres October 24 and gets a
   fourth row.
 - Out of scope on purpose: `/yourpit/`, the door in `door.js`, the /pit

@@ -129,7 +129,7 @@ Report: https://is-agentic.com/scan/holysmokesbbqco.com
 ## Top quick wins (under an hour each)
 
 1. **Fix or re-verify the Episode 2 link.** The Episodes page links
-   `youtu.be/I8UXczTyIgM`. YouTube's oEmbed returns 404 for that ID and the
+   `youtu.be/I8UXczTylgM`. YouTube's oEmbed returns 404 for that ID and the
    watch page says "This video is unavailable" (checked twice, 20 minutes
    apart). The Pilot and Episode 3 IDs both resolve. Either the video is
    private, removed, or the ID on the page is wrong. The homepage card also

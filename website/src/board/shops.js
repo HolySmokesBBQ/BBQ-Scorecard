@@ -232,7 +232,7 @@ export const SHOPS = [
     name: 'Bavaria Sausage Kitchen',
     storeType: 'butcher',
     region: 'madison_metro',
-    location: '6317 Nesbitt Rd, Madison',
+    location: '6317 Nesbitt Rd, Fitchburg',
     website: 'https://bavariasausage.com/',
     note: 'German sausage maker + butcher. Well known statewide.',
   },

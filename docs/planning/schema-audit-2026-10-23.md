@@ -317,7 +317,7 @@ from the brief. No `duration`: it is not on the page and was not supplied.
 
 | `@id` | `name` | `uploadDate` | YouTube ID (`url`, `embedUrl`) | `thumbnailUrl` base | `description` |
 |---|---|---|---|---|---|
-| `#ep2` | Big Revelations (Episode 2) | 2026-10-10 | I8UXczTyIgM | `/photos/yt-episode-2-{1280,640}.jpg` | the page's Episode 2 paragraph, verbatim |
+| `#ep2` | Big Revelations (Episode 2) | 2026-10-10 | I8UXczTylgM | `/photos/yt-episode-2-{1280,640}.jpg` | the page's Episode 2 paragraph, verbatim |
 | `#pilot` | Pilot Episode | 2026-09-25 | x0NodCwbVYk | `/photos/yt-pilot-{1280,640}.jpg` | the page's pilot paragraph, verbatim |
 | `#ep4` | from the entry | 2026-10-24 | av8HTvWysRE | `/photos/yt-episode-4-{1280,640}.jpg` | from the entry |
 
