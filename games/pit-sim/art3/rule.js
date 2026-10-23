@@ -838,12 +838,16 @@ function foldTable(r) {
     r.seg(P, [2, 22, 10.5], [22, 22, 10.5], CW.dark); r.seg(P, [22, 2, 10.5], [22, 22, 10.5], CW.dark);
   });
 }
+// Frames 0 to 2: the whole canopy in its three stripes. Joel 2026-10-23: frame 3 is the posts alone
+// and frame 4 the roof alone (stripe 0), so the game sorts each post by its tile and draws the roof,
+// 64 up, over everything under it that stands lower.
 function canopy(r, f) {
-  const P = r.F(4, 2), ST2 = [[OR, CW], [CL, CW], [RP.stem, CW]][f];
-  r.obj(function () {
+  const part = f === 3 ? 'posts' : (f === 4 ? 'roof' : 'all');
+  const P = r.F(4, 2), ST2 = [[OR, CW], [CL, CW], [RP.stem, CW]][f > 2 ? 0 : f];
+  if (part !== 'roof') r.obj(function () {
     [[3, 3], [93, 3], [3, 45], [93, 45]].forEach(function (p) { r.box(P, p[0], p[1], p[0] + 1, p[1] + 1, 0, 58, ST, { rim: false }); });
   });
-  r.obj(function () {
+  if (part !== 'posts') r.obj(function () {
     r.q(P, [[1, 1, 64], [95, 1, 64], [95, 47, 64], [1, 47, 64]], ST2[0].base);
     for (let v = 1; v < 47; v += 8) r.q(P, [[1, v, 64], [95, v, 64], [95, v + 4, 64], [1, v + 4, 64]], ST2[1].hi);
     for (let u = 1; u < 95; u++) { const k = Math.floor((u - 1) / 6) % 2, p = P(u, 47, 64); r.rect(p[0], p[1], 1, 5 + ((u % 6) === 3 ? 1 : 0), k ? ST2[1].base : ST2[0].base); }
@@ -1144,7 +1148,7 @@ def('flower_box', 52, 38, 26, 24, 1, flowerBox, { footprint: [2, 1] });
 def('chair', 32, 42, 16, 28, 2, chair, { footprint: [1, 1], seats: [[0, -7]] });
 def('fold_chair', 32, 42, 16, 28, 1, foldChair, { footprint: [1, 1], seats: [[0, -7]] });
 def('fold_table', 48, 42, 24, 28, 1, foldTable, { footprint: [1, 1], shadow: [18, 8] });
-def('canopy', 152, 144, 76, 106, 3, canopy, { footprint: [4, 2] });
+def('canopy', 152, 144, 76, 106, 5, canopy, { footprint: [4, 2], posts: [[3, 3], [93, 3], [3, 45], [93, 45]] });
 def('birdbath', 24, 30, 12, 26, 2, birdbath, { footprint: [1, 1], shadow: [7, 3] });
 def('mailbox', 28, 38, 14, 32, 2, mailbox, { footprint: [1, 1] });
 def('tools', 32, 34, 16, 30, 1, tools, { footprint: [1, 1] });

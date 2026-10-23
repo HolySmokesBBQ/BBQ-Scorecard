@@ -507,7 +507,6 @@ let capturing = false;
 // with a 2x transform so every sim px position and step in this file scales with it.
 let B3 = null;
 const RS = 2;
-const DESK_SIGN_UP = 64;          // Joel 2026-10-20: rp from the sign tile's top vertex up to the sign's top
 const SIDE_W = 380;               // v3.4 playtest: the side column's width at 900 px and up (index.html)
 let recs = [];
 const SIZE = Object.create(null);
@@ -1292,7 +1291,7 @@ function exposeGame() {
       // z and cssPerRp: CSS px per rp; device: device px per rp.
     get: function () { const o = camOrigin(); return { mode: cam.mode, x0: o[0], y0: o[1], vw: cam.vw, vh: cam.vh, z: cssPerRp(), cssPerRp: cssPerRp(), device: cam.z, follow: cam.follow, home: homeBox() }; },
       set: function (mode) { camSet(mode); try { render(); } catch (e) { fail(e); } return cam.mode; },
-      centerOn: function (tx, ty, instant) { const c = tileRp(tx, ty); cam.ease = null; camCenter(c[0], c[1]); },
+      centerOn: function (tx, ty, instant) { const c = tileRp(tx, ty); cam.ease = null; cam.deskFit = false; camCenter(c[0], c[1]); },
       reveal: function (tx, ty) { camReveal(tx, ty); },
       // v4.1 dev: one follow step of dt seconds (the harness advances without frames).
       followStep: function (dt) { camFollow(dt || 1); camFollow(dt || 1); try { render(); } catch (e) { fail(e); } return camOrigin(); },
@@ -1320,6 +1319,17 @@ function exposeGame() {
     get orderBubbles() { return orderBubbles.slice(); },
     get eatCues() { return JSON.parse(JSON.stringify(eatCues)); },   // v4.6: the eaters' steam puffs (world rp)
     get registerBoxes() { return registerBoxes(); },
+    get drawLog() { return drawLog.slice(); },
+    // Joel 2026-10-23: the desktop action box and its parts (owned stations, line spots, owned seats,
+    // the sign) in client CSS px, the canvas rect, and the ids of parts not wholly inside the canvas.
+    frameBoxes: function () {
+      const r = el.cv.getBoundingClientRect(), o = camOrigin(), k = cssPerRp();
+      const cl = function (b) { return { x0: Math.round(r.left + (b.x0 - o[0]) * k), x1: Math.round(r.left + (b.x1 - o[0]) * k), y0: Math.round(r.top + (b.y0 - o[1]) * k), y1: Math.round(r.top + (b.y1 - o[1]) * k) }; };
+      const inside = function (c) { return c.x0 >= r.left - 1 && c.x1 <= r.right + 1 && c.y0 >= r.top - 1 && c.y1 <= r.bottom + 1; };
+      const parts = deskParts().map(function (p) { return { id: p.id, kind: p.kind, c: cl(p.b) }; });
+      const f = deskFrame();
+      return { cv: { x0: Math.round(r.left), x1: Math.round(r.right), y0: Math.round(r.top), y1: Math.round(r.bottom) }, box: f ? cl(f) : null, k: cam.z, fit: cam.deskFit === true, parts: parts, out: parts.filter(function (p) { return !inside(p.c); }).map(function (p) { return p.id; }) };
+    },
     get counterBoxes() { return counterBoxes(); },
     // v4.5: the taps as the game resolved them, today's host seating, and a guest's body on screen
     // (client px: the middle of the box drawn last frame, f up from its foot, default 0.6).
@@ -2218,8 +2228,16 @@ function buildTester() {
   sr.style.marginTop = '6px';
   b.appendChild(sr);
   const add = dis(btn('tester-crew-add', 'Add ' + testerRole.toUpperCase() + ' ' + testerStars + '★', 'alt', function () { testerDo({ crew: { role: testerRole, stars: testerStars } }); }));
+  // Joel 2026-10-23: Add is off, with the plain reason under it, when the sim would refuse the card
+  // (a PIT card below the cabinet smoker, or every crew slot taken).
+  const pitTierMin = typeof C.PIT_TIER === 'number' ? C.PIT_TIER : 1;
+  const addWhy = testerRole === 'pit' && (v.tier | 0) < pitTierMin ? 'PIT needs the cabinet smoker. Turn on Cabinet under Gear first.'
+    : (v.crew.length >= v.slots ? 'All ' + v.slots + ' crew slots are taken. More gear opens more slots.' : '');
+  if (addWhy) add.disabled = true;
   b.appendChild(add);
-  b.appendChild(mk('p', { cls: 'tst-now', text: 'Crew ' + v.crew.length + ' of ' + v.slots + (v.crew.length ? ': ' + v.crew.map(function (c) { return c.name + ' ' + c.role.toUpperCase() + ' ' + c.stars + '★'; }).join(', ') : '') }));
+  if (addWhy && !off) b.appendChild(mk('p', { id: 'tester-crew-why', cls: 'tst-now', text: addWhy }));
+  const slotsT = STRINGS.ui.crewSlots ? U('crewSlots', { n: v.crew.length, s: v.slots }) : 'Crew slots ' + v.crew.length + ' of ' + v.slots;
+  b.appendChild(mk('p', { id: 'tester-crew-now', cls: 'tst-now', text: slotsT + (v.crew.length ? ': ' + v.crew.map(function (c) { return c.name + ' ' + c.role.toUpperCase() + ' ' + c.stars + '★'; }).join(', ') : '.') }));
   b.appendChild(h3('Stock'));
   b.appendChild(dis(btn('tester-fill', 'Fill meat, charcoal and wood', 'alt', function () { testerDo({ fill: true }); })));
   b.appendChild(h3('Next booking'));
@@ -6464,6 +6482,9 @@ function buildSeasonEnd() {
 // arr: { draft, lift, grab, aim: { layout, tiles, ok, reason } | null }
 let arr = null;
 let seenLK = null;
+let deskSig = null;
+let drawLog = [];
+let lateBadges = [];  // this frame's station chips, redrawn over the canopy roof where it covers them     // the depth pass's labelled items in draw order, then canopy_roof (harness)   // the layout, gear and decor the desktop view was last framed for
 let arrDrag = null;
 function arrUnit(id) { return PitSim.UNITS.find(function (u) { return u.id === id; }) || null; }
 function arrOff(lay, id) { const o = lay[id]; return o ? o : [0, 0]; }
@@ -7488,7 +7509,7 @@ function keepPerson(id) {
   }
 }
 function overlaps(a, b) { return a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1; }
-function drawBadge(kind, name, frame, X, Y) {
+function drawBadge(kind, name, frame, X, Y, again) {
   const m = BADGE[kind];
   if (!m || !A3) return;
   const an = A3.anchor(name, frame | 0);
@@ -7506,7 +7527,7 @@ function drawBadge(kind, name, frame, X, Y) {
     if (nx + 8 <= sb.x1) { x0 = nx; chip = { x0: x0, x1: x0 + 16, y0: y0, y1: y0 + 17 }; } else clash = true;
   }
   const by = clash || peopleBoxes.some(function (p) { return overlaps(chip, p); });
-  badgeLog.push({ kind: kind, chip: chip, station: boxRp(name, frame, X, Y), shown: !by });
+  if (!again) { badgeLog.push({ kind: kind, chip: chip, station: boxRp(name, frame, X, Y), shown: !by }); lateBadges.push({ a: [kind, name, frame, X, Y], chip: chip, by: by }); }
   if (by) return;
   onWorld(function () {
     octx.fillStyle = '#1b1410';
@@ -7807,20 +7828,49 @@ function homeBox() {
 }
 // Joel 2026-10-20: the desktop near view frames the kitchen, the counter, the owned seats and the
 // pit sign on the barn (its top not cut), with no wide lawn band under the seats.
-function deskFrame() {
-  const hb = homeBox();
-  if (!hb) return null;
-  const b = { x0: hb.x0, x1: hb.x1, y0: hb.y0, y1: hb.y1 };
-  const st = sim ? sim.state : null;
-  (MAP.seats || []).forEach(function (se) {
-    if (st && !PitSim.tileOwned(se, st.gear, st.decor)) return;
-    const c = tileRp(se.x, se.y);
-    b.x0 = Math.min(b.x0, c[0] - 26); b.x1 = Math.max(b.x1, c[0] + 26); b.y0 = Math.min(b.y0, c[1] - 30); b.y1 = Math.max(b.y1, c[1] + 10);
+// Joel 2026-10-23 (week 6 screenshot: the sign cut at the right, the line and the seats off the
+// side): the box is what the player works and watches, named part by part (world rp): every OWNED
+// station (the counter and the register among them), every spot of the line, every owned seat with
+// its guest, and the whole wall sign. Unowned stations (a kettle 2 spot) no longer pull it.
+function deskParts() {
+  const out = [];
+  if (!sim) return out;
+  const s = sim.state;
+  MAP.stations.forEach(function (st) {
+    if (!owned(st)) return;
+    const a = stationArt(st);
+    out.push({ id: st.id, kind: 'station', b: boxRp(a.name, 0, a.X, a.Y, a.flip) });
   });
+  (MAP.queue || []).forEach(function (t, i) {
+    const c = tileRp(t.x, t.y);
+    out.push({ id: 'queue' + i, kind: 'line', b: { x0: c[0] - 12, x1: c[0] + 12, y0: c[1] - 47, y1: c[1] + 4 } });
+  });
+  (MAP.seats || []).forEach(function (se) {
+    if (!PitSim.tileOwned(se, s.gear, s.decor)) return;
+    const c = tileRp(se.x, se.y);
+    out.push({ id: se.id, kind: 'seat', b: { x0: c[0] - 26, x1: c[0] + 26, y0: c[1] - 42, y1: c[1] + 12 } });
+  });
+  const sg = signRp();
+  if (sg) out.push({ id: 'sign', kind: 'sign', b: boxRp('sign', 0, sg[0], sg[1]) });
+  return out;
+}
+// Where the bridge stage puts the wall sign's anchor (art3/bridge.js stage: wallAt, 4 up).
+function signRp() {
   const sign = MAP.props.find(function (p) { return p.id === 'sign'; });
-  if (sign) { const t = ptOf(sign.tile), c = vtxRp(t.x, t.y); b.y0 = Math.min(b.y0, c[1] - DESK_SIGN_UP); }
+  if (!sign || !A3 || !A3.has('sign')) return null;
+  const ts = tilesOf(sign).concat(sign.tiles ? sign.tiles.map(ptOf) : []), b = spanOf(ts);
+  const u = 12 * (b.x0 + (b.x1 > b.x0 ? b.x1 : b.x0 + 1) + 1) + 8;
+  return [WORLD.OX + u, WORLD.OY + u / 2 - 4];
+}
+function deskFrame() {
+  const parts = deskParts();
+  if (!parts.length) return homeBox();
+  const b = { x0: Infinity, x1: -Infinity, y0: Infinity, y1: -Infinity };
+  parts.forEach(function (p) { b.x0 = Math.min(b.x0, p.b.x0); b.x1 = Math.max(b.x1, p.b.x1); b.y0 = Math.min(b.y0, p.b.y0); b.y1 = Math.max(b.y1, p.b.y1); });
   return b;
 }
+const DESK_PAD = 12;   // rp kept round the desktop action box where the zoom allows
+const DESK_PAD_MIN = 4;
 // The kitchen block: every owned station's drawn box (world rp), the counter included.
 function kitchenBox() {
   let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
@@ -7837,10 +7887,17 @@ function camHome() {
   cam.follow = true;
   cam.homed = true;
   cam.moved = false;
+  const f = cam.phone || cam.mode !== 'near' ? null : deskFrame();
+  cam.deskFit = !!f && f.x1 - f.x0 <= cam.vw + 1e-6 && f.y1 - f.y0 <= cam.vh + 1e-6;
+  if (f) {
+    // Joel 2026-10-23: the desktop view is centred on the action box, not on the pitmaster or the
+    // yard; when the box fits, it stays put through service (camFollow leaves it).
+    camCenter((f.x0 + f.x1) / 2, (f.y0 + f.y1) / 2);
+    if (!cam.deskFit) camKeepWork();
+    return;
+  }
   if (cam.mode === 'near' && b) {
-    const f = cam.phone ? null : deskFrame();
-    if (f) camCenter((f.x0 + f.x1) / 2, (f.y0 + f.y1) / 2);
-    else camCenter((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2);
+    camCenter((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2);
     // Feedback audit item 19: on a narrow phone (375 CSS px: 250 rp for a 240 rp home box) centring,
     // then keeping 12 rp right of the line, cut the drum and the charcoal pile at the left edge. When
     // the box has under 16 rp to spare, the kitchen side (left) gets the margin, up to 12 rp, and the
@@ -7880,7 +7937,7 @@ function camReveal(tx, ty) {
     cam.x0 = Math.max(c[0] + m - cam.vw, Math.min(c[0] - m, cam.x0));
     cam.y0 = Math.max(c[1] + m - cam.vh, Math.min(c[1] - m, cam.y0));
     camClamp();
-    cam.follow = false; cam.moved = true;
+    cam.follow = false; cam.moved = true; cam.deskFit = false;
   }
   cam.ease = null;
 }
@@ -7892,6 +7949,7 @@ function camPan(dxCss, dyCss) {
   cam.ease = null;
   cam.follow = false;
   cam.moved = true;
+  cam.deskFit = false;   // a view the player dragged off the action box follows again, until the next reframe
 }
 function cssPerRp() {
   const r = el.cv.getBoundingClientRect();
@@ -7908,6 +7966,8 @@ function camFollow(dt) {
     cam.x0 = e.fx + (e.tx - e.fx) * q; cam.y0 = e.fy + (e.ty - e.fy) * q;
     if (k >= 1) cam.ease = null;
   }
+  // Joel 2026-10-23: the desktop view holds the whole action box, so it does not chase the pitmaster.
+  if (!cam.phone && cam.deskFit) return;
   const s = sim.state;
   if (!cam.follow || s.phase !== 'service' || cam.ease) return;
   const p = s.player, X = isoX(p.px + 8, p.py + 8) * RS, Y = isoY(p.px + 8, p.py + 8) * RS - 24;
@@ -8872,8 +8932,8 @@ function decorItems(spot, s, push) {
 // (objects 1, what sits on them 1.5, people 2, what people hold 2.5), then X, then push order.
 function drawSorted(s) {
   const items = [];
-  let order = 0;
-  const push = function (d, l, X, fn) { items.push({ d: d, l: l, x: X, o: order++, f: fn }); };
+  let order = 0, label = null;   // label: what drawLog names this item (the harness reads the order)
+  const push = function (d, l, X, fn) { items.push({ d: d, l: l, x: X, o: order++, f: fn, n: label }); };
   peopleBoxes = peopleNext; peopleNext = []; badgeLog = []; regClear = null; custBoxes.clear();
   const T_ = MAP.T;
   const open = gateOpen(s);
@@ -8900,7 +8960,9 @@ function drawSorted(s) {
 
   for (let i = 0; i < MAP.props.length; i++) propItems(MAP.props[i], push);
   dressItems(push);
-  for (let i = 0; i < MAP.stations.length; i++) if (owned(MAP.stations[i])) stationItems(MAP.stations[i], s, push);
+  for (let i = 0; i < MAP.stations.length; i++) if (owned(MAP.stations[i])) { label = MAP.stations[i].id; stationItems(MAP.stations[i], s, push); }
+  label = null;
+  canopyItems(s, push);
   for (let i = 0; i < MAP.decor.length; i++) if (s.decor[MAP.decor[i].id] === true) decorItems(MAP.decor[i], s, push);
   hostItems(push);
 
@@ -8919,7 +8981,9 @@ function drawSorted(s) {
     }
     const mx = Math.round(m.px), my = Math.round(m.py);
     if (kind === 'player') playerDrawn = [isoX(mx + 8, my + 8) * RS, isoY(mx + 8, my + 8) * RS];
+    label = kind;
     push((mx + my) / TILE, 2, isoX(mx + 8, my + 8) * RS, function () { withShift(moverShift(mx, my), function () { drawMover(kind, m, s); }); keepPerson(null); });
+    label = null;
   }
   const custs = s.customers.slice().sort(byId);
   eatPlates.clear();
@@ -8945,6 +9009,7 @@ function drawSorted(s) {
       }
     } else {
       const cx = Math.round(c.px), cy = Math.round(c.py);
+      label = 'cust' + c.id;
       push((cx + cy) / TILE, 2, isoX(cx + 8, cy + 8) * RS, function () { withShift(moverShift(cx, cy), function () { drawMover('cust', c, s); }); keepPerson(c.id); });
     }
   }
@@ -8954,8 +9019,9 @@ function drawSorted(s) {
   // the lawn away from the stations (dogPick), so it never stands in front of one.
   push((dx + dy) / TILE, 2, isoX(dx + 8, dy + 8) * RS, function () { recOnly('dog', dx, dy, dog.frame); drawDog(dx, dy); });
 
+  label = null;
   items.sort(function (a, b) { return (a.d - b.d) || (a.l - b.l) || (a.x - b.x) || (a.o - b.o); });
-  for (let i = 0; i < items.length; i++) items[i].f();
+  for (let i = 0; i < items.length; i++) { if (items[i].n) drawLog.push(items[i].n); items[i].f(); }
   return custs;
 }
 
@@ -8970,8 +9036,8 @@ function drawSeated(c, seat) {
 // ---------------------------------------------------------------- render: overhead (spec A)
 
 // The string lights from the post along the back fence top to the back corner, then along the barn
-// eave to the hook; one smoke column per lit cooker at 70 percent (the canopy draws behind the depth
-// pass, drawCanopy).
+// eave to the hook; one smoke column per lit cooker at 70 percent (over the canopy roof, which draws
+// right after the depth pass, drawCanopyRoof).
 const BULBS = ['#f6d26a', '#ef6b4a', '#8fd25c', '#6fc3f0'];
 function drawOverhead(s) {
   if (s.decor.lights === true) {
@@ -9041,13 +9107,45 @@ function drawBirds() {
     }
   });
 }
-// The canopy over the line (fix pass: nothing tall in front of the work area): drawn right after the
-// ground, behind the depth pass, so the counter, the plates and everyone in the line draw over its
-// roof and posts.
-function drawCanopy(s) {
+// The canopy over the line. Joel 2026-10-23 (week 6: the board drew over the striped roof and the
+// roof sat under the counter): a tall roof on four posts. Each post (frame 3, its column clipped)
+// sorts in the depth pass by its own tile; the roof (frame 4) draws after the depth pass, 64 rp up,
+// so it covers everything under and behind it that stands lower (the board, the counter end, guests
+// in the line), while anything in front of its footprint never reaches its pixels (it would have to
+// stand taller than 64). Bubbles, numbers and smoke still draw over it.
+const CANOPY_POSTS = [[3, 3, 0, 0], [93, 3, 1, 0], [3, 45, 0, 1], [93, 45, 1, 1]];   // u, v in the art, then the corner (x, y)
+function canopyItems(s, push) {
+  if (s.gear.canopy !== true || !A3) return;
+  const tiles = canopyTiles(), b = spanOf(tiles), c = tilesRp(tiles), top = vtxRp(b.x0, b.y0);
+  CANOPY_POSTS.forEach(function (q) {
+    const tx = q[2] ? b.x1 : b.x0, ty = q[3] ? b.y1 : b.y0, px = top[0] + q[0] - q[1];
+    push(tx + ty, 1, px, function () {
+      onWorld(function () {
+        octx.save();
+        octx.beginPath();
+        octx.rect(px - 8, -1e4, 16, 2e4);
+        octx.clip();
+        A3.drawAt(octx, 'canopy', Math.round(c[0]), Math.round(c[1]), 3, false);
+        octx.restore();
+      });
+      drawLog.push('canopy_post');
+    });
+  });
+}
+function drawCanopyRoof(s) {
   if (s.gear.canopy !== true) return;
-  const tiles = canopyTiles(), c = tilesRp(tiles), cp = MAP.overhead && MAP.overhead.canopy;
-  put3('canopy', 0, c[0], c[1]);
+  const tiles = canopyTiles(), c = tilesRp(tiles), cp = MAP.overhead && MAP.overhead.canopy, b = spanOf(tiles);
+  const roof = A3 ? boxRp('canopy', 4, c[0], c[1]) : null;
+  // The pitmaster under or behind the roof sees through it (the roof at 55 percent while his drawn
+  // box meets it), so he never vanishes at a station it covers.
+  const p = s.player, pt = p ? (Math.round(p.px) + Math.round(p.py)) / TILE : 0;
+  const pb = playerDrawn ? { x0: playerDrawn[0] - 12, x1: playerDrawn[0] + 12, y0: playerDrawn[1] - 47, y1: playerDrawn[1] } : null;
+  const see = !!(roof && pb && pt < b.x1 + b.y1 + 1 && overlaps(pb, roof));
+  if (see) octx.globalAlpha = 0.55;
+  try { put3('canopy', 4, c[0], c[1]); } finally { octx.globalAlpha = 1; }
+  drawLog.push(see ? 'canopy_roof_see' : 'canopy_roof');
+  // A station's icon chip under the roof draws again over it, so a covered board still shows.
+  if (roof) lateBadges.forEach(function (e) { if (!e.by && overlaps(e.chip, roof)) drawBadge(e.a[0], e.a[1], e.a[2], e.a[3], e.a[4], true); });
   recOnly('canopy', cp && typeof cp.x === 'number' ? cp.x : tiles[0].x * TILE, cp && typeof cp.y === 'number' ? cp.y : tiles[0].y * TILE, 0);
 }
 function ventRp(a) {
@@ -9665,6 +9763,12 @@ function render() {
   const s = sim.state;
   const inService = s.phase === 'service';
   layoutSync();
+  // Joel 2026-10-23: on desktop a new layout or new gear (seats, stations) reframes the action box,
+  // except while a piece is being moved in Arrange.
+  if (!cam.phone && !arr) {
+    const sig = seenLK + '|' + JSON.stringify(s.gear) + '|' + JSON.stringify(s.decor);
+    if (sig !== deskSig) { const first = deskSig === null; deskSig = sig; if (!first) { resize(); return; } }
+  }
   hits.length = 0;
   // The world, 1 px per rp.
   octx = wctx;
@@ -9674,8 +9778,9 @@ function render() {
   octx.setTransform(RS, 0, 0, RS, 0, 0);
   octx.globalAlpha = 1;
   drawGround(s);                      // 1. sky, ground, barn, back fence, "+" marks
-  drawCanopy(s);                      // 1b. the canopy, behind everything that stands
-  const custs = drawSorted(s);        // 2. the depth pass
+  drawLog = []; lateBadges = [];
+  const custs = drawSorted(s);        // 2. the depth pass (the canopy posts among it)
+  drawCanopyRoof(s);                  // 2b. the canopy roof over everything under it
   drawOverhead(s);                    // 3. string lights, smoke columns
   drawSmokeAndFire(s);                // 4. dark puffs
   drawCues(s, custs);                 // 5. bubbles, bars, sweat, zzz, hearts
@@ -9727,8 +9832,16 @@ function render() {
   if (!reduced && shakeUntil > nowMs) ox = (Math.floor(nowMs / 16) % 2 === 0 ? 1 : -1) * Math.max(1, Math.round(z));
   const sx0 = Math.max(0, o[0]), sy0 = Math.max(0, o[1]);
   const sx1 = Math.min(WORLD.W, o[0] + cam.vw), sy1 = Math.min(WORLD.H, o[1] + cam.vh);
-  if (sx1 > sx0 && sy1 > sy0) vctx.drawImage(off, sx0, sy0, sx1 - sx0, sy1 - sy0, (sx0 - o[0]) * z + ox, (sy0 - o[1]) * z, (sx1 - sx0) * z, (sy1 - sy0) * z);
-  if ((WORLD.H - o[1]) * z < ch) { vctx.fillStyle = '#5a9c3c'; vctx.fillRect(0, Math.floor((WORLD.H - o[1]) * z), cw, ch); }
+  if (sx1 > sx0 && sy1 > sy0) {
+    vctx.drawImage(off, sx0, sy0, sx1 - sx0, sy1 - sy0, (sx0 - o[0]) * z + ox, (sy0 - o[1]) * z, (sx1 - sx0) * z, (sy1 - sy0) * z);
+    // Joel 2026-10-23: a desktop view wider or taller than the world (the zoom that fits the action
+    // box) carries the world's edge pixels out to the canvas edge, not sky or a flat green band.
+    const ty0 = (sy0 - o[1]) * z, th = (sy1 - sy0) * z;
+    if (cam.phone) { if ((WORLD.H - o[1]) * z < ch) { vctx.fillStyle = '#5a9c3c'; vctx.fillRect(0, Math.floor((WORLD.H - o[1]) * z), cw, ch); } }
+    else if (sx0 > o[0]) vctx.drawImage(off, sx0, sy0, 1, sy1 - sy0, ox, ty0, Math.ceil((sx0 - o[0]) * z), th);
+    if (!cam.phone && sx1 < o[0] + cam.vw) { const x = Math.floor((sx1 - o[0]) * z) + ox; vctx.drawImage(off, sx1 - 1, sy0, 1, sy1 - sy0, x, ty0, cw - x, th); }
+    if (!cam.phone && sy1 < o[1] + cam.vh) { const y = Math.floor((sy1 - o[1]) * z); vctx.drawImage(vctx.canvas, 0, y - 1, cw, 1, 0, y, cw, ch - y); }
+  }
   vctx.drawImage(ov, 0, 0, ov.width, ov.height, ox, 0, ov.width * cam.kOv, ov.height * cam.kOv);
 }
 
@@ -9780,10 +9893,12 @@ function resize() {
     const side = el.panels.hidden ? 0 : SIDE_W + 16;
     const cssW = Math.max(320, vw - 32 - side);
     const cssH = Math.max(240, (vh || 820) - 44 - CONTROLS_H_DESK - 28);   // 28: #foot under the controls
-    const hb = deskFrame() || homeBox();   // Joel 2026-10-20: the kitchen, the seats and the sign
-    const kHome = hb ? Math.floor(Math.min(cssW * d / (hb.x1 - hb.x0 + 32), cssH * d / (hb.y1 - hb.y0 + 8)) + 1e-6) : 1;
-    const kFill = Math.ceil(Math.max(cssW * d / WORLD.W, cssH * d / WORLD.H) - 1e-6);
-    cam.nearK = Math.max(1, kHome, kFill);
+    // Joel 2026-10-23: the largest whole k that fits the action box (deskFrame: owned stations, the
+    // line, owned seats, the whole sign) with DESK_PAD round it, or DESK_PAD_MIN when the full pad
+    // would cost a whole step of zoom (1427 by 890: 3x with 4 rp, not 2x with 12).
+    const hb = deskFrame() || homeBox();
+    const fitK = function (pad) { return hb ? Math.floor(Math.min(cssW * d / (hb.x1 - hb.x0 + 2 * pad), cssH * d / (hb.y1 - hb.y0 + 2 * pad)) + 1e-6) : 1; };
+    cam.nearK = Math.max(1, fitK(DESK_PAD) >= fitK(0) ? fitK(DESK_PAD) : (fitK(DESK_PAD_MIN) || fitK(0)));
     el.cv.width = Math.floor(cssW * d);
     el.cv.height = Math.floor(cssH * d);
     if (cam.mode === 'fit') cam.mode = 'near';
@@ -9795,7 +9910,8 @@ function resize() {
   ov.height = Math.ceil(el.cv.height / cam.kOv);
   camView();
   // A resize keeps a view the player moved; otherwise the home view, framed for the new size.
-  if (!cam.homed || was !== cam.phone || !cam.moved) camHome(); else camClamp();
+  // Desktop always reframes the action box (a panel opening or closing, a new size, service).
+  if (!cam.homed || was !== cam.phone || !cam.moved || (!cam.phone && cam.mode === 'near')) camHome(); else camClamp();
   syncZoom();
   snapCanvas(d);
   vctx.imageSmoothingEnabled = false;

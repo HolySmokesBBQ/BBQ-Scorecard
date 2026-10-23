@@ -194,7 +194,7 @@ const RULE_MANIFEST = Object.freeze([
   ['tree_trunk', 'rule', 92, 140, 1, 46, 134, 0], ['tree_canopy', 'rule', 92, 140, 1, 46, 134, 0], ['pot', 'rule', 20, 24, 3, 10, 20, 0],
   ['lights_post', 'rule', 24, 84, 1, 12, 78, 0], ['picnic', 'rule', 76, 56, 2, 38, 36, 0], ['picnic_bench', 'rule', 76, 56, 2, 38, 36, 0],
   ['flower_box', 'rule', 52, 38, 1, 26, 24, 0], ['chair', 'rule', 32, 42, 2, 16, 28, 0],
-  ['fold_chair', 'rule', 32, 42, 1, 16, 28, 0], ['fold_table', 'rule', 48, 42, 1, 24, 28, 0], ['canopy', 'rule', 152, 144, 3, 76, 106, 0],
+  ['fold_chair', 'rule', 32, 42, 1, 16, 28, 0], ['fold_table', 'rule', 48, 42, 1, 24, 28, 0], ['canopy', 'rule', 152, 144, 5, 76, 106, 0],
   ['birdbath', 'rule', 24, 30, 2, 12, 26, 0], ['mailbox', 'rule', 28, 38, 2, 14, 32, 0], ['tools', 'rule', 32, 34, 1, 16, 30, 0],
   ['shelf', 'rule', 32, 54, 1, 16, 40, 0], ['hose', 'rule', 36, 30, 1, 16, 22, 0], ['plus', 'rule', 32, 18, 1, 16, 9, 0],
   // v4.4 yard dressing

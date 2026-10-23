@@ -11097,6 +11097,67 @@ async function browserChecks() {
     return 'trailer at (4,7)(4,8) mirrored, ' + (await ev(F.pieces('kettle1') + '.length')) + ' pieces on, frames saved' + (hit ? '' : ' (no tile point)');
   });
 
+  // Joel 2026-10-23 (desktop screenshot, week 6, cash 20, cooler, big table and canopy, the kitchen at
+  // the back of the patio, the board at the counter end by the canopy, Tester tools open): the view
+  // frames the action box (owned stations, the line, owned seats, the whole sign) at a whole zoom at
+  // every desktop size; the canopy roof draws after the board under it; PIT Add is off without the
+  // cabinet, with the reason under it.
+  await step('Joel 2026-10-23 week 6 frame: the action box inside the canvas at four desktop sizes, the canopy roof over the board, PIT Add off without the cabinet', async () => {
+    const flagId = (await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: 'window.PitSimTester = true;' })).identifier;
+    const notes = [];
+    try {
+      await emulate({ width: 1603, height: 916, deviceScaleFactor: 1, mobile: false }, false);
+      await reload(frameState());
+      const lay = await ev('JSON.stringify(S().layout)');
+      assert(lay.includes('"counter":[0,4]') && lay.includes('"board":[2,0]'), 'the fixture layout did not load ' + lay);
+      await click('hub-tab-pit'); await advance(0);
+      await click('pit-tester'); await advance(0);
+      assert(await visible('tester'), '#tester did not open');
+      // 3. PIT without the cabinet: Add off, the reason under it, the slots line in the game's words.
+      const t0 = await ev('({ role: $("tester-role-pit").getAttribute("aria-pressed"), dis: $("tester-crew-add").disabled, why: $("tester-crew-why") ? txt("tester-crew-why") : null, now: txt("tester-crew-now") })');
+      assert(t0.role === 'true' && t0.dis === true && t0.why && /cabinet/i.test(t0.why) && t0.now === 'Crew slots 0 of 2.', 'PIT Add without the cabinet ' + describe(t0));
+      assert(!/[\u2013\u2014]/.test(t0.why + t0.now), 'a dash in the tester copy ' + describe(t0));
+      await click('tester-role-run'); await advance(0);
+      const t1 = await ev('({ dis: $("tester-crew-add").disabled, why: !!$("tester-crew-why") })');
+      assert(t1.dis === false && !t1.why, 'RUN Add should be on ' + describe(t1));
+      await click('tester-role-pit'); await advance(0);
+      // 1. The camera: every owned station, line spot, owned seat and the sign inside the canvas.
+      const sizes = [[1603, 916], [1427, 890], [1366, 768], [1920, 1080]];
+      const check = async (w, h, label) => {
+        await emulate({ width: w, height: h, deviceScaleFactor: 1, mobile: false }, false);
+        await sleep(TIMEOUT_MS.resize); await advance(0);
+        const fb = await frameBoxes();
+        assert(fb && fb.parts.some((p) => p.id === 'sign') && fb.parts.some((p) => p.kind === 'seat') && fb.parts.some((p) => p.id === 'board') && fb.parts.some((p) => p.id === 'register'), label + ' ' + w + 'x' + h + ' parts ' + describe(fb && fb.parts.map((p) => p.id)));
+        assert(fb.out.length === 0, label + ' ' + w + 'x' + h + ': outside the canvas ' + describe(fb.out) + ' canvas ' + describe(fb.cv));
+        assert(Number.isInteger(fb.k) && fb.k >= 1 && fb.fit, label + ' ' + w + 'x' + h + ' zoom ' + fb.k + ' fit ' + fb.fit);
+        notes.push(label + ' ' + w + 'x' + h + ' ' + fb.k + 'x');
+        return fb;
+      };
+      for (const [w, h] of sizes) await check(w, h, 'tester');
+      await emulate({ width: 1603, height: 916, deviceScaleFactor: 1, mobile: false }, false); await sleep(TIMEOUT_MS.resize); await advance(0);
+      await screenshot(DESKTOP_MODE ? 'week6-tester-1603-desktop.png' : 'week6-tester-1603.png');
+      // 2. The canopy: four posts in the depth pass, the roof after the board (the board sits under
+      // the roof's pixels in this layout).
+      const dl = await ev('({ log: g.drawLog })');
+      const iB = dl.log.lastIndexOf('board'), iR = dl.log.findIndex((n) => /^canopy_roof/.test(n));
+      assert(iB >= 0 && iR > iB && dl.log.filter((n) => n === 'canopy_post').length === 4, 'the canopy order ' + describe(dl.log));
+      await click('tester-back'); await advance(0);
+      await check(1603, 916, 'hub');
+      // In service with no panel (the canvas takes the side column's room).
+      assert(await toService(), 'the week 6 fixture never reached service');
+      await advance(20);
+      for (const [w, h] of sizes) await check(w, h, 'service');
+      await emulate({ width: 1603, height: 916, deviceScaleFactor: 1, mobile: false }, false); await sleep(TIMEOUT_MS.resize); await advance(0);
+      const sl = await ev('g.drawLog');
+      assert(sl.findIndex((n) => /^canopy_roof/.test(n)) > sl.lastIndexOf('board'), 'service canopy order ' + describe(sl));
+      await screenshot(DESKTOP_MODE ? 'week6-service-1603-desktop.png' : 'week6-service-1603.png');
+    } finally {
+      await cdp.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: flagId }).catch(() => {});
+      await emulate(RUN_METRICS, DESKTOP_MODE ? false : true); await sleep(TIMEOUT_MS.resize);
+    }
+    return notes.join('; ');
+  });
+
   await step('zero console errors across the run', () => {
     const e = errorCount();
     assert(e.total === 0, describe(e) + ' first: ' + describe(report.console.find((c) => c.type === 'error') || report.exceptions[0] || report.logEntries.find((l) => l.level === 'error')));
@@ -11186,7 +11247,37 @@ async function weekPlay() {
   }
   return { taps, cooks, cookSec: Math.round(cookSec), prepSec: Math.round(menuSim), log, errors: errorCount().total };
 }
+// Joel's 2026-10-23 desktop screenshot: week 6, cash 20, the cooler, the big table and the canopy (the
+// kettle, no cabinet), the kettle, cooler, pile and trash bunched at the back of the patio and the
+// board at the counter end by the canopy.
+function frameState(over = {}) {
+  const s = saveV9({ cash: 20, season: { week: 6, results: resultsOf(5) } });
+  s.v = SAVE_V;
+  s.gear = Object.assign({}, s.gear, { cooler: true, bigtable: true, canopy: true });
+  s.layout = { kettle1: [-3, -4], cooler: [-2, -5], pile: [-3, -5], trash: [0, 1], counter: [0, 4], board: [2, 0], picnic1: [1, 3] };
+  return Object.assign(s, over);
+}
+// Every owned station's, seat's, the sign's and the line's drawn box in canvas CSS px, the canvas
+// size, and the camera.
+async function frameBoxes() {
+  return ev('g.frameBoxes ? g.frameBoxes() : null');
+}
+// --frame <module>: a dev hook; loads the page, then runs the module's default export with the
+// harness helpers (frames and boxes of one state without the whole run).
+async function frameMode() {
+  const url = pathToFileURL(FILES.index).href + '?seed=' + SEED;
+  const loaded = cdp.once('Page.loadEventFired');
+  await cdp.send('Page.navigate', { url });
+  await loaded;
+  assert(await waitForGame(), 'game did not load');
+  const mod = await import(pathToFileURL(path.resolve(argValue('--frame', ''))).href);
+  return mod.default({ ev, cdp, screenshot, emulate, reload, sleep, advance, realTap, click, saveV9, resultsOf, frameState, frameBoxes, errorCount, report, OUT_DIR });
+}
 async function main() {
+  if (argv.includes('--frame')) {
+    try { await launch(); console.log(JSON.stringify(await frameMode(), null, 1)); } finally { try { if (cdp && cdp.ws) cdp.ws.close(); } catch (_e) { /* ignore */ } killChrome(); await removeProfile(); }
+    return;
+  }
   if (argv.includes('--week')) {
     try { await launch(); console.log(JSON.stringify(await weekPlay(), null, 1)); } finally { try { if (cdp && cdp.ws) cdp.ws.close(); } catch (_e) { /* ignore */ } killChrome(); await removeProfile(); }
     return;
