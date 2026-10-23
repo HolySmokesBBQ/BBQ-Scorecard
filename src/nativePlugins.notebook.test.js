@@ -191,13 +191,23 @@ test('each listed plugin is installed and its classpath names a real plugin clas
 test('the gradle project paths point at real plugin directories', () => {
   // A wrong projectDir fails the build loudly, but it fails it 10 minutes into
   // a queue rather than here.
+  // capacitor-android used to be skipped here, and that exclusion is exactly
+  // what let the bridge project point at ../../../node_modules for months --
+  // C:\Users\jmuil\node_modules, outside the repo entirely. It broke when that
+  // directory was removed in the 2026-10-22 PC cleanup, and no test noticed.
+  // It is checked like every other project now: the whole point of this test
+  // is that the paths resolve, and the bridge is the one that cannot be
+  // missing.
   const settings = read('android-notebook/capacitor.settings.gradle');
+  let checked = 0;
   for (const m of settings.matchAll(/project\(':(capacitor-[\w-]+)'\)\.projectDir = new File\('([^']+)'\)/g)) {
     const [, name, rel] = m;
-    if (name === 'capacitor-android') continue;
     const abs = resolve(ROOT, 'android-notebook', rel);
     expect(existsSync(abs), `${name} projectDir does not exist: ${rel}`).toBe(true);
+    checked++;
   }
+  // A regex that stops matching would make this pass by checking nothing.
+  expect(checked, 'no projectDir lines were parsed at all').toBeGreaterThan(5);
 });
 
 test("Notebook's build scripts parse", () => {
