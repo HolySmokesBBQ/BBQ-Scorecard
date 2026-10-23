@@ -10570,7 +10570,20 @@ async function browserChecks() {
     // Tutorial day: the guests waited for the pitmaster (no self-serve on day 1).
     const d1 = eventsDay1.filter((e) => e.type === 'self_serve' || (e.type === EVENT.served && e.self === true)).length;
     assert(d1 === 0, 'day 1 had ' + d1 + ' self-serve plates');
-    return 'A got up after ' + go.t + ' s, took the plate at ' + atTogo[0].x + ',' + atTogo[0].y + ' (tip ' + atTogo[0].tip + ' of ' + tipCap.table + '), ate at ' + sa.id + '; B waited, delivered by you; puffs ' + cues.map((q) => (q.rect.x1 - q.rect.x0) + 'x' + (q.rect.y1 - q.rect.y0)).join(',') + ', ' + all.filter((q) => q.drawn).length + ' of ' + all.length + ' seats drawn, none on a counter; frames ' + path.basename(shot1) + ', ' + path.basename(shot2);
+    // Joel 2026-10-23: "what happened to customers picking ready food up at the table after paying?"
+    // A guest rung up while their meat waits on the counter picks it up right away, then sits and eats.
+    const C9 = 9801;
+    await run('const st = S(); st.customers = []; for (const k of Object.keys(st.seats)) st.seats[k] = null; st.spawnAt = Infinity; st.stations.table.spots = st.stations.table.spots.map(() => null); st.stations.table.spots[1] = { meat: "chicken", times: [st.clock] }; const q = MAP.queue[0]; st.customers.push({ x: q.x, y: q.y, px: q.x * 16, py: q.y * 16, face: q.face || "up", next: null, path: [], walking: false, anim: 0, id: ' + C9 + ', body: 1, want: "chicken", patienceMax: 999, patience: 999, wait: 0, queueIndex: 0, mode: "waiting", mood: "neutral", reason: null, pause: 0, hop: 0, seat: null, eat: 0, eatMax: 30, bonusPaid: false, booked: false, runPlate: false, paid: false, fed: false, togo: false, spot: -1, price: 0, paidAt: 0, rungBy: null, incoming: null }); const p = st.player; p.x = 1; p.y = 4; p.px = 16; p.py = 64; p.path = []; p.next = null; p.target = null; p.walking = false; p.carrying = null; p.busy = null; g.advance(0); return true;');
+    const n9 = await eventCount();
+    await canvasTap(TILE.register.x, TILE.register.y);
+    const rung = await until('S().customers.some((c) => c.id === ' + C9 + ' && c.paid === true)', WAIT_S.walk);
+    assert(rung.ok, 'the pitmaster did not ring the guest up');
+    const pick = await ev('(() => { const c = S().customers.find((o) => o.id === ' + C9 + '); const ev9 = globalThis.__smoke.events.slice(' + n9 + '); return { fetch: !!c.fetch, seat: c.seat, self: ev9.filter((x) => x.type === "self_serve" && x.id === ' + C9 + ').length, order: ev9.filter((x) => x.id === ' + C9 + ' && (x.type === "rung" || x.type === "self_serve")).map((x) => x.type) }; })()');
+    assert(pick.fetch && pick.seat && pick.self === 1 && sameJSON(pick.order, ['rung', 'self_serve']), 'a guest who paid with their meat on the counter did not pick it up first ' + describe(pick));
+    const ate9 = await until('S().customers.some((c) => c.id === ' + C9 + ' && c.mode === "eating")', 20);
+    const c9 = await ev('(() => { const c = S().customers.find((o) => o.id === ' + C9 + '); const s = MAP.seats.find((x) => x.id === c.seat); return { at: [c.x, c.y], seat: s ? [s.x, s.y] : null, by: globalThis.__smoke.events.slice(' + n9 + ').filter((x) => x.type === "served" && x.id === ' + C9 + ').map((x) => x.by) }; })()');
+    assert(ate9.ok && sameJSON(c9.at, c9.seat) && sameJSON(c9.by, ['self']), 'the paid guest did not carry the plate to the seat and eat ' + describe(c9));
+    return 'A got up after ' + go.t + ' s, took the plate at ' + atTogo[0].x + ',' + atTogo[0].y + ' (tip ' + atTogo[0].tip + ' of ' + tipCap.table + '), ate at ' + sa.id + '; paid with chicken waiting: picked it up, ate at the seat; B waited, delivered by you; puffs ' + cues.map((q) => (q.rect.x1 - q.rect.x0) + 'x' + (q.rect.y1 - q.rect.y0)).join(',') + ', ' + all.filter((q) => q.drawn).length + ' of ' + all.length + ' seats drawn, none on a counter; frames ' + path.basename(shot1) + ', ' + path.basename(shot2);
   });
 
   // v4.6 (Joel's phone 2026-10-21): with a panel open the panel layer covered the header, so a tap

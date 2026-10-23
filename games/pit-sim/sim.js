@@ -4674,26 +4674,30 @@ function createSim(saved, seed) {
       if (freePlates(c.want) <= 0) { c.selfT = 0; continue; }
       c.selfT = (c.selfT || 0) + dt;
       if (c.selfT < C.SELF_SERVE_WAIT) continue;
-      const used = new Set();
-      for (const o of state.customers) {
-        if (o === c) continue;
-        if (o.fetch) used.add(o.fetch.spot);
-        else if (o.mode === 'togo') used.add(o.spot);
-      }
-      let k = -1;
-      for (let i = 0; i < MAP.togo.length; i++) if (!used.has(i)) { k = i; break; }
-      if (k < 0) continue;
-      const sp = MAP.togo[k];
-      const path = custRoute(c, sp.x, sp.y);
-      if (path === null) continue;
-      c.selfT = 0;
-      c.fetch = { spot: k };
-      c.incoming = 'self';
-      c.mode = 'toSeat';
-      c.pause = 0;
-      setRoute(c, path);
-      emit('self_serve', { id: c.id, meat: c.want, spot: k });
+      if (startFetch(c)) c.selfT = 0;
     }
+  }
+  // Send guest c to a free to go spot to take one plate of their meat (a claim): true when sent.
+  function startFetch(c) {
+    const used = new Set();
+    for (const o of state.customers) {
+      if (o === c) continue;
+      if (o.fetch) used.add(o.fetch.spot);
+      else if (o.mode === 'togo') used.add(o.spot);
+    }
+    let k = -1;
+    for (let i = 0; i < MAP.togo.length; i++) if (!used.has(i)) { k = i; break; }
+    if (k < 0) return false;
+    const sp = MAP.togo[k];
+    const path = custRoute(c, sp.x, sp.y);
+    if (path === null) return false;
+    c.fetch = { spot: k };
+    c.incoming = 'self';
+    c.mode = 'toSeat';
+    c.pause = 0;
+    setRoute(c, path);
+    emit('self_serve', { id: c.id, meat: c.want, spot: k });
+    return true;
   }
   // At the to go spot: take the claimed plate (it is served there), or, if it is gone, go back and wait.
   function fetchArrive(c, sp) {
@@ -4816,8 +4820,11 @@ function createSim(saved, seed) {
       c.eatMax = C.EAT_MIN + (C.EAT_MAX - C.EAT_MIN) * rng();
       c.eat = 0;
       c.mode = 'toSeat';
-      setRoute(c, pick.path);
       emit('seat_taken', { id: c.id, seat: id });
+      // Joel 2026-10-23: a plate of their meat already waiting on the counter? They pick it up right
+      // after paying and carry it to the seat. Otherwise they sit and wait (self-serve or delivery).
+      if (selfServeOn() && !c.hostSeat && freePlates(c.want) > 0 && startFetch(c)) return;
+      setRoute(c, pick.path);
       return;
     }
     const hs = pickHostSeat(c);
