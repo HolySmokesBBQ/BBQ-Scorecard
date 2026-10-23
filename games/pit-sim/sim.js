@@ -3,6 +3,19 @@
 // no browser storage. Randomness only through the seeded generator on the sim object. Runs in
 // Node under vm.runInThisContext and in the browser as a classic deferred script.
 //
+// v4.8 Help wanted (2026-10-23, Joel: "Why are there 'rounds' of hiring? That's too 'retro bowl'
+// like."). Hiring Day (the draft with rounds, picks, tryouts and other outfits) is gone. The crew
+// sheet holds a Help wanted board instead: season.board, BOARD_SIZE applicants by the fan rating
+// third (BOARD_FIRST in week 1), each with role, stars, wage and one line about them (boardLine,
+// which hints at the hidden potential). hireBoard(i) signs one any time in the week's mornings when a
+// crew slot is open (C.TIER_SLOTS by cooker tier), its wage fits the payroll cap (hireCapWhy) and,
+// for a PIT applicant, the yard has the cabinet smoker; no signing fee, two seasons, NEW, as the
+// draft was. startWeek() refreshes the board every week (genBoard): each open applicant stays with
+// chance BOARD_STAY, the rest are gone, new ones fill it. Referrals from the Offseason join the
+// week 1 board. Walk-ins are as before. Season start, the creator and the tutorial go straight to
+// week 1 with the board. Save v16: season.board { year, week, list }; a v15 save mid Hiring Day (or
+// owing one) loads onto week 1 with a fresh board, its crew kept and its open referrals on the board.
+//
 // v4.0 Economy (2026-10-20, Joel: "a few sessions in I was losing money", "as the facility grows so
 // does the ability to hire staff"). dev/econ.mjs plays whole seasons on these rules. The leak: every
 // lineup card was paid its full wage on every cook, a half length weekday Yard day too, and Hiring Day
@@ -10,7 +23,7 @@
 // Wednesday Yard days lost about 30 each and the typical crew player sat near flat for three weeks.
 //   C.YARD_DAY_WAGE 0.5: a weekday Yard day pays each card half (till.halfShift, ui.halfShift).
 //   C.PAYROLL_START 30 and C.PAYROLL_PER_GEAR 10: the wages the yard can sign grow with the gear owned,
-//     up to C.PAYROLL[0]. hireApplicant, hireReferral and hireWalkin refuse past it (ui.hireCap).
+//     up to C.PAYROLL[0]. hireBoard and hireWalkin refuse past it (ui.hireCap).
 //     payroll() adds hire (that cap) and signed (every card's wage); budget is still C.PAYROLL[0].
 //   A Yard day's till.net now comes after the meat, charcoal and spoilage it used (as a booking's), so
 //     the report's Take today is what the day made; game.js shows Costs and Wages above it and the
@@ -28,7 +41,7 @@
 //   yardCart() cooks the booking's meats on a Yard day only with a cooler.
 //   A weekday Yard day's daily costs are C.YARD_DAY_COSTS (till.daily; a half shift, as the wages).
 //   nextGear(): the Gear tile's Next and goal(): the cooler, then the cabinet smoker, then the rest.
-//   hiringView().money (wageCheck): what a Yard day clears at this pace and the wage line (half of it).
+//   boardView().money (wageCheck): what a Yard day clears at this pace and the wage line (half of it).
 //   The money log: season.money (one row a day: day, kind, plates, net, big), season.moneyPrev, and
 //     moneyView() for the Season tab (STRINGS.money). Both saved in the season only when set.
 
@@ -60,9 +73,9 @@
 //   The cooker: card.post (setPitPost / cyclePitPost, crew sheet #card-post), else kettle 2 when owned,
 //     else the main cooker. state.pitCard is the mover (state.pit stays the pitmaster's XP).
 //   Lock: pitOpen() is pitTier >= C.PIT_TIER (the cabinet smoker). On the kettle a PIT card is out of
-//     the lineup and every hire of one is refused (ui.pitLocked); Hiring Day says so (ui.pitLockedH).
-//     genPool and genWalkins take input pit: the pool appends C.PIT_POOL PIT cards from their own stream
-//     (the 24 stay as they were), walk-ins draw from five roles. A PIT card that moves on refers a PIT.
+//     the lineup and every hire of one is refused (ui.pitLocked); the board says so (ui.pitLockedB).
+//     genBoard and genWalkins take input pit: with it they draw from five roles (v4.8: the board
+//     replaced the Hiring Day pool). A PIT card that moves on refers a PIT.
 //   Wage C.ROLE_WAGE.pit 1.5 (FIRE 1.25). XP: pieces pulled (XP_PREP_CUT) and fuel (XP_FIRE_BAG).
 //   Save v14: cards may hold role 'pit' and post; a v13 or older save drops a PIT card (none existed).
 //   Events: pit_lit, pit_fed, pit_on, pit_pull { burnt, over }, pit_park, pit_post.
@@ -574,7 +587,7 @@ const C = Object.freeze({
   // weather
   RAIN_FROM_DAY: 4, RAIN_CHANCE: 0.15, RAIN_ARRIVALS: 0.6,
   // save clamps
-  SAVE_VERSION: 15, MAX_DAY: 999, MAX_CASH: 999999, MAX_STAT: 9999999,   // v3.4: 8 (season.advance); v3.5: 9 (season.plan, pit); v3.6: 10 (the register, the TILL card)
+  SAVE_VERSION: 16, MAX_DAY: 999, MAX_CASH: 999999, MAX_STAT: 9999999,   // v3.4: 8 (season.advance); v3.5: 9 (season.plan, pit); v3.6: 10 (the register, the TILL card)
   // v3.0 season and week [S 3], contract W2
   SEASON_WEEKS: 7,                    // v3.5: six weeks and the competition finale as week 7 (was 9)
   YEAR_MAX: 99,
@@ -674,10 +687,10 @@ const C = Object.freeze({
   MOOD_STARS: Object.freeze([-1, -0.5, 0, 0, 0.5]),      // added to both skills during a cook, index mood + 2 [S 6.4]
   WAGE_TABLE: Object.freeze([10, 13, 16, 20, 24, 29, 34, 40, 46]),   // overall stars 1, 1.5, 2, ... 5 [S 6.5]
   ROLE_WAGE: Object.freeze({ run: 1.0, fire: 1.25, prep: 1.0, till: 1.0, pit: 1.5 }),   // v4.3: PIT above FIRE (it does FIRE's job on its cooker and more)
-  // v4.3 the PIT card: from the cabinet smoker up (pitTier), six in a Hiring Day pool once open, the
+  // v4.3 the PIT card: from the cabinet smoker up (pitTier), on the Help wanted board once open, the
   // plates it keeps ahead on a Yard day, seconds between its feeds, seconds it holds a piece at a busy
   // board, and the seconds of slack it wants before a pull when it slices.
-  PIT_TIER: 1, PIT_POOL: 6, PIT_AHEAD: 8, PIT_FEED_GAP: 2.5, PIT_HOLD_S: 6, PIT_SLICE_LEAD: 2,
+  PIT_TIER: 1, PIT_AHEAD: 8, PIT_FEED_GAP: 2.5, PIT_HOLD_S: 6, PIT_SLICE_LEAD: 2,
   // v3.7 the register: a guest orders and pays there first, then sits (or stands at a to go spot)
   // and waits for the plate; the tip is paid when the plate arrives.
   PAYROLL: Object.freeze([60, 90, 140, 220]),            // by rung index; v3.1 is always index 0, the backyard (review 1: kept, X20.13)
@@ -693,7 +706,7 @@ const C = Object.freeze({
   // grate slot needs a piece (cook and handling), so the cart never passes what the cookers can turn.
   // A weekday Yard day's daily costs are YARD_DAY_COSTS (a half shift, as the wages).
   PACE_START: Object.freeze([5, 8]), PACE_GROW: 1.2, PACE_ADD: 1, PACE_TURN_S: 30, YARD_DAY_COSTS: 5,
-  PLATE_CLEAR: 6,   // v4.4: what a sold plate clears after its meat, with the tip (Hiring Day's estimate)
+  PLATE_CLEAR: 6,   // v4.4: what a sold plate clears after its meat, with the tip (the board's estimate)
   // v4.1 the gear ladder, by pitTier (kettle, cabinet smoker, stick burner, trailer rig): crew slots,
   // the lineup budget, the extra signable wages a tier and the booking headcount factor.
   TIER_SLOTS: Object.freeze([2, 3, 4, 5]),
@@ -703,16 +716,16 @@ const C = Object.freeze({
   CABINET_SLOTS: 4, CABINET_DECAY: 0.5, OFFSET_SLOTS: 6, OFFSET_DECAY: 0.4, TRAILER_SLOTS: 8, TRAILER_DECAY: 0.3,
   WOOD_PRICE: 3, WOOD_ADD: 40, SPLITS_PER_COOKER: 7,   // a split adds 40 (a bag 30); prefill splits per wood cooker
   ROSTER_SLOTS: Object.freeze([2, 3, 4, 6]),
-  CREW_MAX: 8,                                           // cards a save may hold: the slots plus a full draft
+  CREW_MAX: 8,                                           // cards a save may hold: the most slots and an old save's extras
   BENCH_STREAK: 2,                                       // booked events left home in a row that cost a mood step
-  HIRE_ROUNDS: 3, POOL_SIZE: 24, POOL_PAGE: 9,   // v3.6: 24 (6 a role, TILL added; was 18)
-  TAKEN_PER_ROUND: 3, TAKEN_SHORTLIST: 6,                // other outfits take 3 of the 6 best open cards after every round
-  TRYOUTS: 2,
+  BOARD_SIZE: Object.freeze([3, 4, 5]),                  // v4.8: Help wanted applicants a week by fan rating third
+  BOARD_FIRST: 6,                                        // v4.8: the week 1 board (one of each open role first; 6 tuned by dev/econ.mjs real)
+  BOARD_STAY: 0.5,                                       // v4.8: the chance an applicant you passed on is still there next week
   WALKINS: Object.freeze([2, 2, 3]),                     // walk-ins a week by fan rating third
   LEVEL_XP: 120, BANK_MAX: 9,                            // review 1: LEVEL_XP 200 to 120
   XP_RUN_PLATE: 3, XP_PREP_CUT: 3, XP_FIRE_BAG: 3, XP_FIRE_HOLD: 15,   // review 1: FIRE 1 and 10 to 3 and 15
   FIRE_WALK: Object.freeze([3.5, 5.5]),                  // review 1: the FIRE card's walk, NPC_TILES_PER_S * TENDER_CYCLE / firePace clamped to this
-  HEADLINER: Object.freeze([2.5, 2]),                    // review 1: a role's first pool card draws each skill as 2.5 + floor(r() * 2) / 2
+  HEADLINER: Object.freeze([2.5, 2]),                    // review 1: a board's headliner draws each skill as 2.5 + floor(r() * 2) / 2
   HAT_SHARE: 0.25,                                       // review 1: the share of crew looks that wear a hat
   STRETCH_EDGE: 1.0,                                     // review 1: a drawn stretch pays more than this times every safe card
   TRAIN_XP: 40,
@@ -1689,7 +1702,7 @@ const STRINGS = Object.freeze({
     movingOn: 'Moving on',
     nobody: 'Nobody is moving on.',
     leaves: '{name} {reason}',
-    refers: '{name} sends a friend to Hiring Day.',
+    refers: '{name} sends a friend to the Help wanted board.',
     refersNone: '{name} leaves without sending anyone.',
     referral: 'Friend of {name}',
     start: 'Start season {n}'
@@ -1744,6 +1757,15 @@ const STRINGS = Object.freeze({
     pit: Object.freeze(['Pulls meat closer to done.', 'Burns fewer pieces and keeps the fire steadier.'])
   }),
   mood: Object.freeze(['Done', 'Grumpy', 'OK', 'Happy', 'Fired up']),      // index mood + 2
+  // v4.8 the Help wanted board: one line an applicant by role and how far they can grow
+  // (potential 4.5 and up, 3.5 and up, else), so the board hints at what a card hides.
+  boardSay: Object.freeze({
+    run: Object.freeze(['Quick on their feet and learns fast.', 'Carries plates fine and wants to get better.', 'Carries plates fine. Set in their ways.']),
+    fire: Object.freeze(['New to fire but picks it up fast.', 'Keeps a fire going and wants to learn more.', 'Knows charcoal. About as good as they will get.']),
+    prep: Object.freeze(['Good with a knife and learns fast.', 'Slices clean and wants to get faster.', 'Slices fine. Set in their ways.']),
+    till: Object.freeze(['Quick with change and learns fast.', 'Runs a register fine and wants to get better.', 'Runs a register. Set in their ways.']),
+    pit: Object.freeze(['Cooked at home for years and learns fast.', 'Can run a cooker and wants to learn more.', 'Can run a cooker. Set in their ways.'])
+  }),
   crewSay: Object.freeze({
     run: '{name} ran {n} plates. Guests tipped {t}.',             // review 1: the tips on the plates they carried
     runOne: '{name} ran 1 plate. Guests tipped {t}.',
@@ -1814,11 +1836,7 @@ const STRINGS = Object.freeze({
     refillMeat: 'One more {label} is in the cooler.',               // {label}: MEATS[meat].label
     refillCharcoal: 'One more bag is on the pile.',
     // v3.1 (contract X10, exact text)
-    hiringOpen: 'Hiring Day. {n} people want to work your pit.',
     hired: '{name} joins the crew.',
-    tryout: '{name} could reach {n} stars.',
-    roundDone: 'Round {r} is over. Other outfits hired {list}.',
-    hiringDone: 'Hiring Day is done.',
     letGo: '{name} is off the crew.',
     trained: '{name} trained. Plus {xp} XP.',
     levelReady: '{name} can level up.',
@@ -2094,36 +2112,22 @@ const STRINGS = Object.freeze({
     // save notice
     notice: 'Your save was updated for the season.',
     // v3.1 (contract X10, exact text)
-    // Hiring Day
-    hiringH: 'Hiring Day',
-    hireRound: 'Round {r} of 3',
-    hireRoundsDone: 'Every round is done',
-    pageOf: 'Page {p}/{n}',
-    pagePrev: 'Previous page',
-    pageNext: 'Next page',
-    hireInfo: 'How Hiring Day works',
-    hireHelp: 'Tap a card to see it. Each round you can hire one person or pass. Other outfits hire after every round.',
+    // v4.8 the Help wanted board (the crew sheet)
+    boardH: 'Help wanted',
+    boardNote: 'Hire anyone here between days. No signing fee, two seasons. The board changes every week.',
+    boardEmpty: 'Nobody new this week. Check back next week.',
+    boardFrom: 'Sent by {name}.',
+    boardAria: '{name}, {role}, {stars}, wage {w}. {line}',
     payroll: 'Payroll {p} / {b}',
     payrollAria: 'Payroll {p} of {b} for one event',
-    crewBtn: 'Crew',
-    hiresLeft: 'Hires left',
-    passRound: 'Pass round {r}',
-    startWeek: 'Start week 1',
-    tryoutsLeft: 'Tryouts left: {n}',
-    tooMany: 'Let someone go. The crew has room for {s}.',
-    taken: 'Hired elsewhere',
-    yours: 'On your crew',
     newBadge: 'NEW',
     wage: 'Wage',
     perEvent: '{w} an event',
     contract1: '1 season',
     contract2: '2 seasons',
     appAria: '{name}, {role}, {stars}, wage {w}',
-    appTaken: '{name}, hired elsewhere',
     potential: 'Potential {n} stars',
-    potentialHidden: 'Potential unknown. A tryout shows it.',
-    tryout: 'Try out',
-    tryoutNone: 'No tryouts left',
+    potentialHidden: 'Potential unknown until they work for you. Their line on the board gives a hint.',
     hire: 'Hire',
     hireFee: 'Hire for {f}',
     pass: 'Pass',
@@ -2154,7 +2158,7 @@ const STRINGS = Object.freeze({
     no: 'No',
     sendOffCash: 'Not enough cash for the send-off.',
     slots: '{n} of {s} on the crew',
-    crewEmpty: 'No crew yet. Walk-ins come by every week.',
+    crewEmpty: 'No crew yet. Hire from the Help wanted board below.',
     walkinsH: 'Walk-ins this week',
     walkinLine: 'They sign for one season. The signing fee is one event of wages.',
     crewFull: 'The crew is full. Let someone go first.',
@@ -2186,7 +2190,7 @@ const STRINGS = Object.freeze({
     hireCap: 'Your yard can sign {b} in wages. Each piece of gear adds {n}.',
     // v4.3 the PIT card (a second pitmaster who runs one cooker)
     pitLocked: 'A PIT card needs the cabinet smoker or better. Buy it on the Gear sheet first.',
-    pitLockedH: 'No PIT cards today. A PIT card runs one cooker for you, and hiring one needs the cabinet smoker.',
+    pitLockedB: 'No PIT applicants yet. A PIT card runs one cooker for you, and hiring one needs the cabinet smoker.',
     pitPost: 'Runs {c}. Tap to change',
     rowCrewPaid: 'Signing and send-off',
     moneyMore: 'Show every row',
@@ -2205,14 +2209,9 @@ const STRINGS = Object.freeze({
     // the season end card and the save notice
     seCrew: '{name} signs on for another season at {w}.',
     noticeCrew: 'Your save was updated. Your helpers are crew cards now.',
-    // review round 1 (contract X20)
-    passEmpty: 'Pass round {r}? Nobody is on your crew yet.',
-    // v4.4 Hiring Day: what a Yard day clears at this pitmaster's pace, before wages.
+    // v4.4 the board: what a Yard day clears at this pitmaster's pace, before wages.
     wageNote: 'At your pace a Yard day clears about {n} before wages. Wages come out of every cook, half on a weekday. You can run the kettle alone.',
-    wageWarn: 'A card over {h} a cook takes more than half of that. You can pass and hire once the yard sells more.',
-    tryoutTaken: '{name} went to another outfit after the tryout.',
-    takenBadge: '{n} taken',
-    takenPageAria: '{n} hired elsewhere on page {p}',
+    wageWarn: 'An applicant over {h} a cook takes more than half of that. You can wait and hire once the yard sells more.',
     crewNext: 'Crew: {names}. Wages {w}.',
     crewNone: 'Nobody on the crew this time.',
     wageRow: 'Wage {w}',
@@ -2463,58 +2462,84 @@ function fanThirdOf(rep) {
   return rep >= C.THIRD_EDGES[1] ? 2 : (rep >= C.THIRD_EDGES[0] ? 1 : 0);
 }
 
-// X6.1: the Hiring Day pool, 18 applicants (six of each role), 1 to 3 stars, potential 2 to 5.
-// Review 1: the first card of each role (in pool order) is a headliner, each skill drawn as
-// HEADLINER[0] + floor(r() * HEADLINER[1]) / 2 (2.5 to 3 stars), so every pool holds one 2.5 or 3 star
-// card a role, the cards other outfits go after first. Same draws, same order.
-function genPool(input) {
+// v4.8: the line a Help wanted applicant shows, by role and how far they can grow.
+function boardLine(role, potential) {
+  const lines = STRINGS.boardSay[roleOf(role)] || STRINGS.boardSay.run;
+  const p = typeof potential === 'number' ? potential : 0;
+  return lines[p >= 4.5 ? 0 : (p >= 3.5 ? 1 : 2)];
+}
+
+// v4.8: this week's Help wanted board (pure, deterministic). Week 1 holds BOARD_FIRST applicants
+// with one of each open role first, a later week BOARD_SIZE by the fan rating third. Each applicant
+// in input keep (last week's board, the ones nobody hired) stays with chance BOARD_STAY, in order,
+// while there is room for one new face at least; the rest of the board is new. The first new applicant is a headliner
+// (HEADLINER, 2.5 to 3 stars), the others 1 to 3 stars; potential 2 to 5, never under the best skill
+// plus a half. PIT applicants only with input pit true (the cabinet smoker). Input refs (referrals)
+// join after, each with its from. Every entry: name, role, skills, potential, mood, look, stars,
+// wage, line (and from on a referral). The board is in role order, then the referrals.
+function genBoard(input) {
   const inp = isPlainObject(input) ? input : {};
   const seed = seedOf(inp);
   const year = toInt(readKey(inp, 'year'), 1, 1, C.YEAR_MAX);
+  const week = toInt(readKey(inp, 'week'), 1, 1, C.SEASON_WEEKS);
+  const rep = finiteOr0(readKey(inp, 'rep'));
   const used = nameSet(readKey(inp, 'avoid'));
-  const rp = mulberry32(mix32((seed ^ 0x504F4F4C) >>> 0, year, 0));
-  const roles = [];
-  const each = Math.floor(C.POOL_SIZE / POOL_ROLES.length);
-  for (const role of POOL_ROLES) for (let i = 0; i < each; i++) roles.push(role);
-  for (let i = roles.length - 1; i >= 1; i--) {
-    const j = Math.floor(rp() * (i + 1));
-    const tmp = roles[i]; roles[i] = roles[j]; roles[j] = tmp;
-  }
+  const rb = mulberry32(mix32((seed ^ 0x424F4152) >>> 0, year, week));
+  const n = week === 1 ? C.BOARD_FIRST : C.BOARD_SIZE[fanThirdOf(rep)];
+  const open = readKey(inp, 'pit') === true ? ROLE_IDS : POOL_ROLES;
   const out = [];
-  const headed = new Set();
-  for (let idx = 0; idx < roles.length; idx++) {
-    const role = roles[idx];
-    const name = drawName(rp, used);
-    const head = !headed.has(role);
-    headed.add(role);
-    const s0 = head ? C.HEADLINER[0] + Math.floor(rp() * C.HEADLINER[1]) / 2 : 1 + Math.floor(rp() * 5) / 2;
-    const s1 = head ? C.HEADLINER[0] + Math.floor(rp() * C.HEADLINER[1]) / 2 : 1 + Math.floor(rp() * 5) / 2;
-    const potential = Math.min(5, Math.max(Math.max(s0, s1) + 0.5, 2 + Math.floor(rp() * 7) / 2));
-    const mood = rp() < 0.5 ? 0 : 1;
-    const look = drawLook(rp);
-    const stars = cardStars([s0, s1]);
-    out.push({ name, role, skills: [s0, s1], potential, mood, look, stars, wage: wageFor(stars, role), idx });
+  const keepIn = readKey(inp, 'keep');
+  const keep = Array.isArray(keepIn) ? keepIn : [];
+  for (const k of keep) {
+    const stay = rb() < C.BOARD_STAY;
+    if (!stay || out.length >= n - 1 || !isPlainObject(k) || !open.includes(k.role) || used.has(k.name)) continue;
+    used.add(k.name);
+    const stars = cardStars(k.skills);
+    const e = { name: k.name, role: k.role, skills: k.skills.slice(), potential: k.potential, mood: k.mood, look: cleanLook(k.look), stars, wage: wageFor(stars, k.role), line: boardLine(k.role, k.potential) };
+    if (typeof k.from === 'string') e.from = k.from;
+    out.push(e);
   }
-  // v4.3: with the cabinet smoker or better (input pit true), PIT_POOL PIT cards follow the 24 from
-  // their own stream, so the first 24 stay as they were; the first is a headliner as above.
-  if (readKey(inp, 'pit') === true) {
-    const rq = mulberry32(mix32((seed ^ 0x50495421) >>> 0, year, 0));
-    for (let i = 0; i < C.PIT_POOL; i++) {
-      const name = drawName(rq, used);
-      const s0 = i === 0 ? C.HEADLINER[0] + Math.floor(rq() * C.HEADLINER[1]) / 2 : 1 + Math.floor(rq() * 5) / 2;
-      const s1 = i === 0 ? C.HEADLINER[0] + Math.floor(rq() * C.HEADLINER[1]) / 2 : 1 + Math.floor(rq() * 5) / 2;
-      const potential = Math.min(5, Math.max(Math.max(s0, s1) + 0.5, 2 + Math.floor(rq() * 7) / 2));
-      const mood = rq() < 0.5 ? 0 : 1;
-      const look = drawLook(rq);
-      const stars = cardStars([s0, s1]);
-      out.push({ name, role: 'pit', skills: [s0, s1], potential, mood, look, stars, wage: wageFor(stars, 'pit'), idx: out.length });
-    }
+  // The new roles: every open role once in a shuffled order (week 1 starts with the four that need
+  // no cabinet), then again, so a board rarely holds two of a role.
+  const deck = week === 1 ? POOL_ROLES.slice() : open.slice();
+  for (let i = deck.length - 1; i >= 1; i--) {
+    const j = Math.floor(rb() * (i + 1));
+    const t = deck[i]; deck[i] = deck[j]; deck[j] = t;
+  }
+  const more = open.slice();
+  for (let i = more.length - 1; i >= 1; i--) {
+    const j = Math.floor(rb() * (i + 1));
+    const t = more[i]; more[i] = more[j]; more[j] = t;
+  }
+  const roles = deck.concat(more, more);
+  let k = 0;
+  while (out.length < n) {
+    const role = roles[k % roles.length];
+    const head = k === 0;
+    k += 1;
+    const name = drawName(rb, used);
+    const s0 = head ? C.HEADLINER[0] + Math.floor(rb() * C.HEADLINER[1]) / 2 : 1 + Math.floor(rb() * 5) / 2;
+    const s1 = head ? C.HEADLINER[0] + Math.floor(rb() * C.HEADLINER[1]) / 2 : 1 + Math.floor(rb() * 5) / 2;
+    const potential = Math.min(5, Math.max(Math.max(s0, s1) + 0.5, 2 + Math.floor(rb() * 7) / 2));
+    const mood = rb() < 0.5 ? 0 : 1;
+    const look = drawLook(rb);
+    const stars = cardStars([s0, s1]);
+    out.push({ name, role, skills: [s0, s1], potential, mood, look, stars, wage: wageFor(stars, role), line: boardLine(role, potential) });
+  }
+  // The board reads by role (RUN, FIRE, PREP, TILL, PIT), each role in draw order.
+  out.sort((a, b) => ROLE_IDS.indexOf(a.role) - ROLE_IDS.indexOf(b.role));
+  const refsIn = readKey(inp, 'refs');
+  for (const r of Array.isArray(refsIn) ? refsIn : []) {
+    if (!isPlainObject(r) || !ROLE_IDS.includes(r.role)) continue;
+    const stars = cardStars(r.skills);
+    out.push({ name: r.name, role: r.role, skills: r.skills.slice(), potential: r.potential, mood: r.mood, look: cleanLook(r.look), stars,
+      wage: wageFor(stars, r.role), line: boardLine(r.role, r.potential), from: typeof r.from === 'string' ? r.from : STRINGS.defaultName });
   }
   return out;
 }
 
 // X6.3: this week's walk-ins, 2, 2 or 3 by the fan rating third; trained cards of 2 to 4 stars.
-// Review 1: none in week 1 (Hiring Day was this morning), and a walk-in comes at its ceiling
+// Review 1: none in week 1 (the board is all new that week), and a walk-in comes at its ceiling
 // (potential = its best skill; the potential draw still happens so the stream keeps its order).
 function genWalkins(input) {
   const inp = isPlainObject(input) ? input : {};
@@ -3294,48 +3319,54 @@ function readWalkins(arr, roles) {
   return out;
 }
 
-// X11.2: Hiring Day mid way: round 1 to 4, tryouts 0 to TRYOUTS and exactly 18 valid pool entries,
-// else null.
-function readHiring(h, year, roles) {
-  if (!isPlainObject(h)) return null;
-  const y = readKey(h, 'year'), round = readKey(h, 'round'), tryouts = readKey(h, 'tryouts');
-  if (y !== year) return null;
-  if (!(typeof round === 'number' && Number.isInteger(round) && round >= 1 && round <= C.HIRE_ROUNDS + 1)) return null;
-  if (!(typeof tryouts === 'number' && Number.isInteger(tryouts) && tryouts >= 0 && tryouts <= C.TRYOUTS)) return null;
-  const pool = readKey(h, 'pool');
-  // v3.6: a v9 save's Hiring Day mid way keeps its 18 card pool (no TILL cards in it). v4.3: a pool
-  // with the PIT cards holds POOL_SIZE + PIT_POOL.
-  if (!Array.isArray(pool) || (pool.length !== C.POOL_SIZE && pool.length !== 18 && pool.length !== C.POOL_SIZE + C.PIT_POOL)) return null;
+// v4.8 (save v16): the Help wanted board, { year, week, list }: at most BOARD_FIRST + REF_MAX
+// applicants (validated like a walk-in) with their hired flags, and from on a referral. Anything
+// else, or one bad entry, gives null (the week draws a fresh board).
+function readBoard(b, roles) {
+  if (!isPlainObject(b)) return null;
+  const year = readKey(b, 'year'), week = readKey(b, 'week'), list = readKey(b, 'list');
+  if (!(typeof year === 'number' && Number.isInteger(year) && year >= 1 && year <= C.YEAR_MAX)) return null;
+  if (!(typeof week === 'number' && Number.isInteger(week) && week >= 1 && week <= C.SEASON_WEEKS)) return null;
+  if (!Array.isArray(list) || list.length > C.BOARD_FIRST + C.REF_MAX) return null;
   const used = new Set();
   const out = [];
-  for (let i = 0; i < pool.length; i++) {
+  for (let i = 0; i < list.length; i++) {
     let e;
-    try { e = pool[i]; } catch (x) { return null; }
+    try { e = list[i]; } catch (x) { return null; }
     const a = cleanApplicant(e, i, used, roles);
     if (a === null) return null;
-    const status = readKey(e, 'status');
-    if (status !== 'open' && status !== 'mine' && status !== 'taken') return null;
-    a.status = status;
-    a.tried = toBool(readKey(e, 'tried'));
+    a.hired = toBool(readKey(e, 'hired'));
+    const from = readKey(e, 'from');
+    if (typeof from === 'string') a.from = cleanName(from, STRINGS.defaultName);
     out.push(a);
   }
-  // v3.3 (V33-6): up to REF_MAX referral cards, each open or mine; a bad list drops to [].
-  let refs = [];
-  const refsIn = readKey(h, 'refs');
-  if (Array.isArray(refsIn) && refsIn.length <= C.REF_MAX) {
-    for (let i = 0; i < refsIn.length; i++) {
-      let e;
-      try { e = refsIn[i]; } catch (x) { refs = []; break; }
-      const a = cleanApplicant(e, C.POOL_SIZE + i, used, roles);
-      const status = readKey(e, 'status');
-      if (a === null || (status !== 'open' && status !== 'mine')) { refs = []; break; }
-      a.status = status;
-      const from = readKey(e, 'from');
-      a.from = typeof from === 'string' ? cleanName(from, STRINGS.defaultName) : STRINGS.defaultName;
-      refs.push(a);
-    }
+  return { year, week, list: out };
+}
+
+// v4.8: a v15 or older save's Hiring Day (mid way) keeps only its open referrals, up to REF_MAX,
+// for the week 1 board; the pool, the rounds and the tryouts are gone. A bad list gives [].
+function readOldRefs(h, year, roles) {
+  if (!isPlainObject(h) || readKey(h, 'year') !== year) return [];
+  return readRefList(readKey(h, 'refs'), roles);
+}
+// v4.8: up to REF_MAX referrals (an entry with status other than open is left out), as the old
+// Hiring Day held them or as validateSave hands them on in season.refs.
+function readRefList(refsIn, roles) {
+  if (!Array.isArray(refsIn) || refsIn.length > C.REF_MAX) return [];
+  const used = new Set();
+  const out = [];
+  for (let i = 0; i < refsIn.length; i++) {
+    let e;
+    try { e = refsIn[i]; } catch (x) { return []; }
+    const a = cleanApplicant(e, i, used, roles);
+    const status = readKey(e, 'status');
+    if (a === null || (status !== undefined && status !== 'open' && status !== 'mine')) return [];
+    if (status === 'mine') continue;
+    const from = readKey(e, 'from');
+    a.from = typeof from === 'string' ? cleanName(from, STRINGS.defaultName) : STRINGS.defaultName;
+    out.push(a);
   }
-  return { year: y, round, tryouts, pool: out, refs };
+  return out;
 }
 
 // X11.3: v1 to v4 hires become cards, buddy first (a RUN card, 2.5 stars) then the fire tender (a
@@ -3363,7 +3394,7 @@ function validateSave(obj) {
   try {
     if (!isPlainObject(obj)) return null;
     const v = readKey(obj, 'v');
-    if (v !== 1 && v !== 2 && v !== 3 && v !== 4 && v !== 5 && v !== 6 && v !== 7 && v !== 8 && v !== 9 && v !== 10 && v !== 11 && v !== 12 && v !== 13 && v !== 14 && v !== 15) return null;
+    if (v !== 1 && v !== 2 && v !== 3 && v !== 4 && v !== 5 && v !== 6 && v !== 7 && v !== 8 && v !== 9 && v !== 10 && v !== 11 && v !== 12 && v !== 13 && v !== 14 && v !== 15 && v !== 16) return null;
     const day = toInt(readKey(obj, 'day'), 1, 1, C.MAX_DAY);
     const cash = toInt(readKey(obj, 'cash'), C.START_CASH, 0, C.MAX_CASH);
     const rep = toInt(readKey(obj, 'rep'), C.START_REP, 0, 100);
@@ -3467,22 +3498,25 @@ function validateSave(obj) {
     if (typeof prevIn === 'number' && Number.isFinite(prevIn)) season.moneyPrev = toInt(prevIn, 0, -C.MAX_CASH, C.MAX_CASH);
     season.overnight = (typeof onMeat === 'string' && C.OVERNIGHT_MEATS.includes(onMeat) && (!MEATS[onMeat].drumOnly || canBrisket(gear))
       && typeof onN === 'number' && Number.isInteger(onN) && onN >= 1 && onN <= C.OVERNIGHT_PIECES) ? { meat: onMeat, n: onN } : null;
-    // X11.2 and X11.3: the crew, the next card id, Hiring Day and the three season keys.
+    // X11.2 and X11.3: the crew, the next card id and the season keys (v4.8: the board, no Hiring Day).
     const seasonV5 = v >= 5 && isPlainObject(seasonIn) ? seasonIn : undefined;
     const crew = v >= 5 ? readCrew(readKey(obj, 'crew'), rolesFor(v)) : migrateHires(hires, season.seed);   // v4.3: PIT cards from v14
     let maxId = 0;
     for (const c of crew) maxId = Math.max(maxId, c.id);
     const seqLo = Math.min(9999, maxId + 1);
     const crewSeq = v >= 5 ? clamp(toInt(readKey(obj, 'crewSeq'), seqLo, 1, 9999), seqLo, 9999) : seqLo;
-    const draftedIn = readKey(seasonV5, 'drafted');
-    season.drafted = typeof draftedIn === 'boolean' ? draftedIn : (season.results.length > 0 || crew.length > 0);
     const trainedIn = readKey(seasonV5, 'trained');
     season.trained = (typeof trainedIn === 'number' && Number.isInteger(trainedIn) && trainedIn >= 1 && trainedIn <= crewSeq - 1) ? trainedIn : null;
     season.walkins = v >= 5 ? readWalkins(readKey(seasonV5, 'walkins'), rolesFor(v)) : [];
-    let hiring = null;
-    if (v >= 5 && season.results.length === 0 && season.drafted === false && player !== null && !owed) {
-      hiring = readHiring(readKey(obj, 'hiring'), season.year, rolesFor(v));
-    }
+    // v4.8: the Help wanted board (save v16). A v15 or older save mid Hiring Day, or owing one, opens
+    // week 1 with a fresh board and its open referrals on it; its crew is already in crew.
+    // Both keys only when there is something to keep, so a save reads back the same.
+    const boardIn = v >= 16 && !owed ? readBoard(readKey(seasonV5, 'board'), rolesFor(v)) : null;
+    if (boardIn !== null) season.board = boardIn;
+    const refsOld = v >= 5 && v < 16 && !owed && season.results.length === 0 && player !== null
+      ? readOldRefs(readKey(obj, 'hiring'), season.year, rolesFor(v))
+      : (v >= 16 && !owed && season.results.length === 0 ? readRefList(readKey(seasonV5, 'refs'), rolesFor(v)) : []);
+    if (refsOld.length) season.refs = refsOld;
     // v3.3: the trophy shelf, the ribbons and the open Offseason picks (v6 and older: none).
     const trophies = v >= 7 ? readTrophies(readKey(obj, 'trophies')) : [];
     const ribbons = readRibbons(v >= 7 ? readKey(obj, 'ribbons') : undefined);
@@ -3506,7 +3540,7 @@ function validateSave(obj) {
     return {
       v: C.SAVE_VERSION, day, cash, rep, stock, charcoal, wood, gear, decor, stats, drivewayShown,
       tutorial: { done: !owed },
-      season, crew, crewSeq, hiring, player, pitName, trophies, ribbons, offseason, pit, layout, ...(pace ? { pace } : {})
+      season, crew, crewSeq, player, pitName, trophies, ribbons, offseason, pit, layout, ...(pace ? { pace } : {})
     };
   } catch (e) {
     return null;
@@ -3673,7 +3707,6 @@ function createSim(saved, seed) {
     // v3.1 (X4.1): crew cards replace state.hires.
     state.crew = s ? s.crew.map(copyCard) : [];
     state.crewSeq = s ? s.crewSeq : 1;
-    state.hiring = null;
     state.stats = {};
     for (const k of STAT_IDS) {
       const v = s && s.stats ? Number(s.stats[k]) : 0;
@@ -3722,9 +3755,9 @@ function createSim(saved, seed) {
       booking: null,
       addon: null,
       results: ss ? ss.results.map((x) => (x.type === 'finale' ? { type: x.type, stars: x.stars, place: x.place | 0, contest: x.contest || null } : { type: x.type, stars: x.stars })) : [],
-      refs: [],   // v3.3: referrals waiting for the next Hiring Day
+      refs: ss && Array.isArray(ss.refs) ? ss.refs.map((a) => Object.assign({}, a)) : [],   // v4.8: referrals waiting for the next week 1 board
+      board: [],   // v4.8: this week's Help wanted board (startWeek)
       // v3.1 (X4.1): createSim() restores the saved trained pick and walk-ins after startWeek().
-      drafted: ss ? ss.drafted === true : false,
       trained: null,
       walkins: [],
       // v3.2 (D3.1): createSim() restores the saved day keys after startWeek().
@@ -7224,7 +7257,7 @@ function createSim(saved, seed) {
     const raining = state.day >= C.RAIN_FROM_DAY && roll < C.RAIN_CHANCE;
     state.rain = raining;
     if (state.day >= C.RAIN_FROM_DAY) emit('rain', { raining });
-    if (nextLoop === 'week' || nextLoop === 'creator' || nextLoop === 'hiring') {   // X8: not on Hiring Day either
+    if (nextLoop === 'week' || nextLoop === 'creator') {
       state.broke = false;
     } else {
       state.broke = brokeTest();
@@ -7684,6 +7717,12 @@ function createSim(saved, seed) {
     // X6.3: this week's walk-ins and an open training pick; signing fees count from here (item 32).
     s.walkins = genWalkins({ seed: s.seed, year: s.year, week: s.week, rep: state.rep, avoid: avoidNames(), pit: pitOpen() })
       .map((a) => Object.assign(a, { hired: false }));
+    // v4.8: the Help wanted board. Last week's applicants nobody hired may stay (genBoard); week 1
+    // takes the Offseason's referrals. The walk-ins' names stay off it.
+    const keep = (Array.isArray(s.board) ? s.board : []).filter((e) => e.hired !== true);
+    s.board = genBoard({ seed: s.seed, year: s.year, week: s.week, rep: state.rep, avoid: avoidNames().concat(s.walkins.map((w) => w.name)),
+      pit: pitOpen(), keep, refs: s.week === 1 ? s.refs : [] }).map((a) => Object.assign(a, { hired: false }));
+    if (s.week === 1) s.refs = [];
     s.trained = null;
     s.day = 0;
     s.dayLog = new Array(C.WEEK_DAYS).fill(null);
@@ -8553,10 +8592,6 @@ function createSim(saved, seed) {
       if (state.profile === null) {
         beginMorning('creator');
         state.loop = 'creator';
-      } else if (hiringOwed()) {   // X8
-        beginMorning('hiring');
-        openHiring(false);
-        emit('save_wanted', { reason: 'hiring' });
       } else {
         beginMorning('week');
         emit('week_start', { year: s.year, week: s.week });
@@ -8734,12 +8769,13 @@ function createSim(saved, seed) {
       }
     }
     state.offseason = null;
-    s.drafted = false;
     s.trained = null;
     s.walkins = [];
-    beginMorning('hiring');
+    s.board = [];   // v4.8: a new season's board is all new, with the referrals on it
+    beginMorning('week');
     emit('season_start', { year: s.year });
-    openHiring(false);
+    emit('week_start', { year: s.year, week: s.week });
+    startWeek();
     emit('save_wanted', { reason: 'season' });
     return true;
   }
@@ -8752,12 +8788,9 @@ function createSim(saved, seed) {
     state.profile = { name: nm, look: lk };
     state.pitName = pit;
     emit('player_set', { name: nm, pitName: pit });
-    if (state.loop === 'creator') {
-      if (hiringOwed()) openHiring(false);   // X8: Hiring Day before week 1
-      else {
-        emit('week_start', { year: state.season.year, week: state.season.week });
-        startWeek();
-      }
+    if (state.loop === 'creator') {   // v4.8: straight to week 1 and its Help wanted board
+      emit('week_start', { year: state.season.year, week: state.season.week });
+      startWeek();
     }
     emit('save_wanted', { reason: 'player' });
     return { ok: true, look: Object.assign({}, lk), name: nm, pitName: pit };
@@ -9256,7 +9289,6 @@ function createSim(saved, seed) {
       // W5.2, [S 19.2]: skipping goes straight to the creator (or the week, with a profile).
       floorAfterTutorial();
       if (state.profile === null) state.loop = 'creator';
-      else if (hiringOwed()) openHiring(false);   // X8
       else {
         emit('week_start', { year: state.season.year, week: state.season.week });
         startWeek();
@@ -9356,15 +9388,7 @@ function createSim(saved, seed) {
   }
 
   function crewLoop() {
-    return (state.loop === 'week' || state.loop === 'hiring') && state.phase === 'morning';
-  }
-
-  function inHiring() {
-    return state.loop === 'hiring' && state.phase === 'morning' && state.hiring !== null;
-  }
-
-  function hiringOwed() {
-    return state.season.drafted !== true && state.season.results.length === 0;
+    return state.loop === 'week' && state.phase === 'morning';
   }
 
   function crewNames() {
@@ -9540,124 +9564,24 @@ function createSim(saved, seed) {
     return { rows, left, changes, levels, notices };
   }
 
-  // X6.2 (internal): Hiring Day opens on this morning, with a fresh pool of 18 or `restore` (a
-  // validated save's hiring). `silent` (a load, X8) emits nothing.
-  function openHiring(silent, restore) {
-    const s = state.season;
-    state.loop = 'hiring';
-    state.phase = 'morning';
-    s.offers = [];
-    s.booking = null;
-    s.addon = null;
-    state.cart = { meat: zeroByMeat(), charcoal: 0, wood: 0 };
-    const pool = restore
-      ? restore.pool.map((e, idx) => {
-        const stars = cardStars(e.skills);
-        return { name: e.name, role: e.role, skills: e.skills.slice(), potential: e.potential, mood: e.mood, look: cleanLook(e.look),
-          stars, wage: wageFor(stars, e.role), idx, status: e.status, tried: e.tried };
-      })
-      : genPool({ seed: s.seed, year: s.year, avoid: avoidNames(), pit: pitOpen() }).map((a) => Object.assign(a, { status: 'open', tried: false }));
-    // v3.3 (V33-6): referral cards from the Offseason, or the saved ones.
-    const refsIn = restore ? (restore.refs || []) : (s.refs || []).map((a) => Object.assign({}, a, { status: 'open' }));
-    const refs = refsIn.map((e, i) => {
-      const stars = cardStars(e.skills);
-      return { name: e.name, role: e.role, skills: e.skills.slice(), potential: e.potential, mood: e.mood, look: cleanLook(e.look),
-        stars, wage: wageFor(stars, e.role), idx: i, status: e.status, from: e.from };
-    });
-    s.refs = [];
-    state.hiring = { year: s.year, round: restore ? restore.round : 1, tryouts: restore ? restore.tryouts : C.TRYOUTS, pool, refs };
-    if (!silent) emit('hiring_open', { year: s.year, n: pool.length });
-  }
-
-  // X6.2: the end of a round. Other outfits take TAKEN_PER_ROUND of the TAKEN_SHORTLIST best open
-  // cards (stars + potential, then idx) by a seeded draw; then the next round.
-  function endRound() {
-    const h = state.hiring;
-    const ro = mulberry32(mix32((state.season.seed ^ 0x52495641) >>> 0, h.year, h.round));
-    const list = h.pool.filter((e) => e.status === 'open')
-      .sort((a, b) => (b.stars + b.potential) - (a.stars + a.potential) || a.idx - b.idx)
-      .slice(0, C.TAKEN_SHORTLIST);
-    const taken = [];
-    for (let k = 0; k < C.TAKEN_PER_ROUND && list.length > 0; k++) {
-      const e = list.splice(Math.floor(ro() * list.length), 1)[0];
-      e.status = 'taken';
-      taken.push(e);
-    }
-    const ended = h.round;
-    h.round += 1;
-    emit('round_done', { round: ended, taken: taken.map((e) => e.idx), names: taken.map((e) => e.name) });
-    emit('save_wanted', { reason: 'hiring' });
-  }
-
-  function poolEntry(idx) {
-    if (!(typeof idx === 'number' && Number.isInteger(idx)) || state.hiring === null) return null;
-    return state.hiring.pool.find((e) => e.idx === idx) || null;
-  }
-
-  function tryout(idx) {
-    const no = (message) => ({ ok: false, message: message || '', potential: null });
-    if (!inHiring()) return no();
-    const h = state.hiring;
-    const e = poolEntry(idx);
-    if (e === null || e.status !== 'open' || e.tried) return no();
-    if (h.tryouts <= 0) return no(STRINGS.ui.tryoutNone);
-    e.tried = true;
-    h.tryouts -= 1;
-    emit('tryout', { idx: e.idx, name: e.name, potential: e.potential });
-    return { ok: true, message: '', potential: e.potential };
-  }
-
-  function hireApplicant(idx) {
+  // v4.8: hire applicant i off this week's Help wanted board, any morning of the week (between
+  // days). A crew slot must be open (C.TIER_SLOTS by cooker tier), a PIT applicant needs the cabinet
+  // smoker and the wage must fit the payroll cap. No signing fee, two seasons, NEW (as the draft was).
+  function hireBoard(i) {
     const no = (message) => ({ ok: false, message: message || '', id: null });
-    if (!inHiring() || state.hiring.round > C.HIRE_ROUNDS) return no();
-    const e = poolEntry(idx);
-    if (e === null || e.status !== 'open') return no();
-    if (state.crew.length >= C.CREW_MAX) return no(STRINGS.ui.crewFull);   // X18.1 item 45
-    if (e.role === 'pit' && !pitOpen()) return no(STRINGS.ui.pitLocked);   // v4.3
-    const cap = hireCapWhy(e.wage);   // v4.0: the yard's wages grow with its gear
+    if (!inWeek() || !(typeof i === 'number' && Number.isInteger(i))) return no();
+    const s = state.season;
+    const e = Array.isArray(s.board) ? s.board[i] : null;
+    if (!e || e.hired) return no();
+    if (state.crew.length >= payroll().slots || state.crew.length >= C.CREW_MAX) return no(STRINGS.ui.crewFull);
+    if (e.role === 'pit' && !pitOpen()) return no(STRINGS.ui.pitLocked);
+    const cap = hireCapWhy(e.wage);
     if (cap !== null) return no(cap);
-    const card = newCard(e, 2, true);   // Hiring Day: no signing fee, two seasons, NEW
-    e.status = 'mine';
-    emit('crew_hired', { id: card.id, name: card.name, role: card.role, from: 'draft', fee: 0 });
-    endRound();
-    return { ok: true, message: '', id: card.id };
-  }
-
-  // v3.3 (V33-6): a referral is an extra pick; it signs like a Hiring Day card and the round stays.
-  function hireReferral(i) {
-    const no = (message) => ({ ok: false, message: message || '', id: null });
-    if (!inHiring()) return no();
-    const e = state.hiring.refs.find((x) => x.idx === i) || null;
-    if (e === null || e.status !== 'open') return no();
-    if (state.crew.length >= C.CREW_MAX) return no(STRINGS.ui.crewFull);
-    if (e.role === 'pit' && !pitOpen()) return no(STRINGS.ui.pitLocked);   // v4.3
-    const capR = hireCapWhy(e.wage);   // v4.0
-    if (capR !== null) return no(capR);
     const card = newCard(e, 2, true);
-    e.status = 'mine';
-    emit('crew_hired', { id: card.id, name: card.name, role: card.role, from: 'referral', fee: 0 });
-    emit('save_wanted', { reason: 'hiring' });
+    e.hired = true;
+    emit('crew_hired', { id: card.id, name: card.name, role: card.role, from: e.from ? 'referral' : 'board', fee: 0 });
+    emit('save_wanted', { reason: 'crew' });
     return { ok: true, message: '', id: card.id };
-  }
-
-  function passRound() {
-    if (!inHiring() || state.hiring.round > C.HIRE_ROUNDS) return { ok: false, message: '' };
-    endRound();
-    return { ok: true, message: '' };
-  }
-
-  function finishHiring() {
-    if (!inHiring() || state.hiring.round !== C.HIRE_ROUNDS + 1) return { ok: false, message: '' };
-    const slots = payroll().slots;
-    if (state.crew.length > slots) return { ok: false, message: fillText(STRINGS.ui.tooMany, { s: slots }) };
-    const s = state.season;
-    state.hiring = null;
-    s.drafted = true;
-    emit('hiring_done', { year: s.year });
-    emit('week_start', { year: s.year, week: s.week });
-    startWeek();   // no rain roll: the morning already rolled (X8)
-    emit('save_wanted', { reason: 'hiring' });
-    return { ok: true, message: '' };
   }
 
   function hireWalkin(i) {
@@ -9771,11 +9695,6 @@ function createSim(saved, seed) {
     state.crew = state.crew.filter((x) => x !== c);
     state.cash -= sendoff;
     if (sendoff > 0) crewSpend.push({ name: c.name, amount: sendoff });
-    if (state.hiring !== null) {
-      // X18.1 item 33: a card drafted this Hiring Day signs with another outfit.
-      const e = state.hiring.pool.find((x) => x.status === 'mine' && x.name === c.name);
-      if (e) e.status = 'taken';
-    }
     emit('crew_let_go', { id: c.id, name: c.name, sendoff });
     emit('save_wanted', { reason: 'crew' });
     return { ok: true, message: '', sendoff };
@@ -9794,7 +9713,7 @@ function createSim(saved, seed) {
   }
 
   // v4.3: the cooker a PIT card runs (an owned cooker id), or null for the default (the second
-  // cooker when owned, else the main one). Set in the morning, on Hiring Day or in the week.
+  // cooker when owned, else the main one). Set in any morning of the week.
   function setPitPost(id, cooker) {
     const no = (message) => ({ ok: false, message: message || '', post: null });
     if (!crewLoop()) return no();
@@ -9821,7 +9740,7 @@ function createSim(saved, seed) {
     return c === null ? null : cardView(c);
   }
 
-  // v4.4: Hiring Day's plain money line. clear: what a weekend Yard day clears at the pitmaster's own
+  // v4.4: the board's plain money line (v4.8: was Hiring Day's). clear: what a weekend Yard day clears at the pitmaster's own
   // pace (the last one's plates, else the starting cart) before wages; half: the wage that takes half
   // of it (less the crew's wages); warn: true when an open card's wage is over that.
   function wageCheck(wages) {
@@ -9836,20 +9755,25 @@ function createSim(saved, seed) {
     return { clear, half, warn, note: fillText(U.wageNote, { n: clear }), warnLine: warn ? fillText(U.wageWarn, { h: half }) : '' };
   }
 
-  function hiringView() {
-    if (state.loop !== 'hiring' || state.hiring === null) return null;
-    const h = state.hiring;
+  // v4.8: the Help wanted board for the crew sheet: this week's applicants nobody hired yet (i is
+  // the hireBoard index), each with the refusal a hire would get now ('' when it can sign), the money
+  // line, the open slots and whether PIT applicants can come yet. null outside the week.
+  function boardView() {
+    if (state.loop !== 'week') return null;
+    const s = state.season;
+    const list = Array.isArray(s.board) ? s.board : [];
+    const pr = payroll();
+    const full = state.crew.length >= pr.slots || state.crew.length >= C.CREW_MAX;
+    const open = [];
+    list.forEach((e, i) => {
+      if (e.hired) return;
+      const why = full ? STRINGS.ui.crewFull : (e.role === 'pit' && !pitOpen() ? STRINGS.ui.pitLocked : (hireCapWhy(e.wage) || ''));
+      open.push({ i, name: e.name, role: e.role, skills: e.skills.slice(), potential: null, mood: e.mood, look: cleanLook(e.look),
+        stars: e.stars, wage: e.wage, line: e.line || boardLine(e.role, e.potential), from: e.from || null, why });
+    });
     return {
-      year: h.year, round: h.round, tryouts: h.tryouts, picksLeft: Math.max(0, C.HIRE_ROUNDS + 1 - h.round),
-      money: wageCheck(h.pool.filter((e) => e.status === 'open').map((e) => e.wage)),   // v4.4
-      pool: h.pool.map((e) => ({
-        name: e.name, role: e.role, skills: e.skills.slice(), potential: e.tried ? e.potential : null, mood: e.mood,
-        look: cleanLook(e.look), stars: e.stars, wage: e.wage, idx: e.idx, status: e.status, tried: e.tried
-      })),
-      refs: (h.refs || []).map((e) => ({
-        name: e.name, role: e.role, skills: e.skills.slice(), potential: e.potential, mood: e.mood,
-        look: cleanLook(e.look), stars: e.stars, wage: e.wage, idx: e.idx, status: e.status, from: e.from
-      }))
+      year: s.year, week: s.week, list: open, slots: pr.slots, crew: state.crew.length, free: Math.max(0, pr.slots - state.crew.length),
+      pitOpen: pitOpen(), money: wageCheck(open.map((e) => e.wage))
     };
   }
 
@@ -9914,7 +9838,6 @@ function createSim(saved, seed) {
       weekCash: clamp(Math.trunc(report && !live ? state.cash : s.weekCash), 0, C.MAX_CASH),
       results,
       // X11.1 and X18.1 item 31: walk-ins and the training pick only while the week is live.
-      drafted: s.drafted === true,
       trained: live ? s.trained : null,
       walkins: live ? s.walkins.map((w) => ({ name: w.name, role: w.role, skills: w.skills.slice(), potential: w.potential, mood: w.mood,
         look: cleanLook(w.look), hired: w.hired === true })) : [],
@@ -9933,19 +9856,21 @@ function createSim(saved, seed) {
     if (mRows.length) out.season.money = mRows;
     const mPrev = live ? s.moneyPrev : (Array.isArray(s.money) && s.money.length ? s.money.reduce((a, x) => a + x.net, 0) : s.moneyPrev);
     if (typeof mPrev === 'number' && Number.isFinite(mPrev)) out.season.moneyPrev = Math.trunc(mPrev);
+    // v4.8 (save v16): the Help wanted board with its hired flags, tagged with the week it is for. A
+    // report save that opens the next week keeps it too, so the next board can carry who stays.
+    if ((live || report) && Array.isArray(s.board) && s.board.length) {
+      out.season.board = { year: clamp(Math.trunc(s.year), 1, C.YEAR_MAX), week: clamp(Math.trunc(s.week), 1, C.SEASON_WEEKS),
+        list: s.board.slice(0, C.BOARD_FIRST + C.REF_MAX).map((e) => {
+          const o = { name: e.name, role: e.role, skills: e.skills.slice(), potential: e.potential, mood: e.mood, look: cleanLook(e.look), hired: e.hired === true };
+          if (typeof e.from === 'string') o.from = e.from;
+          return o;
+        }) };
+    }
     out.layout = cleanLayout(state.layout);   // v3.9
     out.pit = { xp: clamp(Math.trunc(state.pit.xp) || 0, 0, C.PIT_XP_MAX), longDay: clamp(Math.trunc(state.pit.longDay) || 0, 0, C.LONG_DAY_MAX) };   // v3.5
     out.pace = (state.pace || [null, null]).map((x) => (typeof x === 'number' && Number.isFinite(x) ? clamp(Math.trunc(x), 0, 999) : null));   // v4.4
     out.crew = state.crew.slice().sort(byId).map(copyCard);
     out.crewSeq = clamp(Math.trunc(state.crewSeq), 1, 9999);
-    const h = state.loop === 'hiring' ? state.hiring : null;
-    out.hiring = h === null ? null : {
-      year: h.year, round: h.round, tryouts: h.tryouts,
-      pool: h.pool.map((e) => ({ name: e.name, role: e.role, skills: e.skills.slice(), potential: e.potential, mood: e.mood,
-        look: cleanLook(e.look), status: e.status, tried: e.tried === true })),
-      refs: (h.refs || []).map((e) => ({ name: e.name, role: e.role, skills: e.skills.slice(), potential: e.potential, mood: e.mood,
-        look: cleanLook(e.look), status: e.status, from: e.from }))
-    };
     out.player = state.profile !== null
       ? { name: cleanName(state.profile.name, STRINGS.defaultName), look: cleanLook(state.profile.look) }
       : null;
@@ -9966,7 +9891,8 @@ function createSim(saved, seed) {
   // ---- assemble -----------------------------------------------------------------------------
 
   // W13.3 and X8: the loop comes from the validated save (deviation 37). The morning roll runs for
-  // the tutorial, the creator, Hiring Day and the week; the season end card opens with no roll.
+  // the tutorial, the creator and the week; the season end card opens with no roll. v4.8: a save
+  // that was mid Hiring Day (or owed one) opens week 1, where startWeek draws the board.
   function loadSave(saved) {
     const save = saved !== null && typeof saved === 'object' ? validateSave(saved) : null;
     fillState(save);
@@ -9977,12 +9903,6 @@ function createSim(saved, seed) {
     } else if (state.profile === null) {
       state.loop = 'creator';
       beginMorning('creator');
-    } else if ((save !== null && save.hiring !== null) || hiringOwed()) {
-      // X8: a saved Hiring Day reopens with its pool; an owed one opens fresh. A load emits nothing.
-      const mark = events.length;
-      beginMorning('hiring');
-      openHiring(true, save !== null && save.hiring !== null ? save.hiring : null);
-      events.length = mark;
     } else if (state.season.results.length >= C.SEASON_WEEKS && !(save !== null && save.season.pick !== null)) {
       state.loop = 'seasonEnd';
       state.phase = 'morning';
@@ -9990,6 +9910,10 @@ function createSim(saved, seed) {
     } else {
       state.loop = 'week';
       beginMorning('week');
+      // v4.8: last week's saved board (a report save that opens this week) feeds who stays.
+      const sb = save.season.board;
+      const sameBoard = sb !== null && sb !== undefined && sb.year === state.season.year && sb.week === state.season.week;
+      state.season.board = sb && sb.year === state.season.year && sb.week === state.season.week - 1 ? sb.list.map((e) => Object.assign({}, e)) : [];
       startWeek(state.season.weekCash);
       // W22.3: the saved pick and add-on come back silently when still legal.
       const s = state.season;
@@ -10008,6 +9932,16 @@ function createSim(saved, seed) {
           const stars = cardStars(w.skills);
           return { name: w.name, role: w.role, skills: w.skills.slice(), potential: w.potential, mood: w.mood, look: cleanLook(w.look),
             stars, wage: wageFor(stars, w.role), hired: w.hired === true };
+        });
+      }
+      // v4.8: this week's saved board comes back as it was (hired flags kept).
+      if (sameBoard) {
+        s.board = sb.list.map((e) => {
+          const stars = cardStars(e.skills);
+          const o = { name: e.name, role: e.role, skills: e.skills.slice(), potential: e.potential, mood: e.mood, look: cleanLook(e.look),
+            stars, wage: wageFor(stars, e.role), line: boardLine(e.role, e.potential), hired: e.hired === true };
+          if (typeof e.from === 'string') o.from = e.from;
+          return o;
         });
       }
       s.trained = save.season.trained;
@@ -10081,8 +10015,8 @@ function createSim(saved, seed) {
       for (let i = 1; i < n; i++) ss.results.push({ type: i % 2 ? 'birthday' : 'picnic', stars: 3 });
       ss.week = n; ss.pick = null; ss.addon = null; ss.day = 0; ss.dayLog = new Array(C.WEEK_DAYS).fill(null);
       ss.plan = null; ss.advance = 0; ss.prepped = false; ss.loadin = false; ss.overnight = null; ss.money = [];
-      ss.weekCash = cashKeep; ss.drafted = true; ss.walkins = []; ss.trained = null;
-      sv.hiring = null; sv.offseason = null;
+      ss.weekCash = cashKeep; ss.walkins = []; ss.trained = null;
+      delete ss.board; sv.offseason = null;   // v4.8: the jumped to week draws a fresh board
     };
     if (op.reset === true) {
       sv.cash = C.START_CASH; sv.rep = C.START_REP; sv.charcoal = 0; sv.wood = 0;
@@ -10156,7 +10090,6 @@ function createSim(saved, seed) {
       if (role === 'pit') card.post = null;
       sv.crew.push(card);
       sv.crewSeq = id + 1;
-      ss.drafted = true; sv.hiring = null;
       msg = name + ' joins as ' + role.toUpperCase() + ', ' + sk + ' stars.';
     }
     if (op.fill === true) {
@@ -10206,14 +10139,14 @@ function createSim(saved, seed) {
     prefill, settle,
     gateWaiting,   // Q-6
     // v3.1 (X7)
-    crewView, payroll, hiringView, tryout, hireApplicant, passRound, finishHiring, hireWalkin,
+    crewView, payroll, boardView, hireBoard, hireWalkin,   // v4.8: the Help wanted board replaces Hiring Day
     setBring, train, levelUp, giveRaise, letGo,
     // v3.2 (D5)
     dayOptions, chooseDay, advanceDay, dayCardView,
     // v3.4 (the note at the top)
     recommendDay, bookingNeeds, shopNeeded, shopOpen, shopView, shopConfirm, shopBack, rescueView, rescueSell, rescueAdvance, rescueRestart,
     // v3.3 (design 19.9)
-    compView, compJudges, resign, release, hireReferral,
+    compView, compJudges, resign, release,
     // v3.5 (the note at the top)
     planView, setPlanDay, togglePlanDay, startPlan, skipToWeekend, planOf, restNote,
     pitView, pickPitSkill, cookTime, extraSeconds, moneyView, yardPlates, nextGear,
@@ -10254,7 +10187,8 @@ PitSim.cleanName = cleanName;
 PitSim.filterName = filterName;
 // v3.1 (X1): the six new top level names
 PitSim.ROLE_IDS = ROLE_IDS;
-PitSim.genPool = genPool;
+PitSim.genBoard = genBoard;
+PitSim.boardLine = boardLine;
 PitSim.genWalkins = genWalkins;
 PitSim.cardStars = cardStars;
 PitSim.wageFor = wageFor;

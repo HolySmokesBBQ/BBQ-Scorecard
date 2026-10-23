@@ -2,7 +2,7 @@
 // Season economy bot, v4 (2026-10-20). Dev only, never shipped, not a harness step.
 //
 // Plays whole seasons on the current rules through ../sim.js only (no DOM), the way the game UI
-// drives a week: Hiring Day, the week hub (book an offer, buy gear), the Monday planner, each
+// drives a week: the Help wanted board (v4.8, was Hiring Day), the week hub (book an offer, buy gear), the Monday planner, each
 // morning's shop (the game's own starter cart or prefill), every cook tick by tick with a player
 // bot that works the register, carries plates to seated guests, tends the fire and pulls meat on
 // time, the report, then the next day. The week 7 competition is settled at 3 stars (the bot does
@@ -11,7 +11,7 @@
 // Strategies:
 //   cautious  one cheap RUN card, rests every weekday (Skip to the weekend), the smallest safe
 //             booking, gear only with 150 left over.
-//   typical   drafts a FIRE and a RUN card and brings both everywhere, takes the highest paying
+//   typical   hires a FIRE and a RUN card off the board and brings both everywhere, takes the highest paying
 //             safe booking, follows the planner's prefilled Yard days and the big Start button,
 //             buys gear in order with 80 left over.
 //   greedy    the stretch booking when it can load, Yard days every weekday and Sunday, both cards
@@ -39,7 +39,7 @@
 // v4.4 the real pace phone player (Joel 2026-10-20, "Still losing money here"): a tap 2.5 to 3.5 s
 // after the last (the walk inside it), the game's own cart, the planner's default and Start, the Gear
 // tile's Next once it leaves 40, the fire fed under 30, pulls a few seconds late, 1 piece in 14 burnt.
-//   realsolo      no crew.          real          on Hiring Day the first card under the wage line.
+//   realsolo      no crew.          real          in week 1 the first board card under the wage line.
 //   realhire      the first card it can sign (ignores the wage line, as Joel did).
 //   realcareless  realhire, a Yard day every day, the stretch booking, 3 more chicken on every cart,
 //                 1 piece in 4 burnt, no reserve before gear.
@@ -86,7 +86,7 @@ const STRAT = {
   careless: { crew: ['fire', 'run'], cheap: false, plan: 'all', sunday: true, offer: 'stretch', reserve: 0, react: 3 },
   // v4.4 the real pace phone player (Joel 2026-10-20, "Still losing money here"): a tap every 2.5 to
   // 3.5 s plus the walk, the game's own cart as is, the planner's default and the Start button, on
-  // Hiring Day the first card it can sign (the UI asks before an empty pass), the Gear tile's Next
+  // week 1 the first board card it can sign, the Gear tile's Next
   // item once it leaves 40, a fire fed late, pulls a few seconds late and a burn now and then.
   real: { crew: [], ui: true, heed: true, cheap: false, plan: 'default', sunday: 'rec', offer: 'pay', reserve: 40, real: true },
   // real pace and careless: a Yard day every day, the stretch booking, no reserve before gear, the
@@ -272,34 +272,31 @@ const cartSplit = (sim) => {
 
 // The wages the yard can sign (v4.0 grows it with the gear; older rules: the payroll).
 const capOf = (sim) => { const p = sim.payroll(); return p.hire !== undefined ? p.hire : C.PAYROLL[0]; };
+// v4.8 the Help wanted board (sim.boardView, sim.hireBoard); e.why is the refusal a hire gets now.
 function hiring(sim, st) {
   const s = sim.state;
-  if (st.real) {   // v4.4: the first card on the page it can sign, in round 1; pass the rest
-    for (let round = 1; round <= C.HIRE_ROUNDS && s.loop === 'hiring'; round++) {
-      const v = sim.hiringView();
-      // v4.4 heed: under the Hiring Day wage line when the game shows one (hv.money.half)
-      const line = st.heed && v && v.money && v.money.warn ? v.money.half : Infinity;
-      const pick = st.ui && round === 1 && v ? v.pool.find((e) => e.status === 'open' && e.wage <= capOf(sim) && e.wage <= line) : null;
-      if (pick) sim.hireApplicant(pick.idx); else sim.passRound();
-      sim.drainEvents();
-    }
-    if (s.loop === 'hiring') sim.finishHiring();
+  const v = sim.boardView();
+  if (!v) return;
+  if (st.real) {   // v4.4: the first card on the board it can sign, in week 1 only (as round 1 was)
+    // v4.4 heed: under the board's wage line when the game shows one (money.half)
+    const line = st.heed && v.money && v.money.warn ? v.money.half : Infinity;
+    // v4.8: the board shows every applicant at once (no pages), so the player takes the most stars
+    // it can sign under the line, the cheaper on a tie; realhire and realcareless take the first one.
+    const ok = st.ui && s.season.week === 1 ? v.list.filter((e) => !e.why && e.wage <= line) : [];
+    const pick = st.heed ? ok.sort((a, b) => b.stars - a.stars || a.wage - b.wage)[0] || null : ok[0] || null;
+    if (pick) sim.hireBoard(pick.i);
     sim.drainEvents();
     for (const c of s.crew) sim.setBring(c.id, true);
     return;
   }
-  for (let round = 1; round <= C.HIRE_ROUNDS && s.loop === 'hiring'; round++) {
-    const role = st.crew.find((r) => !s.crew.some((c) => c.role === r)) || null;
-    const v = sim.hiringView();
-    const wages = s.crew.reduce((a, c) => a + c.wage, 0);
-    const open = role && v ? v.pool.filter((e) => e.status === 'open' && e.role === role && wages + e.wage <= capOf(sim)) : [];
+  for (const role of st.crew) {
+    if (s.crew.some((c) => c.role === role)) continue;
+    const open = sim.boardView().list.filter((e) => !e.why && e.role === role);
     open.sort(st.cheap ? (a, b) => a.wage - b.wage || b.stars - a.stars : (a, b) => b.stars - a.stars || a.wage - b.wage);
-    if (open.length && s.crew.length < sim.payroll().slots) sim.hireApplicant(open[0].idx); else sim.passRound();
+    const r = open.length ? sim.hireBoard(open[0].i) : null;
+    if (r && r.ok) sim.setBring(r.id, true);
     sim.drainEvents();
   }
-  if (s.loop === 'hiring') sim.finishHiring();
-  sim.drainEvents();
-  for (const c of s.crew) sim.setBring(c.id, true);
 }
 
 // v4.3: a 3 star PIT card signed as a walk-in (the fee is one wage); the FIRE card goes when the
@@ -376,7 +373,7 @@ function playSeason(seed, stName) {
   sim.skipTutorial(); sim.drainEvents();
   sim.setPlayer(P.DEFAULT_LOOK, 'Pitmaster', 'Your Pit'); sim.drainEvents();
   const s = sim.state;
-  if (s.loop === 'hiring') hiring(sim, st);
+  if (s.loop === 'week') hiring(sim, st);   // v4.8: week 1 opens with the Help wanted board
   if (!st.crew.length && !st.ui) for (const c of s.crew) sim.setBring(c.id, false);
   const rows = [];
   const weekEnd = [];
@@ -391,6 +388,8 @@ function playSeason(seed, stName) {
       buyGear(sim, st, pre);
       // bring a rested card once the payroll has room for it (the payroll grows with the gear)
       if (st.crew.length) for (const c of s.crew) if (!c.bring && !s.crew.some((o) => o.bring && o.role === c.role) && sim.payroll().now + c.wage <= sim.payroll().budget) sim.setBring(c.id, true);
+      // v4.8: a missing role is hired off the board first (no fee), then from the walk-ins
+      if (st.crew.length && week > 1) hiring(sim, st);
       // a careless player also hires the best walk-in when a role is missing
       if (st.crew.length) for (const role of st.crew) {
         if (s.crew.some((c) => c.role === role) || s.crew.length >= sim.payroll().slots) continue;

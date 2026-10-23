@@ -75,6 +75,15 @@
   let ctx = null, master = null, env = null, sfxOut = null;
   let muted = false, sfxMuted = false, started = false, timer = null, created = 0;
   let lastFrame = 0, stalled = false;   // the frame watchdog (see sync)
+  // One copy plays at a time: an app can keep an older copy of the page alive beside a new one (a
+  // republished preview). Whichever copy the player last touched plays; the others go quiet.
+  // BroadcastChannel stays in this browser on this origin; nothing is stored or sent anywhere.
+  const ME = Math.random().toString(36).slice(2);
+  let chan = null, yielded = false;
+  function claimAudio() {
+    yielded = false;
+    try { if (chan) chan.postMessage({ play: 1, id: ME }); } catch (e) { /* no channel */ }
+  }
   let want = { day: 0, week: 1, comp: false, cook: false, waiting: 0, screen: null };
   let cur = null;               // the playing voice
   let pick = null;              // the last choice: { theme, mode, track, rate }
@@ -231,7 +240,7 @@
   }
 
   function sync() {
-    if (!ctx || muted) return;
+    if (!ctx || muted || yielded) return;
     // A page kept alive out of sight (an app's closed artifact view, a hidden frame) can still read
     // as visible but draws no frames. No frame for STALL_MS: go quiet until frames come back.
     if (outOfSight()) { stalled = true; sleep(); return; }
@@ -287,7 +296,7 @@
   }
 
   function wake() {
-    if (muted || !ctx) return;
+    if (muted || !ctx || yielded) return;
     if (typeof document !== 'undefined' && document.hidden) return;
     try { const p = ctx.resume(); if (p && p.catch) p.catch(function () {}); } catch (e) { /* ignore */ }
     sync();
@@ -303,6 +312,7 @@
   function onGesture() {
     started = true;
     if (muted) return;
+    claimAudio();
     makeContext();
     wake();
   }
@@ -311,12 +321,15 @@
     muted = !!m;
     try {
       if (muted) {
-        if (cur) { fadeOut(cur); cur = null; }
+        // Stop it now: sleep() suspends the context, which would freeze a fade half way and leave
+        // the old track sounding under the next one after unmute.
+        if (cur) { try { cur.src.stop(); cur.bus.disconnect(); } catch (e) { /* gone */ } cur = null; }
         sleep();
       } else {
         // The toggle itself is a user gesture (a click, Enter or Space, or assistive tech that sends
         // no pointerdown), so the context is made and resumed right here, inside it.
         started = true;
+        claimAudio();
         makeContext();
         wake();
       }
@@ -368,6 +381,12 @@
     if (typeof document !== 'undefined') { if (document.body) watchScreen(); else document.addEventListener('DOMContentLoaded', watchScreen); }
     if (opts && opts.sfxMuted !== undefined) sfxMuted = !!opts.sfxMuted;
     try {
+      if (typeof root.BroadcastChannel === 'function') {
+        chan = new root.BroadcastChannel('hs.pitsim.audio');
+        chan.onmessage = function (e) { if (e && e.data && e.data.play && e.data.id !== ME) { yielded = true; sleep(); } };
+      }
+    } catch (e) { chan = null; }
+    try {
       root.addEventListener('pointerdown', onGesture, true);
       root.addEventListener('keydown', onGesture, true);
       if (typeof document !== 'undefined') {
@@ -382,7 +401,7 @@
     const p = pick || choose(want);
     return {
       supported: !!AC, started, muted, sfxMuted, context: !!ctx, created,
-      running: !!ctx && ctx.state === 'running', stalled, playing: !!cur && !!ctx && ctx.state === 'running' && !!cur.src.buffer, theme: cur ? cur.theme : null, mode: cur ? cur.mode : null,
+      running: !!ctx && ctx.state === 'running', stalled, yielded, playing: !!cur && !!ctx && ctx.state === 'running' && !!cur.src.buffer, theme: cur ? cur.theme : null, mode: cur ? cur.mode : null,
       // bpm is kept as a tempo index: 100 is the track's own speed, up to 106 with a long line.
       bpm: cur ? Math.round(cur.rate * 1000) / 10 : null,
       track: cur ? cur.track : null, rate: cur ? Math.round(cur.rate * 1000) / 1000 : null,

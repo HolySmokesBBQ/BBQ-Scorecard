@@ -62,6 +62,18 @@
     #arrange .arr-row { display: flex; gap: 8px; flex-wrap: wrap; }
     #arrange .arr-row button { flex: 1 1 auto; min-height: 44px; }
     .arranging #act, .arranging #chips, .arranging #status { display: none !important; }
+    /* v4.8 (Joel on his phone: "you can't rotate equipment"): on a phone the bar sat under the yard in
+       the page flow and grew by a row when Turn showed, so Turn and Done fell below the bottom edge of
+       a real phone screen, and the yard (touch-action: none) left nothing to scroll by. On a phone the
+       bar is fixed to the bottom of the screen in the room the action button and chips leave, one row
+       of four buttons that never wraps, the message held to two lines. */
+    @media (max-width: 899px) {
+      #arrange { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; margin: 0 auto; max-width: 480px; padding: 6px 8px calc(6px + env(safe-area-inset-bottom, 0px)); border-radius: 4px 4px 0 0; }
+      #arr-msg { margin: 0 0 6px; font-size: 13px; line-height: 18px; min-height: 36px; max-height: 36px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+      #arrange .arr-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+      #arrange .arr-row button { min-width: 0; padding: 0 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      #arrange #arr-turn[hidden] + #arr-done { grid-column: span 2; }
+    }
     #wrap { position: relative; width: 100%; background: var(--k); display: flex; justify-content: center; align-items: flex-start; }
     /* v3.6: on phones the yard is a camera on the world, edge to edge; drag pans, the corner button zooms */
     #root.camnear #wrap { width: auto; margin: 0 -16px; }
@@ -605,57 +617,12 @@
     .cc-win .rbadge { position: absolute; left: 3px; top: 0; }
     .cc-new { position: absolute; left: 3px; top: 23px; padding: 2px 3px; background: var(--ink2); border: 2px solid var(--gold2); line-height: 0; }
     .cc-mood { position: absolute; right: 3px; top: 0; line-height: 0; }
-    .cc-band { position: absolute; left: 0; right: 0; bottom: 0; padding: 2px 4px 3px; background: rgba(11, 22, 64, 0.9); color: #fff; font-size: 12px; font-weight: 700; line-height: 1.25; text-align: center; }
-    .crewcard.mine .cc-band, .cp-win .cc-band.mine { background: rgba(24, 96, 44, 0.92); }
-    .crewcard.taken .cc-win, .crewcard.taken .cc-info { filter: grayscale(1) brightness(0.82); }
     .cc-info { display: flex; flex-direction: column; gap: 4px; padding: 5px 4px 3px; background: var(--panel); border-top: 1px solid var(--ink2); box-shadow: inset 0 2px 0 var(--panel-top); line-height: 0; }
     .cc-name { display: flex; justify-content: center; }
     .cc-row { display: flex; align-items: center; justify-content: space-between; gap: 4px; min-height: 14px; }
     .cc-wage { display: inline-flex; align-items: center; gap: 3px; margin-left: auto; }
     @container (max-width: 319px) { .cc-wl { display: none !important; } }
-    /* Hiring Day (X13.2) */
-    #hiring:not([hidden]) { display: flex; flex-direction: column; }
-    #hiring-top { order: -1; }
-    .hire-toprow { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 8px; margin-bottom: 4px; }
-    /* review 1: the round and the tryouts in the UI font, between the cash chip and the info box */
-    .hire-stat { flex: 1 1 auto; display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0; line-height: 0; }
-    .hst { display: flex; flex-direction: column; align-items: center; gap: 3px; }
     .pxl { display: block; line-height: 0; }
-    #panels #hire-cash.pill { display: inline-flex; align-items: center; gap: 8px; min-height: 38px; padding: 4px 14px 4px 10px; background: #2F68EE; border: 1px solid var(--ink2); box-shadow: inset 0 0 0 3px #fff, 0 3px 0 #B9C8EE, 0 4px 0 var(--ink2); }
-    #hire-cash .pv { line-height: 0; }
-    #panels .hub .mockbtn { min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 4px 12px 6px; background: #2F68EE; color: #fff; border: 1px solid var(--ink2); border-radius: 0; box-shadow: inset 0 0 0 3px #fff, 0 3px 0 #9FB4E8, 0 4px 0 var(--ink2); }
-    #panels .hub .mockbtn:disabled { opacity: 0.6; }
-    #panels .hub #hire-info { width: 44px; padding: 0; }
-    #panels #hire-help { margin: 4px 0 8px; padding: 8px 10px; background: var(--ink2); color: #fff; font-size: 13px; border: 2px solid #fff; }
-    #panels .hub #hiring-h { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 2px 0; line-height: 0; }
-    .hstars { display: inline-flex; gap: 2px; }
-    @container (max-width: 330px) { .hstars { display: none; } }
-    #panels #hire-page { display: flex; align-items: center; justify-content: center; gap: 6px; margin: 0 0 2px; line-height: 0; }
-    .tchip { display: inline-flex; align-items: center; padding: 3px 5px; background: var(--ink2); border: 2px solid var(--gold2); line-height: 0; }
-    #hiring-body { padding-bottom: 8px; }
-    @media (max-width: 899px) { #panels > section#hiring { scroll-padding-bottom: 200px; } }
-    #panels .hub .pgarrow { width: 44px; min-width: 44px; height: 44px; margin: 0; padding: 0; background: none; border: 0; box-shadow: none; }
-    #panels .hub .pgarrow:disabled canvas { opacity: 0.35; }
-    #hire-grid { list-style: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 0 0 4px; }
-    #hire-grid li { display: flex; min-width: 0; }
-    @container (max-width: 275px) { #hire-grid, .walkin-grid { grid-template-columns: 1fr; } }
-    #panels .hub #hiring-foot { margin: 0 -12px; padding: 4px 12px 12px; background-color: var(--blue); background-image: repeating-linear-gradient(to bottom, #3667e8 0, #3667e8 2px, transparent 2px, transparent 8px); }
-    @media (max-width: 899px) { #panels .hub #hiring-foot { position: sticky; bottom: -12px; z-index: 2; border-top: 2px solid var(--blue-dd); } }
-    .hire-bar { display: grid; grid-template-columns: 1fr auto 1fr; align-items: end; gap: 10px; }
-    .hire-bar.done { grid-template-columns: auto 1fr; }
-    #panels .hub .hgo.done { justify-self: stretch; min-height: 44px; }
-    #panels #hire-news { margin: 0 0 8px; padding: 6px 8px; background: var(--ink2); border: 2px solid #fff; }
-    #panels #hire-news p { margin: 0; color: #fff; font-size: 13px; font-weight: 700; line-height: 1.3; }
-    #panels #hire-news p.gold { margin-top: 3px; color: var(--gold2); }
-    .hsure { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 0 0 10px; }
-    #panels .hub .hsure button { width: 100%; min-height: 44px; }
-    #panels .hub .hcrew { justify-self: start; min-width: 116px; }
-    #hires-left { display: flex; flex-direction: column; align-items: center; gap: 5px; line-height: 0; }
-    .hl-l { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 10px; color: #fff; font-weight: 700; line-height: 1.1; }
-    .hl-n { display: inline-flex; align-items: center; justify-content: center; min-width: 64px; padding: 7px 10px; background: #2F68EE; border: 1px solid var(--ink2); box-shadow: inset 0 0 0 3px #fff; }
-    #panels .hub .hgo { justify-self: end; min-width: 64px; }
-    #panels #hire-why { margin: 0 0 8px; color: #fff4dc; font-weight: 700; }
-    #panels #hire-why:empty { display: none; }
     /* the payroll box (X13.2): the words set into the top border, near black bar, yellow fill, a tick every 10 */
     .paybar { position: relative; margin: 14px 0 10px; padding: 14px 10px 9px; background: #2F68EE; border: 1px solid var(--ink2); box-shadow: inset 0 0 0 3px #fff; }
     .paybar .pb-t { position: absolute; left: 50%; top: -7px; transform: translateX(-50%); padding: 0 8px; background: var(--blue); line-height: 0; white-space: nowrap; }
@@ -719,6 +686,15 @@
     .walkins { margin-top: 16px; }
     #panels #walkins-line { margin: 2px 0 8px; }
     .walkin-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    @container (max-width: 275px) { .walkin-grid, .help-grid { grid-template-columns: 1fr; } }
+    /* v4.8 the Help wanted board on the crew sheet: a card per applicant with its line under it */
+    .helpw { margin-top: 16px; }
+    #panels #help-note, #panels #help-wage-note, #panels #help-wage-warn, #panels #help-pit-lock, #panels #help-empty { margin: 2px 0 8px; }
+    #panels .helpw .crew-slots { margin: 0 0 8px; color: #fff; font-weight: 700; }
+    .help-grid { list-style: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 0; padding: 0; }
+    .help-li { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+    #panels .help-line { margin: 0; color: #fff4dc; font-size: 13px; line-height: 1.3; }
+    #panels .cp-line { margin: 4px 0 0; color: #fff4dc; }
     /* the hub (X13.6) */
     #panels #third-line { margin: -2px 0 0; color: #dbe6ff; font-size: 12px; line-height: 1.3; }
     .tile .win.cwin { justify-content: flex-start; align-items: stretch; gap: 1px; padding: 0; background: var(--ink2); }
@@ -904,9 +880,6 @@
       </section>
       <section id="season-end" class="hub" role="dialog" aria-modal="true" aria-labelledby="season-end-h" hidden>
         <h2 id="season-end-h" tabindex="-1"></h2><div id="season-end-body"></div>
-      </section>
-      <section id="hiring" class="hub" role="dialog" aria-modal="true" aria-labelledby="hiring-h" hidden>
-        <h2 id="hiring-h" tabindex="-1"></h2><div id="hiring-top"></div><div id="hiring-body"></div><div id="hiring-foot"></div>
       </section>
       <section id="card" class="hub" role="dialog" aria-modal="true" aria-labelledby="card-h" hidden>
         <h2 id="card-h" tabindex="-1"></h2><div id="card-body"></div>

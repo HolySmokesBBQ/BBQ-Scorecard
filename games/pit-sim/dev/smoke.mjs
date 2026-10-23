@@ -8,6 +8,14 @@
 // Run from the repo root:
 //   node games/pit-sim/dev/smoke.mjs [--out <dir>] [--desktop] [--seed <n>] [--dir <folder>]
 //
+// v4.8 (2026-10-23): Hiring Day is gone; the crew sheet holds the Help wanted board. Every route that
+// passed Hiring Day (passHiring, the creator, the season start, the v2 and v4 saves) now lands on the
+// week 1 hub. New steps: the board headless (genBoard against refGenBoard, a hire, the refusals, the
+// reload, the weekly refresh) and two by real taps (week 1 board, a hire with a slot open, over the
+// cap; full slots, week 3 with passed applicants gone, a walk-in, a v15 save mid Hiring Day). PIT 1
+// taps the PIT lock on the board. Screenshots help-wanted.png and help-wanted-week2.png (the week 3
+// board) replace hiring.png and hiring-page2.png. Save v16. Older notes below keep their history.
+//
 // v3.0 (contract docs/superpowers/specs/2026-10-18-pit-sim-v3-0-contract.md, W19, the 62 step list).
 // Steps 1 to 17 run in Node with no browser: the K11 checks moved to the v4 save and the v3.0
 // surface, then seven new headless steps (tutorial strands, the booking generator against a
@@ -266,7 +274,7 @@ const SIM_SURFACE = ['C', 'MEATS', 'MEAT_IDS', 'MAP', 'CATALOG', 'STRINGS', 'cre
   // v3.0 (W1): the nine new top level names.
   'BOOKINGS', 'BOOKING_IDS', 'LOOK_KEYS', 'LOOK_COUNTS', 'DEFAULT_LOOK', 'genOffers', 'scoreEvent', 'cleanName', 'filterName',
   // v3.1 (X1): the six new top level names.
-  'ROLE_IDS', 'genPool', 'genWalkins', 'cardStars', 'wageFor', 'skillValue'];
+  'ROLE_IDS', 'genBoard', 'genWalkins', 'cardStars', 'wageFor', 'skillValue'];   // v4.8: genBoard (was genPool)
 const SURFACE_COUNTS = { tiles: 132, stations: 9, seats: 6, decor: 6, props: 19, catalog: 25 };   // v4.1: wood, cabinet, offset, trailer
 const MAP_SIZE = { w: 11, h: 12 };
 const TILE_PX = 16;
@@ -287,7 +295,7 @@ const DEVICE_SIZES = [
 ];
 
 // Contract D2 and D3.
-const C_EXPECT = { WALK_TILES_PER_S: 6, SAVE_VERSION: 15, PATIENCE_MID_FRAC: 0.5, GEAR_RESERVE: 30, QUEUE_SPOTS: 3, QUEUE_SPOTS_BIG: 5, TABLE_SPOTS: 3, TABLE_SPOTS_BIG: 5 };
+const C_EXPECT = { WALK_TILES_PER_S: 6, SAVE_VERSION: 16, PATIENCE_MID_FRAC: 0.5, GEAR_RESERVE: 30, QUEUE_SPOTS: 3, QUEUE_SPOTS_BIG: 5, TABLE_SPOTS: 3, TABLE_SPOTS_BIG: 5 };
 const C_NEW_KEYS = ['EAT_MIN', 'EAT_MAX', 'HEART_SECONDS', 'SEAT_BONUS_BASE', 'SEAT_BONUS_MAX', 'CHARM_STEP', 'CHARM_MAX', 'REP_TOGO_QUICK', 'SWEAT_FRAC', 'ZZZ_AFTER', 'FX', 'PATIENCE_MID_FRAC', 'GEAR_RESERVE'];
 const FX_KEYS = ['NUMBER_S', 'NUMBER_RISE_PX', 'NUMBER_FADE_AT', 'TIP_GAP_PX', 'SPARKLE_S', 'SPARKLE_FRAME_S', 'SPARKLE_STAGGER_S',
   'HEART_S', 'HEART_FRAME_S', 'HEART_RISE_PX', 'HEART_FADE_S', 'EAT_FRAME_S', 'PUFF_EVERY_LOW', 'PUFF_EVERY_GOOD', 'PUFF_EVERY_HOT',
@@ -416,7 +424,7 @@ const C_W2 = {
 };
 const C_W2_FIXED = ['SAVE_VERSION', 'SEASON_WEEKS', 'NAME_MAX', 'NAME_PUNCT', 'LENGTHS'];
 // W2 changed values and the v2.1 keys that stay (W2 last paragraph).
-const C_W2_EXACT = { SAVE_VERSION: 15, DRIVEWAY_PRICE: 400, GATE_OPENS: 30, LAST_CALL: 110, DAY_SECONDS: 125, STEPPER_MAX: 99, START_CASH: 80, START_REP: 20 };
+const C_W2_EXACT = { SAVE_VERSION: 16, DRIVEWAY_PRICE: 400, GATE_OPENS: 30, LAST_CALL: 110, DAY_SECONDS: 125, STEPPER_MAX: 99, START_CASH: 80, START_REP: 20 };
 // W22.18: the keys whose starting values the W19 literals assume.
 const LITERAL_KEYS = ['FEE_MULT', 'FEE_ROUND', 'DEPOSIT_FRAC', 'PAY_BASE', 'PAY_PER_STAR', 'STAR_FANS', 'REP_DAY_MIN', 'SPARE_FRAC', 'BAGS_PER_COOKER',
   'SCORE_FED', 'SCORE_WAIT', 'SCORE_QUALITY', 'STAR_EDGES', 'WAIT_FULL_S', 'WAIT_ZERO_S', 'BURNT_PENALTY', 'OFFMENU_PENALTY', 'COOLER_CAP', 'SEASON_CARRY_REP', 'SEASON_REP_FLOOR',
@@ -432,7 +440,7 @@ const C_X2 = {
   WAGE_TABLE: [10, 13, 16, 20, 24, 29, 34, 40, 46],
   ROLE_WAGE: { run: 1.0, fire: 1.25, prep: 1.0, till: 1.0, pit: 1.5 },
   PAYROLL: [60, 90, 140, 220], ROSTER_SLOTS: [2, 3, 4, 6],
-  CREW_MAX: 8, BENCH_STREAK: 2, HIRE_ROUNDS: 3, POOL_SIZE: 24, POOL_PAGE: 9, TAKEN_PER_ROUND: 3, TAKEN_SHORTLIST: 6, TRYOUTS: 2,
+  CREW_MAX: 8, BENCH_STREAK: 2, BOARD_SIZE: [3, 4, 5], BOARD_FIRST: 6, BOARD_STAY: 0.5,   // v4.8: the Help wanted board (no rounds, pool or tryouts)
   WALKINS: [2, 2, 3], LEVEL_XP: 200, BANK_MAX: 9, XP_RUN_PLATE: 3, XP_PREP_CUT: 3, XP_FIRE_BAG: 1, XP_FIRE_HOLD: 10,
   TRAIN_XP: 40, SETTLE_XP: 30, RAISE_FRAC: 0.2, PREP_WAIT: 2,
   SAFE_SIZES: [0.8, 0.9, 1.0], STRETCH_SIZE: 1.4, STRETCH_MIN: 1.15, STRETCH_LOAD: 1.0, STRETCH_PAY: 1.15, STRETCH_PATIENCE: -5,
@@ -440,7 +448,7 @@ const C_X2 = {
   // review 1 (X20): the new keys at their starting values
   FIRE_WALK: [3.5, 5.5], HEADLINER: [2.5, 2], HAT_SHARE: 0.25, STRETCH_EDGE: 1.0
 };
-const C_X2_FIXED = ['HIRE_ROUNDS', 'POOL_SIZE', 'POOL_PAGE', 'CREW_MAX', 'ROLE_SKILLS'];
+const C_X2_FIXED = ['CREW_MAX', 'ROLE_SKILLS'];
 const CURVE_KEYS = ['fireSense', 'firePace', 'runSpeed', 'runHandle', 'runSeatTip', 'runTip', 'prepKnife', 'prepPace', 'tillRing', 'tillTip', 'pitTiming', 'pitCare', 'pitSense'];
 const CURVE_MID = { fireSense: 55, firePace: 4.0, runSpeed: 4.0, runHandle: 0.4, runSeatTip: 0.1, runTip: 0, prepKnife: 1.0, prepPace: 4.0, tillRing: 1.2, tillTip: 0, pitTiming: 4, pitCare: 0.1, pitSense: 55 };   // fixed (runTip 0: v2's plate tip at 3 stars)
 // X12.1 to X12.3, the art additions.
@@ -449,7 +457,7 @@ const POOL_ROLES = ['run', 'fire', 'prep', 'till'];          // v4.3: the roles 
 const PREP_DEFAULT_LOOK = { skin: 2, hair: 4, hairColor: 0, face: 0, hat: 0, apron: 2 };
 const BUST = { w: 26, h: 22 };
 // X7: the new sim methods (own properties).
-const SIM_METHODS_V31 = ['crewView', 'payroll', 'hiringView', 'tryout', 'hireApplicant', 'passRound', 'finishHiring', 'hireWalkin',
+const SIM_METHODS_V31 = ['crewView', 'payroll', 'boardView', 'hireBoard', 'hireWalkin',   // v4.8: the board replaces Hiring Day
   'setBring', 'train', 'levelUp', 'giveRaise', 'letGo'];
 // X3.1: the booking rows' menu pairs.
 const BOOKING_MENUS = {
@@ -462,19 +470,19 @@ const BOOKING_MENUS = {
 const PREP_TILES = { prepIdle: { x: 1, y: 3, face: 'right' }, prepUse: { x: 2, y: 3, face: 'down' } };   // the angle redo plan A
 // X9 event types.
 const EV31 = {
-  hiringOpen: 'hiring_open', tryout: 'tryout', crewHired: 'crew_hired', roundDone: 'round_done', hiringDone: 'hiring_done',
+  crewHired: 'crew_hired',
   bringSet: 'bring_set', letGo: 'crew_let_go', trained: 'trained', levelReady: 'level_ready', levelUp: 'level_up', raise: 'raise',
   leftFor: 'left_for_prep', crewMood: 'crew_mood', crewNotice: 'crew_notice', crewLeft: 'crew_left'
 };
 // X13 DOM ids.
 const ID31 = {
-  hiring: 'hiring', hiringH: 'hiring-h', hireCash: 'hire-cash', hireInfo: 'hire-info', hireHelp: 'hire-help', hireRound: 'hire-round',
-  hireTryouts: 'hire-tryouts', hirePage: 'hire-page', pagePrev: 'hire-page-prev', pageNext: 'hire-page-next', hireGrid: 'hire-grid',
-  app: (i) => 'app-' + i, hirePayroll: 'hire-payroll', hireCrew: 'hire-crew', hiresLeft: 'hires-left', hiresLeftN: 'hires-left-n',
-  hireGo: 'hire-go', hireWhy: 'hire-why',
+  // v4.8: the Help wanted board on the crew sheet (Hiring Day's ids are gone)
+  help: 'help', helpH: 'help-h', helpNote: 'help-note', helpSlots: 'help-slots', helpList: 'help-list', helpCard: (i) => 'help-' + i,
+  helpLine: (i) => 'help-line-' + i, helpWageNote: 'help-wage-note', helpWageWarn: 'help-wage-warn', helpPitLock: 'help-pit-lock',
+  helpEmpty: 'help-empty', cardLine: 'card-line',
   card: 'card', cardH: 'card-h', cardBack: 'card-back', cardPortrait: 'card-portrait', cardRole: 'card-role', cardMood: 'card-mood',
   cardStars: 'card-stars', cardSkill: (i) => 'card-skill-' + i, cardWage: 'card-wage', cardContract: 'card-contract', cardXp: 'card-xp',
-  cardBanked: 'card-banked', cardNotice: 'card-notice', cardTryout: 'card-tryout', cardHire: 'card-hire', cardPass: 'card-pass',
+  cardBanked: 'card-banked', cardNotice: 'card-notice', cardHire: 'card-hire', cardPass: 'card-pass',
   cardWhy: 'card-why', cardBring: 'card-bring', cardTrain: 'card-train', cardLevel: 'card-level', cardRaise: 'card-raise',
   cardLetGo: 'card-letgo', cardLetGoSure: 'card-letgo-sure', cardLetGoYes: 'card-letgo-yes', cardLetGoNo: 'card-letgo-no',
   cardPick: (i) => 'card-pick-' + i,
@@ -531,7 +539,7 @@ const FONT_FRAME = (ch) => {   // W16.2 font frame mapping
 const SIM_METHODS_V3 = ['bookOffer', 'setAddon', 'railFor', 'canLoadUp', 'loadUp', 'finishReport', 'startSeason', 'seasonEndPreview',
   'setPlayer', 'randomLook', 'look', 'fanThird', 'offerSlots', 'coolerCap', 'inventory', 'meatRoom', 'prefill', 'settle',
   'gateWaiting'];   // W26 Q-6
-const LOOP = { tutorial: 'tutorial', creator: 'creator', week: 'week', prep: 'prep', cook: 'cook', report: 'report', seasonEnd: 'seasonEnd', hiring: 'hiring' };   // X1: hiring
+const LOOP = { tutorial: 'tutorial', creator: 'creator', week: 'week', prep: 'prep', cook: 'cook', report: 'report', seasonEnd: 'seasonEnd' };   // v4.8: no hiring loop
 const EV3 = {
   offersReady: 'offers_ready', bookingPicked: 'booking_picked', deposit: 'deposit', guestsMissed: 'guests_missed',
   clientStars: 'client_stars', spoiled: 'spoiled', weekStart: 'week_start', seasonEnd: 'season_end', seasonStart: 'season_start',
@@ -565,8 +573,8 @@ const ID3 = {
   seMeat: 'se-meat', seCharcoal: 'se-charcoal', seasonNext: 'season-next', pauseLook: 'pause-look', chipCharcoal: 'chip-charcoal'
 };
 const SEASON_WEEKS = 7;   // v3.5: six weeks and the competition finale (was 9)
-const P_POOL = 24;        // v3.6: the Hiring Day pool (6 a role, 4 roles)
-const SAVE_V = 15;        // v4.7: v15 (a turned unit in the layout); v4.1: v13 (the gear ladder); v3.5: save v9 (season.plan, pit); v3.6: v10 (the register, the TILL card); v3.7: v11 (pay, then sit)
+const SAVE_V = 16;        // v4.8: v16 (season.board, no Hiring Day)
+const SAVE_V15 = 15;        // v4.7: v15 (a turned unit in the layout); v4.1: v13 (the gear ladder); v3.5: save v9 (season.plan, pit); v3.6: v10 (the register, the TILL card); v3.7: v11 (pay, then sit)
 // W19 step 51: the v2.1 (v3) save sample.
 const SAVE_V3_SAMPLE = {
   v: 3, day: 5, cash: 150, rep: 20,
@@ -732,11 +740,7 @@ const W15 = ({
     refillMeat: 'One more {label} is in the cooler.',               // {label}: MEATS[meat].label
     refillCharcoal: 'One more bag is on the pile.',
     // X10 additions, spliced from the contract
-    hiringOpen: 'Hiring Day. {n} people want to work your pit.',
     hired: '{name} joins the crew.',
-    tryout: '{name} could reach {n} stars.',
-    roundDone: 'Round {r} is over. Other outfits hired {list}.',
-    hiringDone: 'Hiring Day is done.',
     letGo: '{name} is off the crew.',
     trained: '{name} trained. Plus {xp} XP.',
     levelReady: '{name} can level up.',
@@ -939,35 +943,16 @@ const W15 = ({
     notice: 'Your save was updated for the season.',
     // X10 additions, spliced from the contract
     // Hiring Day
-    hiringH: 'Hiring Day',
-    hireRound: 'Round {r} of 3',
-    hireRoundsDone: 'Every round is done',
-    pageOf: 'Page {p}/{n}',
-    pagePrev: 'Previous page',
-    pageNext: 'Next page',
-    hireInfo: 'How Hiring Day works',
-    hireHelp: 'Tap a card to see it. Each round you can hire one person or pass. Other outfits hire after every round.',
     payroll: 'Payroll {p} / {b}',
     payrollAria: 'Payroll {p} of {b} for one event',
-    crewBtn: 'Crew',
-    hiresLeft: 'Hires left',
-    passRound: 'Pass round {r}',
-    startWeek: 'Start week 1',
-    tryoutsLeft: 'Tryouts left: {n}',
-    tooMany: 'Let someone go. The crew has room for {s}.',
-    taken: 'Hired elsewhere',
-    yours: 'On your crew',
     newBadge: 'NEW',
     wage: 'Wage',
     perEvent: '{w} an event',
     contract1: '1 season',
     contract2: '2 seasons',
     appAria: '{name}, {role}, {stars}, wage {w}',
-    appTaken: '{name}, hired elsewhere',
     potential: 'Potential {n} stars',
-    potentialHidden: 'Potential unknown. A tryout shows it.',
-    tryout: 'Try out',
-    tryoutNone: 'No tryouts left',
+    potentialHidden: 'Potential unknown until they work for you. Their line on the board gives a hint.',
     hire: 'Hire',
     hireFee: 'Hire for {f}',
     pass: 'Pass',
@@ -998,7 +983,14 @@ const W15 = ({
     no: 'No',
     sendOffCash: 'Not enough cash for the send-off.',
     slots: '{n} of {s} on the crew',
-    crewEmpty: 'No crew yet. Walk-ins come by every week.',
+    crewEmpty: 'No crew yet. Hire from the Help wanted board below.',
+    // v4.8 the Help wanted board
+    boardH: 'Help wanted',
+    boardNote: 'Hire anyone here between days. No signing fee, two seasons. The board changes every week.',
+    boardEmpty: 'Nobody new this week. Check back next week.',
+    boardFrom: 'Sent by {name}.',
+    boardAria: '{name}, {role}, {stars}, wage {w}. {line}',
+    pitLockedB: 'No PIT applicants yet. A PIT card runs one cooker for you, and hiring one needs the cabinet smoker.',
     walkinsH: 'Walk-ins this week',
     walkinLine: 'They sign for one season. The signing fee is one event of wages.',
     crewFull: 'The crew is full. Let someone go first.',
@@ -1031,10 +1023,6 @@ const W15 = ({
     seCrew: '{name} signs on for another season at {w}.',
     noticeCrew: 'Your save was updated. Your helpers are crew cards now.',
     // review round 1 (contract X20.12), exact text
-    passEmpty: 'Pass round {r}? Nobody is on your crew yet.',
-    tryoutTaken: '{name} went to another outfit after the tryout.',
-    takenBadge: '{n} taken',
-    takenPageAria: '{n} hired elsewhere on page {p}',
     crewNext: 'Crew: {names}. Wages {w}.',
     crewNone: 'Nobody on the crew this time.',
     wageRow: 'Wage {w}',
@@ -1225,7 +1213,7 @@ const SAVE_V1_SAMPLE = {
   drivewayShown: false
 };
 const SAVE_DIRTY = { v: 1, day: 'abc', cash: -50, rep: 400, stock: { sausage: 200, bogus: 1 }, gear: { drum: true, kettle2: false }, hires: { tender: true }, extra: 1 };
-const INVALID_SAVES = [null, 'x', [], {}, undefined, 42, { v: '5' }, { v: 0 }, { v: '3' }, { v: '4' }, { v: 16 }];   // v4.1: v 1 to 13 accepted; v4.3: 14; v4.7: 15
+const INVALID_SAVES = [null, 'x', [], {}, undefined, 42, { v: '5' }, { v: 0 }, { v: '3' }, { v: '4' }, { v: 17 }];   // v4.1: v 1 to 13 accepted; v4.3: 14; v4.7: 15; v4.8: 16
 
 // The shopping list for day 1 and later days. Two sausage units give four plates, so later
 // customers walk out and the walk out step has something to assert.
@@ -1266,8 +1254,8 @@ const SCREENSHOTS = {
   creator: 'creator.png', week: 'week.png', offers: 'offers.png', inventory: 'inventory.png', sheetShop: 'sheet-shop.png',
   report: 'report.png', seasonEnd: 'season-end.png',
   // v3.1 (X15), plus the four of deviation 34
-  hiring: 'hiring.png', card: 'card.png', crew: 'crew.png', reportCrew: 'report-crew.png',
-  hiringPage2: 'hiring-page2.png', cardWalkin: 'card-walkin.png', cardCrew: 'card-crew.png', cardLevel: 'card-level.png',
+  board: 'help-wanted.png', card: 'card.png', crew: 'crew.png', reportCrew: 'report-crew.png',   // v4.8: the Help wanted board (was hiring.png)
+  boardNext: 'help-wanted-week2.png', cardWalkin: 'card-walkin.png', cardCrew: 'card-crew.png', cardLevel: 'card-level.png',
   // v3.2 Days: the hub with the day strip, a day result card, the weekend cook
   daysWeek: 'days-week.png', daysCard: 'days-card.png', daysWeekend: 'days-weekend.png'
 };
@@ -1584,7 +1572,7 @@ async function nodeChecks() {
   await step('names and looks, headless', () => namesHeadless(globalThis[GLOBAL_NAME]));
   // v3.1 (X15.2 steps 63 to 69, deviation 21: they run here, before the browser).
   await step('crew rules, headless', () => crewRulesHeadless(globalThis[GLOBAL_NAME]));
-  await step('Hiring Day, headless', () => hiringHeadless(globalThis[GLOBAL_NAME]));
+  await step('v4.8 the Help wanted board, headless: week 1 open, a hire, the refusals, the reload, the weekly refresh', () => helpWantedHeadless(globalThis[GLOBAL_NAME]));
   await step('walk-ins, headless', () => walkinsHeadless(globalThis[GLOBAL_NAME]));
   await step('mood, notice and leaving, headless', () => moodHeadless(globalThis[GLOBAL_NAME]));
   await step('felt difference, headless', () => feltHeadless(globalThis[GLOBAL_NAME]), { fatal: true });
@@ -2253,10 +2241,14 @@ function pitHeadless(P) {
   // card on the crew stays out of the lineup.
   const k = pitSeason(P, 41, {});
   assert(k.sim.pitOpen() === false && P.pitTier(k.st().gear) === 0, 'PIT open on the kettle');
-  const g0 = P.genPool({ seed: 41, year: 1 }), g1 = P.genPool({ seed: 41, year: 1, pit: true });
-  assert(g0.length === C.POOL_SIZE && !g0.some((e) => e.role === 'pit'), 'the kettle pool holds PIT cards');
-  assert(g1.length === C.POOL_SIZE + C.PIT_POOL && g1.filter((e) => e.role === 'pit').length === C.PIT_POOL && deepEq(g1.slice(0, C.POOL_SIZE), g0)
-    && g1.every((e, i) => e.idx === i), 'the open pool ' + describe(g1.slice(C.POOL_SIZE).map((e) => [e.role, e.stars, e.wage])));
+  // v4.8: the Help wanted board holds no PIT applicant on the kettle, and PIT applicants once open.
+  let bdLocked = 0, bdOpen = 0;
+  for (let sd = 1; sd <= 30; sd++) for (let w = 1; w <= 6; w++) {
+    bdLocked += P.genBoard({ seed: sd, year: 1, week: w, rep: 80 }).filter((e) => e.role === 'pit').length;
+    bdOpen += P.genBoard({ seed: sd, year: 1, week: w, rep: 80, pit: true }).filter((e) => e.role === 'pit').length;
+  }
+  assert(bdLocked === 0 && bdOpen > 0, 'PIT board applicants locked ' + bdLocked + ', open ' + bdOpen);
+  assert(k.sim.boardView().pitOpen === false && !k.sim.boardView().list.some((e) => e.role === 'pit'), 'the kettle board ' + describe(k.sim.boardView().list.map((e) => e.role)));
   let wkLocked = 0, wkOpen = 0;
   for (let sd = 1; sd <= 30; sd++) for (let w = 2; w <= 6; w++) {
     wkLocked += P.genWalkins({ seed: sd, year: 1, week: w, rep: 80 }).filter((e) => e.role === 'pit').length;
@@ -2271,8 +2263,8 @@ function pitHeadless(P) {
   k.st().crew = [mkCard(P, 1, 'Dee', 'pit', [3, 3])];
   k.st().crewSeq = 2;
   assert(k.sim.payroll().now === 0, 'a PIT card works the kettle: payroll ' + describe(k.sim.payroll()));
-  notes.push('locked on the kettle: 24 card pool, 0 PIT walk-ins over 150 weeks, "' + lockR.message + '"');
-  // (c) Open with the cabinet smoker: the walk-in signs, the pool from a Hiring Day holds six.
+  notes.push('locked on the kettle: no PIT on 180 boards, 0 PIT walk-ins over 150 weeks, "' + lockR.message + '"');
+  // (c) Open with the cabinet smoker: the walk-in signs, a PIT applicant on the board signs.
   const o = pitSeason(P, 42, { cabinet: true });
   assert(o.sim.pitOpen() === true, 'PIT not open with the cabinet');
   o.st().cash = 500;
@@ -2284,17 +2276,15 @@ function pitHeadless(P) {
   assert(hr.ok === true && hiredEv.length === 1 && hiredEv[0].role === 'pit' && o.sim.crewView(hr.id).post === null && o.sim.crewView(hr.id).postNow === 'kettle1'
     && o.sim.payroll().now === pw.wage, 'the PIT walk-in with the cabinet ' + describe([hr, hiredEv, o.sim.crewView(hr.id)]));
   const hsave = o.sim.serialize();
-  hsave.season.results = []; hsave.season.week = 1; hsave.season.drafted = false; hsave.crew = []; hsave.hiring = null;
+  hsave.season.results = []; hsave.season.week = 1; hsave.crew = []; delete hsave.season.board;
   const hd = headless(P, hsave, 43, { days: true });
-  assert(hd.st().loop === LOOP.hiring, 'no Hiring Day with the cabinet: loop ' + describe(hd.st().loop));
-  const hv = hd.sim.hiringView();
-  const pitIdx = hv.pool.filter((e) => e.role === 'pit').map((e) => e.idx);
-  assert(hv.pool.length === C.POOL_SIZE + C.PIT_POOL && pitIdx.length === C.PIT_POOL, 'the Hiring Day pool with the cabinet ' + hv.pool.length);
-  const cheap = hv.pool.filter((e) => e.role === 'pit').sort((a, b) => a.wage - b.wage)[0];
-  const hx = hd.sim.hireApplicant(cheap.idx);
+  assert(hd.st().loop === LOOP.week && hd.sim.boardView().pitOpen === true, 'week 1 with the cabinet: loop ' + describe(hd.st().loop));
+  const cheapW = P.wageFor(1, 'pit');
+  hd.st().season.board.push({ name: 'Dot', role: 'pit', skills: [1, 1], potential: 3, mood: 0, look: Object.assign({}, DEFAULT_LOOK), stars: 1, wage: cheapW, line: P.boardLine('pit', 3), hired: false });
+  const hx = hd.sim.hireBoard(hd.st().season.board.length - 1);
   hd.drain();
-  assert(hx.ok === true && hd.st().crew.some((c) => c.role === 'pit'), 'drafting a PIT card ' + describe(hx) + ', ' + hd.sim.payroll().hire);
-  notes.push('the cabinet opens it: PIT walk-in signed for ' + pw.wage + ', Hiring Day pool ' + hv.pool.length + ' with ' + pitIdx.length + ' PIT, drafted ' + cheap.name + ' at ' + cheap.wage);
+  assert(hx.ok === true && hd.st().crew.some((c) => c.role === 'pit'), 'hiring a PIT applicant off the board ' + describe(hx) + ', ' + hd.sim.payroll().hire);
+  notes.push('the cabinet opens it: PIT walk-in signed for ' + pw.wage + ', ' + bdOpen + ' PIT applicants on 180 open boards, a 1 star PIT off the board at ' + cheapW);
   // (d) A cook where the PIT card runs kettle 2 by itself: lights it, loads it, pulls on time. The
   // pitmaster never taps (5 stars: Care 0, so every pull is on time).
   const runPit = (stars, player, extra) => {
@@ -2367,16 +2357,20 @@ function pitHeadless(P) {
   assert(!P.validateSave(v13).crew.some((c) => c.role === 'pit'), 'a v13 save kept a PIT card');
   const badPost = JSON.parse(JSON.stringify(sv)); badPost.crew.find((c) => c.role === 'pit').post = 'grill';
   assert(P.validateSave(badPost).crew.find((c) => c.role === 'pit').post === null, 'a bad pick kept');
-  // A referral from a PIT card that moved on is a PIT card (v14), dropped from a v13 Hiring Day.
+  // A referral from a PIT card that moved on is a PIT card (v14): a v14 save mid Hiring Day puts it
+  // on the week 1 board (v4.8); a v13 save drops it.
   const hs = JSON.parse(JSON.stringify(hsave));
-  hs.v = 14;
-  hs.hiring = { year: hs.season.year, round: 1, tryouts: 2, pool: hv.pool.map((e) => ({ name: e.name, role: e.role, skills: e.skills, potential: e.potential || 3, mood: e.mood, look: e.look, status: 'open', tried: false })),
+  hs.v = 14; hs.season.drafted = false;
+  hs.hiring = { year: hs.season.year, round: 1, tryouts: 2, pool: [],
     refs: [{ name: 'Lou', role: 'pit', skills: [3, 3], potential: 3.5, mood: 0, look: Object.assign({}, DEFAULT_LOOK), status: 'open', from: 'Dee' }] };
   const vh = P.validateSave(hs);
-  assert(vh.hiring && vh.hiring.pool.length === C.POOL_SIZE + C.PIT_POOL && vh.hiring.refs.length === 1 && vh.hiring.refs[0].role === 'pit', 'a v14 Hiring Day with a PIT referral ' + describe(vh.hiring && vh.hiring.refs));
+  assert(!('hiring' in vh) && vh.season.refs && vh.season.refs.length === 1 && vh.season.refs[0].role === 'pit' && vh.season.refs[0].from === 'Dee', 'a v14 Hiring Day with a PIT referral ' + describe(vh.season.refs));
+  const hb = P.createSim(vh, 45);
+  const lou = hb.boardView().list.find((e) => e.name === 'Lou');
+  assert(hb.state.loop === LOOP.week && lou && lou.role === 'pit' && lou.from === 'Dee', 'the PIT referral on the week 1 board ' + describe(hb.boardView().list.map((e) => [e.name, e.from])));
   hs.v = 13;
-  assert(P.validateSave(hs).hiring === null, 'a v13 Hiring Day with PIT cards kept');
-  notes.push('pick kettle 1 kept by save v14; v13 drops PIT cards; a PIT referral reloads');
+  assert(!('refs' in P.validateSave(hs).season), 'a v13 Hiring Day with a PIT referral kept it');
+  notes.push('pick kettle 1 kept by save v14; v13 drops PIT cards; a PIT referral from a v14 Hiring Day joins the week 1 board');
   return notes.join('; ');
 }
 
@@ -2475,9 +2469,9 @@ function registerHeadless(P) {
   }
   assert(ringT[5] < ringT[1], 'a 5 star TILL rang up in ' + ringT[5] + ' s, a 1 star in ' + ringT[1] + ' s');
   notes.push('TILL rings in ' + ringT[1] + ' s at 1 star, ' + ringT[5] + ' s at 5');
-  // (e) The pool and the walk-ins carry TILL cards.
-  const pool = P.genPool({ seed: 7, year: 1 });
-  assert(pool.filter((e) => e.role === 'till').length === 6, 'genPool TILL cards ' + pool.filter((e) => e.role === 'till').length);
+  // (e) The board and the walk-ins carry TILL cards (v4.8: every week 1 board holds one).
+  const pool = P.genBoard({ seed: 7, year: 1, week: 1 });
+  assert(pool.filter((e) => e.role === 'till').length >= 1, 'genBoard TILL cards ' + pool.filter((e) => e.role === 'till').length);
   let wk = 0;
   for (let sd = 1; sd <= 30 && !wk; sd++) for (let w = 2; w <= 7 && !wk; w++) wk = P.genWalkins({ seed: sd, year: 1, week: w, rep: 80 }).filter((e) => e.role === 'till').length;
   assert(wk > 0, 'no TILL walk-in over 30 seeds');
@@ -3431,10 +3425,10 @@ function migratedDefaults(s, label) {
   assert(Number.isInteger(s.season.seed) && s.season.seed >= 0, label + ': season.seed ' + describe(s.season.seed));
   assert(!('settings' in s), label + ': kept a settings key ' + describe(s.settings));
   assert(s.wood === 0, label + ': wood ' + describe(s.wood));
-  // v3.1 (X11.3, X15.1 step 6): no hires, so no cards, and Hiring Day is still owed.
+  // v3.1 (X11.3, X15.1 step 6): no hires, so no cards; v4.8: no Hiring Day, no board saved yet.
   assert(!('hires' in s), label + ': kept a hires key ' + describe(s.hires));
-  assert(sameJSON(s.crew, []) && s.crewSeq === 1 && s.hiring === null, label + ': crew ' + describe(s.crew) + ', crewSeq ' + describe(s.crewSeq) + ', hiring ' + describe(s.hiring));
-  assert(s.season.drafted === false && s.season.trained === null && sameJSON(s.season.walkins, []), label + ': drafted, trained, walkins ' + describe([s.season.drafted, s.season.trained, s.season.walkins]));
+  assert(sameJSON(s.crew, []) && s.crewSeq === 1 && !('hiring' in s), label + ': crew ' + describe(s.crew) + ', crewSeq ' + describe(s.crewSeq) + ', hiring ' + describe(s.hiring));
+  assert(!('drafted' in s.season) && !('board' in s.season) && !('refs' in s.season) && s.season.trained === null && sameJSON(s.season.walkins, []), label + ': board, refs, trained, walkins ' + describe([s.season.board, s.season.refs, s.season.trained, s.season.walkins]));
 }
 
 function validateV4(P) {
@@ -3450,11 +3444,12 @@ function validateV4(P) {
   for (const g of LADDER_IDS) want4.gear[g] = false;   // v4.1: no rung of the gear ladder
   delete want4.hires;
   delete want4.settings;   // 2026-10-19: an old save's length setting is ignored
-  Object.assign(want4, { crew: [], crewSeq: 1, hiring: null });
+  Object.assign(want4, { crew: [], crewSeq: 1 });   // v4.8: no hiring key
   // v3.3: the shelf, the ribbons and no open Offseason.
   Object.assign(want4, { trophies: [], ribbons: { sausage: 0, chicken: 0, ribs: 0, butt: 0, brisket: 0 }, offseason: null });
   // D9: and the five day keys, on that week's Monday.
-  Object.assign(want4.season, { drafted: true, trained: null, walkins: [], day: 0, dayLog: [null, null, null, null, null, null, null], prepped: false, loadin: false, overnight: null, advance: 0, plan: null });
+  delete want4.season.drafted;   // v4.8: no Hiring Day, no board saved yet
+  Object.assign(want4.season, { trained: null, walkins: [], day: 0, dayLog: [null, null, null, null, null, null, null], prepped: false, loadin: false, overnight: null, advance: 0, plan: null });
   assert(deepEq(rt, want4), 'the W13.1 sample migrates to ' + describe(rt) + ', wanted ' + describe(want4));
   const cases = [
     ['charcoal 500', (s) => { s.charcoal = 500; }, (r) => r.charcoal === 200],
@@ -3471,7 +3466,7 @@ function validateV4(P) {
     ["pitName ''", (s) => { s.pitName = ''; }, (r) => r.pitName === W15.defaultPit],
     ['settings.length turbo', (s) => { s.settings.length = 'turbo'; }, (r) => !('settings' in r)],
     ['day 1 owing the tutorial with a player', (s) => { s.day = 1; s.tutorial = { done: false }; }, (r) => r.player === null && r.tutorial.done === false && r.season.week === 1 && r.season.results.length === 0],
-    ['no results and no hires', (s) => { s.season.week = 1; s.season.results = []; s.season.pick = null; }, (r) => r.season.drafted === false && sameJSON(r.crew, [])]
+    ['no results and no hires', (s) => { s.season.week = 1; s.season.results = []; s.season.pick = null; }, (r) => !('board' in r.season) && !('refs' in r.season) && sameJSON(r.crew, [])]
   ];
   for (const [label, mut, ok] of cases) {
     const s = base();
@@ -3502,19 +3497,21 @@ function validateV5(P) {
   for (const g of LADDER_IDS) want5.gear[g] = false;   // v4.1
   delete want5.settings;   // 2026-10-19: an old save's length setting is ignored
   Object.assign(want5.season, { day: 0, dayLog: [null, null, null, null, null, null, null], prepped: false, loadin: false, overnight: null, advance: 0, plan: null });
+  delete want5.season.drafted; delete want5.hiring;   // v4.8: no Hiring Day, no board saved yet
   // v3.3: the shelf, the ribbons and no open Offseason.
   Object.assign(want5, { trophies: [], ribbons: { sausage: 0, chicken: 0, ribs: 0, butt: 0, brisket: 0 }, offseason: null });
   assert(deepEq(rt, want5), 'the X11.1 sample does not migrate to v 6 on Monday: ' + describe(rt));
   const names = P.STRINGS.names;
   const extra = (over) => Object.assign(JSON.parse(JSON.stringify(SAVE_V5_SAMPLE.crew[0])), { id: 3, name: 'June' }, over);
-  // A save that owes Hiring Day, with a pool shaped as X11.1 saves it (no stars, wage or idx).
+  // A save mid Hiring Day (v15 and older), with a pool shaped as X11.1 saves it and one open referral.
   const hiringSave = (n) => {
     const s = base();
     s.season.week = 1; s.season.results = []; s.season.pick = null; s.season.drafted = false; s.season.trained = null; s.season.walkins = [];
     s.crew = []; s.crewSeq = 1;
-    const pool = P.genPool({ seed: s.season.seed, year: 1, avoid: [] }).slice(0, n).map((e) => ({ name: e.name, role: e.role, skills: e.skills.slice(), potential: e.potential,
-      mood: e.mood, look: Object.assign({}, e.look), status: 'open', tried: false }));
-    s.hiring = { year: 1, round: 2, tryouts: 1, pool };
+    const pool = P.genBoard({ seed: s.season.seed, year: 1, week: 1, avoid: [] }).concat(P.genBoard({ seed: s.season.seed + 1, year: 1, week: 1, avoid: [] }))
+      .concat(P.genBoard({ seed: s.season.seed + 2, year: 1, week: 1, avoid: [] })).concat(P.genBoard({ seed: s.season.seed + 3, year: 1, week: 1, avoid: [] }))
+      .slice(0, n).map((e) => ({ name: e.name, role: e.role, skills: e.skills.slice(), potential: e.potential, mood: e.mood, look: Object.assign({}, e.look), status: 'open', tried: false }));
+    s.hiring = { year: 1, round: 2, tryouts: 1, pool, refs: [{ name: 'Wren', role: 'fire', skills: [3, 3], potential: 4, mood: 0, look: Object.assign({}, DEFAULT_LOOK), status: 'open', from: 'Dale' }] };
     return s;
   };
   const cases = [
@@ -3532,9 +3529,10 @@ function validateV5(P) {
     ['contract 3', (s) => { s.crew[0].contract = 3; }, (r) => r.crew[0].contract === 1 || r.crew[0].contract === 2],   // X11.2 pins 1 or 2, not clamp or default
     ['crewSeq 1 under the ids', (s) => { s.crewSeq = 1; }, (r) => r.crewSeq === 3],
     ['a walk-in with role drive', (s) => { s.season.walkins[0].role = 'drive'; }, (r) => sameJSON(r.season.walkins, [])],
-    ['hiring with 18 pool entries', (s) => { Object.assign(s, hiringSave(18)); }, (r) => r.hiring !== null && r.hiring.pool.length === 18 && r.hiring.round === 2 && r.hiring.tryouts === 1 && r.season.drafted === false],
-    ['hiring with 17 pool entries', (s) => { Object.assign(s, hiringSave(17)); }, (r) => r.hiring === null],
-    ['hiring for another year', (s) => { Object.assign(s, hiringSave(18)); s.hiring.year = 2; }, (r) => r.hiring === null],
+    // v4.8: a save mid Hiring Day keeps no pool or round; its open referral waits for the week 1 board.
+    ['mid Hiring Day with 18 pool entries', (s) => { Object.assign(s, hiringSave(18)); }, (r) => !('hiring' in r) && !('board' in r.season) && r.season.refs.length === 1 && r.season.refs[0].role === 'fire' && r.season.refs[0].from === 'Dale' && !('drafted' in r.season)],
+    ['mid Hiring Day, the referral taken', (s) => { Object.assign(s, hiringSave(17)); s.hiring.refs[0].status = 'mine'; }, (r) => !('hiring' in r) && !('refs' in r.season)],
+    ['Hiring Day for another year', (s) => { Object.assign(s, hiringSave(18)); s.hiring.year = 2; }, (r) => !('hiring' in r) && !('refs' in r.season)],
     ["pick 'invite' in week 3", (s) => { s.season.week = 3; s.season.results = s.season.results.slice(0, 2); s.season.pick = 'invite'; }, (r) => r.season.week === 3 && r.season.pick === 'invite']
   ];
   for (const [label, mut, ok] of cases) {
@@ -3543,7 +3541,7 @@ function validateV5(P) {
     let r;
     try { r = V(s); } catch (e) { throw new Error('v5 ' + label + ' threw: ' + e.message); }
     assert(r && r.v === SAVE_V, 'v5 ' + label + ' returned ' + describe(r && r.v));
-    assert(ok(r), 'v5 ' + label + ' gave crew ' + describe(r.crew) + ', crewSeq ' + describe(r.crewSeq) + ', hiring ' + describe(r.hiring && { round: r.hiring.round, n: r.hiring.pool && r.hiring.pool.length }) + ', season ' + describe(r.season));
+    assert(ok(r), 'v5 ' + label + ' gave crew ' + describe(r.crew) + ', crewSeq ' + describe(r.crewSeq) + ', season ' + describe(r.season));
   }
   const cyc = base(); cyc.crew[0].look.loop = cyc; cyc.season.walkins[0].self = cyc;
   let threw = null;
@@ -3564,16 +3562,12 @@ function toWeek(P, seed, look, name, pit) {
   return h;
 }
 // v3.1 (X6.2, X8): pass every round of Hiring Day, then finishHiring().
+// v4.8: no Hiring Day: the creator, the tutorial and a new season land on week 1's hub with the
+// Help wanted board open and nobody hired (the old helper passed three rounds here).
 function passHiring(h, label) {
-  assert(h.st().loop === LOOP.hiring, (label || '') + ': not on Hiring Day: loop ' + describe(h.st().loop));
-  for (let i = 0; i < 3; i++) {
-    const r = h.sim.passRound();
-    h.drain();
-    assert(r && r.ok === true, (label || '') + ': passRound ' + (i + 1) + ' ' + describe(r));
-  }
-  const f = h.sim.finishHiring();
   h.drain();
-  assert(f && f.ok === true && h.st().loop === LOOP.week, (label || '') + ': finishHiring ' + describe(f) + ', loop ' + describe(h.st().loop));
+  assert(h.st().loop === LOOP.week && h.st().phase === 'morning' && h.st().season.week === 1, (label || '') + ': not on the week 1 hub: loop ' + describe(h.st().loop) + ', week ' + describe(h.st().season.week));
+  assert(Array.isArray(h.st().season.board) && h.st().season.board.length >= 5, (label || '') + ': week 1 board ' + describe(h.st().season.board && h.st().season.board.length));
 }
 // v3.1 (X4.2): a full crew card for fixtures; skills, role and name given, the rest at the X15.3 defaults.
 function mkCard(P, id, name, role, skills, over = {}) {
@@ -4038,27 +4032,19 @@ function weekLoopHeadless(P) {
   const set = h.sim.setPlayer(MARTY.look, MARTY.name, MARTY.pit);
   h.drain();
   assert(set && set.ok === true && set.name === MARTY.name && set.pitName === MARTY.pit && deepEq(set.look, MARTY.look), 'setPlayer returned ' + describe(set));
-  // v3.1 (X8, X15.1 step 14): setPlayer lands on Hiring Day; three passes and finishHiring give week 1.
-  assert(st().loop === LOOP.hiring, 'loop after setPlayer ' + describe(st().loop) + ', wanted hiring');
+  // v4.8: setPlayer lands on week 1's hub with the Help wanted board (no Hiring Day).
+  assert(st().loop === LOOP.week && st().phase === PHASE.morning, 'loop after setPlayer ' + describe(st().loop) + ', wanted week');
   assert(deepEq(st().profile, { name: MARTY.name, look: MARTY.look }), 'state.profile ' + describe(st().profile));
   assert(st().pitName === MARTY.pit, 'state.pitName ' + describe(st().pitName));
   const seq = h.log.slice(n0).map((e) => e.type);
-  const order = [EV3.playerSet, EV31.hiringOpen, EVENT.saveWanted].map((t) => seq.indexOf(t));
-  assert(order.every((i) => i >= 0) && order.every((i, j) => j === 0 || i > order[j - 1]), 'events after setPlayer ' + describe(seq) + ', wanted player_set, hiring_open, save_wanted (X8)');
-  assert(!seq.includes(EV3.weekStart), 'week_start fired before Hiring Day: ' + describe(seq));
+  const order = [EV3.playerSet, EV3.weekStart, EV3.offersReady, EVENT.saveWanted].map((t) => seq.indexOf(t));
+  assert(order.every((i) => i >= 0) && order.every((i, j) => j === 0 || i > order[j - 1]), 'events after setPlayer ' + describe(seq) + ', wanted player_set, week_start, offers_ready, save_wanted');
+  assert(!seq.some((t) => /hiring|round_done|tryout/.test(t)), 'a Hiring Day event fired: ' + describe(seq));
   const sw = h.of(EVENT.saveWanted, n0);
   assert(sw.some((e) => e.reason === 'player'), 'no save_wanted player: ' + describe(sw.map(strip)));
-  const hn = h.log.length;
-  for (let i = 0; i < 3; i++) { const pr = h.sim.passRound(); h.drain(); assert(pr && pr.ok === true, 'passRound ' + (i + 1) + ' ' + describe(pr)); }
-  const fh = h.sim.finishHiring();
-  h.drain();
-  assert(fh && fh.ok === true && st().loop === LOOP.week && st().phase === PHASE.morning, 'finishHiring ' + describe(fh) + ', loop ' + describe(st().loop));
-  const seqH = h.log.slice(hn).map((e) => e.type);
-  const fi = seqH.indexOf(EV31.hiringDone);
-  const orderH = [EV31.hiringDone, EV3.weekStart, EV3.offersReady, EVENT.saveWanted].map((t) => seqH.indexOf(t, fi));
-  assert(fi >= 0 && orderH.every((i) => i >= 0) && orderH.every((i, j) => j === 0 || i > orderH[j - 1]), 'events after finishHiring ' + describe(seqH) + ', wanted hiring_done, week_start, offers_ready, save_wanted (X8)');
-  assert(h.of(EVENT.saveWanted, hn).some((e) => e.reason === 'hiring'), 'no save_wanted hiring: ' + describe(h.of(EVENT.saveWanted, hn).map(strip)));
-  const ws = h.of(EV3.weekStart, hn)[0];
+  const bv1 = h.sim.boardView();
+  assert(bv1 && bv1.week === 1 && bv1.list.length === C.BOARD_FIRST, 'the week 1 board ' + describe(bv1 && bv1.list.length));
+  const ws = h.of(EV3.weekStart, n0)[0];
   assert(ws.year === 1 && ws.week === 1, 'week_start ' + describe(strip(ws)));
   const bk = st().season.booking;
   assert(bk && bk.id === 'birthday', 'season.booking ' + describe(bk && bk.id));
@@ -4179,7 +4165,7 @@ function weekLoopHeadless(P) {
   assert(typeof h.sim.setLength === 'undefined' && !('settings' in st()) && !('settings' in h.sim.serialize()), 'a length setting is still there ' + describe(st().settings));
   notes.push('max line ' + maxLine + ', spawned ' + arrived.length + ', missed ' + t.missed + ', orders ' + describe(orders));
   notes.push(boardHeadless(P));
-  return 'creator, Hiring Day passed, week 1 Birthday of ' + bk.headcount + ' idle to 1 star and rest pay ' + t.payRest + ', week 2 picnic plus ' + addon + ' ' + describe(r2) + ', no length setting; ' + notes.join('; ');
+  return 'creator to week 1 with the board, week 1 Birthday of ' + bk.headcount + ' idle to 1 star and rest pay ' + t.payRest + ', week 2 picnic plus ' + addon + ' ' + describe(r2) + ', no length setting; ' + notes.join('; ');
 }
 
 // W25 R-2 (sim.js R-2): the second pork butt slices onto a board that holds the first butt's plates;
@@ -4334,25 +4320,21 @@ function seasonEndHeadless(P) {
   assert(s.rep === repTo, 'rep ' + repBefore + ' to ' + s.rep + ', wanted ' + repTo);
   assert(deepEq(s.stock, zeroMeat()), 'stock after startSeason ' + describe(s.stock));
   assert(s.charcoal === chBefore && s.cash === cashBefore, 'charcoal ' + s.charcoal + ', cash ' + s.cash + ', wanted ' + chBefore + ', ' + cashBefore);
-  // X8: startSeason opens Hiring Day for year 2.
-  assert(s.loop === LOOP.hiring && s.phase === PHASE.morning, 'loop after startSeason ' + s.loop + ', wanted hiring');
+  // v4.8: startSeason opens week 1 of year 2 with a fresh Help wanted board (no Hiring Day).
+  assert(s.loop === LOOP.week && s.phase === PHASE.morning, 'loop after startSeason ' + s.loop + ', wanted week');
   const seq = h.log.slice(n1).map((e) => e.type);
-  const o = [EV3.seasonStart, EV31.hiringOpen, EVENT.saveWanted].map((x) => seq.indexOf(x));
-  assert(o.every((i) => i >= 0) && o[1] > o[0] && o[2] > o[1], 'events after startSeason ' + describe(seq) + ' (X8)');
+  const o = [EV3.seasonStart, EV3.weekStart, EV3.offersReady, EVENT.saveWanted].map((x) => seq.indexOf(x));
+  assert(o.every((i) => i >= 0) && o.every((i, j) => j === 0 || i > o[j - 1]), 'events after startSeason ' + describe(seq));
   assert(h.of(EVENT.saveWanted, n1).some((e) => e.reason === 'season'), 'no save_wanted season');
-  const hv = h.sim.hiringView();
-  assert(hv && hv.year === 2 && hv.round === 1 && hv.pool.length === C.POOL_SIZE && !hv.pool.some((e) => e.name === 'Dale'), 'hiringView() in year 2 ' + describe(hv && { year: hv.year, round: hv.round, n: hv.pool.length }));
+  const hv = h.sim.boardView();
+  assert(hv && hv.year === 2 && hv.week === 1 && hv.list.length >= C.BOARD_FIRST && !hv.list.some((e) => e.name === 'Dale'), 'boardView() in year 2 ' + describe(hv && { year: hv.year, week: hv.week, n: hv.list.length }));
   const c = cardOf(h, 1);
   assert(c && c.contract === 1 && c.wage === wageTo && c.raised === false && c.seasons === 1 && c.rookie === false && c.mood === 0 && c.bench === 0 && c.notice === false,
     'the renewed card ' + describe(c) + ', wanted contract 1, wage ' + wageTo + ', not raised, 1 season, no NEW, mood 0, bench 0');
-  const n2 = h.log.length;
   passHiring(h, 'season 2');
-  const seq2 = h.log.slice(n2).map((e) => e.type);
-  const o2 = [EV31.hiringDone, EV3.weekStart, EV3.offersReady].map((x) => seq2.indexOf(x));
-  assert(o2.every((i) => i >= 0) && o2[1] > o2[0] && o2[2] > o2[1], 'events after finishHiring ' + describe(seq2));
-  assert(st().season.year === 2 && st().season.week === 1, 'after Hiring Day year ' + st().season.year + ' week ' + st().season.week);
+  assert(st().season.year === 2 && st().season.week === 1, 'after startSeason year ' + st().season.year + ' week ' + st().season.week);
   assert(h.sim.startSeason() === false, 'a second startSeason() outside seasonEnd did not return false');
-  return 'nine settle(3) weeks, season_end with nine 3s, rep ' + repBefore + ' to ' + repTo + ', cash ' + cashBefore + ' and charcoal ' + chBefore + ' kept, Hiring Day for year 2, Dale renewed 12 to ' + wageTo + ', year 2 week 1';
+  return 'nine settle(3) weeks, season_end with nine 3s, rep ' + repBefore + ' to ' + repTo + ', cash ' + cashBefore + ' and charcoal ' + chBefore + ' kept, week 1 of year 2 with a board of ' + hv.list.length + ', Dale renewed 12 to ' + wageTo + ', year 2 week 1';
 }
 
 // ---- v3.3 the competition and the Offseason (sim names: design 19.9) ------------------------------
@@ -4619,7 +4601,7 @@ function offseasonHeadless(P) {
   const h2 = headless(P, P.validateSave(JSON.parse(JSON.stringify(sv))), 9, { days: true });
   const pv2 = h2.sim.seasonEndPreview();
   assert(h2.st().loop === 'seasonEnd' && pv2.contracts.find((e) => e.id === 7).decided === 'sign2' && deepEq(pv2.leaving, pv.leaving), 'reloaded Offseason ' + describe(pv2.contracts));
-  // Start season 2: who stays, who goes, the friends at Hiring Day.
+  // Start season 2: who stays, who goes, the friends on the week 1 Help wanted board (v4.8).
   const n1 = h2.log.length;
   assert(h2.sim.startSeason() === true, 'startSeason');
   h2.drain();
@@ -4630,31 +4612,32 @@ function offseasonHeadless(P) {
   assert(m.contract === 2 && m.wage === maya.asks && m.mood === (mayaMood > 0 ? mayaMood - 1 : (mayaMood < 0 ? mayaMood + 1 : 0)), 'Maya re-signed ' + describe(m));
   for (const e of pv.contracts) if (e.id !== 7 && e.id !== goId) { const c = h2.st().crew.find((x) => x.id === e.id); assert(c && c.contract === 1 && c.wage === e.asks, 'undecided re-signs for one season ' + describe(c)); }
   assert(h2.of('crew_moved_on', n1).length === pv.leaving.length, 'crew_moved_on events');
-  const hv = h2.sim.hiringView();
+  assert(h2.st().loop === LOOP.week && h2.st().season.week === 1, 'after startSeason ' + describe([h2.st().loop, h2.st().season.week]));
+  const hv = h2.sim.boardView();
+  const refs = hv.list.filter((e) => e.from);
   const refers = pv.leaving.filter((l) => l.refers > 0);
-  assert(hv && hv.refs.length === refers.length, 'referrals ' + describe(hv && hv.refs));
-  hv.refs.forEach((r, i) => assert(r.from === refers[i].name && r.role === refers[i].role && r.stars >= refers[i].stars - 1 && r.status === 'open', 'referral ' + describe(r)));
-  if (hv.refs.length > 0 && h2.st().crew.length < C.CREW_MAX) {
-    const round = hv.round;
-    // v4.0 economy: a hire past the wages the yard can sign is refused with ui.hireCap; the fixture's
-    // eight card crew is over it, so the check reads the refusal, then cuts the fixture's wages.
-    const pr0 = h2.sim.payroll();
-    if (C.PAYROLL_START !== undefined && pr0.signed + hv.refs[0].wage > pr0.hire) {
-      const no = h2.sim.hireReferral(0);
-      assert(no.ok === false && no.message === fill(P.STRINGS.ui.hireCap, { b: pr0.hire, n: C.PAYROLL_PER_GEAR }), 'hireReferral over the cap ' + describe(no));
-      for (const c of h2.st().crew) c.wage = 1;   // fixture
-    }
-    const r = h2.sim.hireReferral(0);
+  assert(refs.length === refers.length && hv.list.length === C.BOARD_FIRST + refs.length, 'referrals on the board ' + describe(hv.list.map((e) => [e.name, e.from])));
+  refs.forEach((r, i) => assert(r.from === refers[i].name && r.role === refers[i].role && r.stars >= refers[i].stars - 1 && r.line === P.boardLine(r.role, h2.st().season.board[r.i].potential), 'referral ' + describe(r)));
+  if (refs.length > 0) {
+    // The fixture's crew fills every slot: the friend is refused with ui.crewFull, then the fixture
+    // trims the crew to one card on a 1 wage and the friend signs off the board.
+    const no = h2.sim.hireBoard(refs[0].i);
+    assert(no.ok === false && no.message === P.STRINGS.ui.crewFull, 'a referral on a full crew ' + describe(no));
+    h2.st().crew = h2.st().crew.slice(0, 1);   // fixture
+    for (const c of h2.st().crew) c.wage = 1;   // fixture
+    const n2 = h2.log.length;
+    const r = h2.sim.hireBoard(refs[0].i);
     h2.drain();
-    assert(r.ok === true && h2.sim.hiringView().round === round && h2.sim.hiringView().refs[0].status === 'mine', 'hireReferral ' + describe(r));
+    assert(r.ok === true && !h2.sim.boardView().list.some((e) => e.i === refs[0].i) && h2.of(EV31.crewHired, n2)[0].from === 'referral', 'hireBoard of the referral ' + describe(r));
     const card = h2.st().crew.find((c) => c.id === r.id);
     assert(card && card.contract === 2 && card.rookie === true, 'the friend signs for two seasons, NEW');
     const sv2 = h2.sim.serialize();
-    assert(sv2.hiring && sv2.hiring.refs.length === hv.refs.length && sv2.hiring.refs[0].status === 'mine', 'saved refs ' + describe(sv2.hiring && sv2.hiring.refs));
+    const savedRefs = sv2.season.board.list.filter((e) => e.from);
+    assert(savedRefs.length === refs.length && savedRefs[0].hired === true && savedRefs[0].from === refs[0].from, 'saved refs ' + describe(savedRefs));
     const h3 = headless(P, P.validateSave(JSON.parse(JSON.stringify(sv2))), 9, { days: true });
-    assert(h3.st().loop === 'hiring' && h3.sim.hiringView().refs.length === hv.refs.length, 'refs after a reload');
+    assert(h3.st().loop === LOOP.week && deepEq(h3.sim.boardView().list, h2.sim.boardView().list), 'refs after a reload');
   }
-  return pv.leaving.length + ' moved on (' + pv.leaving.map((l) => l.name + ' ' + l.reason + (l.refers ? ' refers ' + l.refers : '')).join('; ') + '), ' + pv.contracts.length + ' contracts, Maya re-signed 2 at ' + maya.asks + ', ' + hv.refs.length + ' referral(s)';
+  return pv.leaving.length + ' moved on (' + pv.leaving.map((l) => l.name + ' ' + l.reason + (l.refers ? ' refers ' + l.refers : '')).join('; ') + '), ' + pv.contracts.length + ' contracts, Maya re-signed 2 at ' + maya.asks + ', ' + refs.length + ' referral(s) on the week 1 board';
 }
 
 function season2Headless(P) {
@@ -4753,32 +4736,46 @@ function refLook(r, C) {
   if (look.hair === 2 && look.hat === 1) look.hat = 0;
   return look;
 }
-function refGenPool(P, input) {
-  const C = P.C, names = P.STRINGS.names, avoid = input.avoid || [];
-  const rp = refMulberry32(refMix32((input.seed ^ 0x504F4F4C) >>> 0, input.year, 0));
-  const roles = [];
-  for (const role of POOL_ROLES) for (let i = 0; i < 6; i++) roles.push(role);
-  for (let i = roles.length - 1; i >= 1; i--) {
-    const j = Math.floor(rp() * (i + 1));
-    const t = roles[i]; roles[i] = roles[j]; roles[j] = t;
-  }
+// v4.8: the Help wanted board model (sim.js genBoard): week 1 BOARD_FIRST, else BOARD_SIZE by third;
+// each keep entry stays with chance BOARD_STAY (one draw each, in order) while one slot stays new; new
+// roles from a shuffled deck (the four no-cabinet roles in week 1, else the open roles) then a second
+// shuffle twice; the first new one a headliner; then sorted by role, then the referrals.
+function refGenBoard(P, input) {
+  const C = P.C, names = P.STRINGS.names, avoid = (input.avoid || []).slice();
+  const third = (input.rep || 0) >= C.THIRD_EDGES[1] ? 2 : (input.rep || 0) >= C.THIRD_EDGES[0] ? 1 : 0;
+  const rb = refMulberry32(refMix32((input.seed ^ 0x424F4152) >>> 0, input.year, input.week));
+  const n = input.week === 1 ? C.BOARD_FIRST : C.BOARD_SIZE[third];
+  const open = input.pit === true ? ROLE_IDS : POOL_ROLES;
   const out = [];
-  const headed = new Set();   // review 1 (X20.7): a role's first card is a headliner
-  for (let idx = 0; idx < roles.length; idx++) {
-    const name = refName(names, rp, avoid, out);
-    const head = !headed.has(roles[idx]);
-    headed.add(roles[idx]);
-    const hl = C.HEADLINER || [2.5, 2];
-    const s0 = head ? hl[0] + Math.floor(rp() * hl[1]) / 2 : 1 + Math.floor(rp() * 5) / 2;
-    const s1 = head ? hl[0] + Math.floor(rp() * hl[1]) / 2 : 1 + Math.floor(rp() * 5) / 2;
-    const potential = Math.min(5, Math.max(Math.max(s0, s1) + 0.5, 2 + Math.floor(rp() * 7) / 2));
-    const mood = rp() < 0.5 ? 0 : 1;
-    const look = refLook(rp, C);
-    const stars = refCardStars([s0, s1]);
-    out.push({ idx, name, role: roles[idx], skills: [s0, s1], potential, mood, look, stars, wage: refWageFor(C, stars, roles[idx]) });
+  for (const k of input.keep || []) {
+    const stay = rb() < C.BOARD_STAY;
+    if (!stay || out.length >= n - 1 || !open.includes(k.role) || avoid.includes(k.name)) continue;
+    avoid.push(k.name);
+    out.push({ name: k.name, role: k.role, skills: k.skills.slice(), potential: k.potential, mood: k.mood, look: k.look, stars: refCardStars(k.skills), wage: refWageFor(C, refCardStars(k.skills), k.role) });
   }
+  const shuffle = (a) => { for (let i = a.length - 1; i >= 1; i--) { const j = Math.floor(rb() * (i + 1)); const t = a[i]; a[i] = a[j]; a[j] = t; } return a; };
+  const deck = shuffle(input.week === 1 ? POOL_ROLES.slice() : open.slice());
+  const more = shuffle(open.slice());
+  const roles = deck.concat(more, more);
+  const hl = C.HEADLINER || [2.5, 2];
+  let k = 0;
+  while (out.length < n) {
+    const role = roles[k % roles.length];
+    const head = k === 0;
+    k += 1;
+    const name = refName(names, rb, avoid, out);
+    const s0 = head ? hl[0] + Math.floor(rb() * hl[1]) / 2 : 1 + Math.floor(rb() * 5) / 2;
+    const s1 = head ? hl[0] + Math.floor(rb() * hl[1]) / 2 : 1 + Math.floor(rb() * 5) / 2;
+    const potential = Math.min(5, Math.max(Math.max(s0, s1) + 0.5, 2 + Math.floor(rb() * 7) / 2));
+    const mood = rb() < 0.5 ? 0 : 1;
+    const look = refLook(rb, C);
+    const stars = refCardStars([s0, s1]);
+    out.push({ name, role, skills: [s0, s1], potential, mood, look, stars, wage: refWageFor(C, stars, role) });
+  }
+  out.sort((a, b) => ROLE_IDS.indexOf(a.role) - ROLE_IDS.indexOf(b.role));
   return out;
 }
+
 function refGenWalkins(P, input) {
   const C = P.C, names = P.STRINGS.names, avoid = input.avoid || [];
   const third = input.rep >= C.THIRD_EDGES[1] ? 2 : input.rep >= C.THIRD_EDGES[0] ? 1 : 0;
@@ -4801,19 +4798,6 @@ function refGenWalkins(P, input) {
   return out;
 }
 const appView = (a) => ({ name: a.name, role: a.role, skills: a.skills, potential: a.potential, mood: a.mood, look: a.look, stars: a.stars, wage: a.wage });
-// X6.2: other outfits take TAKEN_PER_ROUND of the TAKEN_SHORTLIST best open entries after a round.
-function refTaken(P, pool, status, seed, year, round) {
-  const C = P.C;
-  const ro = refMulberry32(refMix32((seed ^ 0x52495641) >>> 0, year, round));
-  const list = pool.filter((e) => status[e.idx] === 'open').sort((a, b) => (b.stars + b.potential) - (a.stars + a.potential) || a.idx - b.idx).slice(0, C.TAKEN_SHORTLIST);
-  const taken = [];
-  for (let k = 0; k < C.TAKEN_PER_ROUND && list.length; k++) {
-    const j = Math.floor(ro() * list.length);
-    taken.push(list[j].idx);
-    list.splice(j, 1);
-  }
-  return taken;
-}
 // A headless sim from a v5 save built off the X11.1 sample (week 3, two results, no crew unless given).
 function v5Save(over = {}) {
   const s = JSON.parse(JSON.stringify(SAVE_V5_SAMPLE));
@@ -4949,7 +4933,7 @@ function daysLoopHeadless(P) {
   assert(d3.season.day === 5 && d3.season.loadin === false && sameJSON(d3.season.dayLog, ['off', 'off', 'off', 'off', 'off', null, null]), 'no pick keeps the day, never the Load-in ' + describe(d3.season));
   const d4 = V(v6Save({ season: { week: 5, pick: 'birthday', day: 3 } }));
   assert(d4.season.week === 3 && d4.season.day === 0, 'a week that does not hold opens Monday ' + describe(d4.season));
-  assert(V({ v: 16 }) === null, '{ v: 16 } accepted');
+  assert(V({ v: 17 }) === null, '{ v: 17 } accepted');
   notes.push('morning shops cost ' + seen.join(', ') + ' Monday to Thursday');
   return notes.join('; ') + '; the report save reloads on Sunday, a Yard week writes { yard, 0 }, dirty v6 keys clamp';
 }
@@ -5138,7 +5122,7 @@ function surfaceV31(P, sim) {
   assert(C.BUDDY_WAGE === 20 && C.TENDER_WAGE === 30 && P.wageFor(2.5, 'run') === C.BUDDY_WAGE && P.wageFor(3, 'fire') === C.TENDER_WAGE,
     'BUDDY_WAGE ' + C.BUDDY_WAGE + ' and TENDER_WAGE ' + C.TENDER_WAGE + ' against wageFor(2.5, run) ' + P.wageFor(2.5, 'run') + ' and wageFor(3, fire) ' + P.wageFor(3, 'fire'));
   assert(sameJSON(P.ROLE_IDS, ROLE_IDS), 'ROLE_IDS ' + describe(P.ROLE_IDS));
-  for (const n of ['genPool', 'genWalkins', 'cardStars', 'wageFor', 'skillValue']) assert(typeof P[n] === 'function', 'PitSim.' + n + ' is not a function');
+  for (const n of ['genBoard', 'boardLine', 'genWalkins', 'cardStars', 'wageFor', 'skillValue']) assert(typeof P[n] === 'function', 'PitSim.' + n + ' is not a function');
   for (const id of BOOKING_IDS) {
     const row = P.BOOKINGS[id];
     const want = BOOKING_MENUS[id];
@@ -5151,8 +5135,8 @@ function surfaceV31(P, sim) {
   assert(missingM.length === 0, 'X7 methods missing (own function properties): ' + missingM.join(', '));
   const s = sim.state;
   assert(s.hires === undefined, 'state.hires is ' + describe(s.hires) + ' (X4.1: removed)');
-  assert(Array.isArray(s.crew) && s.crew.length === 0 && s.crewSeq === 1 && s.hiring === null && s.prep === null, 'a new game crew ' + describe({ crew: s.crew, crewSeq: s.crewSeq, hiring: s.hiring, prep: s.prep }));
-  assert(s.season.drafted === false && s.season.trained === null && Array.isArray(s.season.walkins), 'a new game season ' + describe({ drafted: s.season.drafted, trained: s.season.trained, walkins: s.season.walkins }));
+  assert(Array.isArray(s.crew) && s.crew.length === 0 && s.crewSeq === 1 && !('hiring' in s) && s.prep === null, 'a new game crew ' + describe({ crew: s.crew, crewSeq: s.crewSeq, hiring: s.hiring, prep: s.prep }));
+  assert(!('drafted' in s.season) && Array.isArray(s.season.board) && s.season.trained === null && Array.isArray(s.season.walkins), 'a new game season ' + describe({ board: s.season.board, trained: s.season.trained, walkins: s.season.walkins }));
   assert(Array.isArray(s.stations.board.waiting) && s.stations.board.waiting.length === 0, 'state.stations.board.waiting ' + describe(s.stations.board.waiting));
   sim.drainEvents();
   const hr = sim.hire('buddy');
@@ -5297,123 +5281,131 @@ function crewRulesHeadless(P) {
   return 'skillValue on ' + CURVE_KEYS.length + ' curves, cardStars and wageFor, X5.2 clamps, payroll, the swap, the budget, train and banked levels, at potential, the mood level, the raise, three send-offs; ' + notes.join('; ');
 }
 
-// Step 64.
-function hiringHeadless(P) {
+// Step 64, v4.8: the Help wanted board (it replaced Hiring Day). The generator against its model,
+// week 1 open on the hub, a hire with a slot open (no fee, two seasons, NEW), the plain refusals
+// (slots full, over the payroll cap, a PIT applicant without the cabinet), a reload keeps the board,
+// the board refreshes the next week with some passed applicants gone, and a report save carries it.
+function helpWantedHeadless(P) {
   const C = P.C, U = P.STRINGS.ui, names = P.STRINGS.names;
   const notes = [];
-  const g1 = P.genPool({ seed: 7, year: 1 }), g2 = P.genPool({ seed: 7, year: 1 });
-  assert(Array.isArray(g1) && deepEq(g1, g2), 'genPool twice differs');
-  assert(g1.length === C.POOL_SIZE, 'genPool has ' + g1.length + ' entries');
-  for (const role of POOL_ROLES) assert(g1.filter((e) => e.role === role).length === 6, 'genPool ' + role + ' count ' + g1.filter((e) => e.role === role).length);
+  const lineOf = (e) => P.boardLine(e.role, e.potential);
+  // The generator.
+  const g1 = P.genBoard({ seed: 7, year: 1, week: 1 }), g2 = P.genBoard({ seed: 7, year: 1, week: 1 });
+  assert(Array.isArray(g1) && deepEq(g1, g2), 'genBoard twice differs');
+  assert(g1.length === C.BOARD_FIRST, 'the week 1 board has ' + g1.length);
+  assert(POOL_ROLES.every((r) => g1.some((e) => e.role === r)) && !g1.some((e) => e.role === 'pit'), 'week 1 roles ' + describe(g1.map((e) => e.role)));
+  assert(sameJSON(g1.map((e) => ROLE_IDS.indexOf(e.role)), g1.map((e) => ROLE_IDS.indexOf(e.role)).slice().sort((a, b) => a - b)), 'the board is not in role order ' + describe(g1.map((e) => e.role)));
   for (const e of g1) {
-    assert(e.stars >= 1 && e.stars <= 3 && e.potential >= 2 && e.potential <= 5 && e.potential >= Math.max(...e.skills) + 0.5, 'genPool entry ' + describe(e));
-    assert(e.stars === P.cardStars(e.skills) && e.wage === P.wageFor(e.stars, e.role) && (e.mood === 0 || e.mood === 1), 'genPool entry stars, wage or mood ' + describe(e));
-    assert(LOOK_KEYS.every((k) => Number.isInteger(e.look[k]) && e.look[k] >= 0 && e.look[k] < LOOK_COUNTS[k]), 'genPool look ' + describe(e.look));
+    assert(e.stars >= 1 && e.stars <= 3 && e.potential >= 2 && e.potential <= 5 && e.potential >= Math.max(...e.skills) + 0.5, 'board entry ' + describe(e));
+    assert(e.stars === P.cardStars(e.skills) && e.wage === P.wageFor(e.stars, e.role) && (e.mood === 0 || e.mood === 1) && e.line === lineOf(e) && typeof e.line === 'string' && e.line.length > 0, 'board entry stars, wage, mood or line ' + describe(e));
+    assert(LOOK_KEYS.every((k) => Number.isInteger(e.look[k]) && e.look[k] >= 0 && e.look[k] < LOOK_COUNTS[k]), 'board look ' + describe(e.look));
+    assert(!/[–—]/.test(e.line), 'a dash in the line ' + describe(e.line));
   }
-  assert(sameJSON(g1.map((e) => e.idx), g1.map((_, i) => i)), 'genPool idx ' + describe(g1.map((e) => e.idx)));
-  assert(g1.every((e) => names.includes(e.name)) && new Set(g1.map((e) => e.name)).size === g1.length, 'genPool names ' + describe(g1.map((e) => e.name)));
-  const avoid = names.slice(0, 24);
-  const ga = P.genPool({ seed: 7, year: 1, avoid });
-  assert(!ga.some((e) => avoid.includes(e.name)), 'genPool with avoid used ' + describe(ga.filter((e) => avoid.includes(e.name)).map((e) => e.name)));
-  for (const input of [{ seed: 7, year: 1 }, { seed: 7, year: 2 }, { seed: 123456789, year: 1, avoid }, { seed: 99, year: 3, avoid: ['Rosa'] }]) {
-    const got = P.genPool(input).map(appView), want = refGenPool(P, input).map(appView);
-    assert(deepEq(got, want), 'genPool(' + describe(input).slice(0, 80) + ') differs from the X6.1 model: ' + describe(got.slice(0, 2)) + ' against ' + describe(want.slice(0, 2)));
+  assert(g1.some((e) => e.stars >= 2.5), 'no headliner on the week 1 board ' + describe(g1.map((e) => e.stars)));
+  assert(g1.every((e) => names.includes(e.name)) && new Set(g1.map((e) => e.name)).size === g1.length, 'board names ' + describe(g1.map((e) => e.name)));
+  const avoid = names.slice(0, 40);
+  assert(!P.genBoard({ seed: 7, year: 1, week: 1, avoid }).some((e) => avoid.includes(e.name)), 'genBoard used an avoided name');
+  const sizes = [20, 50, 80].map((rep) => P.genBoard({ seed: 7, year: 1, week: 3, rep }).length);
+  assert(sameJSON(sizes, [20, 50, 80].map((rep) => C.BOARD_SIZE[rep >= C.THIRD_EDGES[1] ? 2 : rep >= C.THIRD_EDGES[0] ? 1 : 0])), 'board sizes by third ' + describe(sizes));
+  let pitSeen = 0, pitLocked = 0;
+  for (let sd = 1; sd <= 30; sd++) for (let w = 2; w <= 6; w++) {
+    pitSeen += P.genBoard({ seed: sd, year: 1, week: w, rep: 80, pit: true }).filter((e) => e.role === 'pit').length;
+    pitLocked += P.genBoard({ seed: sd, year: 1, week: w, rep: 80 }).filter((e) => e.role === 'pit').length;
   }
-  notes.push('genPool matches the X6.1 model on four inputs');
-  // On a sim on Hiring Day.
-  const h = headless(P, null, 641);
-  assert(h.sim.skipTutorial() === true, 'skipTutorial() did not return true');
-  h.drain();
-  h.sim.setPlayer(DEFAULT_LOOK, W15.defaultName, W15.defaultPit);
-  h.drain();
+  assert(pitLocked === 0 && pitSeen > 0, 'PIT applicants without the cabinet ' + pitLocked + ', with it ' + pitSeen);
+  for (const input of [{ seed: 7, year: 1, week: 1 }, { seed: 7, year: 2, week: 4, rep: 50 }, { seed: 123456789, year: 1, week: 2, rep: 80, avoid, pit: true },
+    { seed: 99, year: 3, week: 5, rep: 20, avoid: ['Rosa'], keep: P.genBoard({ seed: 99, year: 3, week: 4, rep: 20 }) }]) {
+    const got = P.genBoard(input).map(appView), want = refGenBoard(P, input).map(appView);
+    assert(deepEq(got, want), 'genBoard(' + describe(input).slice(0, 80) + ') differs from the model: ' + describe(got.slice(0, 2)) + ' against ' + describe(want.slice(0, 2)));
+  }
+  // Who stays: about BOARD_STAY of last week's open applicants, the rest are gone.
+  let kept = 0, offered = 0;
+  for (let sd = 1; sd <= 40; sd++) {
+    const prev = P.genBoard({ seed: sd, year: 1, week: 2, rep: 50 });
+    const next = P.genBoard({ seed: sd, year: 1, week: 3, rep: 50, keep: prev });
+    offered += prev.length;
+    kept += next.filter((e) => prev.some((p) => p.name === e.name && sameJSON(p.skills, e.skills))).length;
+  }
+  assert(kept > 0 && kept < offered && Math.abs(kept / offered - C.BOARD_STAY) < 0.2, 'kept ' + kept + ' of ' + offered);
+  notes.push('genBoard matches its model on four inputs; ' + kept + ' of ' + offered + ' passed applicants stayed a week');
+  // The sim: week 1 opens on the hub with the board.
+  const h = toWeek(P, 641);
   const st = h.st;
-  assert(st().loop === LOOP.hiring, 'loop after setPlayer ' + describe(st().loop));
-  const seed = st().season.seed;
-  const pool = P.genPool({ seed, year: 1, avoid: [] });
-  const hv0 = h.sim.hiringView();
-  assert(hv0 && hv0.year === 1 && hv0.round === 1 && hv0.tryouts === C.TRYOUTS && hv0.picksLeft === 3 && hv0.pool.length === C.POOL_SIZE, 'hiringView() ' + describe(hv0 && { year: hv0.year, round: hv0.round, tryouts: hv0.tryouts, picksLeft: hv0.picksLeft }));
-  for (const e of hv0.pool) {
-    const p = pool[e.idx];
-    assert(e.name === p.name && e.role === p.role && sameJSON(e.skills, p.skills) && e.stars === p.stars && e.wage === p.wage && e.status === 'open' && e.tried === false && e.potential === null,
-      'hiringView entry ' + e.idx + ' ' + describe(e) + ', pool ' + describe(p));
-  }
-  const n0 = h.log.length;
-  const t1 = h.sim.tryout(0), t2 = h.sim.tryout(1), t3 = h.sim.tryout(2);
-  h.drain();
-  assert(t1 && t1.ok && t1.potential === pool[0].potential && t2 && t2.ok && t2.potential === pool[1].potential, 'two tryouts ' + describe([t1, t2]));
-  assert(t3 && t3.ok === false, 'a third tryout ' + describe(t3));
-  const ty = h.of(EV31.tryout, n0);
-  assert(ty.length === 2 && ty[0].idx === 0 && ty[0].name === pool[0].name && ty[0].potential === pool[0].potential, 'tryout events ' + describe(ty.map(strip)));
-  const hv1 = h.sim.hiringView();
-  assert(hv1.tryouts === 0 && hv1.pool[0].potential === pool[0].potential && hv1.pool[1].potential === pool[1].potential && hv1.pool.slice(2).every((e) => e.potential === null), 'hiringView after two tryouts ' + describe(hv1.pool.slice(0, 3)));
-  const early = h.sim.finishHiring();
-  assert(early && early.ok === false && early.message === '' && st().loop === LOOP.hiring, 'finishHiring in round 1 ' + describe(early));
-  // A pick ends round 1; other outfits take three of the six best open by stars plus potential.
-  const pick = 4;
-  const status = Object.fromEntries(pool.map((e) => [e.idx, 'open']));
+  const bv = h.sim.boardView();
+  assert(bv && bv.year === 1 && bv.week === 1 && bv.list.length === C.BOARD_FIRST && bv.slots === C.TIER_SLOTS[0] && bv.free === C.TIER_SLOTS[0] && bv.pitOpen === false, 'boardView() ' + describe(bv && { week: bv.week, n: bv.list.length, slots: bv.slots, free: bv.free }));
+  assert(bv.money && bv.money.note === fill(U.wageNote, { n: bv.money.clear }) && (bv.money.warn ? bv.money.warnLine === fill(U.wageWarn, { h: bv.money.half }) : bv.money.warnLine === ''), 'the board money line ' + describe(bv.money));
+  const model = refGenBoard(P, { seed: st().season.seed, year: 1, week: 1, rep: st().rep, avoid: [W15.defaultName] });
+  const brief = (e) => ({ name: e.name, role: e.role, skills: e.skills, stars: e.stars, wage: e.wage });
+  assert(deepEq(bv.list.map(brief), model.map(brief)), 'the week 1 board is not the model ' + describe(bv.list.map((e) => e.name)));
+  assert(bv.list.every((e) => e.potential === null && e.line === lineOf(st().season.board[e.i])), 'the board shows potential or a wrong line');
+  // A hire with a slot open.
+  const pick = bv.list.find((e) => e.why === '');
+  assert(pick, 'nobody on the week 1 board fits the cap ' + describe(bv.list.map((e) => [e.wage, e.why])));
   const cash0 = st().cash;
   const n1 = h.log.length;
-  const hr = h.sim.hireApplicant(pick);
+  const hr = h.sim.hireBoard(pick.i);
   h.drain();
-  assert(hr && hr.ok === true && Number.isInteger(hr.id), 'hireApplicant(' + pick + ') ' + describe(hr));
+  assert(hr && hr.ok === true && Number.isInteger(hr.id), 'hireBoard(' + pick.i + ') ' + describe(hr));
   const card = cardOf(h, hr.id);
-  const pe = pool[pick];
-  assert(card && card.name === pe.name && card.role === pe.role && sameJSON(card.skills, pe.skills) && card.potential === pe.potential && card.mood === pe.mood && deepEq(card.look, pe.look)
-    && card.contract === 2 && card.rookie === true && card.wage === pe.wage && card.xp === 0 && card.banked === 0 && card.worked === 0 && card.seasons === 0 && card.trait === null && card.raised === false && card.notice === false && card.bench === 0
-    && card.bring === (pe.wage <= C.PAYROLL[0]), 'the drafted card ' + describe(card) + ', applicant ' + describe(pe));
-  assert(st().cash === cash0, 'a Hiring Day hire took ' + (cash0 - st().cash) + ' (X6.2: no signing fee)');
+  const pe = st().season.board[pick.i];
+  assert(card && card.name === pe.name && card.role === pe.role && sameJSON(card.skills, pe.skills) && card.potential === pe.potential && card.contract === 2 && card.rookie === true && card.wage === pe.wage && card.worked === 0,
+    'the hired card ' + describe(card) + ', applicant ' + describe(pe));
+  assert(st().cash === cash0, 'a board hire took ' + (cash0 - st().cash) + ' (no signing fee)');
   const ch = h.of(EV31.crewHired, n1);
-  assert(ch.length === 1 && deepEq(strip(ch[0]), { type: EV31.crewHired, id: hr.id, name: pe.name, role: pe.role, from: 'draft', fee: 0 }), 'crew_hired ' + describe(ch.map(strip)));
-  status[pick] = 'mine';
-  const taken1 = refTaken(P, pool, status, seed, 1, 1);
-  for (const i of taken1) status[i] = 'taken';
-  const hv2 = h.sim.hiringView();
-  const takenNow = hv2.pool.filter((e) => e.status === 'taken').map((e) => e.idx).sort((x, y) => x - y);
-  assert(hv2.round === 2 && hv2.picksLeft === 2 && hv2.pool[pick].status === 'mine' && takenNow.length === C.TAKEN_PER_ROUND && sameJSON(takenNow, taken1.slice().sort((x, y) => x - y)),
-    'after the pick: round ' + hv2.round + ', taken ' + describe(takenNow) + ', the ro model ' + describe(taken1));
-  const rd = h.of(EV31.roundDone, n1);
-  assert(rd.length === 1 && rd[0].round === 1 && sameJSON(rd[0].taken.slice().sort((x, y) => x - y), taken1.slice().sort((x, y) => x - y)) && sameJSON(rd[0].names.slice().sort(), taken1.map((i) => pool[i].name).sort()), 'round_done ' + describe(rd.map(strip)));
-  assert(h.of(EVENT.saveWanted, n1).some((e) => e.reason === 'hiring'), 'no save_wanted hiring after the round');
-  // A reload mid Hiring Day restores the pool, the statuses and the round.
-  const ser = h.sim.serialize();
-  assert(ser && ser.v === SAVE_V && ser.hiring && ser.hiring.round === 2 && ser.season.week === 1 && ser.season.pick === null, 'serialize() on Hiring Day ' + describe(ser && { v: ser.v, hiring: ser.hiring && ser.hiring.round, week: ser.season && ser.season.week, pick: ser.season && ser.season.pick }));
-  const back = P.validateSave(JSON.parse(JSON.stringify(ser)));
-  assert(back && back.hiring && back.hiring.pool.length === C.POOL_SIZE, 'validateSave dropped the Hiring Day ' + describe(back && back.hiring));
-  const again = P.createSim(back, 641);
-  assert(again.state.loop === LOOP.hiring && deepEq(again.hiringView(), h.sim.hiringView()), 'the reload gave loop ' + describe(again.state.loop) + ', hiringView ' + describe(again.hiringView() && again.hiringView().round));
-  assert(deepEq(again.state.crew, st().crew), 'the reload lost the drafted card');
-  // Two passes end rounds 2 and 3.
-  for (const round of [2, 3]) {
-    const p = h.sim.passRound();
-    h.drain();
-    assert(p && p.ok === true, 'passRound in round ' + round + ' ' + describe(p));
-    const tk = refTaken(P, pool, status, seed, 1, round);
-    for (const i of tk) status[i] = 'taken';
+  assert(ch.length === 1 && deepEq(strip(ch[0]), { type: EV31.crewHired, id: hr.id, name: pe.name, role: pe.role, from: 'board', fee: 0 }) && h.of(EVENT.saveWanted, n1).some((e) => e.reason === 'crew'), 'crew_hired ' + describe(ch.map(strip)));
+  assert(!h.sim.boardView().list.some((e) => e.i === pick.i) && h.sim.hireBoard(pick.i).ok === false, 'the hired applicant is still on the board');
+  // Over the payroll cap.
+  const capNow = h.sim.payroll().hire;
+  const signed = () => st().crew.reduce((a, c) => a + c.wage, 0);
+  const capMsg = fill(U.hireCap, { b: capNow, n: C.PAYROLL_PER_GEAR });
+  const over = h.sim.boardView().list.find((e) => signed() + e.wage > capNow);
+  if (over) {
+    const r = h.sim.hireBoard(over.i);
+    assert(r.ok === false && r.message === capMsg && over.why === r.message, 'over the cap ' + describe(r));
+    notes.push('over the cap: ' + over.name + ' at ' + over.wage);
+  } else {
+    st().season.board.push({ name: 'Moe', role: 'fire', skills: [5, 5], potential: 5, mood: 0, look: Object.assign({}, DEFAULT_LOOK), stars: 5, wage: P.wageFor(5, 'fire'), line: P.boardLine('fire', 5), hired: false });
+    const r = h.sim.hireBoard(st().season.board.length - 1);
+    assert(r.ok === false && r.message === capMsg, 'over the cap (fixture) ' + describe(r));
+    st().season.board.pop();
   }
-  const hv3 = h.sim.hiringView();
-  const taken3 = hv3.pool.filter((e) => e.status === 'taken').map((e) => e.idx).sort((x, y) => x - y);
-  const want3 = Object.keys(status).filter((k) => status[k] === 'taken').map(Number).sort((x, y) => x - y);
-  assert(hv3.round === 4 && hv3.picksLeft === 0 && taken3.length === 3 * C.TAKEN_PER_ROUND && sameJSON(taken3, want3), 'after round 3: round ' + hv3.round + ', taken ' + describe(taken3) + ', the ro model ' + describe(want3));
-  assert(h.sim.passRound().ok === false && h.sim.hireApplicant(hv3.pool.find((e) => e.status === 'open').idx).ok === false, 'a fourth round ran');
-  // A full roster drafts, then lets someone go before week 1.
-  st().crew.push(mkCard(P, 50, 'Walt', 'fire', [2, 2], { bring: false }), mkCard(P, 51, 'Faye', 'prep', [2, 2], { bring: false }));   // fixture: a roster of 3
-  st().crewSeq = 52;
-  const full = h.sim.finishHiring();
-  assert(full && full.ok === false && full.message === fill(U.tooMany, { s: h.sim.payroll().slots }) && st().loop === LOOP.hiring, 'finishHiring with 3 on 2 slots ' + describe(full));
-  const cash1 = st().cash;
-  const lg = h.sim.letGo(hr.id);
+  // A PIT applicant without the cabinet smoker (fixture: one on the board).
+  st().season.board.push({ name: 'Dee', role: 'pit', skills: [1, 1], potential: 3, mood: 0, look: Object.assign({}, DEFAULT_LOOK), stars: 1, wage: 0, line: P.boardLine('pit', 3), hired: false });
+  const pl = h.sim.hireBoard(st().season.board.length - 1);
+  assert(pl.ok === false && pl.message === U.pitLocked, 'a PIT hire on the kettle ' + describe(pl));
+  st().season.board.pop();
+  // Slots full (fixture: a second card fills the two kettle slots).
+  st().crew.push(mkCard(P, 60, 'Walt', 'prep', [1, 1], { bring: false, wage: 0 }));
+  st().crewSeq = 61;
+  const first = h.sim.boardView().list[0];
+  const fr = h.sim.hireBoard(first.i);
+  assert(fr.ok === false && fr.message === U.crewFull && first.why === U.crewFull, 'slots full ' + describe(fr) + ', why ' + describe(first.why));
+  // Letting someone go opens the slot again.
+  const lg = h.sim.letGo(60);
   h.drain();
-  assert(lg && lg.ok === true && lg.sendoff === 0 && st().cash === cash1 && cardOf(h, hr.id) === null, 'letGo of the unworked card ' + describe(lg));
-  assert(h.sim.hiringView().pool[pick].status === 'taken', 'the let go draft pick reads ' + describe(h.sim.hiringView().pool[pick].status) + ' (X18.1 item 33: taken)');
-  const n2 = h.log.length;
-  const fin = h.sim.finishHiring();
+  assert(lg && lg.ok === true && lg.sendoff === 0 && cardOf(h, 60) === null && h.sim.boardView().free === 1, 'letGo ' + describe(lg));
+  // A reload keeps the board and its hired flag.
+  const ser = h.sim.serialize();
+  assert(ser.v === SAVE_V && ser.season.board && ser.season.board.year === 1 && ser.season.board.week === 1 && ser.season.board.list.length === C.BOARD_FIRST && ser.season.board.list[pick.i].hired === true && !('hiring' in ser), 'serialize() board ' + describe(ser.season.board && { week: ser.season.board.week, n: ser.season.board.list.length }));
+  const again = P.createSim(P.validateSave(JSON.parse(JSON.stringify(ser))), 641);
+  assert(again.state.loop === LOOP.week && deepEq(again.boardView(), h.sim.boardView()), 'the reload gave ' + describe(again.boardView() && again.boardView().list.map((e) => e.name)));
+  // Next week: a new board; passed applicants may be gone.
+  const wk1 = st().season.board.filter((e) => !e.hired).map((e) => e.name);
+  settleWeek(h, 3);
+  const rser = h.sim.serialize();   // the report save opens week 2
+  h.sim.finishReport();
   h.drain();
-  assert(fin && fin.ok === true && st().loop === LOOP.week && st().phase === PHASE.morning && st().hiring === null && st().season.drafted === true, 'finishHiring ' + describe(fin) + ', loop ' + describe(st().loop));
-  const seq = h.log.slice(n2).map((e) => e.type);
-  const order = [EV31.hiringDone, EV3.weekStart, EV3.offersReady, EVENT.saveWanted].map((t) => seq.indexOf(t));
-  assert(order.every((i) => i >= 0) && order.every((i, j) => j === 0 || i > order[j - 1]), 'events after finishHiring ' + describe(seq));
-  assert(h.of(EV31.hiringDone, n2)[0].year === 1 && h.of(EVENT.saveWanted, n2).some((e) => e.reason === 'hiring'), 'hiring_done or save_wanted ' + describe(h.log.slice(n2).map(strip)));
-  return 'tryouts 2 of 2, potential hidden until tried, a pick with no fee, three taken a round by the ro model (' + taken1.join(' ') + '), the reload keeps it, round 4, tooMany, a free let go, week 1; ' + notes.join('; ');
+  assert(st().season.week === 2 && st().loop === LOOP.week, 'week 2 ' + describe([st().season.week, st().loop]));
+  const bv2 = h.sim.boardView();
+  const third = st().rep >= C.THIRD_EDGES[1] ? 2 : st().rep >= C.THIRD_EDGES[0] ? 1 : 0;
+  assert(bv2.week === 2 && bv2.list.length === C.BOARD_SIZE[third] && !bv2.list.some((e) => e.name === pe.name), 'the week 2 board ' + describe(bv2.list.map((e) => e.name)));
+  const stayed = bv2.list.filter((e) => wk1.includes(e.name)).map((e) => e.name);
+  const gone = wk1.filter((n) => !bv2.list.some((e) => e.name === n));
+  assert(gone.length > 0 || stayed.length === wk1.length, 'stayed ' + describe(stayed) + ', gone ' + describe(gone));
+  const fromReport = P.createSim(P.validateSave(JSON.parse(JSON.stringify(rser))), 641);
+  assert(fromReport.state.season.week === 2 && deepEq(fromReport.boardView().list, bv2.list), 'the report save gave another week 2 board ' + describe(fromReport.boardView() && fromReport.boardView().list.map((e) => e.name)));
+  notes.push('week 2: ' + stayed.length + ' stayed (' + stayed.join(' ') + '), ' + gone.length + ' gone (' + gone.join(' ') + ')');
+  return 'week 1 board of ' + bv.list.length + ', ' + pe.name + ' hired with no fee, refusals for the cap, the cabinet and full slots, a free let go, the reload and the report save keep it, a new board in week 2; ' + notes.join('; ');
 }
 
 // Step 65.
@@ -5914,7 +5906,7 @@ function migrateHeadless(P) {
       assert(r.crew[n].name === names[k] && deepEq(r.crew[n].look, look), label + ': card ' + (n + 1) + ' name ' + describe(r.crew[n].name) + ', look ' + describe(r.crew[n].look) + ', the X11.3 model ' + names[k] + ' ' + describe(look));
     }
     assert(r.crew[0].name !== r.crew[1].name && r.crew.every((c) => names.includes(c.name)), label + ': names ' + describe(r.crew.map((c) => c.name)));
-    assert(r.crewSeq === 3 && r.hiring === null && r.season.drafted === true && r.season.trained === null && sameJSON(r.season.walkins, []), label + ': crewSeq, hiring, drafted, trained, walkins ' + describe([r.crewSeq, r.hiring, r.season.drafted, r.season.trained, r.season.walkins]));
+    assert(r.crewSeq === 3 && !('hiring' in r) && !('drafted' in r.season) && r.season.trained === null && sameJSON(r.season.walkins, []), label + ': crewSeq, hiring, drafted, trained, walkins ' + describe([r.crewSeq, r.hiring, r.season.drafted, r.season.trained, r.season.walkins]));
     const sim = P.createSim(r, 691);
     const pr = sim.payroll();
     assert(pr.now === 50 && pr.budget === P.C.PAYROLL[0] && pr.count === 2, label + ': payroll() ' + describe(pr));
@@ -6958,25 +6950,6 @@ async function ledgerAddsUp(boxId) {
   return parts.join(' ') + ' = ' + cash.v;
 }
 // v3.1 page helpers.
-// Review 1 (X20.11): with nobody on the crew a pass asks first (ui.passEmpty, Yes and No above the
-// bar); the helper answers Yes and counts the asks.
-let passAsks = 0;
-const andListH = (w) => (w.length <= 1 ? w.join('') : w.slice(0, -1).join(', ') + ' and ' + w[w.length - 1]);
-const hireGo = async (n) => {   // hire-go n times: passes, then Start week 1
-  for (let i = 0; i < n; i++) {
-    assert(await visible(ID31.hiring), '#hiring hidden before hire-go ' + (i + 1) + '; loop ' + describe(await loop()));
-    await click(ID31.hireGo);
-    await advance(0);
-    if (await visible('hire-pass-yes')) {
-      const r = await ev('S().hiring ? S().hiring.round : null');
-      const why = await accText(ID31.hireWhy);
-      assert(why === fill(UI.passEmpty, { r }) && (await ev('S().crew.length')) === 0, '#hire-why on the pass confirm ' + describe(why));
-      passAsks += 1;
-      await click('hire-pass-yes');
-      await advance(0);
-    }
-  }
-};
 const crewTile = async () => {
   const al = await attrOf(ID3.cardCrew, 'aria-label');
   return (al || '') + ' | ' + (await accText(ID3.cardCrew));
@@ -7072,154 +7045,82 @@ async function v3BrowserSteps(captures) {
     await click(ID3.crGo);
     await advance(0);
     const s = await ev('({ loop: S().loop, profile: S().profile, pitName: S().pitName })');
-    // v3.1 (X15.1 step 43): Fire it up lands on Hiring Day.
-    assert(s.loop === LOOP.hiring, 'loop after Fire it up ' + describe(s.loop) + ', wanted hiring');
-    assert(await visible(ID31.hiring), '#hiring hidden after Fire it up');
+    // v4.8: Fire it up lands on the week 1 hub (no Hiring Day).
+    assert(s.loop === LOOP.week, 'loop after Fire it up ' + describe(s.loop) + ', wanted week');
+    assert(await visible(ID3.week), '#week hidden after Fire it up');
     assert(deepEq(s.profile, { name: MARTY.name, look: MARTY.look }), 'state.profile ' + describe(s.profile));
     assert(s.pitName === MARTY.pit, 'state.pitName ' + describe(s.pitName));
     key = await lookKeyNow();
     assert(key === lookKeyOf(MARTY.look), 'art.lookKey() after Fire it up ' + describe(key));
     const raw = await storedSave();
     assert(raw && raw.v === SAVE_V && raw.player && raw.player.name === MARTY.name && deepEq(raw.player.look, MARTY.look) && raw.pitName === MARTY.pit && !('hires' in raw), 'stored save ' + describe(raw && { v: raw.v, player: raw.player, pitName: raw.pitName, hires: raw.hires }));
-    return CREATOR_TAPS.length + ' taps to ' + key + ', Marty of ' + MARTY.pit + ', saved v 5, on Hiring Day';
+    return CREATOR_TAPS.length + ' taps to ' + key + ', Marty of ' + MARTY.pit + ', saved v ' + raw.v + ', on the week 1 hub';
   }, { fatal: true });
 
-  // v3.1 (X15.2 step 70): Hiring Day by real taps, right after step 43.
-  await step('Hiring Day by real taps', async () => {
+  // v4.8: the Help wanted board by real taps, right after the creator (it replaced Hiring Day). The
+  // crew sheet from the hub's Crew tile: week 1's board, each applicant's line, the money lines, the
+  // PIT lock line; an applicant's card; a hire with a slot open (no fee); a refusal over the cap.
+  await step('v4.8 Help wanted board by real taps: week 1 on the crew sheet, a hire with a slot open, a refusal over the cap', async () => {
     await advance(0);
     const budget = CC.PAYROLL ? CC.PAYROLL[0] : 60;
-    assert((await loop()) === LOOP.hiring && (await visible(ID31.hiring)), 'loop ' + describe(await loop()) + ', #hiring visible ' + (await visible(ID31.hiring)));
-    const hh = await srText(ID31.hiringH);
-    assert(hh === UI.hiringH, '#hiring-h .sr text ' + describe(hh));
-    const rd1 = await accText(ID31.hireRound);
-    assert(rd1 === fill(UI.hireRound, { r: 1 }), '#hire-round ' + describe(rd1));
-    for (let i = 0; i < 9; i++) assert(await present(ID31.app(i)), '#app-' + i + ' missing on page 1');
-    assert(!(await present(ID31.app(9))), '#app-9 shown on page 1');
-    const hl = await accText(ID31.hiresLeftN);
-    assert(hl === '3', '#hires-left-n ' + describe(hl));
-    const tl0 = await accText(ID31.hireTryouts);
-    assert(tl0 === fill(UI.tryoutsLeft, { n: CC.TRYOUTS }), '#hire-tryouts ' + describe(tl0));
-    assert((await ev('g.hiringPage')) === 1, 'PitSim.game.hiringPage ' + describe(await ev('g.hiringPage')));
-    assert(await ev('$(' + JSON.stringify(ID31.pagePrev) + ').disabled === true'), '#hire-page-prev enabled on page 1');
-    const helpShut = !(await visible(ID31.hireHelp));
-    await click(ID31.hireInfo);
+    assert((await loop()) === LOOP.week && (await visible(ID3.week)), 'loop ' + describe(await loop()) + ', #week visible ' + (await visible(ID3.week)));
+    assert(!(await present('hiring')) && !(await present('hire-go')), 'a Hiring Day panel is still in the page');
+    await crewByTaps();
+    assert((await visible(ID3.sheet)) && (await visible(ID31.help)), '#help hidden on the crew sheet');
+    assert((await accText(ID31.helpH)) === UI.boardH && (await accText(ID31.helpNote)) === UI.boardNote, '#help-h ' + describe(await accText(ID31.helpH)));
+    const bv = await ev('JSON.parse(JSON.stringify(sim.boardView()))');
+    assert(bv && bv.week === 1 && bv.list.length === CC.BOARD_FIRST && (await ev('g.board')) === CC.BOARD_FIRST, 'the week 1 board ' + describe(bv && bv.list.length) + ', g.board ' + describe(await ev('g.board')));
+    for (const e of bv.list) {
+      assert(await visible(ID31.helpCard(e.i)), '#help-' + e.i + ' hidden');
+      assert((await text(ID31.helpLine(e.i))) === e.line, '#help-line-' + e.i + ' reads ' + describe(await text(ID31.helpLine(e.i))) + ', wanted ' + describe(e.line));
+      const al = await attrOf(ID31.helpCard(e.i), 'aria-label');
+      assert(al.startsWith(e.name + ', ') && al.includes(', wage ' + e.wage + '. ') && al.endsWith(e.line), '#help-' + e.i + ' aria-label ' + describe(al));
+    }
+    assert((await accText(ID31.helpWageNote)) === bv.money.note && (bv.money.warn ? (await accText(ID31.helpWageWarn)) === bv.money.warnLine : !(await present(ID31.helpWageWarn))), '#help-wage-note ' + describe(await accText(ID31.helpWageNote)));
+    assert((await accText(ID31.helpPitLock)) === UI.pitLockedB, '#help-pit-lock ' + describe(await accText(ID31.helpPitLock)));
+    await ev('$(' + JSON.stringify(ID31.help) + ').scrollIntoView({ block: "start" })');
     await advance(0);
-    const helpOpen = (await visible(ID31.hireHelp)) && (await attrOf(ID31.hireInfo, 'aria-expanded')) === 'true' && (await accText(ID31.hireHelp)) === UI.hireHelp;
-    await click(ID31.hireInfo);
-    await advance(0);
-    assert(helpShut && helpOpen, '#hire-info did not toggle #hire-help (shut ' + helpShut + ', open ' + helpOpen + ')');
-    await click(ID31.pageNext);
-    await advance(0);
-    assert((await ev('g.hiringPage')) === 2, 'hiringPage after #hire-page-next ' + describe(await ev('g.hiringPage')));
-    for (let i = 9; i < 18; i++) assert(await present(ID31.app(i)), '#app-' + i + ' missing on page 2');
-    assert(!(await present(ID31.app(0))), '#app-0 shown on page 2');
-    const pg = await accText(ID31.hirePage);
-    assert(pg.includes(fill(UI.pageOf, { p: 2, n: Math.ceil(P_POOL / 9) })), '#hire-page reads ' + describe(pg));   // v3.6: 24 cards, 3 pages
-    await screenshot(SCREENSHOTS.hiringPage2);
-    await click(ID31.pagePrev);
-    await advance(0);
-    assert((await ev('g.hiringPage')) === 1, 'hiringPage after #hire-page-prev ' + describe(await ev('g.hiringPage')));
-    // A card sheet, a tryout, then Pass.
-    const e0 = await ev('sim.hiringView().pool[0]');
-    await click(ID31.app(0));
-    await advance(0);
-    assert(await visible(ID31.card), '#card hidden after #app-0');
-    for (const id of [ID31.cardPortrait, ID31.cardSkill(0), ID31.cardSkill(1), ID31.cardHire, ID31.cardPass]) assert(await visible(id), '#' + id + ' not shown on the applicant sheet');
-    assert((await srText(ID31.cardH)) === e0.name, '#card-h .sr ' + describe(await srText(ID31.cardH)) + ', wanted ' + e0.name);
-    const sk = await ev('({ role: attr("card-skill-0", "role"), now: attr("card-skill-0", "aria-valuenow"), max: attr("card-skill-0", "aria-valuemax"), label: attr("card-skill-0", "aria-label") })');
-    const skWant = fill(UI.skillAria, { skill: W15.skill[e0.role][0], n: e0.skills[0] });
-    assert(sk.role === 'meter' && Number(sk.now) === e0.skills[0] && sk.max === '5' && sk.label === skWant, '#card-skill-0 ' + describe(sk) + ', wanted ' + describe(skWant));
-    const st0 = await accText(ID31.cardStars);
-    assert(st0.includes(UI.potentialHidden), '#card-stars before the tryout ' + describe(st0));
+    await screenshot(SCREENSHOTS.board);
+    // An applicant's card, then the hire with a slot open: the first RUN applicant that fits.
+    const target = bv.list.find((e) => e.why === '' && e.role === 'run');
+    assert(target, 'no RUN applicant fits the cap ' + describe(bv.list.map((e) => [e.role, e.wage, e.why])));
+    await realTap(ID31.helpCard(target.i));
+    assert(await visible(ID31.card), '#card hidden after #help-' + target.i);
+    assert((await srText(ID31.cardH)) === target.name && (await text(ID31.cardLine)) === target.line, '#card-h ' + describe(await srText(ID31.cardH)) + ', #card-line ' + describe(await text(ID31.cardLine)));
+    assert((await accText(ID31.cardStars)).includes(UI.potentialHidden) && (await accText(ID31.cardContract)) === UI.contract2, '#card-stars or #card-contract ' + describe([await accText(ID31.cardStars), await accText(ID31.cardContract)]));
     await screenshot(SCREENSHOTS.card);
-    await click(ID31.cardTryout);
-    await advance(0);
-    const pot = await ev('sim.hiringView().pool[0].potential');
-    assert(typeof pot === 'number', 'the tryout left potential ' + describe(pot));
-    const st1 = await accText(ID31.cardStars);
-    assert(st1.includes(fill(UI.potential, { n: pot })), '#card-stars after the tryout ' + describe(st1) + ', wanted ' + describe(fill(UI.potential, { n: pot })));
-    assert(!(await visible(ID31.cardTryout)), '#card-tryout still shown once tried');
-    const tl1 = await accText(ID31.hireTryouts);
-    assert(tl1 === fill(UI.tryoutsLeft, { n: CC.TRYOUTS - 1 }), '#hire-tryouts after a tryout ' + describe(tl1));
-    if (CC.TRYOUTS === 2) assert(tl1 === 'Tryouts left: 1', '#hire-tryouts ' + describe(tl1) + ', X15.2 literal');
-    await click(ID31.cardPass);
-    await advance(0);
-    assert((await visible(ID31.hiring)) && !(await visible(ID31.card)), '#card-pass did not return to #hiring');
-    const foc = await ev('document.activeElement ? document.activeElement.id : null');
-    assert(foc === ID31.app(0), 'focus after #card-pass is on ' + describe(foc) + ', wanted #app-0');
-    // Hire the first open RUN card on page 1 whose wage fits the budget (deviation 33).
-    const pool = await ev('sim.hiringView().pool');
-    let target = pool.find((e) => e.idx < 9 && e.role === 'run' && e.status === 'open' && e.wage <= budget);
-    let onPage2 = false;
-    if (!target) {
-      target = pool.find((e) => e.role === 'run' && e.status === 'open' && e.wage <= budget);
-      assert(target, 'no open RUN card in the pool ' + describe(pool.map((e) => e.role + ':' + e.status)));
-      onPage2 = true;
-      while ((await ev('g.hiringPage')) < Math.floor(target.idx / 9) + 1) { await click(ID31.pageNext); await advance(0); }   // v3.6: three pages
-    }
-    await click(ID31.app(target.idx));
-    await advance(0);
-    assert(await visible(ID31.card), '#card hidden after #app-' + target.idx);
+    const cash0 = await ev('S().cash');
     const n0 = await eventCount();
-    await click(ID31.cardHire);
-    await advance(0);
+    await realTap(ID31.cardHire);
     const ch = await eventsSince(n0, EV31.crewHired);
-    assert(ch.length === 1 && ch[0].name === target.name && ch[0].from === 'draft' && ch[0].fee === 0, 'crew_hired after #card-hire ' + describe(ch));
-    if (await visible(ID31.card)) { await click(ID31.cardBack); await advance(0); }
-    assert(await visible(ID31.hiring), '#hiring hidden after the hire');
+    assert(ch.length === 1 && ch[0].name === target.name && ch[0].from === 'board' && ch[0].fee === 0 && (await ev('S().cash')) === cash0, 'crew_hired after #card-hire ' + describe(ch));
+    assert((await visible(ID3.sheet)) && !(await visible(ID31.card)) && !(await present(ID31.helpCard(target.i))), 'after the hire: the sheet, or the hired applicant still on the board');
+    assert((await accText(ID31.crewSlots)) === fill(UI.slots, { n: 1, s: bv.slots }) && (await present(ID31.crew(ch[0].id))), '#crew-slots after the hire ' + describe(await accText(ID31.crewSlots)));
     hired70 = { id: ch[0].id, name: target.name, wage: target.wage, role: 'run' };
-    const pm = await ev('({ role: attr("hire-payroll", "role"), now: attr("hire-payroll", "aria-valuenow"), min: attr("hire-payroll", "aria-valuemin"), max: attr("hire-payroll", "aria-valuemax"), label: attr("hire-payroll", "aria-label") })');
-    assert(pm.role === 'meter' && pm.now === String(target.wage) && pm.min === '0' && pm.max === String(budget) && pm.label === fill(UI.payrollAria, { p: target.wage, b: budget }), '#hire-payroll ' + describe(pm) + ', wanted the wage ' + target.wage);
-    const rd2 = await accText(ID31.hireRound);
-    assert(rd2 === fill(UI.hireRound, { r: 2 }), '#hire-round after the hire ' + describe(rd2));
-    assert((await accText(ID31.hiresLeftN)) === '2', '#hires-left-n after the hire ' + describe(await accText(ID31.hiresLeftN)));
-    // Review 1 (X20.11): the round's takes show on screen, in #hire-news above the bar.
-    const rdEv = await eventsSince(n0, EV31.roundDone);
-    const newsWant = rdEv.length ? fill(W15.say.roundDone, { r: 1, list: andListH(rdEv[0].names) }) : null;
-    const newsTxt = await accText('hire-news');
-    assert(newsWant && (await visible('hire-news')) && newsTxt.startsWith(newsWant), '#hire-news ' + describe(newsTxt) + ', wanted ' + describe(newsWant));
-    const goAria = await attrOf(ID31.hireGo, 'aria-label');
-    assert(goAria === fill(UI.passRound, { r: 2 }), '#hire-go aria-label in round 2 ' + describe(goAria));
-    // Exactly three cards read Hired elsewhere, and the hire reads On your crew, on both pages.
-    const view = await ev('sim.hiringView().pool');
-    const takenIdx = view.filter((e) => e.status === 'taken').map((e) => e.idx);
-    assert(takenIdx.length === 3 && view[target.idx].status === 'mine', 'statuses ' + describe(view.map((e) => e.status)));
-    const readPage = async () => ev('[...document.querySelectorAll("#hire-grid .crewcard, #hire-grid button")].filter((b) => /^app-\\d+$/.test(b.id)).map((b) => ({ id: b.id, al: b.getAttribute("aria-label") || "", text: (b.textContent || "").replace(/\\s+/g, " ").trim(), dis: b.getAttribute("aria-disabled") }))');
-    const seen = {};
-    for (let pg2 = 1; pg2 <= Math.ceil(P_POOL / 9); pg2++) {   // v3.6: three pages
-      while ((await ev('g.hiringPage')) < pg2) { await click(ID31.pageNext); await advance(0); }
-      for (const b of await readPage()) seen[b.id] = b;
+    const pm = await ev('({ role: attr("crew-payroll", "role"), now: attr("crew-payroll", "aria-valuenow"), max: attr("crew-payroll", "aria-valuemax") })');
+    assert(pm.role === 'meter' && pm.now === String(target.wage) && pm.max === String(budget), '#crew-payroll ' + describe(pm) + ', wanted the wage ' + target.wage);
+    // Over the cap: the plain line on the card, nothing signed.
+    const left = await ev('sim.boardView().list');
+    const over = left.find((e) => e.why && e.why !== UI.crewFull && e.why !== UI.pitLocked);
+    let overNote = 'every applicant left fits the cap';
+    if (over) {
+      const crew0 = await ev('S().crew.length');
+      await realTap(ID31.helpCard(over.i));
+      await realTap(ID31.cardHire);
+      const why = await accText(ID31.cardWhy);
+      assert(why === over.why && why === (await ev('PitSim.STRINGS.ui.hireCap')).split('{b}').join(String(await ev('sim.payroll().hire'))).split('{n}').join(String(CC.PAYROLL_PER_GEAR)) && (await ev('S().crew.length')) === crew0 && (await visible(ID31.card)), '#card-why over the cap ' + describe(why));
+      await realTap(ID31.cardPass);
+      assert((await visible(ID3.sheet)) && (await present(ID31.helpCard(over.i))), 'Pass did not return to the board');
+      overNote = over.name + ' at ' + over.wage + ': "' + why + '"';
     }
-    while ((await ev('g.hiringPage')) > 1) { await click(ID31.pagePrev); await advance(0); }
-    let takenRead = 0;
-    for (const e of view) {
-      const b = seen[ID31.app(e.idx)];
-      assert(b, '#app-' + e.idx + ' not found on either page');
-      const all = b.al + ' ' + b.text;
-      const isTaken = all.includes(UI.taken) || b.al === fill(UI.appTaken, { name: e.name });
-      if (isTaken) takenRead += 1;
-      assert(isTaken === (e.status === 'taken'), '#app-' + e.idx + ' (' + e.status + ') reads ' + describe(all));
-      if (e.status === 'taken') assert(b.dis === 'true', '#app-' + e.idx + ' taken but aria-disabled ' + describe(b.dis));
-      if (e.status === 'mine') assert(all.includes(UI.yours), '#app-' + e.idx + ' (yours) reads ' + describe(all));
-    }
-    assert(takenRead === 3, takenRead + ' cards read ' + describe(UI.taken));
-    await screenshot(SCREENSHOTS.hiring);
-    // Two passes, then Start week 1.
-    await hireGo(2);
-    const goTxt = await accText(ID31.hireGo);
-    assert(goTxt.includes(UI.startWeek) && (await accText(ID31.hireRound)) === UI.hireRoundsDone, '#hire-go after round 3 reads ' + describe(goTxt) + ', #hire-round ' + describe(await accText(ID31.hireRound)));
-    // Review 1: once every round is done the Hires left box and the tryouts line are gone, and Start
-    // week 1 does not overlap anything in the bar.
-    assert(!(await present(ID31.hiresLeft)) && !(await present(ID31.hireTryouts)), '#hires-left or #hire-tryouts still shown after round 3');
-    const overlap = await ev('(() => { const go = $("hire-go").getBoundingClientRect(), cr = $("hire-crew").getBoundingClientRect(); return go.left < cr.right - 0.5 && cr.left < go.right - 0.5; })()');
-    assert(overlap === false, '#hire-go overlaps #hire-crew after round 3');
-    await click(ID31.hireGo);
-    await advance(0);
-    assert((await loop()) === LOOP.week && (await visible(ID3.week)), 'after Start week 1: loop ' + describe(await loop()));
     const raw = await storedSave();
-    assert(raw && raw.v === SAVE_V && raw.hiring === null && raw.season.drafted === true && raw.crew.length === 1 && raw.crew[0].name === target.name, 'stored save after Hiring Day ' + describe(raw && { v: raw.v, hiring: raw.hiring, drafted: raw.season && raw.season.drafted, crew: raw.crew }));
-    return 'two pages, a tryout showed ' + pot + ' stars, Pass kept focus, hired ' + target.name + ' (RUN, wage ' + target.wage + (onPage2 ? ', page 2' : '') + '), three taken, then the week 1 hub';
+    assert(raw && raw.v === SAVE_V && !('hiring' in raw) && raw.season.board && raw.season.board.week === 1 && raw.season.board.list.length === CC.BOARD_FIRST
+      && raw.season.board.list[target.i].hired === true && raw.crew.length === 1 && raw.crew[0].name === target.name, 'stored save after the hire ' + describe(raw && { v: raw.v, board: raw.season && raw.season.board, crew: raw.crew }));
+    await realTap(ID3.sheetBack);
+    assert(await visible(ID3.week), 'Back did not return to the hub');
+    return 'board of ' + bv.list.length + ' (' + bv.list.map((e) => e.role).join(' ') + '), hired ' + target.name + ' (RUN, wage ' + target.wage + ', no fee), over the cap ' + overNote + ', saved v ' + raw.v;
   }, { fatal: true });
+
 
   await step('name on the sign and the header', async () => {
     await advance(0);
@@ -7611,17 +7512,14 @@ async function v3BrowserSteps(captures) {
     await screenshot(SCREENSHOTS.seasonEnd);
     await click(ID3.seasonNext);
     await advance(0);
-    // v3.1 (X15.1 step 50): Hiring Day for year 2 first, then hire-go four times.
-    const sh = await ev('({ loop: S().loop, year: S().season.year, week: S().season.week, hy: sim.hiringView() && sim.hiringView().year })');
-    assert(sh.loop === LOOP.hiring && sh.year === 2 && sh.hy === 2 && (await visible(ID31.hiring)), 'after #season-next ' + describe(sh) + ', wanted Hiring Day for year 2');
-    await hireGo(4);
-    const s = await ev('({ loop: S().loop, year: S().season.year, week: S().season.week })');
-    assert(s.loop === LOOP.week && s.year === 2 && s.week === 1, 'after hire-go four times ' + describe(s));
+    // v4.8: season 2 opens on its week 1 hub with a new Help wanted board (no Hiring Day).
+    const s = await ev('({ loop: S().loop, year: S().season.year, week: S().season.week, by: sim.boardView() && sim.boardView().year, bn: sim.boardView() && sim.boardView().list.length })');
+    assert(s.loop === LOOP.week && s.year === 2 && s.week === 1 && s.by === 2 && s.bn >= CC.BOARD_FIRST && (await visible(ID3.week)), 'after #season-next ' + describe(s) + ', wanted the year 2 week 1 hub');
     const wl = await accText(ID3.weekLabel);
     assert(wl.includes(fill(UI.weekOf, { w: 1 })), '#week-label reads ' + describe(wl));
     const raw = await storedSave();
-    assert(raw && raw.v === SAVE_V && raw.season && raw.season.year === 2 && sameJSON(raw.season.results, []) && raw.season.drafted === true && raw.hiring === null, 'stored save season ' + describe(raw && raw.season));
-    return 'competition report (' + th + '), season end ' + describe(lines[ID3.seRep]) + ', Hiring Day for year 2, season 2 week 1';
+    assert(raw && raw.v === SAVE_V && raw.season && raw.season.year === 2 && sameJSON(raw.season.results, []) && !('hiring' in raw) && raw.season.board && raw.season.board.year === 2, 'stored save season ' + describe(raw && raw.season));
+    return 'competition report (' + th + '), season end ' + describe(lines[ID3.seRep]) + ', season 2 week 1 with a board of ' + s.bn;
   });
 
   await step('v2.1 save migrates', async () => {
@@ -7637,14 +7535,12 @@ async function v3BrowserSteps(captures) {
     assert(status === UI.notice, '#status is ' + describe(status) + ', wanted ' + describe(UI.notice));
     await click(ID3.crGo);
     await advance(0);
-    // v3.1 (X15.1 step 51): no hires and no results, so Hiring Day comes first.
-    assert((await loop()) === LOOP.hiring && (await visible(ID31.hiring)), 'after Fire it up: loop ' + describe(await loop()) + ', wanted hiring');
-    await hireGo(4);
-    assert((await loop()) === LOOP.week && (await visible(ID3.week)), 'after hire-go four times: loop ' + describe(await loop()));
+    // v4.8: no hires and no results: the week 1 hub with the Help wanted board (no Hiring Day).
+    assert((await loop()) === LOOP.week && (await visible(ID3.week)), 'after Fire it up: loop ' + describe(await loop()));
     const raw = await storedSave();
     assert(raw && raw.v === SAVE_V && raw.player && deepEq(raw.player.look, DEFAULT_LOOK) && raw.cash === SAVE_V3_SAMPLE.cash && raw.charcoal === SAVE_V3_SAMPLE.charcoal && raw.gear.kettle2 === true && sameJSON(raw.crew, []) && !('hires' in raw),
       'stored save ' + describe(raw && { v: raw.v, player: raw.player, cash: raw.cash, charcoal: raw.charcoal, gear: raw.gear, crew: raw.crew }));
-    return 'creator with ' + describe(sub) + ', notice shown, Hiring Day, week 1 hub, stored v 5 cash ' + raw.cash + ' charcoal ' + raw.charcoal;
+    return 'creator with ' + describe(sub) + ', notice shown, week 1 hub, stored v 5 cash ' + raw.cash + ' charcoal ' + raw.charcoal;
   });
 }
 
@@ -7668,9 +7564,9 @@ async function browserChecks() {
     assert(hooks.dog && hooks.fxLog && hooks.captureFrame && hooks.advance && hooks.banner, 'PitSim.game hooks ' + describe(hooks));
     const v3hooks = await ev('({ rail: "rail" in g, sign: "sign" in g, panel: "panel" in g })');
     assert(v3hooks.rail && v3hooks.sign && v3hooks.panel, 'PitSim.game v3.0 hooks ' + describe(v3hooks));
-    // v3.1 (X13.8): the crew and hiringPage getters.
-    const v31hooks = await ev('({ crew: "crew" in g, page: "hiringPage" in g, crewVal: g.crew ? Object.keys(g.crew).sort() : null, pageVal: g.hiringPage })');
-    assert(v31hooks.crew && v31hooks.page && sameJSON(v31hooks.crewVal, ['fire', 'pit', 'prep', 'run', 'till']) && v31hooks.pageVal === null, 'PitSim.game v3.1 hooks ' + describe(v31hooks));
+    // v3.1 (X13.8): the crew getter; v4.8: board (open applicants this week, null outside the week), no hiringPage.
+    const v31hooks = await ev('({ crew: "crew" in g, page: "hiringPage" in g, board: "board" in g, crewVal: g.crew ? Object.keys(g.crew).sort() : null })');
+    assert(v31hooks.crew && !v31hooks.page && v31hooks.board && sameJSON(v31hooks.crewVal, ['fire', 'pit', 'prep', 'run', 'till']), 'PitSim.game v3.1 hooks ' + describe(v31hooks));
     await installProbe();
     await advance(0);
     return 'version ' + ver;
@@ -8490,13 +8386,11 @@ async function browserChecks() {
     assert(raw.tutorial && raw.tutorial.done === true, 'stored save tutorial ' + describe(raw.tutorial));
     await click(ID3.crGo);
     await advance(0);
-    // X15.1 step 53: no hires and no results, so Hiring Day comes first.
-    assert((await loop()) === LOOP.hiring && (await visible(ID31.hiring)), 'after Fire it up loop ' + describe(await loop()) + ', wanted hiring');
-    await hireGo(4);
+    // v4.8: no hires and no results: straight to the week 1 hub (no Hiring Day).
     const s2 = await ev(read);
-    assert(s2.loop === LOOP.week && (await visible(ID3.week)), 'after hire-go four times loop ' + describe(s2.loop));
+    assert(s2.loop === LOOP.week && (await visible(ID3.week)), 'after Fire it up loop ' + describe(s2.loop));
     for (const k of keys) assert(sameJSON(s2[k], v1Want(k, s2[k])), 'on the hub ' + k + ' is ' + describe(s2[k]) + ', wanted ' + describe(v1Want(k, s2[k])));
-    return 'creator, Hiring Day, then the week 1 hub, day ' + s.day + ', cash ' + s.cash + ', rep ' + s.rep + ', stored v ' + raw.v + ', tutorial done, no cards';
+    return 'creator, then the week 1 hub, day ' + s.day + ', cash ' + s.cash + ', rep ' + s.rep + ', stored v ' + raw.v + ', tutorial done, no cards';
   });
 
   await step('v2 save loads with the tutorial done', async () => {
@@ -8514,10 +8408,8 @@ async function browserChecks() {
     assert(status === TEXT.notice, '#status is ' + describe(status) + ', wanted the W13.3 notice for a v2 save');
     await click(ID3.crGo);
     await advance(0);
-    // v3.1: Hiring Day is owed (no hires, no results).
-    assert((await loop()) === LOOP.hiring, 'after Fire it up loop ' + describe(await loop()) + ', wanted hiring');
-    await hireGo(4);
-    assert((await loop()) === LOOP.week, 'after hire-go four times loop ' + describe(await loop()));
+    // v4.8: no hires, no results: the week 1 hub (no Hiring Day).
+    assert((await loop()) === LOOP.week, 'after Fire it up loop ' + describe(await loop()));
     await toBookedDay();   // D10.1
     assert(await ev('$(' + JSON.stringify(ID3.go) + ').disabled === false'), '#go disabled; #go-why ' + describe(await accText(ID3.goWhy)));
     await toBookedDay();   // D10.1
@@ -8532,7 +8424,7 @@ async function browserChecks() {
     assert(ar.length === 0, 'arrow drawn with the tutorial done: ' + describe(ar));
     const ser = await ev('sim.' + SIM_METHODS.serialize + '()');
     assert(ser.v === SAVE_V && ser.tutorial && ser.tutorial.done === true, 'serialize() ' + describe({ v: ser.v, tutorial: ser.tutorial }));
-    return 'v2 day 1 save: creator, no tutorial, notice, Hiring Day, then a cook with ' + describe(st2);
+    return 'v2 day 1 save: creator, no tutorial, notice, then a cook with ' + describe(st2);
   });
 
   await step('skip tutorial', async () => {
@@ -8858,23 +8750,20 @@ async function browserChecks() {
       await reload(saveV4({ season: { week: 9, results: resultsOf(9) } }));
       assert(await visible(ID3.seasonEnd), '#season-end hidden for a nine result save');
       await measure('season end', true);
-      // v3.1 (X15.1 step 60): Hiring Day on both pages, #card in every mode and the crew sheet.
-      await reload(saveV5({ season: { drafted: false } }));
-      assert(await visible(ID31.hiring), '#hiring hidden for an owed Hiring Day fixture; loop ' + describe(await loop()));
-      await measure('Hiring Day page 1', true);
-      await click(ID31.pageNext);
-      await measure('Hiring Day page 2', true);
-      await click(ID31.app(9));
-      assert(await visible(ID31.card), '#card hidden after #app-9');
+      // v4.8: the crew sheet with the Help wanted board, #card in board mode (Hiring Day is gone).
+      await reload(saveV5({}));
+      assert(await visible(ID3.week), '#week hidden for the week 1 fixture; loop ' + describe(await loop()));
+      await click(ID3.cardCrew);
+      assert((await visible(ID3.sheet)) && (await visible(ID31.help)), '#help hidden on the week 1 crew sheet');
+      await measure('crew sheet with the Help wanted board', true);
+      await click(ID31.helpCard(await ev('sim.boardView().list[0].i')));
+      assert(await visible(ID31.card), '#card hidden after the first #help card');
       await measure('card, applicant', true);
       await click(ID31.cardBack);
       await advance(0);
-      await click(ID31.hireCrew);
-      assert(await visible(ID3.sheet), '#sheet hidden after #hire-crew');
-      await measure('crew sheet on Hiring Day', true);
       await click(ID3.sheetBack);
       await advance(0);
-      assert(await visible(ID31.hiring), '#sheet-back did not return to #hiring');
+      assert(await visible(ID3.week), '#sheet-back did not return to the hub');
       const crew60 = [pageCard(1, 'Rosa', 'run', [2.5, 3], { banked: 1 }), pageCard(2, 'Dale', 'fire', [3, 2.5], { mood: -2, notice: true })];
       await reload(saveV5({ season: { week: 2, results: resultsOf(1) }, crew: crew60, cash: 300 }));
       assert(await visible(ID3.week), '#week hidden for the crew fixture; loop ' + describe(await loop()));
@@ -9050,6 +8939,93 @@ async function browserChecks() {
     await advance(0);
     return 'payroll ' + rosa.wage + ' of ' + budget31 + ', 1 then 2 of ' + slots31 + ', mood read on ' + moodHow + ', ' + wk[0].name + ' signed for ' + wk[0].wage + (joined ? ' and joined the lineup' : ' and rests') + ', the first Rest trained ' + least.name + ' ' + xp0 + ' to ' + xp1 + ' XP' + (spent ? ' (Tuesday next)' : '');
   });
+
+  // v4.8: the Help wanted board's other rules by real taps: full slots refused, the board new the next
+  // week with a passed applicant gone, a walk-in still signing beside it, and a v15 save mid Hiring Day
+  // loading onto the board with its crew and its open referral.
+  await step('v4.8 Help wanted board by real taps: slots full refused, a new board next week with a passed applicant gone, a walk-in still signs, an old save mid Hiring Day migrates', async () => {
+    const notes = [];
+    // (a) Slots full: two cards on the kettle's two slots.
+    await reload(saveV5({ season: { week: 2, results: resultsOf(1) }, cash: 300, crew: [pageCard(1, 'Rosa', 'run', [2, 2]), pageCard(2, 'Dale', 'fire', [2, 2])] }));
+    assert((await loop()) === LOOP.week, 'the full crew fixture loaded as ' + describe(await loop()));
+    await crewByTaps();
+    const first = await ev('sim.boardView().list[0]');
+    assert(first && first.why === UI.crewFull, 'the board on a full crew ' + describe(first));
+    await realTap(ID31.helpCard(first.i));
+    await realTap(ID31.cardHire);
+    const whyFull = await accText(ID31.cardWhy);
+    assert(whyFull === UI.crewFull && (await ev('S().crew.length')) === 2, 'slots full: #card-why ' + describe(whyFull));
+    await realTap(ID31.cardPass);
+    notes.push('full: "' + whyFull + '"');
+    // (b) A week 2 board you pass on, then week 3's board.
+    const look = Object.assign({}, DEFAULT_LOOK);
+    const passed = [['Opal', 'run', 1.5], ['Earl', 'fire', 2], ['June', 'prep', 1.5], ['Tad', 'till', 2], ['Bea', 'run', 1]];
+    const s2 = saveV9({ cash: 300, season: { week: 2, results: resultsOf(1) }, crew: [] });
+    s2.v = SAVE_V;
+    s2.season.board = { year: 1, week: 2, list: passed.map(([name, role, st]) => ({ name, role, skills: [st, st], potential: st + 1, mood: 0, look, hired: false })) };
+    await reload(s2);
+    assert((await loop()) === LOOP.week && (await ev('S().season.week')) === 2, 'the week 2 fixture loaded as ' + describe(await loop()));
+    await crewByTaps();
+    const wk2 = await ev('sim.boardView().list.map((e) => e.name)');
+    assert(sameJSON(wk2, passed.map((p) => p[0])), 'the saved week 2 board ' + describe(wk2));
+    for (let i = 0; i < passed.length; i++) assert(await present(ID31.helpCard(i)), '#help-' + i + ' missing in week 2');
+    await realTap(ID3.sheetBack);
+    await toBookedDay();
+    await click(ID3.go);
+    await advance(0);
+    assert(await ev('sim.settle(3)'), 'sim.settle(3) refused (deviation 18)');
+    await advance(0);
+    assert(await visible(ID.till), '#till hidden after the week 2 event');
+    await click(ID.next);
+    await advance(0);
+    for (let i = 0; i < 3 && (await ev('S().season.week')) === 2; i++) { if (!(await restOfWeek())) break; }
+    assert((await ev('S().season.week')) === 3 && (await loop()) === LOOP.week, 'week 3 never came ' + describe(await ev('({ week: S().season.week, day: S().season.day, loop: S().loop })')));
+    await crewByTaps();
+    const bv3 = await ev('JSON.parse(JSON.stringify(sim.boardView()))');
+    const names3 = bv3.list.map((e) => e.name);
+    const stayed = passed.map((p) => p[0]).filter((n) => names3.includes(n));
+    const gone = passed.map((p) => p[0]).filter((n) => !names3.includes(n));
+    assert(bv3.week === 3 && gone.length >= 1 && names3.some((n) => !passed.some((p) => p[0] === n)), 'week 3 board ' + describe(names3) + ', stayed ' + describe(stayed) + ', gone ' + describe(gone));
+    for (const e of bv3.list) assert((await text(ID31.helpLine(e.i))) === e.line, '#help-line-' + e.i + ' in week 3');
+    for (const n of gone) assert(!(await ev('[...document.querySelectorAll("#help-list .crewcard")].some((b) => (b.getAttribute("aria-label") || "").startsWith(' + JSON.stringify(n + ', ') + '))')), n + ' still on the week 3 board');
+    await ev('$(' + JSON.stringify(ID31.help) + ').scrollIntoView({ block: "start" })');
+    await advance(0);
+    await screenshot(SCREENSHOTS.boardNext);
+    notes.push('week 3: ' + gone.length + ' gone (' + gone.join(' ') + '), ' + stayed.length + ' stayed (' + stayed.join(' ') + '), ' + (names3.length - stayed.length) + ' new');
+    // (c) A walk-in still signs beside the board, for its fee.
+    const wk = await ev('JSON.parse(JSON.stringify(S().season.walkins))');
+    assert(wk.length >= 1 && (await visible(ID31.walkinsH)), 'week 3 walk-ins ' + describe(wk.length));
+    const cash0 = await ev('S().cash');
+    const n0 = await eventCount();
+    await realTap(ID31.walkin(0));
+    await realTap(ID31.cardHire);
+    const ch = await eventsSince(n0, EV31.crewHired);
+    assert(ch.length === 1 && ch[0].from === 'walkin' && ch[0].fee === wk[0].wage && (await ev('S().cash')) === cash0 - wk[0].wage, 'the walk-in hire ' + describe(ch) + ', why ' + describe(await accText(ID31.cardWhy)));
+    if (await visible(ID31.card)) await realTap(ID31.cardBack);
+    notes.push('walk-in ' + wk[0].name + ' for ' + wk[0].wage);
+    // (d) A v15 save mid Hiring Day: round 2, one card drafted, an open referral.
+    const old = saveV9({ cash: 120, season: { week: 1, results: [] }, crew: [pageCard(1, 'Rosa', 'run', [2.5, 2.5], { worked: 0 })] });
+    old.v = SAVE_V15;
+    old.season.drafted = false;
+    const pool = [['Hollis', 'run'], ['Jo', 'fire'], ['Clem', 'prep'], ['Lena', 'till'], ['Nora', 'run'], ['Wade', 'fire']]
+      .map(([name, role], i) => ({ name, role, skills: [1.5, 2], potential: 3, mood: 0, look, status: i === 0 ? 'taken' : 'open', tried: i === 1 }));
+    while (pool.length < 24) pool.push(Object.assign({}, pool[1 + (pool.length % 5)], { status: 'open', tried: false }));   // the old 24 card shape (v4.8 reads none of it)
+    old.hiring = { year: 1, round: 2, tryouts: 1, pool, refs: [{ name: 'Mae', role: 'fire', skills: [2.5, 2.5], potential: 3.5, mood: 0, look, status: 'open', from: 'Dale' }] };
+    await reload(old);
+    assert((await loop()) === LOOP.week && (await visible(ID3.week)) && !(await present('hiring')), 'the v15 Hiring Day save loaded as ' + describe(await loop()));
+    const crew = await ev('S().crew.map((c) => c.name)');
+    assert(sameJSON(crew, ['Rosa']), 'the drafted crew ' + describe(crew));
+    await crewByTaps();
+    const bvo = await ev('JSON.parse(JSON.stringify(sim.boardView()))');
+    const mae = bvo.list.find((e) => e.from === 'Dale');
+    assert(bvo.week === 1 && bvo.list.length === PC.BOARD_FIRST + 1 && mae && (await text(ID31.helpLine(mae.i))) === mae.line + ' ' + fill(UI.boardFrom, { name: 'Dale' }), 'the migrated board ' + describe(bvo.list.map((e) => [e.name, e.from])));
+    const raw = await storedSave();
+    assert(raw && raw.v === SAVE_V && !('hiring' in raw) && !('drafted' in raw.season) && raw.season.board && raw.season.board.week === 1 && raw.crew.length === 1, 'the stored save after the migration ' + describe(raw && { v: raw.v, hiring: raw.hiring, board: raw.season.board && raw.season.board.week }));
+    await realTap(ID3.sheetBack);
+    notes.push('v15 mid Hiring Day: week 1 hub, Rosa kept, ' + mae.name + ' (sent by Dale) on a board of ' + bvo.list.length + ', saved v ' + raw.v);
+    return notes.join('; ');
+  });
+
 
   await step('level-up choice by real taps', async () => {
     const rosa = pageCard(1, 'Rosa', 'run', [2.5, 3], { banked: 1, potential: 4 });
@@ -9575,7 +9551,7 @@ async function browserChecks() {
     await click('season-next');
     await advance(0);
     const st = await ev('({ year: S().season.year, week: S().season.week, loop: S().loop, trophies: g.trophies })');
-    assert(st.year === 2 && st.week === 1 && (st.loop === 'hiring' || st.loop === 'week'), 'after Start season 2 ' + describe(st));
+    assert(st.year === 2 && st.week === 1 && st.loop === 'week', 'after Start season 2 ' + describe(st));
     assert(st.trophies === 1, 'the trophy did not carry into season 2 ' + describe(st));
     return 'season 2 week 1, loop ' + st.loop + ', trophy shelf kept 1';
   });
@@ -10359,39 +10335,43 @@ async function browserChecks() {
   // reads the AudioContext graph: every source node start is logged (a buffer source with its buffer
   // length, an oscillator with its frequency), and music.state().gains reads the live loop gains.
   // Sizzle is the 1.6 s one shot buffer, the ding the 1318.5 Hz oscillator.
-  // ---- v4.3 the PIT card (Joel: "Or even another pitmaster."). A Hiring Day fixture on the kettle and
-  // one on the cabinet smoker, then a week 3 cook with a PIT card on kettle 2. Every tap is real.
-  // Screenshots: the PIT card mid-cook on the phone run (375 by 812) and the desktop run (1427 by 890).
-  const pitHiringFixture = (gear) => {
-    const s = saveV9({ cash: 400, season: { week: 1, results: [] }, crew: [] });
+  // ---- v4.3 the PIT card (Joel: "Or even another pitmaster."). A Help wanted board (v4.8, was Hiring
+  // Day) with a PIT applicant on the kettle and on the cabinet smoker, then a week 3 cook with a PIT
+  // card on kettle 2. Every tap is real. Screenshots: the PIT card mid-cook on the phone run (375 by
+  // 812) and the desktop run (1427 by 890).
+  const pitBoardFixture = (gear) => {
+    const s = saveV9({ cash: 400, season: { week: 2, results: resultsOf(1) }, crew: [] });
     s.v = SAVE_V;
     s.gear = Object.assign({}, s.gear, gear || {});
-    s.season.drafted = false;
-    s.hiring = null;
     s.layout = {};
+    const look = Object.assign({}, DEFAULT_LOOK);
+    s.season.board = { year: 1, week: 2, list: [
+      { name: 'Opal', role: 'run', skills: [1.5, 1.5], potential: 4, mood: 1, look, hired: false },
+      { name: 'Dee', role: 'pit', skills: [1, 1], potential: 3, mood: 0, look, hired: false }] };
     return s;
   };
-  await step('v4.3 PIT 1: Hiring Day says plainly a PIT card needs the cabinet smoker; with it six PIT cards come and one signs by taps', async () => {
-    await reload(pitHiringFixture({}));
-    assert((await loop()) === LOOP.hiring, 'the kettle fixture loaded as ' + describe(await loop()));
-    const k = await ev('({ lock: vis("hire-pit-lock") ? $("hire-pit-lock").textContent : null, pit: sim.hiringView().pool.filter((e) => e.role === "pit").length, n: sim.hiringView().pool.length, open: sim.pitOpen() })');
-    assert(k.lock === LU.pitLockedH && k.pit === 0 && k.n === LC.POOL_SIZE && k.open === false, 'Hiring Day on the kettle ' + describe(k));
-    await reload(pitHiringFixture({ cabinet: true }));
-    assert((await loop()) === LOOP.hiring, 'the cabinet fixture loaded as ' + describe(await loop()));
-    const c = await ev('({ lock: !!$("hire-pit-lock"), pool: sim.hiringView().pool.map((e) => [e.idx, e.role, e.wage]), open: sim.pitOpen() })');
-    const pits = c.pool.filter((e) => e[1] === 'pit');
-    assert(c.lock === false && c.open === true && pits.length === LC.PIT_POOL && c.pool.length === LC.POOL_SIZE + LC.PIT_POOL, 'Hiring Day with the cabinet ' + describe(c));
-    const pick = pits.slice().sort((a, b) => a[2] - b[2])[0];
-    for (let i = 0; i < 4 && !(await present(ID31.app(pick[0]))); i++) { await click(ID31.pageNext); await advance(0); }
-    assert(await present(ID31.app(pick[0])), '#app-' + pick[0] + ' never shown');
-    const band = await ev('(() => { const e = $("app-' + pick[0] + '"); return e ? (e.querySelector(".r-pit") ? "r-pit" : e.className) : null; })()');
-    await click(ID31.app(pick[0])); await advance(0);
-    assert(await visible(ID31.card), '#card hidden after #app-' + pick[0]);
+  await step('v4.3 PIT 1 (v4.8 board): on the kettle the board says plainly a PIT card needs the cabinet smoker and a PIT hire is refused by taps; with the cabinet it signs', async () => {
+    await reload(pitBoardFixture({}));
+    assert((await loop()) === LOOP.week && (await ev('sim.pitOpen()')) === false, 'the kettle fixture loaded as ' + describe(await loop()));
+    await crewByTaps();
+    assert((await accText(ID31.helpPitLock)) === LU.pitLockedB, '#help-pit-lock on the kettle ' + describe(await accText(ID31.helpPitLock)));
+    const band = await ev('(() => { const e = $("help-1"); return e ? (e.classList.contains("r-pit") || e.querySelector(".r-pit") ? "r-pit" : e.className) : null; })()');
+    await realTap(ID31.helpCard(1));
+    assert(await visible(ID31.card), '#card hidden after #help-1');
     const role = await accText(ID31.cardRole);
-    await click(ID31.cardHire); await advance(0);
+    await realTap(ID31.cardHire);
+    const why = await accText(ID31.cardWhy);
+    assert(why === LU.pitLocked && (await ev('S().crew.length')) === 0, 'a PIT hire on the kettle: #card-why ' + describe(why));
+    await reload(pitBoardFixture({ cabinet: true }));
+    assert((await loop()) === LOOP.week && (await ev('sim.pitOpen()')) === true, 'the cabinet fixture loaded as ' + describe(await loop()));
+    await crewByTaps();
+    assert(!(await present(ID31.helpPitLock)), '#help-pit-lock still shown with the cabinet');
+    await realTap(ID31.helpCard(1));
+    await realTap(ID31.cardHire);
     const hired = await ev('S().crew.filter((x) => x.role === "pit").map((x) => ({ id: x.id, wage: x.wage, post: x.post === undefined ? "none" : x.post }))');
-    assert(hired.length === 1 && hired[0].wage === pick[2], 'the PIT draft ' + describe([hired, role]));
-    return 'kettle: "' + k.lock + '", no PIT in 24; cabinet: ' + pits.length + ' PIT of ' + c.pool.length + ', drafted #app-' + pick[0] + ' (' + band + ', "' + role + '") at ' + pick[2];
+    assert(hired.length === 1 && (await visible(ID3.sheet)) && !(await present(ID31.helpCard(1))), 'the PIT hire with the cabinet ' + describe([hired, role]));
+    await realTap(ID3.sheetBack);
+    return 'kettle: "' + LU.pitLockedB + '", the PIT hire refused "' + why + '"; cabinet: Dee (' + band + ', "' + role + '") signed at ' + hired[0].wage;
   });
 
   await step('v4.3 PIT 2: the crew sheet picks the cooker, then a cook where the PIT card lights, loads and pulls kettle 2 with no tap on it, drawn mid-cook', async () => {
@@ -11031,7 +11011,8 @@ async function browserChecks() {
     assert(a.lift === 'kettle1' && (await visible('arr-turn')), 'the stick burner did not lift with Turn shown ' + describe(a));
     await realTap('arr-turn');
     a = await AR();
-    assert(a.turn === true && a.aim && a.aim.ok === false && /patio/.test(a.msg), 'turn in place ' + describe(a));
+    // v4.8: turned in place it would leave the patio, so it moves to the nearest spot it fits, turned.
+    assert(a.turn === true && a.aim === null && a.lift === 'kettle1' && a.draft.kettle1 && a.draft.kettle1[2] === 1 && /turned/.test(a.msg), 'turn in place ' + describe(a));
     await canvasTap(4, 7); await advance(0);
     a = await AR();
     assert(a.lift === null && sameJSON(a.draft.kettle1, [3, -1, 1]), 'turned drop in the counter row ' + describe(a));
@@ -11074,6 +11055,65 @@ async function browserChecks() {
     const kinds = {}; evs.forEach((e) => { kinds[e.type] = (kinds[e.type] || 0) + 1; });
     assert(on > 0 && (kinds.pit_pull | 0) > 0 && dbg.loop === LOOP.report && dbg.till && dbg.till.label === 'Church picnic', 'the picnic on the turned stick burner ' + describe({ on, served, n0, n1, r, dbg, kinds }));
     return 'tester ' + describe(st.crew) + ' week ' + st.wk + ' cash ' + st.cash + '; fit ' + fit0.w + ' px, ' + fit0.n + ' buttons; turned to (4,7)(4,8) by tap; you lit it and put a piece on, the PIT card put ' + on + ' on and pulled ' + kinds.pit_pull + '; the picnic report: ' + dbg.till.served + ' served';
+  });
+
+  // v4.8 (Joel on his phone: "on the mobile side, you can't rotate equipment"). Two causes: the Arrange
+  // bar sat in the page flow under the yard and grew a row when Turn showed, so Done (and on a short
+  // screen Turn) fell below the screen with nothing to scroll by (the yard takes the touches); and a
+  // turn that did not fit in place only drew a red footprint, off the left edge of a phone's view at
+  // the stick burner, so Turn looked dead. realTap scrolls first, so the step above never saw either.
+  // Here every button is tapped where it is, with no scroll: at 390 by 844 (and the shorter 390 by 700
+  // a phone browser leaves under its own bars) Turn must be on screen and the top element at its
+  // centre, and a touch on it must turn the live stick burner in the preview.
+  const tapInPlace = async (id) => {
+    const p = await ev('(() => { const e = $(' + JSON.stringify(id) + '); if (!e || e.hidden || e.disabled) return null; const r = e.getBoundingClientRect(); const x = r.left + r.width / 2, y = r.top + r.height / 2; const top = document.elementFromPoint(x, y); return { x: Math.round(x), y: Math.round(y), t: Math.round(r.top), b: Math.round(r.bottom), l: Math.round(r.left), r: Math.round(r.right), vw: innerWidth, vh: innerHeight, sy: scrollY, top: top ? (top.id || top.tagName) : null }; })()');
+    assert(p, '#' + id + ' not shown');
+    assert(p.t >= 0 && p.l >= 0 && p.b <= p.vh && p.r <= p.vw && p.top === id, '#' + id + ' not fully on screen and on top ' + describe(p));
+    if (DESKTOP_MODE) await mouseTap(p.x, p.y);
+    else {
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: p.x, y: p.y, radiusX: 4, radiusY: 4, force: 1 }] });
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    }
+    await sleep(60); await advance(0);
+    return p;
+  };
+  await step('v4.8 phone Arrange: at 390x844 real touch taps lift the stick burner, Turn is on screen and turns it, a spot, Done saves it turned', async () => {
+    if (DESKTOP_MODE) return 'phone run only';
+    const base = saveV9({ cash: 300, season: { week: 2, results: resultsOf(1) } });
+    await reload(base);
+    const sv = await ev('(() => { sim.testerApply({ cash: 2000 }); sim.testerApply({ gear: { offset: true } }); return sim.serialize(); })()');
+    await reload(sv);
+    const notes = [];
+    for (const m of [{ width: 390, height: 700 }, { width: 390, height: 844 }]) {
+      await emulate({ width: m.width, height: m.height, deviceScaleFactor: 3, mobile: true }, true); await sleep(TIMEOUT_MS.resize); await advance(0);
+      assert(await ev('PitSim.pitTier(S().gear) === 2 && S().loop === "week"'), 'not a week with the stick burner');
+      await enterArrange();
+      for (const [from, to, id] of [[[4, 6], [1, 6], 'cooler'], [[4, 8], [1, 7], 'pile']]) {
+        await canvasTap(from[0], from[1]); await advance(0);
+        assert((await AR()).lift === id, 'tap did not lift the ' + id);
+        await canvasTap(to[0], to[1]); await advance(0);
+      }
+      await canvasTap(1, 8); await advance(0);
+      let a = await AR();
+      assert(a.lift === 'kettle1' && a.turn === false, 'the stick burner did not lift ' + describe(a));
+      const pt = await tapInPlace('arr-turn');
+      a = await AR();
+      // The preview: the yard's live stick burner runs along y now (it moved to the nearest spot it fits).
+      const pv = await ev('({ t: MAP.station("kettle1").tiles.map((q) => [q.x, q.y]), turned: MAP.station("kettle1").turned === true })');
+      assert(a.lift === 'kettle1' && a.turn === true && a.draft.kettle1 && a.draft.kettle1[2] === 1 && pv.turned && pv.t.length === 2 && pv.t[0][0] === pv.t[1][0], 'Turn did not turn the preview ' + describe([a, pv]));
+      if (m.height === 844) await screenshot('arrange-turn-phone.png');
+      await canvasTap(4, 7); await advance(0);
+      a = await AR();
+      const geo = await ev('({ t: MAP.station("kettle1").tiles.map((q) => [q.x, q.y]), turned: MAP.station("kettle1").turned === true })');
+      assert(a.lift === null && sameJSON(a.draft.kettle1, [3, -1, 1]) && sameJSON(geo.t, [[4, 7], [4, 8]]) && geo.turned, 'the turned drop ' + describe([a, geo]));
+      const dn = await tapInPlace('arr-done');
+      const saved = await ev('({ lay: S().layout, arr: g.arrange(), ls: JSON.parse(localStorage.getItem(' + JSON.stringify(SAVE_KEY) + ')).layout })');
+      assert(saved.arr === null && sameJSON(saved.lay.kettle1, [3, -1, 1]) && sameJSON(saved.ls.kettle1, [3, -1, 1]), 'Done did not save it turned ' + describe(saved));
+      notes.push(m.width + 'x' + m.height + ': Turn at y ' + pt.t + ' to ' + pt.b + ' of ' + pt.vh + ', Done ' + dn.t + ' to ' + dn.b);
+      await reload(sv);
+    }
+    await emulate(RUN_METRICS); await sleep(TIMEOUT_MS.resize); await advance(0);
+    return notes.join('; ') + '; no scroll, touch taps only, saved [3,-1,1]';
   });
 
   await step('v4.7 a turned trailer rig mid cook (frames)', async () => {
@@ -11196,6 +11236,12 @@ async function browserChecks() {
 
 // --week [--week-skip] [--week-save-v N]: play one week from Monday by real taps (CDP input at each
 // button's center) and log taps and simulated seconds. Menus are tapped; each cook's clock runs out.
+// v4.8: the crew sheet by real taps from the hub: the Crew tile sits on the Your pit tab, so a tap on
+// the tab first when the tile is not on screen.
+async function crewByTaps() {
+  if (!(await visible(ID3.cardCrew)) && (await visible('hub-tab-pit'))) await realTap('hub-tab-pit');
+  await realTap(ID3.cardCrew);
+}
 async function realTap(id) {
   const p = await ev('(() => { const e = $(' + JSON.stringify(id) + '); if (!e || e.disabled) return null; e.scrollIntoView({ block: "center" }); const r = e.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()');
   assert(p, '#' + id + ' missing or disabled');
