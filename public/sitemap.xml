@@ -126,4 +126,40 @@
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
+  <url>
+    <loc>https://holysmokesbbqco.com/privacy-board.html</loc>
+    <lastmod>2026-10-23</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+  <url>
+    <loc>https://holysmokesbbqco.com/delete-account-board.html</loc>
+    <lastmod>2026-10-23</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+  <url>
+    <loc>https://holysmokesbbqco.com/support.html</loc>
+    <lastmod>2026-10-23</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+  <url>
+    <loc>https://holysmokesbbqco.com/notebook/privacy-notebook.html</loc>
+    <lastmod>2026-10-23</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+  <url>
+    <loc>https://holysmokesbbqco.com/notebook/delete-account-notebook.html</loc>
+    <lastmod>2026-10-23</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+  <url>
+    <loc>https://holysmokesbbqco.com/notebook/changelog-notebook.html</loc>
+    <lastmod>2026-10-23</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.4</priority>
+  </url>
 </urlset>

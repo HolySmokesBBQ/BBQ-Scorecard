@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#1a1a1a" />
+  <title>BBQ Meat Calculator — How Much Meat + Cook Time | Holy Smokes BBQ</title>
+
+  <link rel="preload" as="image" href="/calculator/bbq-calculator-logo.png" type="image/png" fetchpriority="high" />
+  <link rel="preload" as="font" type="font/woff2" href="/calculator/fonts/inter-latin.woff2" crossorigin />
+  <link rel="preload" as="font" type="font/woff2" href="/calculator/fonts/oswald-latin.woff2" crossorigin />
+  <link rel="icon" type="image/png" href="/calculator/calc-icon-192.png" />
+  <link rel="apple-touch-icon" href="/calculator/calc-icon-192.png" />
+  <link rel="canonical" href="https://holysmokesbbqco.com/calculator/" />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="BBQ Calculator" />
+  <meta property="og:title" content="BBQ Meat Calculator — How Much to Buy + Cook Time + Smoker Batches" />
+  <meta property="og:description" content="How much brisket for 50 people? Free BBQ calculator: enter guest count, pick a meat, get raw weight to buy, cook time, smoker batches, and a shopping list. Brisket, pulled pork, ribs, chicken, turkey, tri-tip, sausage." />
+  <meta property="og:image" content="https://holysmokesbbqco.com/calculator/bbq-calculator-logo.png" />
+  <meta property="og:url" content="https://holysmokesbbqco.com/calculator/" />
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="BBQ Meat Calculator — Holy Smokes BBQ" />
+  <meta name="twitter:description" content="Free BBQ meat calculator. Enter guests, pick a meat, get raw weight, cook time, smoker batches, wood pairings, and a shopping list." />
+  <meta name="description" content="Free BBQ meat calculator. Enter guests and pick a meat: brisket, pulled pork, ribs, chicken, turkey, tri-tip, or sausage. Get raw weight to buy, cook time, smoker batches, wood recommendations, and a shopping list." />
+  <meta name="keywords" content="BBQ calculator, meat calculator, brisket calculator, how much brisket per person, smoker calculator, BBQ portion calculator, pulled pork calculator, rib calculator, how much meat for BBQ, party BBQ planner" />
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebApplication",
+        "@id": "https://holysmokesbbqco.com/calculator/#webapp",
+        "name": "BBQ Meat Calculator",
+        "alternateName": [
+          "BBQ Calculator",
+          "Holy Smokes BBQ Calculator",
+          "BBQ Portion Calculator"
+        ],
+        "url": "https://holysmokesbbqco.com/calculator/",
+        "description": "Free BBQ meat calculator. Enter guests and pick a meat to get raw weight to buy, cook time per pound, smoker batches, wood pairings, and a shopping list. Covers brisket, pulled pork, St. Louis ribs, baby back ribs, chicken, turkey, tri-tip, and sausage.",
+        "applicationCategory": "LifestyleApplication",
+        "applicationSubCategory": "Food & Drink",
+        "operatingSystem": "Web",
+        "browserRequirements": "Requires JavaScript. Requires HTML5.",
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD"
+        },
+        "publisher": {
+          "@id": "https://holysmokesbbqco.com/#organization"
+        },
+        "inLanguage": "en-US",
+        "keywords": "BBQ calculator, meat calculator, brisket calculator, smoker calculator, portion calculator, how much meat per person",
+        "featureList": [
+          "Meat quantity by guest count and appetite",
+          "Cook time per pound with wrap and rest",
+          "Smoker capacity and batch math",
+          "Reverse cook schedule from serve time",
+          "Shopping list generator",
+          "Wood pairing guide with 16 wood types",
+          "Print and share cook plans"
+        ]
+      }
+    ]
+  }
+  </script>
+
+  <script src="/gtm-init.js?v=8" defer data-ga-title="BBQ Calculator — Holy Smokes BBQ Co" data-ga-group="calculator"></script>
+
+  <style>
+    @font-face {
+      font-family: 'Inter';
+      font-style: normal;
+      font-weight: 400 700;
+      font-display: swap;
+      src: url(/calculator/fonts/inter-latin.woff2) format('woff2');
+      unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+    }
+    @font-face {
+      font-family: 'Oswald';
+      font-style: normal;
+      font-weight: 400 700;
+      font-display: swap;
+      src: url(/calculator/fonts/oswald-latin.woff2) format('woff2');
+      unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html { background: #1a1a1a; min-height: 100%; }
+    body { background: #1a1a1a; color: #f5e6d3; font-family: 'Inter', sans-serif; min-height: 100vh; }
+    #root { min-height: 100vh; }
+    input, textarea, select, button { font-family: 'Inter', sans-serif; }
+
+    /* Match the Scorecard/Notebook responsive container so the three
+       apps render at the same width on every viewport. */
+    .bbq-container-wide { max-width: 720px; margin: 0 auto; padding: 0; }
+    @media (min-width: 768px) {
+      .bbq-container-wide { max-width: 1100px; }
+    }
+    @media (min-width: 1200px) {
+      .bbq-container-wide { max-width: 1300px; }
+    }
+
+    .print-only { display: none; }
+
+    @media print {
+      html, body, #root { background: #fff !important; color: #000 !important; }
+      .no-print { display: none !important; }
+      .print-only { display: block !important; }
+      /* Strip dark panel chrome — print on white paper */
+      .printable, .printable * {
+        background: #fff !important;
+        color: #000 !important;
+        border-color: #999 !important;
+        box-shadow: none !important;
+      }
+      .printable button { display: none !important; }
+      .printable input[type="datetime-local"] { border: none !important; padding: 0 !important; }
+      /* Tighten margins for paper */
+      @page { margin: 0.5in; }
+    }
+  </style>
+</head>
+<body>
+  <main id="root">
+    <!-- SEO content — visible to search engine crawlers before React
+         mounts and replaces this shell. Contains the semantic keywords
+         and answers most people search for when looking for a BBQ
+         calculator. React's createRoot().render() wipes this on hydrate. -->
+    <div style="max-width:720px;margin:0 auto;padding:24px 16px;color:#f5e6d3;line-height:1.6;">
+      <h1 style="font-size:28px;margin-bottom:12px;color:#d4a64a;">BBQ Meat Calculator</h1>
+      <p style="margin-bottom:12px;">Free BBQ calculator that answers the questions every pitmaster asks before a big cook: <strong>how much meat to buy, how long to smoke it, how many batches your smoker can hold, and what to grab at the store</strong>.</p>
+
+      <p style="margin-bottom:16px;">Enter your guest count, pick a meat, and pick your smoker. The calculator returns raw weight to buy, cooked yield, cook time per pound, finish temperature, wrap method, rest time, batch count, a reverse cook schedule from your serve time, and a shopping list you can print or share.</p>
+
+      <h2 style="font-size:20px;margin:20px 0 10px;color:#4A6741;">Supported meats</h2>
+      <ul style="margin-bottom:20px;padding-left:20px;">
+        <li>Brisket (packer, flat, point)</li>
+        <li>Pulled pork (Boston butt, pork shoulder)</li>
+        <li>St. Louis ribs and baby back ribs</li>
+        <li>Chicken (whole, quarters, thighs)</li>
+        <li>Turkey (whole, breast)</li>
+        <li>Tri-tip</li>
+        <li>Sausage (links and ropes)</li>
+      </ul>
+
+      <h2 style="font-size:20px;margin:20px 0 10px;color:#4A6741;">Common questions</h2>
+
+      <h3 style="font-size:16px;margin:12px 0 4px;">How much brisket do I need per person?</h3>
+      <p style="margin-bottom:12px;">Plan on about 1/2 pound of cooked brisket per person when sides are served. Because brisket loses about 40% of its weight during cooking, that means buying roughly 3/4 to 1-1/4 pounds of raw brisket per guest. For 50 people with sides, expect to buy 40-50 pounds of raw brisket.</p>
+
+      <h3 style="font-size:16px;margin:12px 0 4px;">How much pulled pork for 50 people?</h3>
+      <p style="margin-bottom:12px;">Plan on about 1/3 pound of cooked pulled pork per person when sides are included. Pork shoulder loses roughly 40% of its weight during smoking, so for 50 people you need about 25-30 pounds of raw pork shoulder — typically two 12-15 pound bone-in Boston butts.</p>
+
+      <h3 style="font-size:16px;margin:12px 0 4px;">How long does it take to smoke a brisket?</h3>
+      <p style="margin-bottom:12px;">At 225-250°F, plan on 1 to 1-1/2 hours per pound. A 12 pound packer brisket typically takes 12-18 hours from smoker-on to done, plus a 1 hour rest. Wrap in butcher paper or foil around 165°F internal to push through the stall. Pull at 203°F internal or when a probe slides in with no resistance.</p>
+
+      <h3 style="font-size:16px;margin:12px 0 4px;">How many ribs per person?</h3>
+      <p style="margin-bottom:12px;">For St. Louis or spare ribs, plan on 4-5 ribs per adult when serving with sides. For baby back ribs, plan on 6-7 ribs per adult. One full slab of St. Louis ribs serves 2-3 people; one slab of baby backs serves 1-2 people.</p>
+
+      <h3 style="font-size:16px;margin:12px 0 4px;">What wood should I use for brisket?</h3>
+      <p style="margin-bottom:12px;">Oak, pecan, and hickory are the go-to woods for brisket. Post oak is the Texas central pit standard (Franklin BBQ uses only this). Mesquite works but use sparingly since it's intense. Walnut and bourbon barrel chips are also great, especially blended with a milder wood.</p>
+
+      <h3 style="font-size:16px;margin:12px 0 4px;">How much chicken per person for BBQ?</h3>
+      <p style="margin-bottom:20px;">Plan on 1/2 pound of bone-in chicken per person, or about 1 quarter (leg + thigh) per adult. For pulled chicken, plan on 1/3 pound of cooked meat per person, which requires roughly 1/2 pound of raw whole chicken.</p>
+
+      <p style="font-size:13px;color:#999;font-style:italic;">Loading the interactive calculator&hellip;</p>
+    </div>
+  </main>
+  <script type="module" src="/website/calculator/main.calculator.jsx"></script>
+</body>
+</html>

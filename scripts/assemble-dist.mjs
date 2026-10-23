@@ -38,7 +38,7 @@ console.log(landed ? '  + brand landing' : '  ! website/public-landing/index.htm
 // 1b. Inner brand pages (served at /pit, /episodes, /about via Netlify
 //     pretty URLs). Same allowlist trap as everything else here: a page not
 //     named below never deploys.
-for (const page of ['pit.html', 'episodes.html', 'about.html', 'door.js']) {
+for (const page of ['pit.html', 'episodes.html', 'about.html', 'door.js', 'track-links.js']) {
   const ok = copyIfExists(join(ROOT, 'website', 'public-landing', page), join(DIST, page));
   console.log(ok ? `  + ${page}` : `  ! website/public-landing/${page} missing`);
 }
@@ -144,6 +144,43 @@ for (const asset of sharedAssets) {
   if (copyIfExists(src, dest)) {
     console.log(`  + ${asset}`);
   }
+}
+
+// 2a. Sitemap lastmod from git. public/sitemap.xml carries hand-typed dates
+//     that went stale (homepage said 2026-07-01 while the source changed
+//     2026-10-21; seo-audit 2026-10-23). Each <loc> maps to its source path(s)
+//     and takes the date of the last commit touching them. Unknown or
+//     uncommitted paths keep the date in the file.
+try {
+  const { execSync } = await import('node:child_process');
+  const sm = join(DIST, 'sitemap.xml');
+  const srcFor = (loc) => {
+    const p = new URL(loc).pathname;
+    const L = join(ROOT, 'website', 'public-landing');
+    if (p === '/') return [join(L, 'index.html')];
+    if (/^\/(pit|episodes|about)$/.test(p)) return [join(L, p.slice(1) + '.html')];
+    if (/^\/(board-cities|calculator-guests)\/[\w-]+\.html$/.test(p)) return [join(L, p.slice(1))];
+    if (/^\/notebook\/[\w-]+\.html$/.test(p)) return [join(ROOT, 'public', p.slice('/notebook/'.length))];
+    if (/^\/[\w-]+\.html$/.test(p)) return [join(ROOT, 'public', p.slice(1))];
+    if (p === '/scorecard/') return [join(ROOT, 'website', 'src'), join(ROOT, 'index.web.html')];
+    if (p === '/notebook/') return [join(ROOT, 'website', 'src'), join(ROOT, 'index.notebook.web.html')];
+    if (p === '/calculator/') return [join(ROOT, 'website', 'calculator'), join(ROOT, 'index.calculator.html')];
+    if (p === '/board/') return [join(ROOT, 'website', 'src', 'board'), join(ROOT, 'index.board.web.html')];
+    return null;
+  };
+  let xml = readFileSync(sm, 'utf8'), stamped = 0;
+  xml = xml.replace(/<url>\s*<loc>([^<]+)<\/loc>\s*<lastmod>([^<]+)<\/lastmod>/g, (m, loc, old) => {
+    const srcs = srcFor(loc);
+    if (!srcs || !srcs.every(existsSync)) return m;
+    const d = execSync('git log -1 --format=%cs -- ' + srcs.map(x => JSON.stringify(x)).join(' '), { cwd: ROOT, encoding: 'utf8' }).trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return m;
+    if (d !== old) stamped++;
+    return `<url>\n    <loc>${loc}</loc>\n    <lastmod>${d}</lastmod>`;
+  });
+  writeFileSync(sm, xml);
+  console.log(`  + sitemap lastmod from git (${stamped} dates changed)`);
+} catch (e) {
+  console.log('  ! sitemap lastmod skipped: ' + e.message);
 }
 
 // 2b. Static SEO landing pages. These live outside the SPAs on purpose —
@@ -319,6 +356,24 @@ try {
   }
 } catch (e) {
   console.log('  ! board brisket line skipped: ' + e.message);
+}
+
+// 8b. Board coverage on the homepage card, baked from website/src/board/schema.js
+//     (single source of truth; the card said "23 states" while the data had 24,
+//     cro audit 2026-10-23). Cities floor to the nearest ten with a plus sign.
+try {
+  const { CITIES } = await import('../website/src/board/schema.js');
+  const cities = Object.keys(CITIES).length;
+  const states = new Set(Object.values(CITIES).map(c => c.state)).size;
+  const home = join(DIST, 'index.html');
+  if (cities && states && existsSync(home)) {
+    let html = readFileSync(home, 'utf8');
+    html = html.replace(/{{BOARD_CITIES}}/g, String(Math.floor(cities / 10) * 10)).replace(/{{BOARD_STATES}}/g, String(states));
+    writeFileSync(home, html);
+    console.log(`  + board coverage: ${cities} cities (shown ${Math.floor(cities / 10) * 10}+), ${states} states`);
+  }
+} catch (e) {
+  console.log('  ! board coverage skipped: ' + e.message);
 }
 
 console.log('Done.');

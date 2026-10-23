@@ -284,6 +284,13 @@
   [headers.values]
     Cache-Control = "no-cache"
 
+# Website click tracking (website/public-landing/track-links.js). Small and
+# edited with the pages it annotates, so no-cache like site-fx.js.
+[[headers]]
+  for = "/track-links.js"
+  [headers.values]
+    Cache-Control = "no-cache"
+
 
 [[headers]]
   for = "/gtm-init.js"
