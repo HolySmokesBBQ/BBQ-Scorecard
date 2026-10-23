@@ -1,5 +1,6 @@
 // Packs games/pit-sim into one HTML page for Joel's private preview Artifact: every ./script is inlined
-// in order, window.PitSimTester is set (the Tester tools; the site copy never sets it), the title reads
+// in order at the end of the body (they were deferred, so they run after the DOM they build on),
+// window.PitSimTester is set (the Tester tools; the site copy never sets it), the title reads
 // "Your Pit Preview", and tracks/*.mp3 are copied beside the page (published as Artifact files).
 // Usage: node games/pit-sim/dev/package-preview.cjs <out dir> [--no-tester]
 const fs = require('fs');
@@ -12,15 +13,17 @@ const tester = !process.argv.includes('--no-tester');
 
 let html = fs.readFileSync(path.join(GAME, 'index.html'), 'utf8');
 const used = [];
-let first = true;
-html = html.replace(/<script src="\.\/([^"?]+)(?:\?[^"]*)?" defer><\/script>/g, function (m, rel) {
+const inl = [];
+html = html.replace(/[ \t]*<script src="\.\/([^"?]+)(?:\?[^"]*)?" defer><\/script>\r?\n?/g, function (m, rel) {
   const src = fs.readFileSync(path.join(GAME, rel), 'utf8').replace(/<\/script/gi, '<\\/script');
   used.push(rel);
-  const flag = first && tester ? '<script>window.PitSimTester = true;</script>\n  ' : '';
-  first = false;
-  return flag + '<script>\n' + src + '\n</script>';
+  inl.push('<script>\n' + src + '\n</script>');
+  return '';
 });
 if (!used.length) { console.error('no ./ scripts found in index.html'); process.exit(1); }
+if (html.indexOf('</body>') < 0) { console.error('no </body> in index.html'); process.exit(1); }
+const flag = tester ? '<script>window.PitSimTester = true;</script>\n' : '';
+html = html.replace('</body>', function () { return flag + inl.join('\n') + '\n</body>'; });
 html = html.replace(/<title>[^<]*<\/title>/, '<title>Your Pit Preview</title>');
 
 fs.mkdirSync(path.join(out, 'tracks'), { recursive: true });
