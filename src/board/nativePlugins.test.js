@@ -55,6 +55,15 @@ test('capacitor.settings.gradle includes exactly the listed plugins', () => {
   expect(included).toEqual(listed.map(gradleName).sort());
 });
 
+// capacitor-android used to resolve to ../../../node_modules, the untracked
+// C:\Users\jmuil\node_modules (8.3.4 against the repo's 8.4.2 core), which
+// vanished in the 10/22 PC cleanup. It must come from this repo.
+test('capacitor-android builds from the repo node_modules', () => {
+  const s = read('android-board/capacitor.settings.gradle');
+  expect(s).toMatch(/project\(':capacitor-android'\)\.projectDir = new File\('\.\.\/node_modules\/@capacitor\/android\/capacitor'\)/);
+  expect(existsSync(resolve(ROOT, 'node_modules/@capacitor/android/capacitor/build.gradle'))).toBe(true);
+});
+
 test('app/capacitor.build.gradle implements exactly the listed plugins', () => {
   const impl = [...read('android-board/app/capacitor.build.gradle').matchAll(/implementation project\(':(capacitor-[\w-]+)'\)/g)]
     .map(m => m[1]).sort();
