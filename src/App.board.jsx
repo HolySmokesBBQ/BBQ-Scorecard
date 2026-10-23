@@ -26,6 +26,7 @@ import { track } from './board/analytics.js';
 import { errorCode } from './analyticsCodes.js';
 import ConsentPrompt from './board/ConsentPrompt.jsx';
 import { sendProblemReport } from './diagnostics.js';
+import { recordPost, maybeAskForReview, shareBoard } from './board/postFollowup.js';
 import 'leaflet/dist/leaflet.css';
 
 // ─── palette ───────────────────────────────────────────────────
@@ -262,6 +263,17 @@ export default function BoardApp() {
     }
   };
 
+  // After a post: show the confirmation, count the post, and on the 2nd
+  // one ask for a store rating (postFollowup.js).
+  const [posted, setPosted] = useState(null);
+  const handlePosted = (info) => {
+    setPosted(info);
+    const postCount = recordPost();
+    maybeAskForReview({ postCount }).then((asked) => {
+      if (asked) track('board_review_prompt_shown');
+    });
+  };
+
   const openSubmit = (prefill = {}) => {
     setSubmitState(prefill);
     // Whether the form came pre-filled, not which shop or cut. The shop id
@@ -415,8 +427,26 @@ export default function BoardApp() {
           prefillShopId={submitState.shopId}
           prefillCut={submitState.cut}
           onClose={() => setSubmitState(null)}
+          onPosted={handlePosted}
           onSignIn={handleSignIn}
           onSignInAnon={handleSignInAnon}
+        />
+      )}
+
+      {posted && (
+        <PostedSheet
+          posted={posted}
+          cityLabel={city.label}
+          onAnother={() => {
+            track('board_submit_followup', { action: 'another' });
+            const shopId = posted.shopId;
+            setPosted(null);
+            openSubmit(shopId ? { shopId } : {});
+          }}
+          onDone={() => {
+            track('board_submit_followup', { action: 'done' });
+            setPosted(null);
+          }}
         />
       )}
 
@@ -435,7 +465,19 @@ export default function BoardApp() {
         );
       })()}
 
-      {showOnboarding && <Onboarding onDismiss={() => setShowOnboarding(false)} />}
+      {showOnboarding && (
+        <Onboarding
+          onDismiss={() => setShowOnboarding(false)}
+          renderCityPicker={(onPicked) => (
+            <LocationPicker
+              cityId={cityId}
+              radius={radius}
+              onCityChange={(id) => { setCityId(id); onPicked(); }}
+              onRadiusChange={setRadius}
+            />
+          )}
+        />
+      )}
     </div>
   );
 }
@@ -906,6 +948,57 @@ function ShopDetail({ row, onClose, onSubmit }) {
         >
           + SUBMIT A PRICE FOR THIS SHOP
         </button>
+        <ShareButton source="shop_detail" shopName={shop.name} label="Share this shop" />
+      </div>
+    </div>
+  );
+}
+
+// Share the shop and the community, never a price (referrals audit;
+// Joel 10/12). On the web, where neither a share sheet nor navigator.share
+// may exist, the message is copied and the button says so.
+function ShareButton({ source, shopName, label }) {
+  const [copied, setCopied] = useState(false);
+  const onShare = async () => {
+    track('board_share_tapped', { source });
+    const how = await shareBoard({ source, shopName });
+    if (how === 'copied') { setCopied(true); setTimeout(() => setCopied(false), 2500); }
+  };
+  return (
+    <button onClick={onShare} style={{ ...secondaryBtn, width: '100%', marginTop: 10, padding: '10px 16px', fontSize: 14, color: PAL.text }}>
+      {copied ? 'Link copied' : label}
+    </button>
+  );
+}
+
+// After a price posts (onboarding audit finding 2): the user's most useful
+// action used to end with the modal silently closing. This says it
+// worked, offers the next post at the same shop, and is where the store
+// rating ask happens, once, on the 2nd post.
+function PostedSheet({ posted, cityLabel, onAnother, onDone }) {
+  const cutLabel = CUTS[posted.cut]?.short || 'price';
+  return (
+    <div role="dialog" aria-modal="true" onClick={onDone} style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 1000,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+    }}>
+      <div onClick={(e) => e.stopPropagation()} style={{
+        background: PAL.panel, border: `1px solid ${PAL.border}`, borderRadius: 12,
+        maxWidth: 420, width: '100%', padding: 22, color: PAL.text,
+      }}>
+        <div role="status" style={{ fontFamily: "'Oswald', sans-serif", fontSize: 22, fontWeight: 700, color: PAL.brass, marginBottom: 8 }}>
+          Posted
+        </div>
+        <div style={{ fontSize: 14, lineHeight: 1.5, marginBottom: 16 }}>
+          Your {cutLabel} price at {posted.shopName} is live on Board for anyone looking near {cityLabel}.
+        </div>
+        <button onClick={onAnother} style={{ ...primaryBtn, width: '100%', padding: '12px 16px' }}>
+          Post another price
+        </button>
+        <ShareButton source="post_confirm" shopName={posted.shopName} label="Tell a friend who shops here" />
+        <button onClick={onDone} style={{ ...secondaryBtn, width: '100%', marginTop: 10, padding: '10px 16px', fontSize: 14 }}>
+          Done
+        </button>
       </div>
     </div>
   );
@@ -924,9 +1017,9 @@ function IntroCard() {
       padding: 14, marginBottom: 12,
     }}>
       <div style={{ fontSize: 13, color: PAL.text, lineHeight: 1.5 }}>
-        Every butcher and meat counter we know about, ranked by best price on file.
-        See a shop with no price? Submit what you paid — it takes 20 seconds and
-        helps the next pitmaster save a few bucks per pound.
+        Prices posted by people who just bought the cut. See a shop with no
+        price? Post what you paid. It takes about 20 seconds, and the next
+        cook near you sees it.
       </div>
     </div>
   );
@@ -1839,8 +1932,8 @@ function AuthGate({ onSignIn, onSignInAnon, onCancel, busy, error }) {
           Cancel
         </button>
         <div style={{ fontSize: 11, color: PAL.textDim, lineHeight: 1.5, marginTop: 10 }}>
-          Anonymous submissions can't be edited or deleted later. Signing
-          in with Google lets you manage yours.
+          You can delete prices you post from Settings on this phone. Sign
+          in with Google to keep them if you switch phones.
         </div>
       </div>
     </div>
@@ -1848,7 +1941,7 @@ function AuthGate({ onSignIn, onSignInAnon, onCancel, busy, error }) {
 }
 
 // ─── Submit modal ──────────────────────────────────────────────
-function SubmitModal({ region, user, prefillShopId, prefillCut, onClose, onSignIn, onSignInAnon }) {
+function SubmitModal({ region, user, prefillShopId, prefillCut, onClose, onPosted, onSignIn, onSignInAnon }) {
   const knownShop = prefillShopId ? getShop(prefillShopId) : null;
   const [shopMode, setShopMode] = useState(knownShop ? 'existing' : 'new');
   const [existingShopId, setExistingShopId] = useState(prefillShopId || '');
@@ -1920,6 +2013,9 @@ function SubmitModal({ region, user, prefillShopId, prefillCut, onClose, onSignI
       });
       track('board_price_submitted', { cut, storeType, region, shopMode, anon: submittingUser.isAnonymous === true });
       onClose();
+      // A brand-new shop's id isn't in SHOPS, so "post another" only
+      // pre-fills a shop that's already on the list.
+      onPosted?.({ shopName: store, cut, shopId: shopMode === 'existing' ? shopId : null });
     } catch (err) {
       console.error('submit failed', err);
       setError('Something went wrong. Try again in a moment.');

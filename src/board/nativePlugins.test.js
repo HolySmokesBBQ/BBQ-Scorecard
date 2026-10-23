@@ -28,7 +28,8 @@ function importedCapacitorPlugins() {
     seen.add(f);
     for (const m of readFileSync(f, 'utf8').matchAll(/(?:from\s*|import\s*\(\s*)['"]([^'"]+)['"]/g)) {
       const spec = m[1];
-      if (/^@capacitor(-firebase)?\/[\w-]+$/.test(spec)) { pkgs.add(spec); continue; }
+      // @capacitor/*, @capacitor-firebase/*, @capacitor-community/*, ...
+      if (/^@capacitor(-[a-z]+)?\/[\w-]+$/.test(spec)) { pkgs.add(spec); continue; }
       if (!spec.startsWith('.')) continue;
       const base = resolve(dirname(f), spec);
       const hit = [base, base + '.js', base + '.jsx', join(base, 'index.js')].find(c => existsSync(c) && statSync(c).isFile());

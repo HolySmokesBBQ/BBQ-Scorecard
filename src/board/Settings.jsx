@@ -8,6 +8,8 @@ import { setConsent } from '../consent.js';
 import { useConsent, openBoardPrivacyPolicy } from './ConsentPrompt.jsx';
 import { fetchMySubmissions, deleteSubmission, submissionLabel } from './mySubmissions.js';
 import { track } from './analytics.js';
+import { deleteBoardAccount, deletionOutcome } from './accountDeletion.board.js';
+import { boardDeletionOps } from './accountDeletionFirebase.board.js';
 
 // Board Settings — minimal by design. Board has less user-owned state
 // than Scorecard/Notebook (no cooks, no reviews to export). This
@@ -146,6 +148,17 @@ export default function Settings({ user, onSignIn, onClose }) {
     }
   };
 
+  // Delete account (legal register #1). 'idle' | 'confirm' | 'busy' | 'done'.
+  const [delState, setDelState] = useState('idle');
+  const [delResult, setDelResult] = useState(null);
+  const handleDeleteAccount = async () => {
+    setDelState('busy');
+    setDelResult(null);
+    const r = await deleteBoardAccount({ ops: boardDeletionOps });
+    setDelResult(r);
+    setDelState(r.ok ? 'done' : 'confirm');
+  };
+
   const handleRegion = (v) => { setRegion(v); writeLS(LS_REGION, v); };
   const handleRadius = (v) => { setRadius(v); writeLS(LS_RADIUS, String(v)); };
   const handleUnits = (v) => { setUnits(v); writeLS(LS_UNITS, v); };
@@ -209,7 +222,8 @@ export default function Settings({ user, onSignIn, onClose }) {
           ) : (
             <>
               <div style={{ fontSize: 14, color: PAL.textDim, marginBottom: 12 }}>
-                Google Sign-In lets you submit prices and appear on the Leaderboard.
+                You can post prices without an account. Signing in with Google
+                keeps your prices with you if you switch phones.
               </div>
               <button
                 style={{ ...S.btn, opacity: signInBusy ? 0.6 : 1 }}
@@ -261,6 +275,20 @@ export default function Settings({ user, onSignIn, onClose }) {
           </div>
         )}
 
+        {(user || delState === 'done') && (
+          <div style={S.card}>
+            <h2 style={S.h2}>DELETE ACCOUNT</h2>
+            <DeleteAccount
+              user={user}
+              state={delState}
+              result={delResult}
+              onStart={() => { setDelResult(null); setDelState('confirm'); }}
+              onCancel={() => { setDelResult(null); setDelState('idle'); }}
+              onConfirm={handleDeleteAccount}
+            />
+          </div>
+        )}
+
         <div style={S.card}>
           <h2 style={S.h2}>PRIVACY</h2>
           <div style={{ fontSize: 14, marginBottom: 6 }}>
@@ -300,5 +328,61 @@ export default function Settings({ user, onSignIn, onClose }) {
         </div>
       </div>
     </div>
+  );
+}
+
+// Two steps (Delete my account, then a confirm panel that says exactly what
+// goes), the same weight as the per-price delete above but harder to hit
+// by accident. Once it finishes, Done reloads the app so nothing from the
+// deleted account (city, filters, onboarding state) lingers in memory.
+export function DeleteAccount({ user, state, result, onStart, onCancel, onConfirm }) {
+  const outcome = deletionOutcome(result);
+  const anon = user?.isAnonymous === true;
+  const note = (o) => (
+    <div role={o.ok ? 'status' : 'alert'} style={{ fontSize: 13, color: o.ok ? PAL.text : '#e8a33d', margin: '10px 0', lineHeight: 1.5 }}>
+      {o.text}
+    </div>
+  );
+
+  if (state === 'done') {
+    return (
+      <>
+        {outcome && note(outcome)}
+        <button style={S.btn} onClick={() => window.location.reload()}>Done</button>
+      </>
+    );
+  }
+
+  if (state === 'idle') {
+    return (
+      <>
+        <div style={{ fontSize: 13, color: PAL.textDim, marginBottom: 12, lineHeight: 1.5 }}>
+          Deletes every price you've posted and your Board sign-in, then clears Board's data from this phone.
+        </div>
+        <button style={S.btn} onClick={onStart}>Delete my account</button>
+      </>
+    );
+  }
+
+  const busy = state === 'busy';
+  return (
+    <>
+      <div style={{ fontSize: 14, lineHeight: 1.5, marginBottom: 12 }}>
+        {anon
+          ? 'This deletes every price you posted from this phone and clears Board’s data from it. Deleted prices can’t be brought back.'
+          : 'This deletes every price you’ve posted and your Board account, then signs you out. Google will ask you to sign in once more to confirm it’s you. Deleted prices can’t be brought back.'}
+      </div>
+      {outcome && !outcome.ok && note(outcome)}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <button
+          style={{ ...S.btn, borderColor: '#e8a33d', color: '#e8a33d', opacity: busy ? 0.6 : 1 }}
+          onClick={onConfirm}
+          disabled={busy}
+        >
+          {busy ? 'Deleting…' : 'Delete everything'}
+        </button>
+        <button style={S.btn} onClick={onCancel} disabled={busy}>Cancel</button>
+      </div>
+    </>
   );
 }

@@ -97,4 +97,5 @@ export const BOARD_NATIVE_PLUGINS = [
   { pkg: '@capacitor/app', classpath: 'com.capacitorjs.plugins.app.AppPlugin' },
   { pkg: '@capacitor/filesystem', classpath: 'com.capacitorjs.plugins.filesystem.FilesystemPlugin' },
   { pkg: '@capacitor/share', classpath: 'com.capacitorjs.plugins.share.SharePlugin' },
+  { pkg: '@capacitor-community/in-app-review', classpath: 'com.getcapacitor.community.inappreview.InAppReviewPlugin' },
 ];

@@ -33,6 +33,8 @@ export const DISCLOSED_PARAMS = {
   hit_count: 'features', fileType: 'features', proposals: 'features',
   proposalCount: 'features', successCount: 'features', failCount: 'features',
   shopMode: 'features', anon: 'features', signed_in: 'features',
+  // After-post sheet: 'another' or 'done' (2.4.9).
+  action: 'features',
   // true/false only since 2.4.6; the shop id itself used to be sent here.
   prefill_shop: 'features', prefill_cut: 'features',
   // "the city you pick (and how far away it is when you use Near me)"
