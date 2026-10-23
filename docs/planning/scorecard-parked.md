@@ -8,8 +8,9 @@ trigger has fired and the step is done.
 
 | Waiting | Trigger | Then |
 |---|---|---|
-| Android 4.4.3 (4403) Open + Production in review (submitted 2026-10-21, one submission, 100%) | Google approves (Production track shows 4403 Active) | Nothing left to promote. Re-check Publishing overview daily until it clears. |
-| iOS 4.4.3 (16) | Submitted 2026-10-21 10:22, Waiting for Review (manual release) | Apple approves, then it sits at Pending Developer Release until Joel clicks Release. Check ASC at the start of every session. |
+| Android 4.4.4 (4404), the in-app rating prompt (1c57a53) | Android SDK back on this PC. C:\Users\jmuil\.bubblewrap was removed in the 10/22 PC-migration cleanup. Restore vs a fresh command-line-tools install is Joel's call; the auditor recommends fresh, at a repo-independent path | Point android/local.properties at the SDK, then build:native, cap sync, gradle-lock check, bundleRelease and the full ladder. Android 4.4.3 is LIVE on Production (10/21). |
+| Play listing ASO quick wins (short and full description, Burnt Ends hi-res icon) | In Play review since 2026-10-23 | Check that the public listing shows them. AI-asset declaration: "Don't label" (the auditor concurred). |
+| iOS 4.4.3 (16) APPROVED, Pending Developer Release (2026-10-23) | Joel clicks Release (or tells me to) | Then set the App Store Promotional Text, which is locked until the version is live: "Your first 5 reviews are free. One $3.99 purchase unlocks unlimited reviews, and reviews you've already saved stay open." iOS 4.4.4 rides the next Codemagic build. |
 | Delete Account device test | Joel signs in with a throwaway account on 4.4.3 and runs Settings > Delete Account | Confirm in the console: users/{uid}, reviews, friendCode, Storage folder and the Auth record are all gone. |
 | Photo end-to-end proof | Joel fully restarts Scorecard (4.4.0+) on the old phone and adds a test photo | Read-only Firestore: J's BBQ photos[] gets https URLs, Storage reviews/<uid>/... has objects. Report the drain count to the auditor. |
 
