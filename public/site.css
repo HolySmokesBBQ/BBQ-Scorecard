@@ -98,6 +98,7 @@ a:focus-visible, button:focus-visible { outline: 2px solid #E6D8B8; outline-offs
 /* Button cluster. Top-aligned with a row-wide minimum height so Launch
    sits on one line across a row even when one card has a store button
    below it and its neighbour does not. */
+.app-card .price-note { font-size: 14px; color: #bfb39a; margin: -8px 0 16px; line-height: 1.45; flex: 0 0 auto; max-width: 46ch; }
 .app-card .actions { display: flex; flex-direction: column; align-items: center; margin-top: auto; }
 .app-card:not(.lead) .actions { min-height: 102px; }
 
