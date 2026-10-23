@@ -157,6 +157,7 @@ import {
   initEntitlements, isUnlocked, canCreateReview, isGateEnabled,
 } from '../entitlements.js';
 import { reconcileEntitlementOnLaunch } from '../purchases.js';
+import { maybeAskForRating } from '../ratingPrompt.js';
 
 const AppContext = createContext(null);
 
@@ -997,6 +998,11 @@ export default function AppProvider({ children }) {
     setDirty(false);
     setView('home');
     setCurrentReview(null);
+    // Store rating ask, once, after the 3rd new review. The delay lets
+    // Home render first so the sheet doesn't cover the form closing.
+    if (!exists) {
+      setTimeout(() => { void maybeAskForRating({ isNew: true, reviewCount: updated.length }); }, 1500);
+    }
     if (fbUser) {
       // Write the single saved review (including any new photo URLs) to
       // cloud explicitly. This is the ONLY path that writes photo fields.

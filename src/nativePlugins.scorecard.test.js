@@ -24,7 +24,7 @@ const REGISTRY = 'android/app/src/main/assets/capacitor.plugins.json';
 
 // '@capacitor/share' -> 'capacitor-share', '@capgo/native-purchases' -> 'capgo-native-purchases'
 const gradleName = (pkg) => pkg.replace(/^@/, '').replace('/', '-');
-const PLUGIN_SPEC = /^@(capacitor|capacitor-firebase|capgo)\/[\w-]+$/;
+const PLUGIN_SPEC = /^@(capacitor|capacitor-community|capacitor-firebase|capgo)\/[\w-]+$/;
 
 function importedPlugins() {
   const seen = new Set();
@@ -56,6 +56,7 @@ test('the import walk finds the plugins Scorecard is known to use', () => {
   const found = importedPlugins();
   expect(found).toContain('@capacitor/app');
   expect(found).toContain('@capacitor/share');
+  expect(found).toContain('@capacitor-community/in-app-review');
   expect(found.length).toBeGreaterThan(3);
 });
 

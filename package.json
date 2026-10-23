@@ -36,9 +36,11 @@
     "deploy": "npm run audit && npm run build:all && netlify deploy --prod --dir=dist"
   },
   "dependencies": {
+    "@capacitor-community/in-app-review": "^8.0.0",
     "@capacitor-firebase/analytics": "^8.3.0",
     "@capacitor-firebase/authentication": "^8.2.0",
     "@capacitor-firebase/crashlytics": "^8.3.0",
+    "@capacitor/android": "^8.4.2",
     "@capacitor/app": "^8.1.0",
     "@capacitor/cli": "^8.3.4",
     "@capacitor/core": "^8.3.4",
