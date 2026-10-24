@@ -14,7 +14,7 @@
 
 import { existsSync, mkdirSync, cpSync, rmSync, writeFileSync, unlinkSync, readdirSync, statSync } from 'node:fs';
 import { resolve, join, extname } from 'node:path';
-import { TESSERACT_KEEP, BOARD_NATIVE_PLUGINS } from './board-native-assets.mjs';
+import { TESSERACT_KEEP, BOARD_NATIVE_PLUGINS, ANDROID_REMOTE_OCR } from './board-native-assets.mjs';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const SOURCE = join(ROOT, 'dist-board-native');
@@ -54,6 +54,17 @@ for (const name of DEAD_ASSETS) {
   if (existsSync(file)) {
     unlinkSync(file);
     console.log(`  - removed dead asset ${name}`);
+  }
+}
+
+// Tier B: Android loads the OCR engine's big files from our own origin,
+// verified against compiled-in hashes (src/board/ocrRemote.js), so they
+// don't ship in the AAB. The iOS build syncs the full dist and keeps them.
+for (const rel of ANDROID_REMOTE_OCR) {
+  const file = join(TARGET_PUBLIC, ...rel.split('/'));
+  if (existsSync(file)) {
+    unlinkSync(file);
+    console.log(`  - removed ${rel} (Android loads it verified from holysmokesbbqco.com/ocr/)`);
   }
 }
 

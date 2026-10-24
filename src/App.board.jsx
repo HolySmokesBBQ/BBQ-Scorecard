@@ -27,6 +27,7 @@ import { errorCode } from './analyticsCodes.js';
 import ConsentPrompt from './board/ConsentPrompt.jsx';
 import { sendProblemReport } from './diagnostics.js';
 import { recordPost, maybeAskForReview, shareBoard } from './board/postFollowup.js';
+import { useRemoteOcr, prepareRemoteOcr, ocrErrorCode, ocrErrorMessage } from './board/ocrRemote.js';
 import 'leaflet/dist/leaflet.css';
 
 // ─── palette ───────────────────────────────────────────────────
@@ -1516,8 +1517,14 @@ function CircularScrubPanel({ region, user, onSignIn, onSignInAnon }) {
     setImageUrl(URL.createObjectURL(file));
     setStatus('loading-ocr');
     track('board_circular_upload_started', { fileType: file.type });
+    let ocr = null;
     try {
       const { createWorker } = await import('tesseract.js');
+      // Android fetches the engine's big files from our own origin and
+      // verifies every byte against hashes compiled into the app before
+      // anything runs (src/board/ocrRemote.js, Tier B). iOS and the web
+      // keep loading the bundled copies below.
+      if (useRemoteOcr()) ocr = await prepareRemoteOcr();
       setStatus('ocr-running');
       setProgress(0);
       // Self-host every Tesseract asset (worker script, core WASM,
@@ -1531,8 +1538,9 @@ function CircularScrubPanel({ region, user, onSignIn, onSignInAnon }) {
       const tessBase = `${import.meta.env.BASE_URL}tesseract/`;
       const worker = await createWorker('eng', 1, {
         workerPath: `${tessBase}worker.min.js`,
-        corePath: tessBase,
-        langPath: tessBase,
+        corePath: ocr ? ocr.corePath : tessBase,
+        langPath: ocr ? ocr.langPath : tessBase,
+        ...(ocr ? { cachePath: ocr.cachePath, cacheMethod: ocr.cacheMethod } : {}),
         // We ship eng.traineddata uncompressed. tesseract.js defaults to
         // gzip:true and asks for eng.traineddata.gz, which 404s in the app
         // (the scan hung) and on the web gets the SPA's index.html. Every
@@ -1553,11 +1561,15 @@ function CircularScrubPanel({ region, user, onSignIn, onSignInAnon }) {
       if (found.length === 0) setError('OCR ran, but no per-pound BBQ prices were detected. Try a sharper image.');
     } catch (err) {
       console.error('OCR failed', err);
-      setError('Something went wrong reading that image. Try a smaller or sharper photo.');
+      // Offline or a failed integrity check: say so plainly. The rest of the
+      // app keeps working, and there is no fallback source (auditor ruling).
+      setError(ocrErrorMessage(err) || 'Something went wrong reading that image. Try a smaller or sharper photo.');
       setStatus('idle');
       // A short code from a fixed list, never the message: error text can carry
       // anything (auditor bounded-reason ruling, 2026-10-12).
-      track('board_circular_ocr_failed', { error: errorCode(err) });
+      track('board_circular_ocr_failed', { error: ocrErrorCode(err) });
+    } finally {
+      ocr?.revoke();
     }
   };
 

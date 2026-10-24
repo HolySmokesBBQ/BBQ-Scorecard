@@ -4,7 +4,7 @@
 **App:** BBQ Board
 **Greenlit by:** BBQ Security auditor (acting for Joel), 2026-09-29, with non-negotiable
 security constraints (below).
-**Status:** awaiting the auditor's review of this spec before implementation.
+**Status:** Tier A shipped in 2.4.5. Tier B approved by the auditor 2026-10-23 and implemented for 2.5.0 (see §8).
 
 ## 1. Why
 
@@ -163,3 +163,57 @@ WebView with no CSP is a remote-code path.
 2. Website session deploys `/ocr/tesseract-7.0.0/` and I verify the hashes live.
 3. **Tier B → the following Board release**, Android only. First release Board can
    upload itself.
+
+## 8. Tier B as built (2.5.0, 2026-10-23)
+
+Auditor ruling 2026-10-23: approved to this spec, plus four conditions. How each is met:
+
+- **(a) Policy basis.** The three cores are WebAssembly executed by the
+  WebView's JavaScript engine. Play's Device and Network Abuse policy exempts
+  "code that runs in a virtual machine or an interpreter where either provides
+  indirect access to Android APIs (such as JavaScript in a webview or
+  browser)". eng.traineddata is model data, not code.
+- **(b) iOS.** The scan feature does ship on iOS, but iOS never takes the
+  remote path. `useRemoteOcr()` is true only on native Android
+  (`Capacitor.getPlatform() === 'android'`). iOS syncs the full
+  dist-board-native and keeps the bundled engine, so App Store guideline
+  2.5.2 never comes into play. This is §4's recommendation, done with a
+  runtime platform check instead of a build flag, because both platforms
+  share one web bundle. The web build keeps its self-hosted copies too.
+- **(c) Website.** `/ocr/tesseract-7.0.0/` is pre-wired (ACAO `*`,
+  `immutable`), but all four files returned 404 on 2026-10-23. Ordering per
+  §4.3: Website deploys the files, Board verifies the live hashes, and only
+  then does a Board release that depends on them ship.
+- **(d) Failure UX.** Offline with no cache gives "Scanning a weekly ad needs
+  a connection the first time. Try again once you're online." A hash
+  mismatch, 404, wrong origin or unknown file gives "Ad scanning isn't
+  available right now. You can still add prices by hand." There is no retry
+  and no fallback source. The rest of the app is unaffected.
+
+Implementation notes (src/board/ocrRemote.js, scripts/gen-ocr-hashes.mjs):
+
+- **Hash constants.** They live in src/board/ocrHashes.js, generated from
+  public/tesseract/. The generator also proves the cores are byte-identical
+  to tesseract.js-core 7.0.0. The suite fails while the constants are stale.
+- **Core loading.** The verified core reaches tesseract.js as
+  `blob:<url>#<core-file-name>`. getCore only treats a path as an explicit
+  file when it ends in "js", and the fragment is ignored when the blob loads.
+- **Language data.** tesseract.js 7.0.0 can't take language data as bytes:
+  `initialize()` joins `.data` instead of `.code`. So the verified bytes are
+  written to tesseract's own idb-keyval cache under a version + hash
+  cachePath, with `cacheMethod: 'readOnly'` and `langPath: 'about:blank'`. A
+  cache miss fails instead of fetching unverified data.
+- **Fetch options.** Fetches use `redirect: 'error'`, `credentials: 'omit'`
+  and `cache: 'no-store'`. Verified copies are cached under
+  `board-ocr/<version>/<file>/<sha256>` and re-verified on every read.
+- **Packaging.** sync-board.mjs strips the four files from the Android
+  assets. worker.min.js still ships.
+- **Browser-verified on the dev server** with Android stubbed and the four
+  files served locally:
+  - a real scan picked only this device's core and found all three test
+    prices
+  - one flipped byte stopped the scan, with nothing cached and no blob made
+  - offline with no cache showed the connection message
+- **Still owed before Production:** the real-device check from §6, since
+  WebView `crypto.subtle` and blob `importScripts` behavior must be confirmed
+  on a phone.

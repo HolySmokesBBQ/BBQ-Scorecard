@@ -59,8 +59,11 @@ describe("Board's worker only ever loads the LSTM builds", () => {
     expect(workerCall[1]).not.toMatch(/legacyCore/);
   });
 
-  test('Board points corePath at a directory, so getCore does the selecting', () => {
-    expect(workerCall[1]).toMatch(/corePath:\s*tessBase\b/);
+  // iOS and the web: corePath is the bundled directory and getCore selects.
+  // Android (Tier B): a verified blob URL for the one variant ocrRemote.js
+  // picked with the same selection order (ocrRemote.test.js).
+  test('Board points corePath at the bundled directory unless the verified remote engine is in use', () => {
+    expect(workerCall[1]).toMatch(/corePath:\s*ocr \? ocr\.corePath : tessBase\b/);
     expect(app).toMatch(/const tessBase = `\$\{import\.meta\.env\.BASE_URL\}tesseract\/`/);
   });
 });

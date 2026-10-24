@@ -20,6 +20,7 @@
 
 import { existsSync, readdirSync, rmSync, rmdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { OCR_REMOTE_FILES } from './gen-ocr-hashes.mjs';
 
 export const TESSERACT_KEEP = [
   'tesseract/worker.min.js',
@@ -28,6 +29,13 @@ export const TESSERACT_KEEP = [
   'tesseract/tesseract-core-simd-lstm.wasm.js',
   'tesseract/tesseract-core-lstm.wasm.js',
 ];
+
+// Tier B (2.5.0): Android fetches these from holysmokesbbqco.com/ocr/ and
+// verifies them against hashes compiled into the app (src/board/ocrRemote.js),
+// so sync-board.mjs strips them from the Android assets. They stay in
+// dist-board-native for the iOS build, which keeps the bundled engine.
+// worker.min.js always ships: it is small and never fetched.
+export const ANDROID_REMOTE_OCR = OCR_REMOTE_FILES.map(f => `tesseract/${f}`);
 
 // Files from public/ that Board's own code, index.board.html or PWA
 // manifest reference. Directories end in '/' and keep everything under them.
