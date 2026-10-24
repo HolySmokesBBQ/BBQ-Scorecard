@@ -125,10 +125,9 @@ const sharedAssets = [
   'googleb5ed7e361153ee65.html',
   // Android trusted-web-activity assetlinks
   '.well-known',
-  // BBQ Board OCR engine, version-pinned under public/ocr/tesseract-<ver>/.
-  // Directory copy; without this entry the files never reach dist/ (same
-  // allowlist trap as support.html, 2026-09-03).
-  'ocr',
+  // BBQ Board OCR engine is NOT a public/ copy: step 2e builds
+  // dist/ocr/tesseract-<ver>/ from public/tesseract/ with a sha256 gate
+  // (scripts/ocr-manifest.mjs). public/ocr/ does not exist on purpose.
   // NOTE: homepage/gallery photos are NOT here. They live in website/photos/
   // (step 2c) because every Vite build copies the whole of public/ into its
   // bundle, and 28 MB of marketing photography was shipping inside the
@@ -181,6 +180,28 @@ try {
   console.log(`  + sitemap lastmod from git (${stamped} dates changed)`);
 } catch (e) {
   console.log('  ! sitemap lastmod skipped: ' + e.message);
+}
+
+// 2e. BBQ Board's OCR engine at dist/ocr/tesseract-<ver>/ (auditor 2026-10-23).
+//     Four files from public/tesseract/, each hashed against the sha256 Board
+//     2.5.0 verifies on device (scripts/ocr-manifest.mjs). A wrong byte fails
+//     the build. The version directory is immutable once live: a new engine
+//     is a new OCR_VERSION, never an overwrite. public/ocr/ is deliberately
+//     absent so the 17 MB never rides inside the app bundles.
+{
+  const { createHash } = await import('node:crypto');
+  const { OCR_FILES, OCR_SOURCE_DIR, OCR_SERVE_DIR } = await import('./ocr-manifest.mjs');
+  const out = join(DIST, ...OCR_SERVE_DIR.split('/'));
+  mkdirSync(out, { recursive: true });
+  for (const f of OCR_FILES) {
+    const src = join(ROOT, ...OCR_SOURCE_DIR.split('/'), f.name);
+    if (!existsSync(src)) throw new Error(`OCR source missing: ${src}`);
+    const bytes = readFileSync(src);
+    const hash = createHash('sha256').update(bytes).digest('hex');
+    if (hash !== f.sha256) throw new Error(`OCR sha256 mismatch for ${f.name}: ${hash}`);
+    writeFileSync(join(out, f.name), bytes);
+  }
+  console.log(`  + ${OCR_SERVE_DIR}/ (${OCR_FILES.length} files, sha256 verified)`);
 }
 
 // 2b. Static SEO landing pages. These live outside the SPAs on purpose —
