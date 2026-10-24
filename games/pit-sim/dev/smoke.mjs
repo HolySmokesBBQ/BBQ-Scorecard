@@ -10482,6 +10482,25 @@ async function browserChecks() {
   // tap on the counter leaves a claimed plate); with an empty counter the guest waits at the seat and
   // the pitmaster delivers by a real tap. The eater has no bubble, only a tiny steam puff on their own
   // plate that never touches a counter or the register. Phone frames: self-serve.png, eating.png.
+  await step('v4.8 charcoal back: a bag grabbed from the pile by a real tap goes back on the next tap, the pile and the day\'s fuel count restored', async () => {
+    await reload(ladFixture({}, { crew: [] }));
+    assert(await toService(), 'no service day');
+    await advance(2);
+    const tp = await ev('(() => { const st = MAP.stations.find((s) => s.id === "pile"); return st.tiles[0]; })()');
+    await run('const p = S().player; p.path = []; p.next = null; p.target = null; p.walking = false; p.carrying = null; p.busy = null; g.advance(0); return true;');
+    const before = await ev('({ charcoal: S().charcoal, bags: S().today.bags })');
+    await canvasTap(tp.x, tp.y);
+    const got = await until('!!S().player.carrying && S().player.carrying.kind === "charcoal"', WAIT_S.walk);
+    const mid = await ev('({ charcoal: S().charcoal, bags: S().today.bags })');
+    assert(got.ok && mid.charcoal === before.charcoal - 1 && mid.bags === before.bags + 1, 'the grab ' + describe({ before, mid }));
+    const label = await ev('document.getElementById("act").textContent');
+    await canvasTap(tp.x, tp.y);
+    const back = await until('S().player.carrying === null', WAIT_S.walk);
+    const after = await ev('({ charcoal: S().charcoal, bags: S().today.bags })');
+    assert(back.ok && after.charcoal === before.charcoal && after.bags === before.bags, 'the bag did not go back ' + describe({ before, mid, after }));
+    assert(/charcoal back/i.test(label), 'the action button did not offer the put back: ' + label);
+    return 'pile ' + before.charcoal + ' to ' + mid.charcoal + ' to ' + after.charcoal + ', bags today ' + before.bags + ' to ' + mid.bags + ' to ' + after.bags + '; button read "' + label + '"';
+  });
   await step('v4.6 self-serve: a seated guest takes a plate off the counter to their seat and eats; one plate one guest; no plate, the guest waits and the pitmaster delivers by real taps; the eating puff is small and off the counter and register; tutorial day only delivers', async () => {
     await reload(ladFixture({}, { crew: [] }));
     assert(await toService(), 'no service day');

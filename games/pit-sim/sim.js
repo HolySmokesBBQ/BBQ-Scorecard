@@ -2178,6 +2178,7 @@ const STRINGS = Object.freeze({
     halfShift: 'half shift, half wages',
     // v4.1 the gear ladder
     burnsWood: 'This one burns wood. Tap it with empty hands to add a split',
+    charcoalBack: 'Put the charcoal back',
     addSplit: 'Add a split ({n} left)',
     lightSplit: 'Light it with a split ({n} left)',
     outOfWood: 'Out of wood splits',
@@ -5034,6 +5035,15 @@ function createSim(saved, seed) {
           state.charcoal -= 1;
           state.today.bags += 1;
           p.carrying = { kind: 'charcoal' };
+        });
+      }
+      if (c.kind === 'charcoal') {
+        // Joel 2026-10-23: "We do it for the cooler." An unused bag goes back on the pile and off the
+        // day's fuel count. A tap on the pile with a bag in hand does it.
+        return act(STRINGS.ui.charcoalBack, true, stationId, () => {
+          state.charcoal += 1;
+          state.today.bags = Math.max(0, state.today.bags - 1);
+          p.carrying = null;
         });
       }
       return noop(fullLabel(c), stationId);
