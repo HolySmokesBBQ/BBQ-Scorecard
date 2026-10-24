@@ -16,6 +16,23 @@
 // week 1 with the board. Save v16: season.board { year, week, list }; a v15 save mid Hiring Day (or
 // owing one) loads onto week 1 with a fresh board, its crew kept and its open referrals on the board.
 //
+// v4.9 The wood rack (2026-10-24, Joel: "picking up logs isn't shown. Much like the charcoal the logs
+// should be moveable and have an animation when being picked up or put down. Right now just tapping the
+// wrong area of the smoker adds more wood."). Overrules v4.1's empty handed tap that fed a wood cooker
+// from its own rack. The wood source is a station now: 'woodrack' (type 'woodrack', sprite 'woodpile',
+// gear 'offset', so it stands only once a wood cooker is owned), a movable Arrange unit 'woodrack' on
+// (1,6), worked from (1,7) (the stick burner's back tile) or (1,5), with its "+" spot (MAP.forSale
+// .offset) where it lands. An empty handed tap on it grabs a split (carrying { kind: 'wood' }, state
+// .wood less one: the rack holds the count); a tap on a wood cooker with the split loads it (addFuel,
+// today.splits plus one: wood is counted on load, so a put back or a mis-tap never costs anything); a
+// tap on the rack with the split puts it back (state.wood plus one). A charcoal cooker refuses a split
+// (ui.splitCharcoal), a wood cooker still refuses a bag (ui.burnsWood). An empty handed tap on a wood
+// cooker only pulls or says what it is doing; it never adds fuel. A split still in a hand when the day
+// ends goes back on the rack. The FIRE card and the PIT card walk to the rack for a split (FIRE: task
+// 'toRack', then 'grab'; PIT: job 'split', step 'grabSplit', then 'addSplit'), as they do for bags.
+// Save v17: an owner of the stick burner whose stored layout leaves no room on the rack's default spot
+// gets the nearest free one (placeUnit); carried items are still not saved.
+//
 // v4.0 Economy (2026-10-20, Joel: "a few sessions in I was losing money", "as the facility grows so
 // does the ability to hire staff"). dev/econ.mjs plays whole seasons on these rules. The leak: every
 // lineup card was paid its full wage on every cook, a half length weekday Yard day too, and Hiring Day
@@ -587,7 +604,7 @@ const C = Object.freeze({
   // weather
   RAIN_FROM_DAY: 4, RAIN_CHANCE: 0.15, RAIN_ARRIVALS: 0.6,
   // save clamps
-  SAVE_VERSION: 16, MAX_DAY: 999, MAX_CASH: 999999, MAX_STAT: 9999999,   // v3.4: 8 (season.advance); v3.5: 9 (season.plan, pit); v3.6: 10 (the register, the TILL card)
+  SAVE_VERSION: 17, MAX_DAY: 999, MAX_CASH: 999999, MAX_STAT: 9999999,   // v3.4: 8 (season.advance); v3.5: 9 (season.plan, pit); v3.6: 10 (the register, the TILL card)
   // v3.0 season and week [S 3], contract W2
   SEASON_WEEKS: 7,                    // v3.5: six weeks and the competition finale as week 7 (was 9)
   YEAR_MAX: 99,
@@ -922,7 +939,12 @@ const STATIONS0 = list([
   Object.freeze({ id: 'register', type: 'register', label: 'Register', spoken: '', gear: null,
     tiles: list([xy(3, 1)]),
     use: list([use(2, 1, 'right'), use(3, 2, 'up')]),
-    sprite: 'register', draw: px(48, 16), sortRow: 1 })
+    sprite: 'register', draw: px(48, 16), sortRow: 1 }),
+  // v4.9: the wood rack, the stick burner's and the trailer rig's fuel, beside their back tile (1,7).
+  Object.freeze({ id: 'woodrack', type: 'woodrack', label: 'Wood rack', spoken: '', gear: 'offset',
+    tiles: list([xy(1, 6)]),
+    use: list([use(1, 7, 'up'), use(1, 5, 'down')]),
+    sprite: 'woodpile', draw: px(16, 96), sortRow: 6 })
 ]);
 
 // v4.1 the gear ladder: what the main cooker (station and unit 'kettle1') is at each pitTier. The
@@ -1059,6 +1081,7 @@ const UNITS = list([
   unitDef('board', 'pit', 'Cutting board', 'cutting board', { stations: ['board'] }),
   unitDef('cooler', 'pit', 'Cooler', 'cooler', { stations: ['cooler'] }),
   unitDef('pile', 'pit', 'Charcoal pile', 'charcoal pile', { stations: ['pile'] }),
+  unitDef('woodrack', 'pit', 'Wood rack', 'wood rack', { stations: ['woodrack'], gear: ['offset'] }),   // v4.9
   unitDef('trash', 'pit', 'Trash', 'trash', { stations: ['trash'] }),
   unitDef('counter', 'line', 'Counter and register', 'counter', { stations: ['table', 'register'], gear: ['bigtable'] }),
   unitDef('picnic1', 'lawn', 'Picnic table', 'picnic table', { props: ['picnic1', 'bench1'], seats: ['pt1a', 'pt1b'] }),
@@ -1078,7 +1101,7 @@ const UNIT_OF = (function () {
   return Object.freeze({ station: Object.freeze(st), prop: Object.freeze(pr), decor: Object.freeze(de), seat: Object.freeze(se) });
 })();
 const STATION_NOUN = Object.freeze({ kettle1: 'kettle', kettle2: 'second kettle', drum: 'drum smoker', board: 'cutting board',
-  cooler: 'cooler', table: 'counter', pile: 'charcoal pile', trash: 'trash', register: 'register' });
+  cooler: 'cooler', table: 'counter', pile: 'charcoal pile', trash: 'trash', register: 'register', woodrack: 'wood rack' });
 const LAYOUT_MAX = 11;
 
 const QUEUE0 = list([
@@ -1102,8 +1125,12 @@ const FORSALE0 = Object.freeze({
   flowers: list([px(6, 10), px(7, 10)]),
   birdbath: list([px(3, 10)]),
   lights: list([px(0, 7)]),
-  picnic2: list([px(6, 8), px(7, 8)])
+  picnic2: list([px(6, 8), px(7, 8)]),
+  offset: list([px(1, 6)])   // v4.9: the wood rack's spot comes with the stick burner
 });
+// v4.9: a "+" spot that follows another unit than the one its purchase places (the stick burner's
+// purchase places the main cooker; its "+" is the wood rack's spot).
+const FORSALE_AT = Object.freeze({ offset: 'woodrack' });
 const FORSALE_UNIT = Object.freeze({ cabinet: 'kettle1', offset: 'kettle1', trailer: 'kettle1', kettle2: 'kettle2', drum: 'drum', bigtable: 'counter', canopy: 'counter', chair1: 'chair1', chair2: 'chair2', picnic2: 'picnic2' });
 const GATE_TILE = px(8, 11);
 const CUST_SPAWN = px(8, 12);
@@ -1233,7 +1260,7 @@ function buildGeom(lay, tier) {
   for (const st of stations) byId[st.id] = st;
   const forSale = {};
   for (const k of Object.keys(FORSALE0)) {
-    const u = FORSALE_UNIT[k];
+    const u = FORSALE_AT[k] || FORSALE_UNIT[k];
     const d = u ? offOf(lay, u) : [0, 0];
     const f0 = FORSALE0[k], a = f0[0];
     const ft = u && turnOf(lay, u) && f0.length > 1 ? f0.map((t) => px(a.x + (t.y - a.y), a.y + (t.x - a.x))) : f0;   // v4.7
@@ -1554,7 +1581,8 @@ const MAP = Object.freeze({
   walk: list([px(5, 1), px(6, 1), px(7, 1), px(8, 1), px(8, 2), px(8, 3), px(8, 4), px(8, 5), px(8, 6), px(8, 7), px(8, 8), px(8, 9), px(8, 10)]),
   apron: Object.freeze({ barn: 'y0', fence: 'x0' }),
   get forSale() { return GEO.forSale; },
-  home: Object.freeze({ stations: list(STATIONS.map((s) => s.id)), queue: list([0, 1]) })
+  // v4.9: the wood rack stays out of the home frame (the stick burner beside it frames that corner).
+  home: Object.freeze({ stations: list(STATIONS.map((s) => s.id).filter((id) => id !== 'woodrack')), queue: list([0, 1]) })
 });
 
 // Contract D4: works on stations, footprint tiles, use tiles, queue entries and seats. The v1
@@ -2177,11 +2205,17 @@ const STRINGS = Object.freeze({
     yardTake: 'sales and tips after costs and wages',
     halfShift: 'half shift, half wages',
     // v4.1 the gear ladder
-    burnsWood: 'This one burns wood. Tap it with empty hands to add a split',
+    burnsWood: 'This one burns wood. Grab a split from the wood rack',   // v4.9: the rack, not the cooker
     charcoalBack: 'Put the charcoal back',
-    addSplit: 'Add a split ({n} left)',
-    lightSplit: 'Light it with a split ({n} left)',
+    addSplit: 'Add the split ({n} on the rack)',
+    lightSplit: 'Light it with the split ({n} on the rack)',
     outOfWood: 'Out of wood splits',
+    // v4.9 the wood rack
+    grabSplit: 'Grab a split ({n} left)',
+    splitBack: 'Put the split back',
+    splitCharcoal: 'This one burns charcoal. Put the split back on the wood rack',
+    splitGo: 'Splits go in the wood cooker or back on the rack',
+    fireFull: 'The fire is full. Hold the split or put it back',
     buyWood: 'Buy at least one wood split.',
     crewSlots: 'Crew slots {n} of {s}',
     tierSlots: 'Crew slots {a} to {b}. Payroll {p} to {q}.',
@@ -2248,6 +2282,7 @@ function fullLabel(c) {
   if (c.kind === 'cooked') return COOKED_GO;
   if (c.kind === 'burnt') return BURNT_GO;
   if (c.kind === 'box') return STRINGS.comp.window;
+  if (c.kind === 'wood') return STRINGS.ui.splitGo;   // v4.9
   return STRINGS.handsFull;
 }
 
@@ -3395,7 +3430,7 @@ function validateSave(obj) {
   try {
     if (!isPlainObject(obj)) return null;
     const v = readKey(obj, 'v');
-    if (v !== 1 && v !== 2 && v !== 3 && v !== 4 && v !== 5 && v !== 6 && v !== 7 && v !== 8 && v !== 9 && v !== 10 && v !== 11 && v !== 12 && v !== 13 && v !== 14 && v !== 15 && v !== 16) return null;
+    if (v !== 1 && v !== 2 && v !== 3 && v !== 4 && v !== 5 && v !== 6 && v !== 7 && v !== 8 && v !== 9 && v !== 10 && v !== 11 && v !== 12 && v !== 13 && v !== 14 && v !== 15 && v !== 16 && v !== 17) return null;
     const day = toInt(readKey(obj, 'day'), 1, 1, C.MAX_DAY);
     const cash = toInt(readKey(obj, 'cash'), C.START_CASH, 0, C.MAX_CASH);
     const rep = toInt(readKey(obj, 'rep'), C.START_REP, 0, 100);
@@ -3534,7 +3569,15 @@ function validateSave(obj) {
     // v4.7 (save v15): a value may carry a third entry, the turn; a v14 or older layout has none.
     const layIn = readKey(obj, 'layout');
     const layV = v >= 15 || !isPlainObject(layIn) ? layIn : Object.keys(layIn).reduce((acc, k) => { const o = layIn[k]; acc[k] = Array.isArray(o) ? o.slice(0, 2) : o; return acc; }, {});
-    const layout = v >= 12 ? fitLayout(layV, gear, decor) : {};
+    // v4.9 (save v17): the wood rack joins the owned units with the stick burner. A stored layout (v16
+    // or older, or any that does not hold with it) that covers its spot or its work tiles moves the rack
+    // to the nearest free spot first, so the rest of the yard is kept.
+    let layW = layV;
+    if (v >= 12 && gear.offset === true && isPlainObject(layV)) {
+      const lay0 = cleanLayout(layV);
+      if (checkLayout(lay0, gear, decor).ok !== true) { const moved = placeUnit(lay0, 'woodrack', gear, decor); if (moved) layW = moved; }
+    }
+    const layout = v >= 12 ? fitLayout(layW, gear, decor) : {};
     // v4.4: the plates of the last Yard day of each kind (an older save has none: the starting cart).
     const paceIn = readKey(obj, 'pace');
     const pace = paceIn === undefined ? undefined : [0, 1].map((i) => { let x; try { x = Array.isArray(paceIn) ? paceIn[i] : undefined; } catch (e) { x = undefined; } return typeof x === 'number' && Number.isFinite(x) ? toInt(x, 0, 0, 999) : null; });
@@ -4963,6 +5006,7 @@ function createSim(saved, seed) {
     const c = state.player.carrying;
     if (c === null) return STRINGS.handsEmpty;
     if (c.kind === 'charcoal') return 'Holding: charcoal';
+    if (c.kind === 'wood') return 'Holding: a wood split';   // v4.9
     const label = MEATS[c.meat].label;
     if (c.kind === 'box') return fillText(STRINGS.comp.holding, { meat: label });
     if (c.kind === 'plates') {
@@ -5049,10 +5093,43 @@ function createSim(saved, seed) {
       return noop(fullLabel(c), stationId);
     }
 
+    // v4.9: the wood rack, as the pile: grab a split with empty hands, put one back with one in hand.
+    // The split leaves the rack on the grab (state.wood) and counts as fuel only once it is loaded.
+    if (st.type === 'woodrack') {
+      if (c === null) {
+        if (state.wood <= 0) return noop(STRINGS.ui.outOfWood, stationId);
+        return act(fillText(STRINGS.ui.grabSplit, { n: state.wood }), true, stationId, () => {
+          state.wood -= 1;
+          p.carrying = { kind: 'wood' };
+          emit('split_grab', { who: 'you' });
+        });
+      }
+      if (c.kind === 'wood') {
+        return act(STRINGS.ui.splitBack, true, stationId, () => {
+          state.wood = Math.min(C.WOOD_MAX, state.wood + 1);
+          p.carrying = null;
+          emit('split_back', { who: 'you' });
+        });
+      }
+      return noop(fullLabel(c), stationId);
+    }
+
     if (st.type === 'cooker') {
       const cooker = state.stations[st.id];
       const burnsWood = st.fuel === 'wood';   // v4.1: the stick burner and the trailer rig
       if (c !== null && c.kind === 'charcoal' && burnsWood) return noop(STRINGS.ui.burnsWood, stationId);
+      // v4.9: a split carried from the wood rack goes in a wood cooker (counted now), never a charcoal one.
+      if (c !== null && c.kind === 'wood') {
+        if (!burnsWood) return noop(STRINGS.ui.splitCharcoal, stationId);
+        if (cooker.fire >= C.FIRE_MAX - 5) return noop(STRINGS.ui.fireFull, stationId);
+        const cold = cooker.fire < C.COLD_UNDER;
+        return act(fillText(cold ? STRINGS.ui.lightSplit : STRINGS.ui.addSplit, { n: state.wood }), true, stationId, () => {
+          state.today.splits += 1;
+          addFuel(cooker, 'wood');
+          p.carrying = null;
+          emit('split_load', { who: 'you', cooker: st.id, lit: cold });
+        });
+      }
       if (c !== null && c.kind === 'charcoal') {
         const cold = cooker.fire < C.COLD_UNDER;
         return act(cold ? 'Light the fire' : 'Add charcoal', true, stationId, () => {
@@ -5086,16 +5163,10 @@ function createSim(saved, seed) {
             p.carrying = { kind: pick.state === 'burnt' ? 'burnt' : 'cooked', meat: pick.meat, pulledAt: state.clock, don: donenessOf(pick) };   // v3.3
           });
         }
-        // v4.1: a wood cooker is fed from its own rack, one split a tap.
-        if (burnsWood && state.wood > 0 && cooker.fire < C.FIRE_MAX - 5) {
-          const cold = cooker.fire < C.COLD_UNDER;
-          return act(fillText(cold ? STRINGS.ui.lightSplit : STRINGS.ui.addSplit, { n: state.wood }), true, stationId, () => {
-            state.wood -= 1;
-            state.today.splits += 1;
-            addFuel(cooker, 'wood');
-          });
-        }
+        // v4.9 (Joel 2026-10-24): an empty handed tap on a wood cooker never adds fuel. A cold or low
+        // one points at the wood rack; the split comes from there.
         if (burnsWood && state.wood <= 0 && cooker.fire < C.FIRE_LOW_WARN) return noop(STRINGS.ui.outOfWood, stationId);
+        if (burnsWood && cooker.fire < C.FIRE_LOW_WARN && cooker.pieces.length === 0) return noop(STRINGS.ui.burnsWood, stationId);
         if (cooker.pieces.length > 0) {
           let left = Infinity;
           for (const pc of cooker.pieces) left = Math.min(left, MEATS[pc.meat].cook - pc.prog);
@@ -5223,6 +5294,7 @@ function createSim(saved, seed) {
 
     if (st.type === 'trash') {
       if (c === null || c.kind === 'charcoal') return noop(STRINGS.nothing, stationId);
+      if (c.kind === 'wood') return noop(STRINGS.ui.splitGo, stationId);   // v4.9: a split is never trash
       if (c.kind === 'burnt') {
         return act('Trash the burnt ' + MEATS[c.meat].label, true, stationId, () => {
           trashCarry(c);
@@ -6130,12 +6202,28 @@ function createSim(saved, seed) {
     return clamp(C.NPC_TILES_PER_S * C.TENDER_CYCLE / t.vals.firePace, C.FIRE_WALK[0], C.FIRE_WALK[1]);
   }
 
-  // X5.3: a bag the FIRE card adds counts on its crew row.
+  // X5.3: a bag the FIRE card adds counts on its crew row. v4.9: a split counts as fuel here, on load.
   function tenderAdd(t) {
-    addFuel(state.stations[t.cooker], t.carrying && t.carrying.kind === 'wood' ? 'wood' : 'charcoal');
+    const wood = !!(t.carrying && t.carrying.kind === 'wood');
+    if (wood) state.today.splits += 1;
+    addFuel(state.stations[t.cooker], wood ? 'wood' : 'charcoal');
     const rec = state.today.crew[String(t.cardId)];
     if (rec) rec.bags += 1;
     emit('fire_fed', { cooker: t.cooker, id: t.cardId === undefined ? null : t.cardId, x: t.x, y: t.y });   // v3.3: the FIRE puff [S 19.8]
+  }
+
+  // v4.9: the FIRE card's walk to the wood rack (any free tile beside it), or null with no way there.
+  function tenderToRack(t) {
+    const rack = STATION_BY_ID.woodrack;
+    if (!rack || !stationActive(rack)) return null;
+    const uses = activeUseTiles(rack);
+    if (uses.length === 0) return null;
+    return playerBfs(t.x, t.y, (x, y) => uses.some((u) => u.x === x && u.y === y));
+  }
+  function tenderHome(t) {
+    const home = MAP.tenderIdle;
+    t.path = playerBfs(t.x, t.y, (x, y) => x === home.x && y === home.y) || [];
+    t.task = 'return';
   }
 
   function tickTender(dt) {
@@ -6146,17 +6234,33 @@ function createSim(saved, seed) {
       if (t.cooldown > 0 || (state.charcoal <= 0 && state.wood <= 0)) return;
       const ck = cookerNeedingFire(t.vals ? t.vals.fireSense : C.TENDER_THRESHOLD);
       if (!ck) return;
-      if (STATION_BY_ID[ck.id].fuel === 'wood') {   // v4.1: a split from the cooker's rack
-        state.wood -= 1;
-        state.today.splits += 1;
-        t.carrying = { kind: 'wood' };
-      } else {
-        state.charcoal -= 1;
-        state.today.bags += 1;
-        t.carrying = { kind: 'charcoal' };
-      }
       t.cooker = ck.id;
       t.cooldown = t.vals ? t.vals.firePace : C.TENDER_CYCLE;
+      if (STATION_BY_ID[ck.id].fuel === 'wood') {
+        // v4.9: walk to the wood rack and grab a split there (it leaves the rack on the grab).
+        const path = tenderToRack(t);
+        if (path === null) { t.cooker = null; return; }
+        t.path = path;
+        t.task = 'toRack';
+        return;
+      }
+      state.charcoal -= 1;
+      state.today.bags += 1;
+      t.carrying = { kind: 'charcoal' };
+      t.task = 'grab';
+      t.t = C.BUDDY_HANDLE;
+      return;
+    }
+    if (t.task === 'toRack') {
+      advanceMover(t, tenderSpeed(t), dt);
+      if (t.next !== null || t.path.length > 0) return;
+      const rack = STATION_BY_ID.woodrack;
+      const u = rack ? activeUseTiles(rack).find((e) => e.x === t.x && e.y === t.y) : null;
+      if (u) t.face = u.face;
+      if (!u || state.wood <= 0) { t.cooker = null; tenderHome(t); return; }
+      state.wood -= 1;
+      t.carrying = { kind: 'wood' };
+      emit('split_grab', { who: 'fire', id: t.cardId === undefined ? null : t.cardId });
       t.task = 'grab';
       t.t = C.BUDDY_HANDLE;
       return;
@@ -6168,7 +6272,9 @@ function createSim(saved, seed) {
       const uses = activeUseTiles(st);
       const path = playerBfs(t.x, t.y, (x, y) => uses.some((u) => u.x === x && u.y === y));
       if (path === null) {
-        tenderAdd(t);
+        // v4.9: no way to the cooker. A split goes back on the rack (nothing spent); a bag goes in as before.
+        if (t.carrying && t.carrying.kind === 'wood') state.wood = Math.min(C.WOOD_MAX, state.wood + 1);
+        else tenderAdd(t);
         t.carrying = null;
         t.cooker = null;
         t.task = 'idle';
@@ -6192,12 +6298,15 @@ function createSim(saved, seed) {
     if (t.task === 'add') {
       t.t -= dt;
       if (t.t > 0) return;
-      if (t.cooker) tenderAdd(t);
+      if (t.cooker) {
+        const wood = !!(t.carrying && t.carrying.kind === 'wood');
+        const lit = state.stations[t.cooker].fire < C.COLD_UNDER;
+        tenderAdd(t);
+        if (wood) emit('split_load', { who: 'fire', cooker: t.cooker, lit });
+      }
       t.carrying = null;
       t.cooker = null;
-      const home = MAP.tenderIdle;
-      t.path = playerBfs(t.x, t.y, (x, y) => x === home.x && y === home.y) || [];
-      t.task = 'return';
+      tenderHome(t);
       return;
     }
     if (t.task === 'return') {
@@ -6478,13 +6587,26 @@ function createSim(saved, seed) {
       pt.carrying = { kind: 'charcoal' };
       return pitGo(pt, id, 'addBag');
     }
+    // v4.9: a split from the wood rack (it leaves the rack on the grab and counts on load).
+    if (step === 'grabSplit') {
+      if (state.wood <= 0) return false;
+      state.wood -= 1;
+      pt.carrying = { kind: 'wood' };
+      emit('split_grab', { who: 'pit', id: pt.cardId });
+      return pitGo(pt, id, 'addSplit');
+    }
+    if (step === 'putSplit') {
+      if (pt.carrying && pt.carrying.kind === 'wood') { state.wood = Math.min(C.WOOD_MAX, state.wood + 1); emit('split_back', { who: 'pit', id: pt.cardId }); }
+      pt.carrying = null;
+      return false;
+    }
     if (step === 'addBag' || step === 'addSplit') {
       const lit = ck.fire < C.COLD_UNDER;
       if (step === 'addSplit') {
-        if (state.wood <= 0) return false;
-        state.wood -= 1;
+        if (!pt.carrying || pt.carrying.kind !== 'wood') return false;
         state.today.splits += 1;
         addFuel(ck, 'wood');
+        emit('split_load', { who: 'pit', cooker: id, lit });
       } else addFuel(ck, 'charcoal');
       pt.carrying = null;
       pt.cooldown = C.PIT_FEED_GAP;
@@ -6566,6 +6688,8 @@ function createSim(saved, seed) {
   function pitDrop(pt) {
     const c = pt.carrying;
     if (!c) return false;
+    if (c.kind === 'wood') return pitGo(pt, 'woodrack', 'putSplit');   // v4.9: a split goes back on the rack
+    if (c.kind === 'charcoal') return pitGo(pt, pt.cooker, 'addBag');
     return pitGo(pt, c.kind === 'cooked' ? 'board' : 'trash', c.kind === 'cooked' ? 'board' : 'trash');
   }
 
@@ -6573,7 +6697,7 @@ function createSim(saved, seed) {
     pt.job = job.kind;
     if (job.kind === 'pull') { pt.piece = job.piece; return pitGo(pt, pt.cooker, 'pull'); }
     if (job.kind === 'bag') return pitGo(pt, 'pile', 'grabBag');
-    if (job.kind === 'split') return pitGo(pt, pt.cooker, 'addSplit');
+    if (job.kind === 'split') return pitGo(pt, 'woodrack', 'grabSplit');   // v4.9: from the wood rack
     if (job.kind === 'load') { pt.meat = job.meat; return pitGo(pt, 'cooler', 'takeMeat'); }
     if (job.kind === 'slice') return pitGo(pt, 'board', 'sliceWaiting');
     return false;
@@ -6649,6 +6773,8 @@ function createSim(saved, seed) {
       if (!pitAct(pt)) {
         if (pt.carrying && pt.carrying.kind === 'raw') { if (!pitGo(pt, 'cooler', 'putBack')) pitHomeWalk(pt); return; }
         if (pt.carrying && pt.carrying.kind === 'charcoal') { if (!pitGo(pt, pt.cooker, 'addBag')) pitHomeWalk(pt); return; }
+        // v4.9: a split the cooker would not take (the fire went full, the player was on it): back on the rack.
+        if (pt.carrying && pt.carrying.kind === 'wood') { if (!pitGo(pt, 'woodrack', 'putSplit')) { state.wood = Math.min(C.WOOD_MAX, state.wood + 1); pt.carrying = null; pitHomeWalk(pt); } return; }
         if (pt.carrying) { if (!pitDrop(pt)) pitHomeWalk(pt); return; }
         pt.job = null;
         // Straight on to the next job when there is one, else home.
@@ -6878,10 +7004,10 @@ function createSim(saved, seed) {
     if (board.stacks.length > 0 || board.slicing !== null || board.waiting.length > 0) return true;   // X5.3
     for (const sp of state.stations.table.spots) if (sp !== null) return true;
     const pc = state.player.carrying;
-    if (pc !== null && pc.kind !== 'charcoal' && pc.kind !== 'burnt') return true;
+    if (pc !== null && pc.kind !== 'charcoal' && pc.kind !== 'wood' && pc.kind !== 'burnt') return true;   // v4.9: a split is fuel
     if (state.buddy && state.buddy.carrying) return true;
     const ptc = state.pitCard ? state.pitCard.carrying : null;   // v4.3
-    if (ptc && ptc.kind !== 'charcoal' && ptc.kind !== 'burnt') return true;
+    if (ptc && ptc.kind !== 'charcoal' && ptc.kind !== 'wood' && ptc.kind !== 'burnt') return true;
     return false;
   }
 
@@ -7038,6 +7164,10 @@ function createSim(saved, seed) {
     // X5.3: pieces left for the PREP card and a PREP slice in progress are thrown out.
     const brd = state.stations.board;
     for (const w of brd.waiting) { t.wastePlates += MEATS[w.meat].plates; t.wasteCost += MEATS[w.meat].unit; }
+    // v4.9: a wood split still in a hand goes back on the rack (it was never counted as fuel).
+    for (const who of [state.player, state.tender, state.pitCard]) {
+      if (who && who.carrying && who.carrying.kind === 'wood') { state.wood = Math.min(C.WOOD_MAX, state.wood + 1); who.carrying = null; }
+    }
     // v4.3: what the PIT card holds: raw meat goes back in the cooler, a cooked piece is thrown out.
     const ptc = state.pitCard ? state.pitCard.carrying : null;
     if (ptc && ptc.kind === 'raw') state.stock[ptc.meat] += 1;
@@ -7430,7 +7560,9 @@ function createSim(saved, seed) {
     // v4.1: the stick burner is the first long cooker, so the main cooker starts from its own spot.
     if (id === 'offset') delete lay.kettle1;
     if (!checkLayout(lay, state.gear, state.decor).ok) {
-      const next = uid ? placeUnit(lay, uid, state.gear, state.decor) : null;
+      let next = uid ? placeUnit(lay, uid, state.gear, state.decor) : null;
+      // v4.9: the stick burner brings the wood rack; it takes the nearest free spot when its own is taken.
+      if (id === 'offset' && !(next && checkLayout(next, state.gear, state.decor).ok)) next = placeUnit(next || lay, 'woodrack', state.gear, state.decor);
       lay = next && checkLayout(next, state.gear, state.decor).ok ? next : {};
     }
     state.layout = settleUnowned(lay, state.gear, state.decor);

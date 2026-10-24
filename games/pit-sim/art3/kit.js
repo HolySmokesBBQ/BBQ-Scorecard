@@ -985,6 +985,21 @@ function carryTogo(r) {
   });
 }
 
+// v4.9: a wood split in the hands (Joel 2026-10-24, "picking up logs isn't shown"): a half log
+// lying across, bark on top, the pale split face toward you, the cut end with its rings at the right.
+function carrySplit(r) {
+  r.obj(function () {
+    r.rect(3, 3, 11, 1, BK.hi);                        // bark, lit along the top
+    r.rect(2, 4, 13, 2, BK.base);
+    r.px(5, 4, BK.dark); r.px(9, 5, BK.dark); r.px(12, 4, BK.dark);
+    r.rect(2, 6, 13, 4, WL.base);                      // the split face
+    r.rect(2, 6, 13, 1, WL.hi);
+    r.rect(4, 8, 5, 1, WL.shade); r.rect(9, 9, 4, 1, WL.shade);   // grain
+    r.rect(3, 10, 12, 1, WD.shade);                    // the underside
+    r.rect(15, 4, 2, 6, LE.base);                      // the cut end and its rings
+    r.px(16, 4, LE.hi); r.px(15, 6, LE.shade); r.px(15, 7, LE.shade); r.px(16, 9, LE.dark);
+  });
+}
 /* ---------------------------------------------------------------- meat on the grate */
 // Paint one meat shape with ramp mr ({hi, base, shade, dark}) plus extras; state drives detail.
 function meatShape(r, m, st) {
@@ -1230,6 +1245,7 @@ MEAT_IDS.forEach(function (m) { def('platter_' + m, 26, 16, 13, 9, 1, function (
 def('platter_empty', 26, 16, 13, 9, 1, function (r) { platter(r, null); });
 def('carry_charcoal', 18, 18, 9, 15, 1, carryBag);
 def('carry_togo', 18, 14, 9, 11, 1, carryTogo);
+def('carry_split', 18, 14, 9, 11, 1, carrySplit);   // v4.9
 // Dish dock plates (round 2): card size, for dishCard().
 MEAT_IDS.forEach(function (m) { def('dish_' + m, 48, 30, 24, 15, 1, function (r) { dish(r, m); }); });
 def('gauge', 8, 40, 4, 40, GAUGE_STEPS + 1, gauge);

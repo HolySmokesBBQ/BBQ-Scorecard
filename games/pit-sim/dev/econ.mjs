@@ -100,6 +100,7 @@ const uiNextGear = (s, sim) => { if (sim && sim.nextGear) { const n = sim.nextGe
 // v4.1 the gear ladder: the cabinet smoker early, the stick burner mid season, the trailer last.
 const GEAR_ORDER = ROW.cabinet && !process.env.ECON_OLD ? ['cabinet', 'kettle2', 'offset', 'cooler', 'bigtable', 'tray', 'drum', 'canopy', 'trailer'] : ['kettle2', 'cooler', 'bigtable', 'tray', 'drum', 'canopy'];
 const woodOf = (id) => (MAP.station(id).fuel || 'charcoal') === 'wood';
+const RACK = !!MAP.station('woodrack');   // v4.9: the sim has the wood rack station (splits are carried)
 const brisketOn = (id) => MAP.station(id).brisket === true || (MAP.station(id).brisket === undefined && id === 'drum');
 const canBrisket = (s) => (P.canBrisket ? P.canBrisket(s.gear) : s.gear.drum === true);
 
@@ -146,6 +147,8 @@ function decide(sim) {
   const seatOf = (g) => MAP.seats.find((x) => x.id === g.seat) || MAP.hostSeats.find((x) => x.id === g.seat);   // v4.5: host seats at a booking
   if (c) {
     if (c.kind === 'charcoal') { const cc = cookers.filter((id) => !woodOf(id)); if (!cc.length) return tile('trash'); let b = cc[0]; for (const id of cc) if (fireOf(id) < fireOf(b)) b = id; return tile(b); }
+    // v4.9: a split carried from the wood rack goes into the lowest wood fire, else back on the rack.
+    if (c.kind === 'wood') { const wc = cookers.filter((id) => woodOf(id) && fireOf(id) < C.FIRE_MAX - 5); if (!wc.length) return tile('woodrack'); let b = wc[0]; for (const id of wc) if (fireOf(id) < fireOf(b)) b = id; return tile(b); }
     if (c.kind === 'raw') {
       const m = MEATS[c.meat];
       const ok = cookers.filter((id) => (!m.drumOnly || brisketOn(id)) && freeSlot(s.stations[id], m.slots) && fireOf(id) >= C.COLD_UNDER);
@@ -179,8 +182,9 @@ function decide(sim) {
     return stockLeft && s.clock < t.lastCallAt;
   };
   const tender = !!s.tender;
-  const feed = (under) => {   // v4.1: a wood cooker takes a split at the cooker itself
-    for (const id of cookers) if (needsFire(id, under) && (woodOf(id) ? s.wood > 0 : s.charcoal > 0)) return tile(woodOf(id) ? id : 'pile');
+  // v4.1: a wood cooker took a split at the cooker itself; v4.9: walk to the wood rack for one (RACK).
+  const feed = (under) => {
+    for (const id of cookers) if (needsFire(id, under) && (woodOf(id) ? s.wood > 0 : s.charcoal > 0)) return tile(woodOf(id) ? (RACK ? 'woodrack' : id) : 'pile');
     return null;
   };
   if (!tender) { const f = feed(REAL ? 30 : 40); if (f) return f; }
@@ -469,6 +473,7 @@ function playSeason(seed, stName) {
     r.spoil = t.spoilCost | 0; r.waste = (t.wasteCost | 0) + (t.grateCost | 0) + (t.rawWaste | 0);
     r.entry = t.entry | 0;
     r.stars = t.stars;
+    r.tier = P.pitTier(s.gear); r.splits = s.today ? s.today.splits | 0 : 0;   // v4.9: the by-cooker lines
     sim.finishReport(); sim.drainEvents();
     r.cashEnd = s.cash; r.stockEnd = stockValue(s); r.coalEnd = s.charcoal;
     rows.push(r);
@@ -626,6 +631,19 @@ if (flag('--pitpair')) {
     console.log('median week each gear was bought: ' + gw.join(', '));
     console.log('median gear owned: ' + med(runs.map((r) => r.gear.length)) + '; by season end: ' + ['drum', 'cabinet', 'offset', 'trailer'].filter((g) => GEAR_ORDER.includes(g)).map((g) => g + ' ' + runs.filter((r) => r.gear.includes(g)).length + '/' + n).join(', '));
     console.log('per seed season totals: ' + keys.map((k) => k + ' ' + Math.round(sum[k] / n)).join(', ') + ', daily ' + Math.round(daily / n));
+    // v4.9: wood days (the main cooker as the stick burner or the trailer rig) next to the rest.
+    const byTier = {};
+    for (const r of runs) for (const x of r.rows) {
+      if (x.kind === 'rest' || x.kind === 'hub' || x.kind === 'rescue' || typeof x.tier !== 'number') continue;
+      const k = ['kettle', 'cabinet', 'stick', 'trailer'][x.tier];
+      const b = byTier[k] || (byTier[k] = { n: 0, net: 0, served: 0, cust: 0, splits: 0 });
+      b.n += 1; b.served += x.served; b.cust += x.customers; b.splits += x.splits || 0;
+      b.net += x.revenue - x.refunds + x.tips + x.pay - x.wages - x.daily - x.meatBuy - x.coalBuy - (x.entry || 0);
+    }
+    for (const k of ['kettle', 'cabinet', 'stick', 'trailer']) {
+      const b = byTier[k];
+      if (b) console.log('  by cooker ' + k.padEnd(8) + ' cooks ' + pad((b.n / n).toFixed(1), 4) + '/season  avg cash net ' + pad(Math.round(b.net / b.n), 4) + '  served ' + (b.served / b.n).toFixed(1) + '/' + (b.cust / b.n).toFixed(1) + '  splits ' + (b.splits / b.n).toFixed(1));
+    }
     for (const [k, b] of Object.entries(byKind)) {
       console.log('  ' + k.padEnd(11) + ' cooks ' + pad((b.n / n).toFixed(1), 4) + '/season  avg take ' + pad(Math.round(b.in / b.n), 4) + '  wages ' + pad(Math.round(b.wages / b.n), 3) + '  meat ' + pad(Math.round(b.meat / b.n), 3) + '  coal ' + pad(Math.round(b.coal / b.n), 3) + '  avg cash net ' + pad(Math.round(b.net / b.n), 4) + '  taps/plate ' + (b.served ? (b.taps / b.served).toFixed(2) : '-') + (b.self ? '  self-serve ' + Math.round(100 * b.self / b.served) + '%' : ''));
     }

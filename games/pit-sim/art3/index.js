@@ -100,6 +100,7 @@ const MANIFEST = Object.freeze([
   ['platter_empty', 'kit', 26, 16, 1, 13, 9, 0],
   ['carry_charcoal', 'kit', 18, 18, 1, 9, 15, 0],
   ['carry_togo', 'kit', 18, 14, 1, 9, 11, 0],
+  ['carry_split', 'kit', 18, 14, 1, 9, 11, 0],   // v4.9 a wood split in the hands
   ['dish_sausage', 'kit', 48, 30, 1, 24, 15, 0],
   ['dish_chicken', 'kit', 48, 30, 1, 24, 15, 0],
   ['dish_ribs', 'kit', 48, 30, 1, 24, 15, 0],

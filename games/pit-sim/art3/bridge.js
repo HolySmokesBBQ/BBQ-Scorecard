@@ -30,7 +30,7 @@ const POSE3 = { down: 'down', up: 'up', side: 'side', carry_down: 'carryDown', c
 // v2 names that are the same thing under another art3 name.
 const ALIAS = { fence_h: 'fence_front', fence_v: 'fence_side', hand_burnt: ['piece_brisket', 3], planter: ['pot', 0],
   picnic: ['picnic_small', 0], picnic_bench: ['bench_small', 0],
-  hand_tray: 'platter_empty', hand_charcoal: 'carry_charcoal', hand_togo: 'carry_togo' };
+  hand_tray: 'platter_empty', hand_charcoal: 'carry_charcoal', hand_togo: 'carry_togo', hand_split: 'carry_split' };   // v4.9 the split
 let signAt = null;     // where the wall sign drew (its anchor, world rp)
 
 let ready = false;

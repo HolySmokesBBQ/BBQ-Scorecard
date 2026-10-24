@@ -8,6 +8,13 @@
 // Run from the repo root:
 //   node games/pit-sim/dev/smoke.mjs [--out <dir>] [--desktop] [--seed <n>] [--dir <folder>]
 //
+// v4.9 (2026-10-24): the wood rack. Save v17. Two new steps by real taps: wood rack 1 (empty hands
+// on every side of the stick burner add nothing, charcoal refused there, a split grabbed at the rack,
+// carried, refused at a kettle, loaded, a second put back; the pick-up, carry and load frames as
+// wood-pickup, wood-carry, wood-load plus -zoom crops; drawLog carry_up, carry_down and sparks) and
+// wood rack 2 (its "+" on the Gear sheet, Arrange moves it, the FIRE card walks to it and carries a
+// split; wood-fire-carry). The ladder, tester and turned steps take their split from the rack and keep
+// the cooler off (1,6).
 // v4.8 (2026-10-23): Hiring Day is gone; the crew sheet holds the Help wanted board. Every route that
 // passed Hiring Day (passHiring, the creator, the season start, the v2 and v4 saves) now lands on the
 // week 1 hub. New steps: the board headless (genBoard against refGenBoard, a hire, the refusals, the
@@ -275,7 +282,7 @@ const SIM_SURFACE = ['C', 'MEATS', 'MEAT_IDS', 'MAP', 'CATALOG', 'STRINGS', 'cre
   'BOOKINGS', 'BOOKING_IDS', 'LOOK_KEYS', 'LOOK_COUNTS', 'DEFAULT_LOOK', 'genOffers', 'scoreEvent', 'cleanName', 'filterName',
   // v3.1 (X1): the six new top level names.
   'ROLE_IDS', 'genBoard', 'genWalkins', 'cardStars', 'wageFor', 'skillValue'];   // v4.8: genBoard (was genPool)
-const SURFACE_COUNTS = { tiles: 132, stations: 9, seats: 6, decor: 6, props: 19, catalog: 25 };   // v4.1: wood, cabinet, offset, trailer
+const SURFACE_COUNTS = { tiles: 132, stations: 10, seats: 6, decor: 6, props: 19, catalog: 25 };   // v4.1: wood, cabinet, offset, trailer
 const MAP_SIZE = { w: 11, h: 12 };
 const TILE_PX = 16;
 const VIRTUAL = { w: MAP_SIZE.w * TILE_PX, h: MAP_SIZE.h * TILE_PX };   // 176 by 192
@@ -295,7 +302,7 @@ const DEVICE_SIZES = [
 ];
 
 // Contract D2 and D3.
-const C_EXPECT = { WALK_TILES_PER_S: 6, SAVE_VERSION: 16, PATIENCE_MID_FRAC: 0.5, GEAR_RESERVE: 30, QUEUE_SPOTS: 3, QUEUE_SPOTS_BIG: 5, TABLE_SPOTS: 3, TABLE_SPOTS_BIG: 5 };
+const C_EXPECT = { WALK_TILES_PER_S: 6, SAVE_VERSION: 17, PATIENCE_MID_FRAC: 0.5, GEAR_RESERVE: 30, QUEUE_SPOTS: 3, QUEUE_SPOTS_BIG: 5, TABLE_SPOTS: 3, TABLE_SPOTS_BIG: 5 };
 const C_NEW_KEYS = ['EAT_MIN', 'EAT_MAX', 'HEART_SECONDS', 'SEAT_BONUS_BASE', 'SEAT_BONUS_MAX', 'CHARM_STEP', 'CHARM_MAX', 'REP_TOGO_QUICK', 'SWEAT_FRAC', 'ZZZ_AFTER', 'FX', 'PATIENCE_MID_FRAC', 'GEAR_RESERVE'];
 const FX_KEYS = ['NUMBER_S', 'NUMBER_RISE_PX', 'NUMBER_FADE_AT', 'TIP_GAP_PX', 'SPARKLE_S', 'SPARKLE_FRAME_S', 'SPARKLE_STAGGER_S',
   'HEART_S', 'HEART_FRAME_S', 'HEART_RISE_PX', 'HEART_FADE_S', 'EAT_FRAME_S', 'PUFF_EVERY_LOW', 'PUFF_EVERY_GOOD', 'PUFF_EVERY_HOT',
@@ -424,7 +431,7 @@ const C_W2 = {
 };
 const C_W2_FIXED = ['SAVE_VERSION', 'SEASON_WEEKS', 'NAME_MAX', 'NAME_PUNCT', 'LENGTHS'];
 // W2 changed values and the v2.1 keys that stay (W2 last paragraph).
-const C_W2_EXACT = { SAVE_VERSION: 16, DRIVEWAY_PRICE: 400, GATE_OPENS: 30, LAST_CALL: 110, DAY_SECONDS: 125, STEPPER_MAX: 99, START_CASH: 80, START_REP: 20 };
+const C_W2_EXACT = { SAVE_VERSION: 17, DRIVEWAY_PRICE: 400, GATE_OPENS: 30, LAST_CALL: 110, DAY_SECONDS: 125, STEPPER_MAX: 99, START_CASH: 80, START_REP: 20 };
 // W22.18: the keys whose starting values the W19 literals assume.
 const LITERAL_KEYS = ['FEE_MULT', 'FEE_ROUND', 'DEPOSIT_FRAC', 'PAY_BASE', 'PAY_PER_STAR', 'STAR_FANS', 'REP_DAY_MIN', 'SPARE_FRAC', 'BAGS_PER_COOKER',
   'SCORE_FED', 'SCORE_WAIT', 'SCORE_QUALITY', 'STAR_EDGES', 'WAIT_FULL_S', 'WAIT_ZERO_S', 'BURNT_PENALTY', 'OFFMENU_PENALTY', 'COOLER_CAP', 'SEASON_CARRY_REP', 'SEASON_REP_FLOOR',
@@ -573,7 +580,7 @@ const ID3 = {
   seMeat: 'se-meat', seCharcoal: 'se-charcoal', seasonNext: 'season-next', pauseLook: 'pause-look', chipCharcoal: 'chip-charcoal'
 };
 const SEASON_WEEKS = 7;   // v3.5: six weeks and the competition finale (was 9)
-const SAVE_V = 16;        // v4.8: v16 (season.board, no Hiring Day)
+const SAVE_V = 17;        // v4.9: v17 (the wood rack); v4.8: v16 (season.board, no Hiring Day)
 const SAVE_V15 = 15;        // v4.7: v15 (a turned unit in the layout); v4.1: v13 (the gear ladder); v3.5: save v9 (season.plan, pit); v3.6: v10 (the register, the TILL card); v3.7: v11 (pay, then sit)
 // W19 step 51: the v2.1 (v3) save sample.
 const SAVE_V3_SAMPLE = {
@@ -1213,7 +1220,7 @@ const SAVE_V1_SAMPLE = {
   drivewayShown: false
 };
 const SAVE_DIRTY = { v: 1, day: 'abc', cash: -50, rep: 400, stock: { sausage: 200, bogus: 1 }, gear: { drum: true, kettle2: false }, hires: { tender: true }, extra: 1 };
-const INVALID_SAVES = [null, 'x', [], {}, undefined, 42, { v: '5' }, { v: 0 }, { v: '3' }, { v: '4' }, { v: 17 }];   // v4.1: v 1 to 13 accepted; v4.3: 14; v4.7: 15; v4.8: 16
+const INVALID_SAVES = [null, 'x', [], {}, undefined, 42, { v: '5' }, { v: 0 }, { v: '3' }, { v: '4' }, { v: 18 }];   // v4.1: v 1 to 13 accepted; v4.3: 14; v4.7: 15; v4.8: 16; v4.9: 17
 
 // The shopping list for day 1 and later days. Two sausage units give four plates, so later
 // customers walk out and the walk out step has something to assert.
@@ -1827,7 +1834,7 @@ const WALL_HUNG = ['shed', 'sign'];   // the barn door and the sign hang on the 
 // the gate; nothing used stands behind it, so check 7 names it next to the drum as an exception.
 const TALL_EXCEPT = ['mailbox'];
 const FOR_SALE = { kettle2: [[4, 7]], drum: [[2, 5], [2, 6]], bigtable: [[4, 4]], canopy: [[7, 2]], chair1: [[9, 3]], chair2: [[9, 4]],
-  flowers: [[6, 10], [7, 10]], birdbath: [[3, 10]], lights: [[0, 7]], picnic2: [[6, 8], [7, 8]] };
+  flowers: [[6, 10], [7, 10]], birdbath: [[3, 10]], lights: [[0, 7]], picnic2: [[6, 8], [7, 8]], offset: [[1, 6]] };   // v4.9: the wood rack's spot
 const COOK_LEGS = [   // [leg, from station, from tile, to station, to tile, steps]
   ['charcoal to kettle 1', 'pile', [3, 8], 'kettle1', [3, 5], 3],
   ['charcoal to kettle 2', 'pile', [3, 8], 'kettle2', [3, 7], 1],
@@ -1884,7 +1891,8 @@ function floorPlanHeadless(P) {
   for (const [id, tiles] of Object.entries(FOR_SALE)) assert(sameJSON(M.forSale[id].map((t) => [t.x, t.y]), tiles), 'MAP.forSale.' + id + ' ' + describe(M.forSale[id]));
   for (const id of ['kettle2', 'drum']) assert(sameJSON(M.station(id).tiles.map((t) => [t.x, t.y]), FOR_SALE[id]), id + ' marker tiles are not its footprint');
   for (const d of M.decor) assert(sameJSON(d.tiles.map((t) => [t.x, t.y]), FOR_SALE[d.id]), d.id + ' marker tiles are not its footprint');
-  assert(sameJSON(M.home.stations, M.stations.map((s) => s.id)) && sameJSON(M.home.queue, [0, 1]), 'MAP.home ' + describe(M.home));
+  // v4.9: the wood rack stays out of the home view's frame (the stick burner it stands with frames that corner).
+  assert(sameJSON(M.home.stations, M.stations.map((s) => s.id).filter((id) => id !== 'woodrack')) && sameJSON(M.home.queue, [0, 1]), 'MAP.home ' + describe(M.home));
   assert(M.walk.every((t) => M.at(t.x, t.y) === M.T.LAWN), 'a MAP.walk tile is not lawn');
   assert(M.apron && M.apron.barn === 'y0' && M.apron.fence === 'x0', 'MAP.apron ' + describe(M.apron));
   assert(sameJSON([M.spawn.x, M.spawn.y, M.spawn.face, M.gate.x, M.gate.y, M.custSpawn.x, M.custSpawn.y, M.passStop.x, M.passStop.y], [3, 2, 'right', 8, 11, 8, 12, 8, 10]), 'spawn, gate, custSpawn, passStop ' + describe([M.spawn, M.gate, M.custSpawn, M.passStop]));
@@ -2168,7 +2176,7 @@ function turnHeadless(P) {
   const row = { kettle1: [3, -1, 1] };
   const blocked = P.checkLayout(row, gear2, {});
   assert(blocked.ok === false && /Overlaps/.test(blocked.reason), 'the counter row with the pile on it ' + describe(blocked));
-  const moved = { kettle1: [3, -1, 1], cooler: [-3, 0], pile: [-3, -1] };
+  const moved = { kettle1: [3, -1, 1], cooler: [-3, -2], pile: [-3, -1] };   // v4.9: the cooler on (1,4), the wood rack keeps (1,6)
   const ok = P.checkLayout(moved, gear2, {});
   assert(ok.ok === true, 'turned stick burner in the counter row ' + describe(ok));
   P.applyLayout(moved, 2);
@@ -4933,7 +4941,7 @@ function daysLoopHeadless(P) {
   assert(d3.season.day === 5 && d3.season.loadin === false && sameJSON(d3.season.dayLog, ['off', 'off', 'off', 'off', 'off', null, null]), 'no pick keeps the day, never the Load-in ' + describe(d3.season));
   const d4 = V(v6Save({ season: { week: 5, pick: 'birthday', day: 3 } }));
   assert(d4.season.week === 3 && d4.season.day === 0, 'a week that does not hold opens Monday ' + describe(d4.season));
-  assert(V({ v: 17 }) === null, '{ v: 17 } accepted');
+  assert(V({ v: 18 }) === null, '{ v: 18 } accepted');
   notes.push('morning shops cost ' + seen.join(', ') + ' Monday to Thursday');
   return notes.join('; ') + '; the report save reloads on Sunday, a Yard week writes { yard, 0 }, dirty v6 keys clamp';
 }
@@ -10258,16 +10266,20 @@ async function browserChecks() {
     assert(v.reach === 'kettle1' && v.label === LU.burnsWood && v.hold && v.hold.kind === 'charcoal' && v.fire === 0, 'charcoal on the stick burner ' + describe(v));
     await canvasTap(4, 7); await settle();   // the bag goes on the second kettle
     const w1 = await ev('S().wood');
+    // v4.9: the split comes from the wood rack (1,6) by a tap, then a tap on the stick burner loads it.
+    await canvasTap(1, 6); await settle();
+    const held = await mainCk();
+    assert(held.hold && held.hold.kind === 'wood' && held.wood === w1 - 1 && held.splits === 0 && held.fire === 0, 'the rack tap ' + describe([w1, held]));
     await canvasTap(2, 8); await settle();
     const lit = await mainCk();
-    assert(lit.fire >= LC.FIRE_LIGHT - 2 && lit.wood === w1 - 1 && lit.splits === 1, 'a split did not light it ' + describe([w1, lit]));
+    assert(lit.fire >= LC.FIRE_LIGHT - 2 && lit.wood === w1 - 1 && lit.splits === 1 && lit.hold === null, 'a split did not light it ' + describe([w1, lit]));
     await meatOn(2, 8);
     await advance(3);
     const c = await mainCk();
     assert(c.n >= 2 && c.fire > 0, 'the stick burner cook ' + describe(c));
     await longView();
     await ladShot('ladder-stick');
-    return 'wood row in the shop, +1 split; charcoal refused ("' + v.label + '"); a split lit it to ' + Math.round(lit.fire) + '; ' + c.n + ' pieces on 6 slots';
+    return 'wood row in the shop, +1 split; charcoal refused ("' + v.label + '"); a split from the wood rack lit it to ' + Math.round(lit.fire) + '; ' + c.n + ' pieces on 6 slots';
   });
 
   await step('v4.1 ladder 4: the trailer rig bought by taps lands on the patio, crew slots 5, a cook on it', async () => {
@@ -10280,6 +10292,7 @@ async function browserChecks() {
       'the trailer ' + describe([t, pr]));
     await click(ID3.sheetBack); await advance(0);
     assert(await toService(), 'no service day');
+    await canvasTap(1, 6); await settle();   // v4.9: a split from the wood rack
     await canvasTap(2, 8); await settle();
     await meatOn(2, 8);
     await advance(3);
@@ -10302,14 +10315,18 @@ async function browserChecks() {
       await canvasTap(6, 9); await advance(0);
       a = await AR();
       assert(a.lift === 'kettle1' && a.aim && a.aim.ok === false && a.aim.reason === 'Cookers stay on the patio', 'a lawn drop was not refused: ' + describe(a));
+      // v4.9: (1,6) is the wood rack's now, so (1,6) (2,6) is refused by name; (1,5) (2,5) is free.
       await canvasTap(2, 6); await advance(0);
       a = await AR();
-      assert(a.lift === null && sameJSON(a.draft, { kettle1: [0, -2] }), 'the trailer drop ' + describe(a));
+      assert(a.lift === 'kettle1' && a.aim && a.aim.ok === false && a.aim.reason === 'Overlaps the wood rack', 'a drop on the wood rack was not refused: ' + describe(a));
+      await canvasTap(2, 5); await advance(0);
+      a = await AR();
+      assert(a.lift === null && sameJSON(a.draft, { kettle1: [0, -3] }), 'the trailer drop ' + describe(a));
       await click('arr-done'); await advance(0);
       const s = await ev('({ lay: S().layout, tiles: MAP.station("kettle1").tiles.map((t) => [t.x, t.y]), ls: JSON.parse(localStorage.getItem(' + JSON.stringify(SAVE_KEY) + ')).layout })');
-      // v4.6: the unbought drum's "+" spot under (2,6) now finds a free spot and steps aside.
-      assert(sameJSON(s.lay.kettle1, [0, -2]) && Object.keys(s.lay).every((k) => k === 'kettle1' || k === 'drum') && sameJSON(s.tiles, [[1, 6], [2, 6]]) && sameJSON(s.ls, s.lay), 'Done ' + describe(s));
-      return 'lifted from (2,8), "Cookers stay on the patio" refused on the lawn, set on (1,6) (2,6), saved';
+      // v4.6: the unbought drum's "+" spot under (2,5) now finds a free spot and steps aside.
+      assert(sameJSON(s.lay.kettle1, [0, -3]) && Object.keys(s.lay).every((k) => k === 'kettle1' || k === 'drum') && sameJSON(s.tiles, [[1, 5], [2, 5]]) && sameJSON(s.ls, s.lay), 'Done ' + describe(s));
+      return 'lifted from (2,8), "Cookers stay on the patio" refused on the lawn, "Overlaps the wood rack" on (1,6), set on (1,5) (2,5), saved';
     } finally {
       if (DESKTOP_MODE) { await emulate(RUN_METRICS); await sleep(TIMEOUT_MS.resize); await advance(0); }
     }
@@ -10319,8 +10336,9 @@ async function browserChecks() {
     const m = await ev('(() => { const V = PitSim.validateSave, o = sim.serialize(); const g12 = { kettle2: true, cooler: true, bigtable: false, tray: false, canopy: false, drum: true }; const a = V(Object.assign({}, o, { v: 12, gear: g12, layout: { cooler: [0, -2] } })); const bad = V(Object.assign({}, o, { gear: Object.assign({}, o.gear, { cabinet: false, offset: true, trailer: true }) })); const keep = V(Object.assign({}, o, { gear: Object.assign({}, o.gear, { cabinet: true, offset: true, trailer: false }), layout: { kettle1: [0, -2] } })); return { v: a.v, g: a.gear, lay: a.layout, bad: bad.gear, keep: keep.layout }; })()');
     assert(m.v === SAVE_V && m.g.kettle2 === true && m.g.drum === true && m.g.cooler === true && m.g.cabinet === false && m.g.offset === false && m.g.trailer === false && sameJSON(m.lay, { cooler: [0, -2] }),
       'v12 to v13 ' + describe(m));
-    // v4.6: the unbought drum's "+" spot may step aside from the stick burner.
-    assert(m.bad.offset === false && m.bad.trailer === false && sameJSON(m.keep.kettle1, [0, -2]) && Object.keys(m.keep).every((k) => k === 'kettle1' || k === 'drum'), 'ladder clamps ' + describe(m));
+    // v4.6: the unbought drum's "+" spot may step aside from the stick burner. v4.9: the wood rack too,
+    // when the stored stick burner stands on its spot.
+    assert(m.bad.offset === false && m.bad.trailer === false && sameJSON(m.keep.kettle1, [0, -2]) && Object.keys(m.keep).every((k) => k === 'kettle1' || k === 'drum' || k === 'woodrack'), 'ladder clamps ' + describe(m));
     const f = ladFixture({ kettle2: true, drum: true });
     f.v = 12;
     delete f.gear.cabinet; delete f.gear.offset; delete f.gear.trailer;
@@ -10328,6 +10346,156 @@ async function browserChecks() {
     const s = await ev('({ loop: S().loop, g: S().gear, spr: MAP.station("kettle1").sprite, v: JSON.parse(localStorage.getItem(' + JSON.stringify(SAVE_KEY) + ')).v })');
     assert(s.loop === LOOP.week && s.g.cabinet === false && s.g.drum === true && s.spr === 'kettle', 'the v12 save in the page ' + describe(s));
     return 'v12 loads as v' + m.v + ' on the hub with the kettle; offset without the cabinet dropped; kettle1 [0,-2] kept with the stick burner';
+  });
+
+  // ---- v4.9 the wood rack (Joel 2026-10-24: "picking up logs isn't shown. Much like the charcoal the
+  // logs should be moveable and have an animation when being picked up or put down. Right now just
+  // tapping the wrong area of the smoker adds more wood."). Every move is a real tap. The pick-up and
+  // put-down tweens run on the sim clock, so tweenAt steps the sim tick by tick to the change and then
+  // a set time on, and reads that frame's drawLog. carryShot holds the sim on its frame for the
+  // screenshot (the page and a 3x crop around the pitmaster or the FIRE card), then lets it run.
+  // hold: pause the sim on that frame in the same evaluation (carryShot then shoots it and resumes).
+  const tweenAt = (pred, more, hold) => ev('(() => { const r = globalThis.__smoke.until(() => (' + pred + '), 8); g.advance(' + more + ');' + (hold ? ' sim.setPaused(true); g.advance(0);' : '') + ' const p = S().player;'
+    + ' return { ok: r.ok, log: g.drawLog.filter((x) => /^(carry_|sparks:)/.test(x)), hold: p.carrying, at: [p.x, p.y, p.face] }; })()');
+  const carryShot = async (name, who) => {
+    await ev('(sim.setPaused(true), g.advance(0), true)');
+    await sleep(80);
+    try {
+      const sfx = DESKTOP_MODE ? '-desktop' : '';
+      const full = await screenshot(name + sfx + '.png');
+      const p = await ev(who === 'fire' ? '(() => { const t = S().tender; return t ? g.tileToClient(t.x, t.y, { pan: false }) : null; })()' : 'g.playerClient()');
+      if (p && Number.isFinite(p.x)) {
+        const W = 110, H = 110;
+        const r = await cdp.send('Page.captureScreenshot', { format: 'png', clip: { x: Math.max(0, p.x - W / 2), y: Math.max(0, p.y - 80), width: W, height: H, scale: 3 } });
+        const crop = path.join(OUT_DIR, name + '-zoom' + sfx + '.png');
+        fs.writeFileSync(crop, Buffer.from(r.data, 'base64'));
+        report.screenshots.push(crop);
+      }
+      return full;
+    } finally { await ev('(sim.setPaused(false), true)'); await advance(0); }
+  };
+  const woodNow = () => ev('({ wood: S().wood, splits: S().today ? S().today.splits : null, fire: S().stations.kettle1.fire, hold: S().player.carrying, at: [S().player.x, S().player.y, S().player.face], reach: sim.reach(), label: sim.verbAt().label })');
+
+  await step('v4.9 wood rack 1: real taps grab a split at the rack (drawn rising into the hands), carry it, load the stick burner (fire up, counted on load, sparks), put one back (nothing counted); empty hands on every side of the stick burner add nothing; charcoal refused there, a split refused at a kettle', async () => {
+    await reload(ladFixture({ kettle2: true, cabinet: true, offset: true }, { wood: 6 }));
+    const rk = await ev('(() => { const st = MAP.station("woodrack"); const v = sim.arrangeView(); return { tiles: st.tiles.map((t) => [t.x, t.y]), type: st.type, unit: v.units.some((u) => u.id === "woodrack"), ok: PitSim.checkLayout(S().layout, S().gear, S().decor).ok }; })()');
+    assert(sameJSON(rk.tiles, [[1, 6]]) && rk.type === 'woodrack' && rk.unit === true && rk.ok === true, 'the wood rack ' + describe(rk));
+    assert(await toService(), 'no service day');
+    const w0 = await woodNow();
+    const rackShown = await ev('g.drawLog.includes("woodrack") && g.badgeLog.some((b) => b.kind === "log")');
+    assert(rackShown, 'the wood rack or its log chip was not drawn: ' + describe(await ev('({ log: g.drawLog.filter((x) => /wood/.test(x)), badges: g.badgeLog.map((b) => b.kind) })')));
+    // (a) Empty hands on every side of the cold stick burner: nothing added, the fire stays out.
+    const sides = new Set();
+    for (const [tx, ty, stand] of [[2, 8, null], [1, 8, null], [2, 8, [3, 8]], [1, 8, [2, 7]], [2, 8, [2, 7]], [1, 8, [1, 7]], [2, 8, [1, 7]]]) {
+      if (stand) { await canvasTap(stand[0], stand[1]); await settle(); }
+      await canvasTap(tx, ty); await settle();
+      const v = await woodNow();
+      sides.add(v.at.slice(0, 2).join(','));
+      assert(v.reach === 'kettle1' && v.wood === w0.wood && v.splits === 0 && v.fire === 0 && v.hold === null && v.label === LU.burnsWood,
+        'an empty handed tap on (' + tx + ',' + ty + ') from ' + v.at + ': ' + describe([w0, v]));
+    }
+    assert(['3,8', '2,7', '1,7'].every((k) => sides.has(k)), 'the taps did not cover every side of the stick burner: ' + describe([...sides]));
+    // (b) Charcoal refused at the stick burner; the bag then goes on kettle 2 (its load frame logged).
+    await canvasTap(4, 8); await settle();
+    await canvasTap(2, 8); await settle();
+    let v = await woodNow();
+    assert(v.hold && v.hold.kind === 'charcoal' && v.label === LU.burnsWood && v.fire === 0, 'charcoal on the stick burner ' + describe(v));
+    await canvasTap(4, 7);
+    const bagIn = await tweenAt('S().player.carrying === null', 0.1);
+    await settle();
+    assert(bagIn.ok && bagIn.log.includes('carry_down:charcoal:cooker') && bagIn.log.includes('sparks:kettle2'), 'the bag load frame ' + describe(bagIn));
+    // (c) A split from the rack: the frame mid pick-up (0.1 s into the 0.2 s lift).
+    const wA = (await woodNow()).wood;
+    await canvasTap(1, 6);
+    const up = await tweenAt('S().player.carrying !== null', 0.1, true);
+    assert(up.ok && up.hold && up.hold.kind === 'wood' && up.log.includes('carry_up:wood'), 'the pick-up frame ' + describe(up));
+    await carryShot('wood-pickup');
+    await settle();
+    v = await woodNow();
+    assert(v.wood === wA - 1 && v.splits === 0 && v.hold && v.hold.kind === 'wood' && v.fire === 0, 'the grab ' + describe([wA, v]));
+    const inHand = (await captureFrame()).filter((d) => d.name === 'hand_split').length;
+    assert(inHand === 1, inHand + ' hand_split records while holding the split');
+    // (d) Carried to kettle 2: the frame mid walk, then refused there with a plain line.
+    await canvasTap(4, 7);
+    const mid = await ev('(() => { globalThis.__smoke.until(() => S().player.next !== null, 3); g.advance(0.15); sim.setPaused(true); g.advance(0); const p = S().player; return { hold: p.carrying, walking: p.next !== null, recs: g.captureFrame().filter((d) => d.name === "hand_split").length }; })()');
+    assert(mid.hold && mid.hold.kind === 'wood' && mid.walking === true && mid.recs === 1, 'mid carry ' + describe(mid));
+    await carryShot('wood-carry');
+    await settle();
+    v = await woodNow();
+    assert(v.reach === 'kettle2' && v.label === LU.splitCharcoal && v.hold && v.hold.kind === 'wood' && v.wood === wA - 1 && v.splits === 0, 'a split at a kettle ' + describe(v));
+    // (e) Loaded into the stick burner: the frame mid load, the sparks over it.
+    const f0 = v.fire;
+    await canvasTap(2, 8);
+    const down = await tweenAt('S().player.carrying === null', 0.1, true);
+    assert(down.ok && down.log.includes('carry_down:wood:cooker') && down.log.includes('sparks:kettle1'), 'the load frame ' + describe(down));
+    await carryShot('wood-load');
+    await settle();
+    v = await woodNow();
+    assert(v.fire >= LC.FIRE_LIGHT - 2 && v.fire > f0 && v.splits === 1 && v.wood === wA - 1 && v.hold === null, 'the load ' + describe([f0, v]));
+    const fireLit = v.fire;
+    // (f) A second split goes back on the rack: the rack count back, nothing counted, its put-down logged.
+    await canvasTap(1, 6); await settle();
+    v = await woodNow();
+    assert(v.hold && v.hold.kind === 'wood' && v.wood === wA - 2 && v.splits === 1, 'the second grab ' + describe(v));
+    await canvasTap(1, 6);
+    const back = await tweenAt('S().player.carrying === null', 0.1);
+    await settle();
+    v = await woodNow();
+    assert(back.ok && back.log.includes('carry_down:wood:woodrack') && !back.log.some((x) => /^sparks/.test(x)) && v.wood === wA - 1 && v.splits === 1 && v.hold === null,
+      'the put back ' + describe([back, v]));
+    // (g) The lit stick burner, empty hands on both tiles: no wood, the fire does not rise.
+    for (const [tx, ty] of [[1, 8], [2, 8]]) {
+      const b = await woodNow();
+      await canvasTap(tx, ty); await settle();
+      const a = await woodNow();
+      assert(a.wood === b.wood && a.splits === b.splits && a.fire <= b.fire + 1e-9 && a.hold === null, 'an empty tap on the lit stick burner ' + describe([b, a]));
+    }
+    return 'rack on (1,6) with its log chip; ' + sides.size + ' sides of the cold stick burner tapped empty handed (' + [...sides].join(' ') + '): no wood, fire 0; charcoal refused ("' + LU.burnsWood
+      + '"); a split grabbed (rack ' + wA + ' to ' + (wA - 1) + ', counted 0), refused at kettle 2 ("' + LU.splitCharcoal + '"), loaded (fire 0 to ' + Math.round(fireLit) + ', counted 1); a second put back (rack '
+      + (wA - 1) + ', counted 1); frames: ' + [up.log[0], down.log.join(' '), back.log[0], bagIn.log.join(' ')].join(', ');
+  });
+
+  await step('v4.9 wood rack 2: its "+" spot shows on the Gear sheet before the stick burner; Arrange yard moves it by taps; the FIRE card walks to the moved rack, carries a split and loads the stick burner', async () => {
+    await reload(ladFixture({ kettle2: true, cabinet: true }, { wood: 0 }));
+    await click(ID3.cardGear); await advance(0);
+    const plus = (await captureFrame()).filter((d) => d.name === 'plus' && d.id === 'offset');
+    assert(plus.length === 1 && plus[0].x === 16 && plus[0].y === 96, 'the wood rack "+" on the Gear sheet ' + describe(plus));
+    await click(ID3.sheetBack); await advance(0);
+    await reload(ladFixture({ kettle2: true, cabinet: true, offset: true }, { wood: 8, crew: [pageCard(1, 'Fi', 'fire', [3, 3])] }));
+    if (DESKTOP_MODE) { await emulate(DESK_J, false); await sleep(TIMEOUT_MS.resize); await advance(0); }
+    try {
+      await enterArrange();
+      await canvasTap(1, 6); await advance(0);
+      let a = await AR();
+      assert(a.lift === 'woodrack', 'a tap on the wood rack did not lift it: ' + describe(a));
+      await canvasTap(6, 6); await advance(0);
+      a = await AR();
+      assert(a.lift === 'woodrack' && a.aim && a.aim.ok === false && a.aim.reason === 'Off the patio', 'a lawn drop was not refused: ' + describe(a));
+      await canvasTap(1, 2); await advance(0);
+      a = await AR();
+      assert(a.lift === null && sameJSON(a.draft, { woodrack: [0, -4] }), 'the rack drop ' + describe(a));
+      await click('arr-done'); await advance(0);
+    } finally {
+      if (DESKTOP_MODE) { await emulate(RUN_METRICS); await sleep(TIMEOUT_MS.resize); await advance(0); }
+    }
+    const lay = await ev('({ lay: S().layout, tiles: MAP.station("woodrack").tiles.map((t) => [t.x, t.y]), ls: JSON.parse(localStorage.getItem(' + JSON.stringify(SAVE_KEY) + ')).layout })');
+    assert(sameJSON(lay.lay.woodrack, [0, -4]) && sameJSON(lay.tiles, [[1, 2]]) && sameJSON(lay.ls, lay.lay), 'Done ' + describe(lay));
+    assert(await toService(), 'no service day');
+    const fire = await ev('(() => { const seen = { toRack: false, walkWood: false, grabAt: null, from: null }; const n0 = S().today.splits, w0 = S().wood; const t0 = S().tender; seen.from = t0 ? [t0.x, t0.y] : null;'
+      + ' const r = globalThis.__smoke.until(() => { const t = S().tender; if (!t) return false; if (t.task === "toRack") seen.toRack = true;'
+      + '   if (t.carrying && t.carrying.kind === "wood" && !seen.grabAt) seen.grabAt = [t.x, t.y];'
+      + '   if (t.carrying && t.carrying.kind === "wood" && t.next !== null && !seen.walkWood) seen.walkWood = true;'
+      + '   return S().today.splits > n0; }, 30);'
+      + ' return Object.assign(seen, { ok: r.ok, splits: S().today.splits - n0, wood: w0 - S().wood, fire: S().stations.kettle1.fire, hold: S().player.carrying, ev: globalThis.__smoke.events.filter((e) => /^split_/.test(e.type)).map((e) => e.type + ":" + e.who).slice(-3) }); })()');
+    const nextTo = (p, q) => p && Math.abs(p[0] - q[0]) + Math.abs(p[1] - q[1]) === 1;
+    assert(fire.ok && fire.toRack && fire.walkWood && nextTo(fire.grabAt, [1, 2]) && fire.splits === 1 && fire.wood === 1 && fire.fire > 0 && fire.hold === null,
+      'the FIRE card did not carry a split from the moved rack: ' + describe(fire));
+    // A second feed, held on the frame where the FIRE card walks with the split.
+    await ev('(S().stations.kettle1.fire = 20, S().tender.cooldown = 0, true)');
+    const walk = await ev('(() => { const r = globalThis.__smoke.until(() => { const t = S().tender; return !!(t && t.carrying && t.carrying.kind === "wood" && t.next !== null); }, 20); sim.setPaused(true); g.advance(0); return { ok: r.ok, recs: g.captureFrame().filter((d) => d.name === "hand_split").length }; })()');
+    assert(walk.ok && walk.recs >= 1, 'the FIRE card walking with a split ' + describe(walk));
+    await carryShot('wood-fire-carry', 'fire');
+    return 'the "+" at (1,6) on the Gear sheet; the rack lifted, refused on the lawn ("Off the patio"), set on (1,2), saved; the FIRE card went from (' + fire.from + ') to (' + fire.grabAt + ') beside the rack, walked the split to the stick burner, loaded it (fire ' + Math.round(fire.fire) + ', 1 split counted); events ' + fire.ev.join(' ');
   });
 
   // Joel 2026-10-20: "the controls for desktop no longer work". Real key events (CDP), real frames.
@@ -11015,7 +11183,7 @@ async function browserChecks() {
     // Turn: the cooler and the pile go to the back row, the stick burner lifts, turns by tap and drops
     // into the counter row (4,7) (4,8).
     await enterArrange();
-    const moves = [[[4, 6], [1, 6], 'cooler'], [[4, 8], [1, 7], 'pile']];
+    const moves = [[[4, 6], [1, 4], 'cooler'], [[4, 8], [1, 7], 'pile']];   // v4.9: (1,6) is the wood rack's
     for (const [from, to, id] of moves) {
       await canvasTap(from[0], from[1]); await advance(0);
       let a = await AR();
@@ -11047,7 +11215,10 @@ async function browserChecks() {
     assert(await ev('S().today.booking && S().today.booking.type === "picnic"'), 'not the picnic in service');
     const sb = await stationTile('kettle1', 0), cl = await stationTile('cooler', 0);
     const n0 = await eventCount();
+    const rk = await stationTile('woodrack', 0);   // v4.9: a split from the wood rack, then into the stick burner
+    await canvasTap(rk.x, rk.y); await settle();
     await canvasTap(sb.x, sb.y); await settle();
+    if (await ev('!!(S().player.carrying && S().player.carrying.kind === "wood")')) { await canvasTap(rk.x, rk.y); await settle(); }   // the PIT card fed it first: back on the rack
     const fed = (await eventsSince(n0, 'fire_fed')).filter((e) => e.cooker === 'kettle1' && (e.id === null || e.id === undefined));
     const lit = await ev(F.fire('kettle1') + ' > 0');
     assert(lit, 'the turned stick burner never lit ' + describe(fed));
@@ -11107,7 +11278,7 @@ async function browserChecks() {
       await emulate({ width: m.width, height: m.height, deviceScaleFactor: 3, mobile: true }, true); await sleep(TIMEOUT_MS.resize); await advance(0);
       assert(await ev('PitSim.pitTier(S().gear) === 2 && S().loop === "week"'), 'not a week with the stick burner');
       await enterArrange();
-      for (const [from, to, id] of [[[4, 6], [1, 6], 'cooler'], [[4, 8], [1, 7], 'pile']]) {
+      for (const [from, to, id] of [[[4, 6], [1, 4], 'cooler'], [[4, 8], [1, 7], 'pile']]) {   // v4.9: (1,6) is the wood rack's
         await canvasTap(from[0], from[1]); await advance(0);
         assert((await AR()).lift === id, 'tap did not lift the ' + id);
         await canvasTap(to[0], to[1]); await advance(0);
@@ -11139,7 +11310,7 @@ async function browserChecks() {
     const s = saveV9({ cash: 900, season: { week: 2, results: resultsOf(1) } });
     s.v = SAVE_V;
     s.gear = Object.assign({}, s.gear, { cooler: true, cabinet: true, offset: true, trailer: true });
-    s.layout = { kettle1: [3, -1, 1], cooler: [-3, 0], pile: [-3, -1] };
+    s.layout = { kettle1: [3, -1, 1], cooler: [-3, -2], pile: [-3, -1] };   // v4.9: the cooler on (1,4), the wood rack keeps (1,6)
     s.stock = { sausage: 12, chicken: 12, ribs: 12, butt: 12, brisket: 12 };
     s.charcoal = 60; s.wood = 60;
     s.crew = [{ id: 1, name: 'Gus', role: 'pit', skills: [4, 4], potential: 4, bring: true, look: Object.assign({}, DEFAULT_LOOK) }];

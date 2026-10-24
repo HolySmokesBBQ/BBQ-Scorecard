@@ -508,6 +508,7 @@ const RS = 2;
 const SIDE_W = 380;               // v3.4 playtest: the side column's width at 900 px and up (index.html)
 let recs = [];
 const SIZE = Object.create(null);
+SIZE.hand_split = [8, 8, 1];   // v4.9: the carried split (art3 carry_split), the hand_charcoal box
 
 // Live region.
 const liveQueue = [];
@@ -6911,6 +6912,7 @@ function observe() {
   const s = sim.state;
   const service = s.phase === 'service';
   watchFeeds(s);
+  watchCarry(s);   // v4.9
   // A cooker's warning bubble starting logs one 'warn' at the bubble (K10).
   for (let i = 0; i < MAP.stations.length; i++) {
     const st = MAP.stations[i];
@@ -7243,9 +7245,10 @@ const BADGE = Object.freeze({
   knife: ['......w', '.....ww', '....ww.', '...ww..', '..ww...', '.b.....', 'b......'],
   plate: ['.......', '..www..', '.wgggw.', 'wgwwwgw', '.wgggw.', '..www..', '.......'],
   bag: ['..b.b..', '...b...', '.bbbbb.', 'bbkkkbb', 'bbkkkbb', 'bbbbbbb', '.bbbbb.'],
-  coin: ['..ooo..', '.oyyyo.', 'oywyyyo', 'oyyoyyo', 'oyyyoyo', '.oyyyo.', '..ooo..']   // v3.6: the register
+  coin: ['..ooo..', '.oyyyo.', 'oywyyyo', 'oyyoyyo', 'oyyyoyo', '.oyyyo.', '..ooo..'],   // v3.6: the register
+  log: ['.......', '.dddd..', 'dbbbbtt', 'dbbbtlt', 'dbbbbtt', '.dddd..', '.......']   // v4.9: the wood rack, a log end on
 });
-const BADGE_PAL = Object.freeze({ o: '#f2702a', y: '#ffd35a', w: '#ffffff', b: '#a0622e', g: '#c9d3e0', k: '#4a4a4a' });
+const BADGE_PAL = Object.freeze({ o: '#f2702a', y: '#ffd35a', w: '#ffffff', b: '#a0622e', g: '#c9d3e0', k: '#4a4a4a', d: '#5e3a1e', t: '#f2c58a', l: '#c98a4b' });
 // v3.4 review: the chip is 1.5x the first cut (the icon at 2 rp a pixel on a 16 by 16 chip) and sits
 // centred over the sprite's own drawn pixels (its opaque box), 2 rp above its top.
 const opaqueBoxes = new Map();
@@ -8581,6 +8584,10 @@ function stationItems(st, s, push) {
   } else if (st.type === 'pile') {
     const n = s.charcoal | 0, f = n >= 5 ? 0 : n >= 3 ? 1 : n >= 1 ? 2 : 3;
     pushArt(push, 'pile', f, a.tiles, { outline: true, badge: 'bag', rec: ['pile', d.x, d.y, f], hit: hit });
+  } else if (st.type === 'woodrack') {
+    // v4.9: the wood rack shows the splits it holds: full from 5, low from 1, the empty rails at 0.
+    const n = s.wood | 0, f = n >= 5 ? 0 : n >= 1 ? 1 : 2;
+    pushArt(push, 'woodpile', f, a.tiles, { outline: true, badge: 'log', rec: ['woodpile', d.x, d.y, f], hit: hit });
   } else {
     pushArt(push, a.name, 0, a.tiles, { outline: true, rec: [st.sprite || a.name, d.x, d.y, 0], hit: hit });
   }
@@ -8801,6 +8808,7 @@ function drawSorted(s) {
   label = null;
   items.sort(function (a, b) { return (a.d - b.d) || (a.l - b.l) || (a.x - b.x) || (a.o - b.o); });
   for (let i = 0; i < items.length; i++) { if (items[i].n) drawLog.push(items[i].n); items[i].f(); }
+  drawCarrySparks(s);   // v4.9: over the depth pass, so a load's sparks read over whoever stands in front
   return custs;
 }
 
@@ -9042,6 +9050,7 @@ function staffHand(kind, m, s) {
   const c = m.carrying;
   if (!c) return (kind === 'player' && s.gear.tray && !s.player.busy) ? 'hand_tray' : null;
   if (c.kind === 'charcoal') return 'hand_charcoal';
+  if (c.kind === 'wood') return B3 ? 'hand_split' : 'hand_charcoal';   // v4.9: the split (art3 only)
   if (c.kind === 'raw') return 'hand_raw_' + c.meat;
   if (c.kind === 'cooked') return 'hand_cooked_' + c.meat;
   if (c.kind === 'burnt') return 'hand_burnt';
@@ -9062,6 +9071,103 @@ function custHand(c) {
 
 function hopOffset(c) { return (c.hop > 0 && !reduced) ? -2 : 0; }
 
+// ---- v4.9 pick-up and put-down (Joel 2026-10-24: "picking up logs isn't shown. Much like the
+// charcoal the logs should be moveable and have an animation when being picked up or put down").
+// A bag or a split that comes into a hand rises from the station into the hands over CARRY_S of
+// sim time (the body dips a pixel for the first half); one that leaves a hand moves from the hands
+// into the station faced (the cooker's fire box, the rack, the pile) over CARRY_S, and a load into a
+// cooker throws a short burst of sparks and ash over it (SPARK_S). Keyed by the mover object, timed
+// on the sim clock (advance() moves it, so the harness draws the frames it wants). Reduced motion:
+// the item swaps at once, no tween, no sparks. Each tween frame logs 'carry_up:<kind>' or
+// 'carry_down:<kind>:<station type>' into drawLog after its mover, and a burst 'sparks:<cooker>'.
+const CARRY_S = 0.2, SPARK_S = 0.5;
+const FUEL_HAND = Object.freeze({ charcoal: 'hand_charcoal', wood: 'hand_split' });
+const FUEL_OF = Object.freeze({ hand_charcoal: 'charcoal', hand_split: 'wood' });
+const FACE_D = Object.freeze({ up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] });
+const carryFx = new WeakMap();   // mover -> { hand, up: { hand, t0 } | null, down: { hand, t0, into } | null }
+let sparkFx = [];                // { st, t0 }
+function fuelHand(m) {
+  const c = m ? m.carrying : null;
+  if (!c || !FUEL_HAND[c.kind]) return '';
+  return c.kind === 'wood' && !B3 ? 'hand_charcoal' : FUEL_HAND[c.kind];
+}
+function facedStation(m) {
+  const d = FACE_D[m.face];
+  if (!d) return null;
+  const tx = m.x + d[0], ty = m.y + d[1];
+  for (let i = 0; i < MAP.stations.length; i++) {
+    const st = MAP.stations[i];
+    if (owned(st) && st.tiles.some(function (t) { return t.x === tx && t.y === ty && owned(t); })) return st;
+  }
+  return null;
+}
+function watchCarry(s) {
+  const now = s.clock;
+  const movers = [s.player, s.tender, s.pitCard || null];
+  for (let i = 0; i < movers.length; i++) {
+    const m = movers[i];
+    if (!m) continue;
+    const h = fuelHand(m);
+    const r = carryFx.get(m);
+    if (!r) { carryFx.set(m, { hand: h, up: null, down: null }); continue; }
+    if (h === r.hand) continue;
+    if (s.phase === 'service' && !reduced) {
+      const st = facedStation(m);
+      if (h && !r.hand) { r.up = { hand: h, t0: now }; r.down = null; }
+      else if (!h && r.hand) {
+        r.down = { hand: r.hand, t0: now, into: st ? st.type : '' };
+        r.up = null;
+        if (st && st.type === 'cooker') { if (sparkFx.length >= 6) sparkFx.shift(); sparkFx.push({ st: st.id, t0: now }); }
+      }
+    }
+    r.hand = h;
+  }
+  sparkFx = sparkFx.filter(function (f) { return s.phase === 'service' && now >= f.t0 && now - f.t0 < SPARK_S; });
+}
+// The tween now: { k (0 to 1), hand, mode, into } or null.
+function carryTween(m, s) {
+  const r = m ? carryFx.get(m) : null;
+  if (!r || reduced || s.phase !== 'service') return null;
+  const now = s.clock;
+  const live = function (e) { return e && now >= e.t0 && now - e.t0 < CARRY_S; };
+  if (live(r.up) && r.hand === r.up.hand) return { k: (now - r.up.t0) / CARRY_S, hand: r.up.hand, mode: 'up', into: '' };
+  if (live(r.down) && !r.hand) return { k: (now - r.down.t0) / CARRY_S, hand: r.down.hand, mode: 'down', into: r.down.into };
+  return null;
+}
+// Sparks and ash over a cooker just loaded: a few embers fly up and fall back, grey flecks drift.
+const SPARK_V = Object.freeze([[-14, -46], [-6, -58], [3, -64], [10, -52], [16, -40], [-10, -34], [7, -30]]);
+function drawCarrySparks(s) {
+  if (!sparkFx.length || reduced || !A3) return;
+  const now = s.clock;
+  for (let i = 0; i < sparkFx.length; i++) {
+    const f = sparkFx[i], st = MAP.station(f.st), ck = s.stations[f.st];
+    if (!st || !owned(st)) continue;
+    const a = stationArt(st);
+    let b;
+    try { b = boxRp(a.name, 0, a.X, a.Y, a.flip); } catch (e) { continue; }
+    const t = now - f.t0, u = t / SPARK_S;
+    const cx = Math.round((b.x0 + b.x1) / 2), cy = Math.round(b.y0 + (b.y1 - b.y0) * 0.55);
+    drawLog.push('sparks:' + f.st);
+    onWorld(function () {
+      for (let j = 0; j < SPARK_V.length; j++) {
+        const v = SPARK_V[j], ash = j >= 5;
+        const x = Math.round(cx + v[0] * t), y = Math.round(cy + v[1] * t + (ash ? 20 : 90) * t * t);
+        const col = ash ? (u < 0.6 ? '#9a9088' : '#6f6a64') : (u < 0.35 ? '#fff1a8' : u < 0.7 ? '#ffb43a' : '#e0561c');
+        octx.fillStyle = '#1b1410';
+        octx.fillRect(x - 1, y - 1, 4, 4);
+        octx.fillStyle = col;
+        octx.fillRect(x, y, 2, 2);
+      }
+      if (ck && ck.fire > 0 && u < 0.5) {   // a quick flare at the mouth
+        octx.fillStyle = '#ffd35a';
+        octx.fillRect(cx - 3, cy - 2, 6, 3);
+        octx.fillStyle = '#f2702a';
+        octx.fillRect(cx - 2, cy - 4, 4, 2);
+      }
+    });
+  }
+}
+
 function drawMover(kind, m, s) {
   const bx = Math.round(m.px), by = Math.round(m.py);
   const isCust = kind === 'cust';
@@ -9071,11 +9177,15 @@ function drawMover(kind, m, s) {
   const bh = size(body[0])[1];
   const feet = by + TILE;
   D('shadow', bx + 2, by + 13);
+  // v4.9: a bag or a split on its way into the hands or out of them (carryTween).
+  const tw = isCust ? null : carryTween(m, s);
   // Facing up, a hand item hides behind the back; the charcoal scoop instead rides over the head
-  // (round 1) so picking it up at the pile shows, 1 px clear of the hair (round 2).
-  const overHead = hand === 'hand_charcoal' && m.face === 'up';
-  const who3 = function () { if (B3) B3.person(isCust ? m.id : null, !!hand && !overHead); };
-  if (hand && m.face === 'up' && !overHead) D(hand, bx + 4, by - 1 + yo);
+  // (round 1) so picking it up at the pile shows, 1 px clear of the hair (round 2). v4.9: the split too.
+  const overHead = (hand === 'hand_charcoal' || hand === 'hand_split') && m.face === 'up';
+  const lifting = !!(tw && tw.mode === 'up' && hand === tw.hand);
+  const dip = tw && ((tw.mode === 'up' && tw.k < 0.5) || (tw.mode === 'down' && tw.k >= 0.5)) ? 1 : 0;
+  const who3 = function () { if (B3) B3.person(isCust ? m.id : null, (!!hand && !overHead) || (!!tw && tw.mode === 'down' && tw.k < 0.5 && m.face !== 'up')); };
+  if (hand && m.face === 'up' && !overHead && !lifting) D(hand, bx + 4, by - 1 + yo);
   const sq = (kind === 'player' && squashAt >= 0 && !reduced) ? tAnim - squashAt : -1;
   if (sq >= 0 && sq < FX.SQUASH_S) {
     who3();
@@ -9083,10 +9193,26 @@ function drawMover(kind, m, s) {
     else DS(body[0], bx + 1, feet - 26, 14, 26, body[1], body[2]);
   } else {
     who3();
-    D(body[0], bx, feet - bh + yo, body[1], body[2]);
+    D(body[0], bx, feet - bh + yo + dip, body[1], body[2]);
   }
+  if (tw && (lifting || tw.mode === 'down')) { drawCarryTween(tw, m, bx, by, feet, bh); if (lifting) return; }
   if (hand && m.face !== 'up') D(hand, bx + 4, by + 4 + yo);
   if (overHead) D(hand, bx + 4, feet - bh - 9 + yo);
+}
+// v4.9: where the held item rests (sim px, before the iso shift) and where it comes from or goes to:
+// toward the station faced, low (the rack, the pile) or into the fire box (a cooker, where it is
+// gone for the last fifth). Facing up the item rides over the head, so it rises from behind the head.
+function drawCarryTween(tw, m, bx, by, feet, bh) {
+  const d = FACE_D[m.face] || [0, 1];
+  const rest = m.face === 'up' ? [bx + 4, feet - bh - 9] : [bx + 4, by + 4];
+  const far = m.face === 'up' ? [bx + 4, by - 2] : [bx + 4 + d[0] * 9, by + 4 + d[1] * 5 + (tw.into === 'cooker' ? 0 : 7)];
+  const e = tw.k * tw.k * (3 - 2 * tw.k);   // smooth step
+  const u = tw.mode === 'up' ? 1 - e : e;    // 0 at the hands, 1 at the station
+  const x = Math.round(rest[0] + (far[0] - rest[0]) * u), y = Math.round(rest[1] + (far[1] - rest[1]) * u);
+  const kind = FUEL_OF[tw.hand] || 'item';
+  drawLog.push(tw.mode === 'up' ? 'carry_up:' + kind : 'carry_down:' + kind + ':' + (tw.into || 'none'));
+  if (tw.mode === 'down' && tw.into === 'cooker' && u > 0.8) return;   // gone into the fire box
+  D(tw.hand, x, y);
 }
 
 
