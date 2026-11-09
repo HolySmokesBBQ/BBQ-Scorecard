@@ -158,6 +158,7 @@ import {
 } from '../entitlements.js';
 import { reconcileEntitlementOnLaunch } from '../purchases.js';
 import { maybeAskForRating } from '../ratingPrompt.js';
+import { isLocalPhoto, countPendingPhotos, repairPendingPhotos } from '../photoRepair.js';
 
 const AppContext = createContext(null);
 
@@ -599,28 +600,15 @@ export default function AppProvider({ children }) {
           // every app update" bug — the cloud is the only durable copy,
           // and until this loop existed, an offline-at-save-time photo
           // never made it there.
-          const repaired = [];
-          for (const rev of kept) {
-            const photos = rev.photos || [];
-            const hasBase64 = photos.some(p => typeof p === 'string' && p.startsWith('data:'));
-            if (!hasBase64) continue;
-            try {
-              const urls = await uploadReviewPhotos(user.uid, rev.id, photos);
-              const stillHasBase64 = urls.some(p => typeof p === 'string' && p.startsWith('data:'));
-              if (stillHasBase64) continue; // upload cap or transient failure — try again next start
-              const patched = { ...rev, photos: urls, photo: urls[0] || null };
-              repaired.push(patched);
-              try { await syncReviewWithPhotos(user.uid, patched); } catch {}
-            } catch (e) {
-              console.error(`Photo repair failed for review ${rev.id}:`, e);
-            }
-          }
-          if (repaired.length) {
-            const patchedIds = new Set(repaired.map(r => r.id));
-            const nextLocal = kept.map(r => patchedIds.has(r.id) ? repaired.find(x => x.id === r.id) : r);
+          // The loop itself lives in photoRepair.js so the pending-photo
+          // banner's Retry runs the same code.
+          const { reviews: nextLocal, restored } = await repairPendingPhotos({
+            uid: user.uid, reviews: kept, upload: uploadReviewPhotos, sync: syncReviewWithPhotos,
+          });
+          if (restored) {
             setReviews(nextLocal);
             saveLocal(nextLocal);
-            track('photo_repair_ran', { restored: repaired.length });
+            track('photo_repair_ran', { restored });
           }
         } catch (e) {
           console.error('Firebase init error:', e);
@@ -1008,7 +996,12 @@ export default function AppProvider({ children }) {
       // cloud explicitly. This is the ONLY path that writes photo fields.
       // Routine bulk sync (syncReviewsUp) intentionally skips photos to
       // avoid wiping cloud URLs when local has empty state.
+      // Only report "Synced" when every photo made it. A failed upload
+      // used to be overwritten here a moment after it was set; the
+      // pending-photo banner now covers that case.
+      const allUploaded = !(reviewToSave.photos || []).some(isLocalPhoto);
       syncReviewWithPhotos(fbUser.uid, reviewToSave).then(() => {
+        if (!allUploaded) return;
         setSyncStatus('done');
         setTimeout(() => setSyncStatus(''), 2000);
       }).catch(() => {});
@@ -1425,6 +1418,29 @@ export default function AppProvider({ children }) {
     navigator.clipboard?.writeText(lines);
   };
 
+  /* ── Photos that never uploaded (Scorecard only) ── */
+  // Notebook renders this provider too; main.notebook.jsx pins
+  // bbq-app-mode to 'cooks' on every load, and Notebook has no reviews.
+  const isNotebookApp = (() => { try { return localStorage.getItem('bbq-app-mode') === 'cooks'; } catch { return false; } })();
+  const pendingPhotoCount = useMemo(() => countPendingPhotos(reviews), [reviews]);
+  const [photoRetrying, setPhotoRetrying] = useState(false);
+  const retryPhotoUploads = async () => {
+    if (!fbUser || photoRetrying) return;
+    setPhotoRetrying(true);
+    try {
+      const { reviews: next, restored } = await repairPendingPhotos({
+        uid: fbUser.uid, reviews, upload: uploadReviewPhotos, sync: syncReviewWithPhotos,
+      });
+      if (restored) {
+        setReviews(next);
+        saveLocal(next);
+        track('photo_repair_ran', { restored });
+      }
+    } finally {
+      setPhotoRetrying(false);
+    }
+  };
+
   /* ── Offline Banner (shared across views) ── */
   const OfflineBanner = () => !isOnline ? (
     <div style={{
@@ -1434,12 +1450,28 @@ export default function AppProvider({ children }) {
     }}>
       Offline — changes saved locally
     </div>
+  ) : (fbUser && pendingPhotoCount > 0 && !isNotebookApp) ? (
+    <div role="status" style={{
+      background: '#78350f', color: '#fde68a', padding: '8px 16px', fontSize: '12px', fontWeight: '600',
+      position: 'sticky', top: 0, zIndex: 100, display: 'flex', alignItems: 'center',
+      justifyContent: 'center', gap: '10px', flexWrap: 'wrap', textAlign: 'center',
+    }}>
+      <span>
+        {pendingPhotoCount === 1 ? '1 photo hasn’t' : `${pendingPhotoCount} photos haven’t`} uploaded yet. Saved on this phone.
+      </span>
+      <button onClick={retryPhotoUploads} disabled={photoRetrying} style={{
+        background: 'transparent', color: '#fde68a', border: '1px solid #fde68a', borderRadius: '6px',
+        padding: '4px 12px', fontSize: '12px', fontWeight: '700', cursor: photoRetrying ? 'default' : 'pointer',
+      }}>
+        {photoRetrying ? 'Retrying…' : 'Retry'}
+      </button>
+    </div>
   ) : syncStatus === 'done' ? (
     <div style={{
       background: '#14532d', color: '#bbf7d0', padding: '6px 16px', textAlign: 'center',
       fontSize: '12px', fontWeight: '600', letterSpacing: '1px', position: 'sticky', top: 0, zIndex: 100,
     }}>
-      {'✓'} Synced to Google Drive
+      {'✓'} Synced
     </div>
   ) : null;
 
